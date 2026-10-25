@@ -530,6 +530,22 @@ class SchoolGTASandbox {
         return;
       }
 
+      // 0.85 演藝大樓 1F/4F 直達光能電梯搭乘
+      if (this.world.isNear1FElevator(this.player.position)) {
+        soundManager.playElevatorDing();
+        this.player.position.set(65.5, 12.0, 43.5);
+        this.player.mesh.position.set(65.5, 12.0, 43.5);
+        this.wantedSystem.showBanner('🛗 已搭乘直達電梯抵達【4F 室內羽球館】！', 3000);
+        return;
+      }
+      if (this.world.isNear4FElevator(this.player.position)) {
+        soundManager.playElevatorDing();
+        this.player.position.set(65.5, 0.0, 43.5);
+        this.player.mesh.position.set(65.5, 0.0, 43.5);
+        this.wantedSystem.showBanner('🛗 已搭乘直達電梯返回【1F 演藝廳門廳】！', 3000);
+        return;
+      }
+
       // 1. 若正拿著籃球：按 E 放下籃球
       if (this.isHoldingBasketball) {
         this.isHoldingBasketball = false;
@@ -1329,6 +1345,10 @@ class SchoolGTASandbox {
       this.hud.showPrompt('🏊', `泳池計時: ${this.swimRaceTimer.toFixed(1)}s (檢查點 ${this.swimCheckpointIdx + 1}/${this.world.swimCheckpoints.length})`);
     } else if (this.ecologicalGarden.isNearWishingPond(targetPosition)) {
       this.hud.showPrompt('E', '🪙 向生態池許願投幣 ($30)');
+    } else if (this.world.isNear1FElevator(targetPosition)) {
+      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 4F 羽球館 (體育老師 Boss)');
+    } else if (this.world.isNear4FElevator(targetPosition)) {
+      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 1F 演藝廳門廳');
     } else {
       let nearBikePatrol = false;
       for (const npc of this.npcs) {
@@ -1630,8 +1650,14 @@ class SchoolGTASandbox {
     );
 
     // 體育老師 Boss 羽球遠程飛彈射擊與更新 (4F 羽球館)
+    // 嚴格限制：羽球攻擊只能在羽球場內進行，攻擊球絕對不可離開球場範圍！
     const peBoss = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
-    if (peBoss && !peBoss.isKnockedDown && peBoss.hp > 0 && !this.player.isDead) {
+    const isPlayerInBadmintonCourt =
+      targetPosition.y >= 11.2 && targetPosition.y <= 17.0 &&
+      targetPosition.x >= 63.0 && targetPosition.x <= 85.0 &&
+      targetPosition.z >= 23.0 && targetPosition.z <= 53.0;
+
+    if (peBoss && !peBoss.isKnockedDown && peBoss.hp > 0 && !this.player.isDead && isPlayerInBadmintonCourt) {
       const proj = peBoss.tryShootShuttlecock(targetPosition, this.engine.scene);
       if (proj) {
         this.shuttlecocks.push(proj);
@@ -1645,6 +1671,19 @@ class SchoolGTASandbox {
       sc.mesh.position.copy(sc.position);
       sc.life -= delta;
 
+      // 嚴格邊界判定：林老師的羽球絕對不能離開羽球館邊界 (X: [62.8, 85.2], Z: [22.8, 53.2], Y: [11.8, 16.8])
+      // 只要觸碰到羽球館邊界或球場邊緣，羽球立即撞壁消散！
+      if (
+        sc.position.x < 62.8 || sc.position.x > 85.2 ||
+        sc.position.z < 22.8 || sc.position.z > 53.2 ||
+        sc.position.y < 11.8 || sc.position.y > 16.8
+      ) {
+        soundManager.playBadmintonHit();
+        this.engine.scene.remove(sc.mesh);
+        this.shuttlecocks.splice(i, 1);
+        continue;
+      }
+
       // 命中玩家判定
       if (sc.position.distanceTo(targetPosition) < 1.35 && !this.player.isDead) {
         soundManager.playBadmintonHit();
@@ -1657,7 +1696,7 @@ class SchoolGTASandbox {
       }
 
       // 著地或壽命結束消散
-      if (sc.life <= 0 || sc.position.y <= 0.15) {
+      if (sc.life <= 0) {
         this.engine.scene.remove(sc.mesh);
         this.shuttlecocks.splice(i, 1);
       }
@@ -1665,11 +1704,10 @@ class SchoolGTASandbox {
 
     // Boss 血條動態顯示 (支援變異食人花王與熱血體育組長林教頭)
     const distToPlantBoss = targetPosition.distanceTo(this.ecologicalGarden.boss.position);
-    const distToPeBoss = peBoss ? targetPosition.distanceTo(peBoss.position) : 999;
 
     if (distToPlantBoss < 35.0 && !this.ecologicalGarden.boss.isDead) {
       this.hud.setBossHealth(this.ecologicalGarden.boss.hp, this.ecologicalGarden.boss.maxHp, true, '秘境霸主：變異食人花王', '🌸');
-    } else if (peBoss && distToPeBoss < 28.0 && !peBoss.isKnockedDown && peBoss.hp > 0) {
+    } else if (peBoss && isPlayerInBadmintonCourt && !peBoss.isKnockedDown && peBoss.hp > 0) {
       this.hud.setBossHealth(peBoss.hp, peBoss.maxHp, true, '熱血體育組長 林教頭 (4F羽球館)', '🏸');
     } else {
       this.hud.setBossHealth(0, 1000, false);

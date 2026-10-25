@@ -754,6 +754,30 @@ export class SoundEffects {
       this.playBicycleBell();
     }, 150);
   }
+
+  // 演藝大樓直達電梯升降與抵達鐘聲 (Elevator Ding)
+  public playElevatorDing() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now); // A5
+    osc.frequency.setValueAtTime(1174.66, now + 0.12); // D6
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.28, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.9);
+  }
 }
 
 export const soundManager = new SoundEffects();

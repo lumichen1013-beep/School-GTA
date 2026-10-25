@@ -1924,54 +1924,67 @@ export class CampusWorld {
 
     // 2. 1~3F 挑高外牆 (Y: 0 ~ 12.0)
     const wH = 12.0;
-    // 北牆 (Stage 背後)
+    // 北牆 (Stage 背後全封閉)
     this.buildWall(baseX, wH / 2, minZ, bW, wH, 0.6, wallMat);
-    // 東牆 (外側)
+    // 東牆 (外側全封閉)
     this.buildWall(maxX, wH / 2, baseZ, 0.6, wH, bL, wallMat);
-    // 西牆 (留出大門 X: 62, Z: 36 ~ 40)
-    const westL1 = (36 - minZ);
+
+    // 西牆：大氣開放寬達 8.0m 的中庭迎賓大正門 (留出大門 X: 62, Z: 34 ~ 42)
+    const westL1 = (34 - minZ); // 12m
     this.buildWall(minX, wH / 2, minZ + westL1 / 2, 0.6, wH, westL1, wallMat);
-    const westL2 = (maxZ - 40);
-    this.buildWall(minX, wH / 2, 40 + westL2 / 2, 0.6, wH, westL2, wallMat);
-    // 南牆 (留出南向雙開門 Z: 54, X: 71 ~ 77)
+    const westL2 = (maxZ - 42); // 12m
+    this.buildWall(minX, wH / 2, 42 + westL2 / 2, 0.6, wH, westL2, wallMat);
+
+    // 南牆：留出南向寬闊雙開副門 (Z: 54, X: 71 ~ 77)
     const southW1 = (71 - minX);
     this.buildWall(minX + southW1 / 2, wH / 2, maxZ, southW1, wH, 0.6, wallMat);
     const southW2 = (maxX - 77);
     this.buildWall(77 + southW2 / 2, wH / 2, maxZ, southW2, wH, 0.6, wallMat);
 
+    // 西側正門迎賓雨遮與紅毯階梯 (Grand Entrance Canopy & Carpet)
+    const canopyMat = new THREE.MeshLambertMaterial({ color: 0x34495e });
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.35, 9.0), canopyMat);
+    canopy.position.set(minX - 1.2, 4.2, 38);
+    this.scene.add(canopy);
+
+    const redCarpet = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 7.6), new THREE.MeshLambertMaterial({ color: 0x9b59b6 }));
+    redCarpet.rotation.x = -Math.PI / 2;
+    redCarpet.position.set(minX - 0.5, 0.03, 38);
+    this.scene.add(redCarpet);
+
     // 3. 挑高演藝廳 (1~3F Grand Auditorium)
-    // A. 舞台大平台 (Stage Platform: X: 64 ~ 84, Z: 23 ~ 29, 高度 Y = 1.0)
-    const stageW = 20;
+    // A. 舞台大平台 (位於東北側 X: 70 ~ 85, Z: 23 ~ 29, 高度 Y = 1.0)
+    const stageW = 15;
     const stageL = 6;
     const stageH = 1.0;
     const stage = new THREE.Mesh(new THREE.BoxGeometry(stageW, stageH, stageL), stageFloorMat);
-    stage.position.set(baseX, stageH / 2, minZ + stageL / 2 + 1.2);
+    stage.position.set(baseX + 3.5, stageH / 2, minZ + stageL / 2 + 1.2);
     stage.receiveShadow = true;
     stage.castShadow = true;
     this.scene.add(stage);
-    this.addFloorSlab(baseX - stageW / 2, baseX + stageW / 2, minZ + 1.2, minZ + stageL + 1.2, stageH);
+    this.addFloorSlab(baseX + 3.5 - stageW / 2, baseX + 3.5 + stageW / 2, minZ + 1.2, minZ + stageL + 1.2, stageH);
 
-    // 舞台台階 (Stage front stairs: Z = minZ + stageL + 1.2 = 29.2)
+    // 舞台台階 (Stage front stairs: Z: 29.2 ~ 30.0)
     const step = new THREE.Mesh(new THREE.BoxGeometry(stageW, 0.5, 0.8), stageFloorMat);
-    step.position.set(baseX, 0.25, minZ + stageL + 1.6);
+    step.position.set(baseX + 3.5, 0.25, minZ + stageL + 1.6);
     this.scene.add(step);
-    this.addFloorSlab(baseX - stageW / 2, baseX + stageW / 2, minZ + stageL + 1.2, minZ + stageL + 2.0, 0.5);
+    this.addFloorSlab(baseX + 3.5 - stageW / 2, baseX + 3.5 + stageW / 2, minZ + stageL + 1.2, minZ + stageL + 2.0, 0.5);
 
     // B. 舞台大紅布幕 (Red Stage Velvet Curtains)
-    const curtainGeo = new THREE.BoxGeometry(2.4, 8.5, 0.3);
+    const curtainGeo = new THREE.BoxGeometry(2.0, 8.5, 0.3);
     const curtainL = new THREE.Mesh(curtainGeo, redVelvetMat);
-    curtainL.position.set(baseX - stageW / 2 + 1.2, stageH + 4.25, minZ + 1.5);
+    curtainL.position.set(baseX + 3.5 - stageW / 2 + 1.0, stageH + 4.25, minZ + 1.5);
     this.scene.add(curtainL);
     const curtainR = new THREE.Mesh(curtainGeo, redVelvetMat);
-    curtainR.position.set(baseX + stageW / 2 - 1.2, stageH + 4.25, minZ + 1.5);
+    curtainR.position.set(baseX + 3.5 + stageW / 2 - 1.0, stageH + 4.25, minZ + 1.5);
     this.scene.add(curtainR);
     const valance = new THREE.Mesh(new THREE.BoxGeometry(stageW, 1.4, 0.35), redVelvetMat);
-    valance.position.set(baseX, stageH + 8.2, minZ + 1.5);
+    valance.position.set(baseX + 3.5, stageH + 8.2, minZ + 1.5);
     this.scene.add(valance);
 
     // C. 舞台三腳大鋼琴 (Grand Piano)
     const pianoGroup = new THREE.Group();
-    pianoGroup.position.set(baseX - 5.5, stageH, minZ + 3.8);
+    pianoGroup.position.set(baseX + 1.0, stageH, minZ + 3.8);
     const pianoMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
     const pianoBody = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.6, 2.2), pianoMat);
     pianoBody.position.y = 0.8;
@@ -1979,7 +1992,6 @@ export class CampusWorld {
     const keys = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.3), new THREE.MeshBasicMaterial({ color: 0xffffff }));
     keys.position.set(0, 0.85, 1.15);
     pianoGroup.add(keys);
-    // 鋼琴腳
     [[-0.8, -0.8], [0.8, -0.8], [0, 0.8]].forEach(([px, pz]) => {
       const pLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.8, 8), pianoMat);
       pLeg.position.set(px, 0.4, pz);
@@ -1989,33 +2001,33 @@ export class CampusWorld {
 
     // D. 演講司儀講台 (Speech Podium)
     const podium = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
-    podium.position.set(baseX + 4.5, stageH + 0.55, minZ + 3.8);
+    podium.position.set(baseX + 7.5, stageH + 0.55, minZ + 3.8);
     this.scene.add(podium);
 
-    // E. 觀眾席階梯看台座椅 (Tiered Seating Rows)
+    // E. 觀眾席看台座椅 (東側看台 X: 72 ~ 84, Z: 33 ~ 51，西側走廊徹底暢通無阻)
     const seatColor = 0xc0392b;
     const seatMat = new THREE.MeshLambertMaterial({ color: seatColor });
     const seatW = 0.55;
     for (let row = 0; row < 4; row++) {
       const rowZ = 34 + row * 4.2;
-      const rowY = row * 0.4;
-      // 階梯地坪
-      const riser = new THREE.Mesh(new THREE.BoxGeometry(bW - 4, 0.4, 4.0), new THREE.MeshLambertMaterial({ color: 0x34495e }));
-      riser.position.set(baseX, rowY + 0.2, rowZ);
+      const rowY = row * 0.35;
+      const riserW = 12.0;
+      // 階梯地坪 (東側半區)
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(riserW, 0.35, 3.8), new THREE.MeshLambertMaterial({ color: 0x34495e }));
+      riser.position.set(baseX + 4.5, rowY + 0.175, rowZ);
       this.scene.add(riser);
-      this.addFloorSlab(baseX - (bW - 4) / 2, baseX + (bW - 4) / 2, rowZ - 2.0, rowZ + 2.0, rowY + 0.4);
+      this.addFloorSlab(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, rowY + 0.35);
 
-      // 左翼座位
-      for (let s = 0; s < 6; s++) {
+      // 看台座椅 (留出中間走道)
+      for (let s = 0; s < 4; s++) {
         const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
-        chair.position.set(baseX - 8.5 + s * 0.9, rowY + 0.4 + 0.32, rowZ);
+        chair.position.set(baseX + 0.2 + s * 1.0, rowY + 0.35 + 0.32, rowZ);
         chair.castShadow = true;
         this.scene.add(chair);
       }
-      // 右翼座位
-      for (let s = 0; s < 6; s++) {
+      for (let s = 0; s < 4; s++) {
         const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
-        chair.position.set(baseX + 3.5 + s * 0.9, rowY + 0.4 + 0.32, rowZ);
+        chair.position.set(baseX + 6.2 + s * 1.0, rowY + 0.35 + 0.32, rowZ);
         chair.castShadow = true;
         this.scene.add(chair);
       }
@@ -2023,51 +2035,118 @@ export class CampusWorld {
 
     // F. 大禮堂挑高橫樑與舞台探照燈 (Truss & Stage Lights at Y = 11.2)
     const truss = new THREE.Mesh(new THREE.BoxGeometry(stageW, 0.4, 0.4), metalMat);
-    truss.position.set(baseX, 11.2, minZ + 4.5);
+    truss.position.set(baseX + 3.5, 11.2, minZ + 4.5);
     this.scene.add(truss);
 
-    // G. 西側直達 4F 羽球場階梯樓梯間 (Walkable Stairs to 4F)
-    // 樓梯位於西側走廊通道 (X: 63.0 ~ 66.5)
-    // 1F -> 2F (Y: 0 -> 4.0, Z: 43 ~ 51)
-    this.addRamp(63.0, 66.5, 43.0, 51.0, 0, 4.0);
-    const r1 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
-    r1.position.set(64.75, 2.0, 47.0);
-    r1.rotation.x = Math.atan2(4.0, 8.0);
+    // 4. 西北側全新真實雙跑折返景觀大樓梯 (Switchback Grand Stairs to 4F)
+    // 樓梯間區域：X: 63.2 ~ 69.8, Z: 22.0 ~ 36.5
+    // 坡度平緩寬闊 (寬度 3.0m)，兩側無錯位，上樓頭頂 100% 垂直淨空，絕不擋頭卡腳！
+    const stairRailMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+
+    // 一段：1F -> 2F (西道跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 向上攀升 Y: 0 -> 4.0)
+    this.addRamp(63.2, 66.2, 25.0, 34.0, 4.0, 0);
+    const r1 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
+    r1.position.set(64.7, 2.0, 29.5);
+    r1.rotation.x = -Math.atan2(4.0, 9.0);
     this.scene.add(r1);
 
-    // 2F Landing (Y = 4.0, Z: 51 ~ 53.5)
-    this.addFloorSlab(63.0, 66.5, 51.0, 53.5, 4.0);
-    const land1 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 2.5), stageFloorMat);
-    land1.position.set(64.75, 3.85, 52.25);
+    // 二段中繼平台：2F Landing (北側觀景中繼平台 Y = 4.0, X: 63.2 ~ 69.8, Z: 22.0 ~ 25.0)
+    this.addFloorSlab(63.2, 69.8, 22.0, 25.0, 4.0);
+    const land1 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
+    land1.position.set(66.5, 3.825, 23.5);
     this.scene.add(land1);
 
-    // 2F -> 3F (Y: 4.0 -> 8.0, Z: 51 ~ 43)
-    this.addRamp(63.0, 66.5, 43.0, 51.0, 8.0, 4.0);
-    const r2 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
-    r2.position.set(64.75, 6.0, 47.0);
-    r2.rotation.x = -Math.atan2(4.0, 8.0);
+    // 二段：2F -> 3F (東道跑道 X: 66.8 ~ 69.8, Z: 25.0 -> 34.0, 向上攀升 Y: 4.0 -> 8.0)
+    this.addRamp(66.8, 69.8, 25.0, 34.0, 4.0, 8.0);
+    const r2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
+    r2.position.set(68.3, 6.0, 29.5);
+    r2.rotation.x = Math.atan2(4.0, 9.0);
     this.scene.add(r2);
 
-    // 3F Landing (Y = 8.0, Z: 40.5 ~ 43.0)
-    this.addFloorSlab(63.0, 66.5, 40.5, 43.0, 8.0);
-    const land2 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 2.5), stageFloorMat);
-    land2.position.set(64.75, 7.85, 41.75);
+    // 三段中繼平台：3F Landing (南側觀景中繼平台 Y = 8.0, X: 63.2 ~ 69.8, Z: 34.0 ~ 37.0)
+    this.addFloorSlab(63.2, 69.8, 34.0, 37.0, 8.0);
+    const land2 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
+    land2.position.set(66.5, 7.825, 35.5);
     this.scene.add(land2);
 
-    // 3F -> 4F (Y: 8.0 -> 12.0, Z: 43 ~ 51)
-    this.addRamp(63.0, 66.5, 43.0, 51.0, 8.0, 12.0);
-    const r3 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
-    r3.position.set(64.75, 10.0, 47.0);
-    r3.rotation.x = Math.atan2(4.0, 8.0);
+    // 三段：3F -> 4F (西道跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 向上攀升 Y: 8.0 -> 12.0)
+    this.addRamp(63.2, 66.2, 25.0, 34.0, 12.0, 8.0);
+    const r3 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
+    r3.position.set(64.7, 10.0, 29.5);
+    r3.rotation.x = -Math.atan2(4.0, 9.0);
     this.scene.add(r3);
 
-    // 4. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
-    // A. 4F 完整樓地板 (Y = 12.0)
-    const floor4 = new THREE.Mesh(new THREE.BoxGeometry(bW, 0.45, bL), stageFloorMat);
-    floor4.position.set(baseX, 11.78, baseZ);
-    floor4.receiveShadow = true;
-    this.scene.add(floor4);
-    this.addFloorSlab(minX, maxX, minZ, maxZ, 12.0);
+    // 四樓樓梯出入口抵達平台 (4F Arrival Landing Y = 12.0, X: 63.2 ~ 69.8, Z: 22.0 ~ 25.0)
+    this.addFloorSlab(63.2, 69.8, 22.0, 25.0, 12.0);
+    const land4 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
+    land4.position.set(66.5, 11.825, 23.5);
+    this.scene.add(land4);
+
+    // 樓梯防護欄杆 (避免摔落天井)
+    const stairRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.2, 11.5), stairRailMat);
+    stairRail.position.set(69.85, 12.6, 30.5);
+    this.scene.add(stairRail);
+    this.addCollider(69.7, 70.0, 24.8, 36.2, 12.0, 13.5);
+
+    // 5. ⚡ 演藝大樓直達電梯系統 (1F ⇄ 4F Express Elevator)
+    // 電梯位於 1F 門廳 X: 65.5, Z: 43.5，外觀具備高科技藍光立體框架與地面發光圈
+    const liftCabinMat = new THREE.MeshStandardMaterial({ color: 0x34495e, metalness: 0.85, roughness: 0.2 });
+    const liftGlassMat = new THREE.MeshLambertMaterial({ color: 0x00cec9, transparent: true, opacity: 0.45 });
+    const liftRingMat = new THREE.MeshBasicMaterial({ color: 0x00cec9, transparent: true, opacity: 0.85 });
+
+    // 1F 電梯車廂與發光踏圈
+    const lift1FGroup = new THREE.Group();
+    lift1FGroup.position.set(65.5, 0, 43.5);
+    const lift1FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
+    lift1FFrame.position.y = 1.6;
+    lift1FGroup.add(lift1FFrame);
+    const lift1FGlass = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.8, 2.4), liftGlassMat);
+    lift1FGlass.position.y = 1.6;
+    lift1FGroup.add(lift1FGlass);
+    const ring1F = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), liftRingMat);
+    ring1F.rotation.x = -Math.PI / 2;
+    ring1F.position.y = 0.04;
+    lift1FGroup.add(ring1F);
+    this.scene.add(lift1FGroup);
+    // 電梯車廂碰撞柱
+    this.addCollider(64.1, 64.3, 42.1, 44.9, 0, 3.2);
+    this.addCollider(66.7, 66.9, 42.1, 44.9, 0, 3.2);
+    this.addCollider(64.1, 66.9, 44.7, 44.9, 0, 3.2);
+
+    // 4F 電梯車廂與發光踏圈
+    const lift4FGroup = new THREE.Group();
+    lift4FGroup.position.set(65.5, 12.0, 43.5);
+    const lift4FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
+    lift4FFrame.position.y = 1.6;
+    lift4FGroup.add(lift4FFrame);
+    const lift4FGlass = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.8, 2.4), liftGlassMat);
+    lift4FGlass.position.y = 1.6;
+    lift4FGroup.add(lift4FGlass);
+    const ring4F = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), liftRingMat);
+    ring4F.rotation.x = -Math.PI / 2;
+    ring4F.position.y = 0.04;
+    lift4FGroup.add(ring4F);
+    this.scene.add(lift4FGroup);
+    // 4F 電梯碰撞柱
+    this.addCollider(64.1, 64.3, 42.1, 44.9, 12.0, 15.2);
+    this.addCollider(66.7, 66.9, 42.1, 44.9, 12.0, 15.2);
+    this.addCollider(64.1, 66.9, 44.7, 44.9, 12.0, 15.2);
+
+    // 6. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
+    // A. 4F 樓地板 (精確避開樓梯天井 X: 63.2 ~ 69.8, Z: 25.0 ~ 34.0，徹底打通樓梯通道！)
+    // 東翼球場大地板 (X: 70.0 ~ 86.0, Z: 22.0 ~ 54.0)
+    const f4E = new THREE.Mesh(new THREE.BoxGeometry(16.0, 0.45, bL), stageFloorMat);
+    f4E.position.set(baseX + 4.0, 11.78, baseZ);
+    f4E.receiveShadow = true;
+    this.scene.add(f4E);
+    this.addFloorSlab(70.0, maxX, minZ, maxZ, 12.0);
+
+    // 西南翼走道地板 (X: 62.0 ~ 70.0, Z: 34.0 ~ 54.0)
+    const f4SW = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.45, 20.0), stageFloorMat);
+    f4SW.position.set(minX + 4.0, 11.78, 44.0);
+    f4SW.receiveShadow = true;
+    this.scene.add(f4SW);
+    this.addFloorSlab(minX, 70.0, 34.0, maxZ, 12.0);
 
     // B. 4F 四周外牆與大採光窗 (Y: 12.0 ~ 16.5)
     const h4 = 4.5;
@@ -2078,28 +2157,25 @@ export class CampusWorld {
     this.buildWall(minX, midY4, baseZ, 0.6, h4, bL, wallMat);
 
     // C. 4F 標準室內羽球場 PVC 地墊 (綠色地墊 + 白線)
-    const matW = 14;
-    const matL = 24;
+    const matW = 13;
+    const matL = 22;
     const courtMat = new THREE.MeshLambertMaterial({ color: 0x16a085 }); // 專業羽球綠地墊
     const court = new THREE.Mesh(new THREE.PlaneGeometry(matW, matL), courtMat);
     court.rotation.x = -Math.PI / 2;
-    court.position.set(baseX, 12.02, baseZ);
+    court.position.set(baseX + 3.0, 12.02, baseZ);
     court.receiveShadow = true;
     this.scene.add(court);
 
     // 羽球場白線 (單打/雙打邊線、發球線、中線)
     const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    // 外邊線
     const lineEdges = [
-      { x: baseX, z: baseZ - matL / 2 + 0.1, w: matW, d: 0.1 },
-      { x: baseX, z: baseZ + matL / 2 - 0.1, w: matW, d: 0.1 },
-      { x: baseX - matW / 2 + 0.1, z: baseZ, w: 0.1, d: matL },
-      { x: baseX + matW / 2 - 0.1, z: baseZ, w: 0.1, d: matL },
-      // 發球中線 (Center line)
-      { x: baseX, z: baseZ, w: 0.08, d: matL - 4 },
-      // 前發球線 (Short service lines: ±2.0m from net)
-      { x: baseX, z: baseZ - 2.0, w: matW, d: 0.08 },
-      { x: baseX, z: baseZ + 2.0, w: matW, d: 0.08 }
+      { x: baseX + 3.0, z: baseZ - matL / 2 + 0.1, w: matW, d: 0.1 },
+      { x: baseX + 3.0, z: baseZ + matL / 2 - 0.1, w: matW, d: 0.1 },
+      { x: baseX + 3.0 - matW / 2 + 0.1, z: baseZ, w: 0.1, d: matL },
+      { x: baseX + 3.0 + matW / 2 - 0.1, z: baseZ, w: 0.1, d: matL },
+      { x: baseX + 3.0, z: baseZ, w: 0.08, d: matL - 4 },
+      { x: baseX + 3.0, z: baseZ - 2.0, w: matW, d: 0.08 },
+      { x: baseX + 3.0, z: baseZ + 2.0, w: matW, d: 0.08 }
     ];
     lineEdges.forEach(l => {
       const lm = new THREE.Mesh(new THREE.PlaneGeometry(l.w, l.d), whiteMat);
@@ -2112,27 +2188,26 @@ export class CampusWorld {
     const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.6, 8);
     const postMat = new THREE.MeshStandardMaterial({ color: 0x34495e, metalness: 0.8 });
     const postL = new THREE.Mesh(postGeo, postMat);
-    postL.position.set(baseX - matW / 2 - 0.2, 12.8, baseZ);
+    postL.position.set(baseX + 3.0 - matW / 2 - 0.2, 12.8, baseZ);
     this.scene.add(postL);
-    this.addCollider(baseX - matW / 2 - 0.4, baseX - matW / 2, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
+    this.addCollider(baseX + 3.0 - matW / 2 - 0.4, baseX + 3.0 - matW / 2, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
 
     const postR = new THREE.Mesh(postGeo, postMat);
-    postR.position.set(baseX + matW / 2 + 0.2, 12.8, baseZ);
+    postR.position.set(baseX + 3.0 + matW / 2 + 0.2, 12.8, baseZ);
     this.scene.add(postR);
-    this.addCollider(baseX + matW / 2, baseX + matW / 2 + 0.4, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
+    this.addCollider(baseX + 3.0 + matW / 2, baseX + 3.0 + matW / 2 + 0.4, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
 
-    // 白色球網本體
     const netMesh = new THREE.Mesh(
       new THREE.BoxGeometry(matW + 0.4, 0.76, 0.04),
       new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
     );
-    netMesh.position.set(baseX, 13.15, baseZ);
+    netMesh.position.set(baseX + 3.0, 13.15, baseZ);
     this.scene.add(netMesh);
-    this.addCollider(baseX - matW / 2, baseX + matW / 2, baseZ - 0.1, baseZ + 0.1, 12.0, 13.55);
+    this.addCollider(baseX + 3.0 - matW / 2, baseX + 3.0 + matW / 2, baseZ - 0.1, baseZ + 0.1, 12.0, 13.55);
 
     // E. 裁判高腳椅 (Referee Tower)
     const refGroup = new THREE.Group();
-    refGroup.position.set(baseX - matW / 2 - 1.2, 12.0, baseZ);
+    refGroup.position.set(baseX + 3.0 - matW / 2 - 1.2, 12.0, baseZ);
     const refChairMat = new THREE.MeshLambertMaterial({ color: 0x2980b9 });
     const refLegs = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 2.0, 8), refChairMat);
     refLegs.position.y = 1.0;
@@ -2147,7 +2222,7 @@ export class CampusWorld {
     roof.position.set(baseX, 16.5, baseZ);
     this.scene.add(roof);
 
-    // G. 招牌橫匾
+    // G. 招牌橫匾 (正面西門上方與南門上方)
     const signCanvas = document.createElement('canvas');
     signCanvas.width = 512;
     signCanvas.height = 128;
@@ -2158,14 +2233,31 @@ export class CampusWorld {
     sctx.lineWidth = 6;
     sctx.strokeRect(4, 4, 504, 120);
     sctx.fillStyle = '#ffffff';
-    sctx.font = 'bold 36px "Noto Sans TC", sans-serif';
+    sctx.font = 'bold 34px "Noto Sans TC", sans-serif';
     sctx.textAlign = 'center';
     sctx.textBaseline = 'middle';
     sctx.fillText('🎭 演藝大樓 (1-3F演藝廳 / 4F羽球館) 🎭', 256, 64);
     const signTex = new THREE.CanvasTexture(signCanvas);
-    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(12, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
-    signMesh.position.set(baseX, 10.5, maxZ + 0.35);
-    this.scene.add(signMesh);
+
+    // 西側正門招牌
+    const signWest = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.4), new THREE.MeshBasicMaterial({ map: signTex }));
+    signWest.rotation.y = -Math.PI / 2;
+    signWest.position.set(minX - 0.35, 5.5, 38);
+    this.scene.add(signWest);
+
+    // 南側副門招牌
+    const signSouth = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.4), new THREE.MeshBasicMaterial({ map: signTex }));
+    signSouth.position.set(baseX, 5.5, maxZ + 0.35);
+    this.scene.add(signSouth);
+  }
+
+  // 電梯位置判定方法 (供 main.ts 呼叫)
+  public isNear1FElevator(pos: THREE.Vector3): boolean {
+    return pos.y < 3.5 && pos.distanceTo(new THREE.Vector3(65.5, 0, 43.5)) < 2.8;
+  }
+
+  public isNear4FElevator(pos: THREE.Vector3): boolean {
+    return pos.y >= 10.0 && pos.distanceTo(new THREE.Vector3(65.5, 12.0, 43.5)) < 2.8;
   }
 
   private buildWall(x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material) {
@@ -2174,7 +2266,7 @@ export class CampusWorld {
     wall.castShadow = true;
     wall.receiveShadow = true;
     this.scene.add(wall);
-    this.addCollider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, 0, h);
+    this.addCollider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, y - h / 2, y + h / 2);
   }
 
   // 學務處全校廣播控制台 (Broadcast Station Desk)

@@ -811,13 +811,22 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 體育老師發射遠程高速羽球飛彈攻擊
+  // 體育老師發射遠程高速羽球飛彈攻擊 (嚴格限制在 4F 羽球館範圍內)
   public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
 
+    // 嚴格限制：羽球攻擊目標必須在 4F 羽球館內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)，絕不可射出球場外！
+    if (
+      targetPos.y < 11.2 || targetPos.y > 17.0 ||
+      targetPos.x < 63.0 || targetPos.x > 85.0 ||
+      targetPos.z < 23.0 || targetPos.z > 53.0
+    ) {
+      return null;
+    }
+
     const dist = this.position.distanceTo(targetPos);
-    if (dist < 3.2 || dist > 22.0) return null;
+    if (dist < 2.5 || dist > 20.0) return null;
 
     this.shuttlecockCooldown = 2.4; // 2.4s 冷卻
     soundManager.playBadmintonWhoosh();
@@ -934,8 +943,15 @@ export class NPC {
       return false;
     }
 
+    // 體育老師 Boss 嚴格限制在 4F 羽球館範圍內 (Y: 11.2 ~ 17.0, X: 63 ~ 85, Z: 23 ~ 53)，絕不鎖定館外玩家
+    if (this.role === 'PE_TEACHER_BOSS') {
+      if (playerPos.y < 11.2 || playerPos.y > 17.0 || playerPos.x < 63.0 || playerPos.x > 85.0 || playerPos.z < 23.0 || playerPos.z > 53.0) {
+        return false;
+      }
+    }
+
     // 垂直高度差檢測：若垂直高度差超過 2.6m（位於不同樓層），視線被樓板與天花板遮擋
-    const maxYDiff = this.role === 'PE_TEACHER_BOSS' ? 4.5 : 2.6;
+    const maxYDiff = this.role === 'PE_TEACHER_BOSS' ? 2.5 : 2.6;
     if (Math.abs(playerPos.y - this.position.y) > maxYDiff) {
       return false;
     }
@@ -1351,6 +1367,13 @@ export class NPC {
         if (this.position.z < 107.2 && Math.abs(this.position.x) < 118.0) {
           this.position.z = 107.2;
         }
+      }
+
+      // 體育老師 Boss 邊界回推：嚴格鎖定在 4F 羽球館內，絕對不會離開球場
+      if (this.role === 'PE_TEACHER_BOSS') {
+        this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
+        this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 52.2);
+        this.position.y = 12.0;
       }
 
       // 5. 防穿牆與卡牆修復 (永遠朝外側退回，絕不向建築內部彈射)
