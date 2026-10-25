@@ -20,6 +20,8 @@ export class ThirdPersonCamera {
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
   }
 
+  private isVehicleMode: boolean = false;
+
   public updateRotation(deltaX: number, deltaY: number) {
     this.yaw -= deltaX * this.sensitivityX;
     this.pitch += deltaY * this.sensitivityY;
@@ -30,10 +32,22 @@ export class ThirdPersonCamera {
     this.pitch = Math.max(minPitch, Math.min(maxPitch, this.pitch));
   }
 
-  public setMode(isVehicle: boolean) {
-    this.targetDistance = isVehicle ? 7.5 : 4.2;
-    this.camera.fov = isVehicle ? 72 : 65;
+  public updateAspect(aspect: number) {
+    this.camera.aspect = aspect;
+    // 直向螢幕 (aspect < 1.0) 時適當補償 FOV，避免視野被截斷過窄
+    const baseFov = this.isVehicleMode ? 72 : 65;
+    if (aspect < 1.0) {
+      this.camera.fov = Math.min(80, baseFov + (1.0 - aspect) * 12);
+    } else {
+      this.camera.fov = baseFov;
+    }
     this.camera.updateProjectionMatrix();
+  }
+
+  public setMode(isVehicle: boolean) {
+    this.isVehicleMode = isVehicle;
+    this.targetDistance = isVehicle ? 7.5 : 4.2;
+    this.updateAspect(this.camera.aspect);
   }
 
   public update(targetPos: THREE.Vector3, delta: number, colliders: CollidableBox[] = []) {
@@ -50,14 +64,24 @@ export class ThirdPersonCamera {
 
     // 教學大樓本體區域 (敬業樓、樂群樓與空中天橋，扣除樓梯間垂直軸)
     const inMainBuilding = targetPos.x >= 25.5 && targetPos.x <= 48.5 && targetPos.z >= 1.0 && targetPos.z <= 89.0;
-    const isIndoors = (inMainBuilding || inStairwell) && targetPos.y < 17.5;
+
+    // 演藝大樓電梯井車廂內部 (X: 63.6 ~ 67.4, Z: 42.0 ~ 45.2)
+    const inElevator = targetPos.x >= 63.6 && targetPos.x <= 67.4 && targetPos.z >= 42.0 && targetPos.z <= 45.2;
+
+    // 演藝大樓本體 (X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0，1~3F 演藝廳 Y < 11.5，4F 羽球館 Y: 12.0 ~ 16.5)
+    const inPerformingArts = targetPos.x >= 63.0 && targetPos.x <= 85.0 && targetPos.z >= 23.0 && targetPos.z <= 53.0;
+
+    const isIndoors = (inMainBuilding || inStairwell || inPerformingArts || inElevator) && targetPos.y < 17.5;
 
     // 2. 平滑調節適當跟隨距離：
+    // 在電梯車廂內設定特寫目標距離 1.75m，防止後腦杓剪裁與穿頂
     // 在狹窄的樓梯間內使用緊湊跟隨距離 (1.85m)，提供最佳爬樓梯與折返轉角視野，防止鏡頭推入外牆！
-    // 在走廊與教室內使用 2.8m，室外則保持 4.2m (步行) / 7.5m (載具)
-    const effectiveTargetDistance = inStairwell
-      ? 1.85
-      : (isIndoors ? Math.min(this.targetDistance, 2.8) : this.targetDistance);
+    // 在走廊與教室/演藝廳內使用 2.8m，室外則保持 4.2m (步行) / 7.5m (載具)
+    const effectiveTargetDistance = inElevator
+      ? 1.75
+      : (inStairwell
+        ? 1.85
+        : (isIndoors ? Math.min(this.targetDistance, 2.8) : this.targetDistance));
 
     this.distance = THREE.MathUtils.lerp(this.distance, effectiveTargetDistance, delta * 6.0);
 
@@ -127,9 +151,15 @@ export class ThirdPersonCamera {
       }
     }
 
-    // 5. 樓梯間與室內空間絕對防穿牆約束 (Hard Spatial Boundaries)
+    // 5. 樓梯間、電梯與室內空間絕對防穿牆約束 (Hard Spatial Boundaries)
     const inOrNearNorthStair = (inNorthStairwell || (actualPosition.x >= 27.0 && actualPosition.x <= 35.0 && actualPosition.z >= -9.5 && actualPosition.z <= 1.5)) && targetPos.y < 23.5;
     const inOrNearSouthStair = (inSouthStairwell || (actualPosition.x >= 27.0 && actualPosition.x <= 35.0 && actualPosition.z >= 88.5 && actualPosition.z <= 99.5)) && targetPos.y < 23.5;
+    const inOrNearElevator = inElevator || (
+      actualPosition.x >= 63.6 && actualPosition.x <= 67.4 &&
+      actualPosition.z >= 42.0 && actualPosition.z <= 45.2 &&
+      ((targetPos.y < 6.0 && actualPosition.y < 4.0) || (targetPos.y >= 6.0 && actualPosition.y >= 10.0 && actualPosition.y <= 16.5))
+    );
+    const inOrNearPerformingArts = inPerformingArts || (actualPosition.x >= 63.0 && actualPosition.x <= 85.0 && actualPosition.z >= 23.0 && actualPosition.z <= 53.0);
 
     if (inOrNearNorthStair) {
       // 樓梯間外牆：西外牆 X=28.0，東外牆 X=34.0，北外牆 Z=-8.5
@@ -143,6 +173,22 @@ export class ThirdPersonCamera {
       actualPosition.x = Math.max(28.35, Math.min(33.65, actualPosition.x));
       actualPosition.z = Math.min(98.15, actualPosition.z);
       actualPosition.y = Math.max(targetPos.y + 0.25, Math.min(23.2, actualPosition.y));
+    } else if (inOrNearElevator) {
+      // 電梯車廂內部約束：限制在車廂內部邊界內，徹底防止仰角鏡頭穿出車頂看見黑暗井道
+      actualPosition.x = Math.max(63.8, Math.min(67.2, actualPosition.x));
+      actualPosition.z = Math.max(42.2, Math.min(45.0, actualPosition.z));
+      if (targetPos.y < 6.0) {
+        actualPosition.y = Math.max(0.45, Math.min(2.45, actualPosition.y));
+      } else {
+        actualPosition.y = Math.max(12.45, Math.min(14.45, actualPosition.y));
+      }
+    } else if (inOrNearPerformingArts && targetPos.y < 17.5) {
+      // 演藝大樓本體天花板限制 (1~3F 演藝廳 Y < 11.5，4F 羽球館 Y: 12.0 ~ 16.5)
+      if (targetPos.y < 11.5) {
+        actualPosition.y = Math.max(0.45, Math.min(11.25, actualPosition.y));
+      } else {
+        actualPosition.y = Math.max(12.45, Math.min(15.95, actualPosition.y));
+      }
     } else {
       // 教學大樓一般室內樓層天花板限制 (僅在 Z: 1.0 ~ 89.0 範圍之教室與走廊)
       const camInMainBuilding = (actualPosition.x >= 27.0 && actualPosition.x <= 48.5 && actualPosition.z >= 1.0 && actualPosition.z <= 89.0);
@@ -163,7 +209,14 @@ export class ThirdPersonCamera {
     this.currentPosition.lerp(actualPosition, lerpFactor);
     this.currentLookAt.lerp(focusPoint, lerpFactor);
 
-    // 7. 插值後再次確認不穿透樓梯間外牆
+    // 7. 插值後再次確認不穿透樓梯間外牆、電梯車廂與室內天花板
+    const curCamInElevator = inElevator || (
+      this.currentPosition.x >= 63.6 && this.currentPosition.x <= 67.4 &&
+      this.currentPosition.z >= 42.0 && this.currentPosition.z <= 45.2 &&
+      ((targetPos.y < 6.0 && this.currentPosition.y < 4.0) || (targetPos.y >= 6.0 && this.currentPosition.y >= 10.0 && this.currentPosition.y <= 16.5))
+    );
+    const curCamInPerformingArts = inPerformingArts || (this.currentPosition.x >= 63.0 && this.currentPosition.x <= 85.0 && this.currentPosition.z >= 23.0 && this.currentPosition.z <= 53.0);
+
     if (inOrNearNorthStair) {
       this.currentPosition.x = Math.max(28.35, Math.min(33.65, this.currentPosition.x));
       this.currentPosition.z = Math.max(-8.15, this.currentPosition.z);
@@ -172,6 +225,20 @@ export class ThirdPersonCamera {
       this.currentPosition.x = Math.max(28.35, Math.min(33.65, this.currentPosition.x));
       this.currentPosition.z = Math.min(98.15, this.currentPosition.z);
       this.currentPosition.y = Math.max(targetPos.y + 0.25, Math.min(23.2, this.currentPosition.y));
+    } else if (curCamInElevator) {
+      this.currentPosition.x = Math.max(63.8, Math.min(67.2, this.currentPosition.x));
+      this.currentPosition.z = Math.max(42.2, Math.min(45.0, this.currentPosition.z));
+      if (targetPos.y < 6.0) {
+        this.currentPosition.y = Math.max(0.45, Math.min(2.45, this.currentPosition.y));
+      } else {
+        this.currentPosition.y = Math.max(12.45, Math.min(14.45, this.currentPosition.y));
+      }
+    } else if (curCamInPerformingArts && targetPos.y < 17.5) {
+      if (targetPos.y < 11.5) {
+        this.currentPosition.y = Math.max(0.45, Math.min(11.25, this.currentPosition.y));
+      } else {
+        this.currentPosition.y = Math.max(12.45, Math.min(15.95, this.currentPosition.y));
+      }
     } else {
       const camInMainBuilding = (this.currentPosition.x >= 25.5 && this.currentPosition.x <= 48.5 && this.currentPosition.z >= 1.0 && this.currentPosition.z <= 89.0);
       if ((inMainBuilding || camInMainBuilding) && targetPos.y < 17.5) {

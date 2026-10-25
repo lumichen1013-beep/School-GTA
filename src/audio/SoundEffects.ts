@@ -4,7 +4,31 @@ export class SoundEffects {
   private isMuted: boolean = false;
 
   constructor() {
-    // Initialized on first user interaction
+    this.setupAutoResume();
+  }
+
+  // 鎖屏或切換分頁切回時自動喚醒 Web Audio
+  private setupAutoResume() {
+    const resumeAudio = () => {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        resumeAudio();
+      }
+    });
+
+    window.addEventListener('click', resumeAudio, { passive: true });
+    window.addEventListener('touchstart', resumeAudio, { passive: true });
+  }
+
+  public resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
   }
 
   private initCtx() {

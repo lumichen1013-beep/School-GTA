@@ -63,6 +63,14 @@ export class HUD {
   private commissaryCloseBtnEl: HTMLElement | null;
   public isCommissaryOpen: boolean = false;
 
+  // 4F 網球挑戰賽對話視窗
+  private tennisModalEl: HTMLElement | null;
+  private tennisCloseBtnEl: HTMLElement | null;
+  private tennisStartBtnEl: HTMLElement | null;
+  private tennisCancelBtnEl: HTMLElement | null;
+  public isTennisDialogOpen: boolean = false;
+  private onTennisStartCallback?: () => void;
+
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
@@ -107,6 +115,31 @@ export class HUD {
       });
     }
 
+    this.tennisModalEl = document.getElementById('tennis-modal');
+    this.tennisCloseBtnEl = document.getElementById('tennis-dialog-close-btn');
+    this.tennisStartBtnEl = document.getElementById('tennis-btn-start');
+    this.tennisCancelBtnEl = document.getElementById('tennis-btn-cancel');
+
+    if (this.tennisCloseBtnEl) {
+      this.tennisCloseBtnEl.addEventListener('click', () => {
+        this.closeTennisDialog();
+      });
+    }
+    if (this.tennisCancelBtnEl) {
+      this.tennisCancelBtnEl.addEventListener('click', () => {
+        this.closeTennisDialog();
+      });
+    }
+    if (this.tennisStartBtnEl) {
+      this.tennisStartBtnEl.addEventListener('click', () => {
+        if (this.onTennisStartCallback) {
+          const cb = this.onTennisStartCallback;
+          this.closeTennisDialog();
+          cb();
+        }
+      });
+    }
+
     this.shotMeterEl = document.getElementById('shot-meter');
     this.shotSweetspotEl = document.getElementById('shot-sweetspot');
     this.shotFillEl = document.getElementById('shot-fill');
@@ -135,6 +168,12 @@ export class HUD {
         this.toggleQuestTracker();
       });
     }
+
+    // 行動裝置或窄螢幕預設將任務看板收合，維持乾淨清爽的開放視野
+    const isMobileDevice = window.innerWidth <= 900 || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (isMobileDevice) {
+      this.toggleQuestTracker(false);
+    }
   }
 
   // 頂部任務介面屬性
@@ -154,6 +193,24 @@ export class HUD {
   private qSwimTime: HTMLElement | null;
   private qBasketStreak: HTMLElement | null;
   private isQuestTrackerExpanded: boolean = true;
+
+  // 效能優化節流與髒檢查 (Perf 6)
+  private minimapDeltaAccumulator: number = 0;
+  private lastMinimapTime: number = 0;
+  private lastCash: number = -1;
+  private lastMissionData: {
+    studentDefeated: number;
+    hasNormalBat: boolean;
+    teacherDefeated: number;
+    dogDefeated: number;
+    bikeDefeated: number;
+    hasSpecialBat: boolean;
+    plantBossDefeated: boolean;
+    peBossDefeated: boolean;
+    trackRecordText: string;
+    swimRecordText: string;
+    basketballStreak: number;
+  } | null = null;
 
   private shotMeterEl: HTMLElement | null;
   private shotSweetspotEl: HTMLElement | null;
@@ -262,6 +319,9 @@ export class HUD {
   }
 
   public setCash(cash: number) {
+    if (this.lastCash === cash) return;
+    this.lastCash = cash;
+
     if (this.cashTextEl) {
       this.cashTextEl.textContent = `NT$ ${cash}`;
     }
@@ -337,8 +397,12 @@ export class HUD {
   }
 
   // 切換任務介面收合/展開
-  public toggleQuestTracker() {
-    this.isQuestTrackerExpanded = !this.isQuestTrackerExpanded;
+  public toggleQuestTracker(expand?: boolean) {
+    if (expand !== undefined) {
+      this.isQuestTrackerExpanded = expand;
+    } else {
+      this.isQuestTrackerExpanded = !this.isQuestTrackerExpanded;
+    }
     if (this.questListContent && this.questToggleIndicator) {
       if (this.isQuestTrackerExpanded) {
         this.questListContent.classList.remove('collapsed');
@@ -350,7 +414,7 @@ export class HUD {
     }
   }
 
-  // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄)
+  // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄，含髒檢查 Dirty check)
   public updateMissionTracker(data: {
     studentDefeated: number;
     hasNormalBat: boolean;
@@ -364,6 +428,25 @@ export class HUD {
     swimRecordText: string;
     basketballStreak: number;
   }) {
+    const last = this.lastMissionData;
+    if (
+      last &&
+      last.studentDefeated === data.studentDefeated &&
+      last.hasNormalBat === data.hasNormalBat &&
+      last.teacherDefeated === data.teacherDefeated &&
+      last.dogDefeated === data.dogDefeated &&
+      last.bikeDefeated === data.bikeDefeated &&
+      last.hasSpecialBat === data.hasSpecialBat &&
+      last.plantBossDefeated === data.plantBossDefeated &&
+      last.peBossDefeated === data.peBossDefeated &&
+      last.trackRecordText === data.trackRecordText &&
+      last.swimRecordText === data.swimRecordText &&
+      last.basketballStreak === data.basketballStreak
+    ) {
+      return;
+    }
+    this.lastMissionData = { ...data };
+
     if (this.qBatProgress) {
       this.qBatProgress.textContent = `${Math.min(20, data.studentDefeated)}/20`;
     }
@@ -408,7 +491,7 @@ export class HUD {
 
     if (this.qPeStatus) {
       if (data.peBossDefeated) {
-        this.qPeStatus.textContent = '已擊潰 🏆';
+        this.qPeStatus.textContent = '已獲勝 🏆';
         this.qPeStatus.className = 'q-status done';
       } else {
         this.qPeStatus.textContent = '4F球場守候';
@@ -488,6 +571,21 @@ export class HUD {
     }
   }
 
+  public openTennisDialog(onStart: () => void) {
+    if (!this.tennisModalEl) return;
+    this.isTennisDialogOpen = true;
+    this.onTennisStartCallback = onStart;
+    this.tennisModalEl.style.display = 'flex';
+  }
+
+  public closeTennisDialog() {
+    if (this.tennisModalEl) {
+      this.tennisModalEl.style.display = 'none';
+      this.isTennisDialogOpen = false;
+      this.onTennisStartCallback = undefined;
+    }
+  }
+
   public hidePrompt() {
     if (this.actionPrompt) {
       this.actionPrompt.style.display = 'none';
@@ -502,7 +600,8 @@ export class HUD {
     npcs: NPC[],
     bicycles: Bicycle[],
     isBeingChased: boolean = false,
-    isHighDanger: boolean = false
+    isHighDanger: boolean = false,
+    delta?: number
   ) {
     // 1. 生命值與體力數值
     if (this.hpBar && this.hpNum) {
@@ -517,8 +616,8 @@ export class HUD {
     // 2. 地點分區偵測
     this.updateLocationZone(playerPos);
 
-    // 3. 繪製 3D 雷達小地圖 (Minimap)
-    this.renderMinimap(playerPos, playerRotY, npcs, bicycles);
+    // 3. 繪製 3D 雷達小地圖 (Minimap，25fps 節流控制)
+    this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta);
 
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette)
     if (this.pursuitVignetteEl) {
@@ -576,7 +675,18 @@ export class HUD {
     this.locationEl.textContent = zone;
   }
 
-  private renderMinimap(playerPos: THREE.Vector3, playerRotY: number, npcs: NPC[], bicycles: Bicycle[]) {
+  private renderMinimap(playerPos: THREE.Vector3, playerRotY: number, npcs: NPC[], bicycles: Bicycle[], delta?: number) {
+    const now = performance.now();
+    const dt = delta !== undefined ? delta : (this.lastMinimapTime > 0 ? (now - this.lastMinimapTime) / 1000 : 0.04);
+    this.lastMinimapTime = now;
+    this.minimapDeltaAccumulator += dt;
+
+    // 控制小地圖繪製頻率為約 25fps（每隔 0.04 秒重繪一次，省去每幀無意義 2D Canvas 重繪開銷）
+    if (this.minimapDeltaAccumulator < 0.04) {
+      return;
+    }
+    this.minimapDeltaAccumulator = this.minimapDeltaAccumulator % 0.04;
+
     const ctx = this.ctx;
     const w = this.canvas.width;
     const h = this.canvas.height;

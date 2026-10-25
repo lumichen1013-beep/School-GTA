@@ -80,6 +80,7 @@ export class NPC {
   private koBadgeSprite: THREE.Sprite;
   private koBadgeCanvas: HTMLCanvasElement;
   private koBadgeTexture: THREE.CanvasTexture;
+  private lastKoBadgeSec: number = -1;
 
   constructor(scene: THREE.Scene, startPos: THREE.Vector3, role: NPCRole, waypoints: THREE.Vector3[] = []) {
     this.position = startPos.clone();
@@ -110,12 +111,12 @@ export class NPC {
       this.attackPower = 22;
       this.attackRange = 1.9;
     } else if (role === 'DOG') {
-      // 校犬柴柴：速度降為原本 1/3 (行走 1.67、追捕 4.5、小跑 2.17)
+      // 校犬柴柴：敏捷四足犬，巡邏步態 3.8，追捕奔馳 11.5，極速狂飆 13.8
       this.maxHp = 630;
-      this.speed = 1.67;
-      this.chaseSpeed = 4.5;
+      this.speed = 3.8;
+      this.chaseSpeed = 11.5;
       this.attackPower = 30;
-      this.attackRange = 1.9;
+      this.attackRange = 2.0;
     } else if (role === 'BIKE_PATROL') {
       // 單車同學：速度降為原本 1/4 (巡邏 1.88、追捕 3.75)
       this.maxHp = 225;
@@ -193,8 +194,12 @@ export class NPC {
     scene.add(this.mesh);
   }
 
-  // 更新昏迷休養倒數秒數告示牌
+  // 更新昏迷休養倒數秒數告示牌 (加入 lastKoBadgeSec 快取節流，僅在秒數變更時重繪)
   private updateKOBadge(secondsLeft: number) {
+    const sec = Math.ceil(Math.max(0, secondsLeft));
+    if (sec === this.lastKoBadgeSec) return;
+    this.lastKoBadgeSec = sec;
+
     const ctx = this.koBadgeCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, 256, 64);
@@ -213,7 +218,7 @@ export class NPC {
     ctx.font = 'bold 26px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`💫 昏迷中 (${Math.ceil(Math.max(0, secondsLeft))}s)`, 128, 32);
+    ctx.fillText(`💫 昏迷中 (${sec}s)`, 128, 32);
 
     this.koBadgeTexture.needsUpdate = true;
   }
@@ -667,7 +672,7 @@ export class NPC {
 
   public getRoleTitle(): string {
     switch (this.role) {
-      case 'PE_TEACHER_BOSS': return '體育組長 林教頭';
+      case 'PE_TEACHER_BOSS': return '網球教練 巨石';
       case 'BANDIT': return '校外強盜';
       case 'TEACHER': return '巡堂老師';
       case 'INSTRUCTOR': return '主任教官';
@@ -706,6 +711,7 @@ export class NPC {
       this.hpBarBgMesh.visible = false;
       this.hpBarMesh.visible = false;
 
+      this.lastKoBadgeSec = -1;
       this.updateKOBadge(10.0);
       this.koBadgeSprite.visible = true;
 
@@ -813,12 +819,12 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 體育老師發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網)
-  public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene): ShuttlecockProjectile | null {
+  // 網球教練發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網)
+  public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene, cooldown: number = 2.2): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
 
-    // 嚴格限制：網球攻擊目標必須在 4F 羽球館/網球場內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)
+    // 嚴格限制：網球目標必須在 4F 網球場內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)
     if (
       targetPos.y < 11.2 || targetPos.y > 17.0 ||
       targetPos.x < 63.0 || targetPos.x > 85.0 ||
@@ -830,8 +836,9 @@ export class NPC {
     const dist = this.position.distanceTo(targetPos);
     if (dist < 2.5 || dist > 22.0) return null;
 
-    this.shuttlecockCooldown = 2.6; // 每 2.6 秒發一次網球
+    this.shuttlecockCooldown = cooldown; // 發球間隔
     soundManager.playBadmintonWhoosh();
+    this.triggerAttackAnimation();
 
     // 建立螢光黃綠色標準網球 3D 模型
     const group = new THREE.Group();
@@ -962,15 +969,13 @@ export class NPC {
       return false;
     }
 
-    // 體育老師 Boss 嚴格限制在 4F 羽球館範圍內 (Y: 11.2 ~ 17.0, X: 63 ~ 85, Z: 23 ~ 53)，絕不鎖定館外玩家
+    // 網球教練 巨石：處於和平教學與挑戰模式，不主動鎖定或追捕玩家
     if (this.role === 'PE_TEACHER_BOSS') {
-      if (playerPos.y < 11.2 || playerPos.y > 17.0 || playerPos.x < 63.0 || playerPos.x > 85.0 || playerPos.z < 23.0 || playerPos.z > 53.0) {
-        return false;
-      }
+      return false;
     }
 
     // 垂直高度差檢測：若垂直高度差超過 2.6m（位於不同樓層），視線被樓板與天花板遮擋
-    const maxYDiff = this.role === 'PE_TEACHER_BOSS' ? 2.5 : 2.6;
+    const maxYDiff = 2.6;
     if (Math.abs(playerPos.y - this.position.y) > maxYDiff) {
       return false;
     }
@@ -979,7 +984,7 @@ export class NPC {
     const dist = toPlayer.length();
 
     // 視距半徑
-    const maxViewDist = this.role === 'PE_TEACHER_BOSS' ? 24.0 : this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
+    const maxViewDist = this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
     if (dist > maxViewDist) return false;
 
     const forward = new THREE.Vector3(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
@@ -1083,6 +1088,7 @@ export class NPC {
           this.reviveTimer = 10.0;
           this.hpBarBgMesh.visible = false;
           this.hpBarMesh.visible = false;
+          this.lastKoBadgeSec = -1;
           this.updateKOBadge(10.0);
           this.koBadgeSprite.visible = true;
 
@@ -1137,6 +1143,7 @@ export class NPC {
         this.hpBarBgMesh.visible = true;
         this.hpBarMesh.visible = true;
         this.koBadgeSprite.visible = false;
+        this.lastKoBadgeSec = -1;
 
         // 重新站立回正
         this.mesh.rotation.x = 0;
@@ -1213,20 +1220,20 @@ export class NPC {
         const distToPlayer = this.position.distanceTo(playerPos);
         const seesPlayer = this.canSeePlayer(playerPos, colliders);
 
-        if (wantedLevel > 0 && seesPlayer && distToPlayer < 18.0) {
+        if (wantedLevel > 0 && seesPlayer && distToPlayer < 20.0) {
           this.isChasing = true;
           this.lostSightTimer = 0;
           this.lastKnownPos.copy(playerPos);
           if (this.whistleCooldown <= 0) {
             soundManager.playDogBark();
-            this.whistleCooldown = 5.0;
+            this.whistleCooldown = 4.0;
           }
           onSpotPlayer();
         } else if (this.isChasing) {
           if (!seesPlayer) {
-            // 失去玩家視線！朝最後目擊位置搜索，若超過 3 秒未見到玩家則放棄追捕
+            // 失去玩家視線！朝最後目擊位置搜索，若超過 4 秒未見到玩家則放棄追捕
             this.lostSightTimer += delta;
-            if (this.lostSightTimer >= 3.0 || distToPlayer > 28.0) {
+            if (this.lostSightTimer >= 4.0 || distToPlayer > 32.0) {
               this.isChasing = false;
               this.isBurstSprinting = false;
               this.dynamicSpeed = this.speed;
@@ -1302,7 +1309,7 @@ export class NPC {
         if (this.chasePacingTimer <= 0) {
           this.isBurstSprinting = !this.isBurstSprinting;
           if (this.isBurstSprinting) {
-            this.chasePacingTimer = 0.5 + Math.random() * 1.0;
+            this.chasePacingTimer = this.role === 'DOG' ? (2.0 + Math.random() * 1.5) : (0.5 + Math.random() * 1.0);
             if (Math.random() < 0.25 && this.whistleCooldown <= 0) {
               if (this.role === 'DOG') soundManager.playDogBark();
               else if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell();
@@ -1310,20 +1317,38 @@ export class NPC {
               this.whistleCooldown = 4.0;
             }
           } else {
-            this.chasePacingTimer = 3.5 + (Math.random() * 0.6 - 0.3);
+            this.chasePacingTimer = this.role === 'DOG' ? (1.5 + Math.random() * 1.0) : (3.5 + (Math.random() * 0.6 - 0.3));
           }
         }
       }
 
       // 目標速度計算
       let targetChaseSpeed = this.speed;
-      if (this.isBurstSprinting) {
+      if (this.role === 'DOG') {
+        // 校犬專屬智慧動態追逐與跟隨邏輯：
+        // 1. 若玩家騎乘自行車，校犬全力狂飆追趕
+        if (isPlayerRidingBike) {
+          targetChaseSpeed = 13.8;
+          this.isBurstSprinting = true;
+        } else {
+          const distToP = this.position.distanceTo(playerPos);
+          if (distToP > 12.0) {
+            // 距離遠：極速奔馳追趕
+            targetChaseSpeed = 12.2;
+            this.isBurstSprinting = true;
+          } else if (distToP > 5.5) {
+            // 中距：配合玩家奔馳節奏，衝刺 11.5，小跑 8.8
+            targetChaseSpeed = this.isBurstSprinting ? 11.5 : 8.8;
+          } else {
+            // 近距：準備撲咬，保持 9.8 衝刺或 7.8 緊咬跟隨
+            targetChaseSpeed = this.isBurstSprinting ? 9.8 : 7.8;
+          }
+        }
+      } else if (this.isBurstSprinting) {
         targetChaseSpeed = this.chaseSpeed;
       } else {
         if (this.role === 'BIKE_PATROL') {
           targetChaseSpeed = 1.88;
-        } else if (this.role === 'DOG') {
-          targetChaseSpeed = 2.17;
         } else if (this.role === 'BANDIT') {
           targetChaseSpeed = 6.8; // 強盜放緩期仍維持 6.8 m/s 快走！
         } else {
@@ -1332,7 +1357,8 @@ export class NPC {
       }
 
       // 平滑速度過渡
-      this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * 4.0, 1.0);
+      const accelRate = this.role === 'DOG' ? 6.0 : 4.0;
+      this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
     } else {
       this.isBurstSprinting = false;
@@ -1435,10 +1461,10 @@ export class NPC {
         }
       }
 
-      // 體育老師 Boss 邊界回推：嚴格鎖定在 4F 羽球館內，絕對不會離開球場
+      // 網球教練 巨石 邊界回推：嚴格鎖定在 4F 網球場北側發球半場內，絕對不會離開球場
       if (this.role === 'PE_TEACHER_BOSS') {
         this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
-        this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 52.2);
+        this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 37.0);
         this.position.y = 12.0;
       }
 
@@ -1473,7 +1499,8 @@ export class NPC {
       // 轉向與俯仰姿態
       const targetRotation = Math.atan2(moveDir.x, moveDir.z);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
-      this.rotationY += diff * Math.min(delta * 10.0, 1.0);
+      const turnRate = this.role === 'DOG' ? 14.0 : 10.0;
+      this.rotationY += diff * Math.min(delta * turnRate, 1.0);
       this.mesh.rotation.y = this.rotationY;
 
       // 追捕姿態視覺回饋：衝刺時前傾壓低、調息時微喘
@@ -1487,20 +1514,32 @@ export class NPC {
       }
 
       // 6. 專屬動作動畫
-      const animRate = this.isChasing ? (this.isBurstSprinting ? 16.0 : 9.5) : 8.0;
+      // 動態步頻：步態頻率與實際位移速度嚴格成比例！
+      const animRate = this.role === 'DOG'
+        ? Math.max(8.0, currentSpeed * 2.2 + 2.0)
+        : (this.isChasing ? (this.isBurstSprinting ? 16.0 : 9.5) : 8.0);
       this.animTimer += delta * animRate;
 
       if (this.role === 'DOG') {
-        // 校犬四足奔跑動畫
-        const dogRun = Math.sin(this.animTimer) * (this.isBurstSprinting ? 0.78 : 0.45);
+        // 校犬四足奔馳動畫：跨步幅度隨速度動態放大 (Gallop stride scaling)
+        const strideMag = Math.min(0.85, 0.40 + (currentSpeed / 12.0) * 0.42);
+        const dogRun = Math.sin(this.animTimer) * strideMag;
         if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.x = dogRun;
         if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.x = -dogRun;
         if (this.dogBackLeftLeg) this.dogBackLeftLeg.rotation.x = -dogRun;
         if (this.dogBackRightLeg) this.dogBackRightLeg.rotation.x = dogRun;
-        if (this.dogTail) this.dogTail.rotation.y = Math.sin(this.animTimer * 2) * 0.45;
-        if (this.dogHead) {
-          this.dogHead.position.z = 0.48 + (this.attackAnimTimer > 0 ? 0.15 : 0);
+
+        // 奔馳時尾巴興奮擺動頻率隨速度加快
+        const tailRate = this.isChasing ? 2.5 : 1.8;
+        if (this.dogTail) this.dogTail.rotation.y = Math.sin(this.animTimer * tailRate) * 0.52;
+
+        // 四足奔馳上下顛簸 (Canine gallop vertical bounce)
+        if (this.attackAnimTimer > 0) {
+          if (this.dogHead) this.dogHead.position.z = 0.63; // 撲咬伸頸
+        } else {
+          if (this.dogHead) this.dogHead.position.z = 0.48;
         }
+        this.mesh.position.y = this.baseFloorY + Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.02);
       } else if (this.role === 'BIKE_PATROL') {
         // 單車糾察隊輪胎旋轉
         const spin = (currentSpeed / 0.38) * delta;
@@ -1524,6 +1563,10 @@ export class NPC {
     }
 
     this.mesh.position.copy(this.position);
+    // 柴柴奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
+    if (this.role === 'DOG' && moveDir.lengthSq() > 0.05) {
+      this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.02);
+    }
 
     // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家
     const toPlayer = playerPos.clone().sub(this.position);

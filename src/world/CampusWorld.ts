@@ -64,7 +64,7 @@ export class CampusWorld {
 
   // 判斷玩家是否身處游泳池水體範圍之內
   public isInsideSwimmingPool(pos: THREE.Vector3): boolean {
-    return pos.x >= 67.5 && pos.x <= 82.5 && pos.z >= -48.5 && pos.z <= -21.5 && pos.y <= 0.8;
+    return pos.x >= 67.5 && pos.x <= 82.5 && pos.z >= -48.5 && pos.z <= -21.5 && pos.y <= 1.0 && pos.y >= -1.5;
   }
   public trackStartPos: THREE.Vector3 = new THREE.Vector3(-30, 0, 14); // 位於東主直道北端終點線 (進第一彎道前，標準田徑終點與200m起點)
   public trackCheckpoints: THREE.Vector3[] = [
@@ -2055,193 +2055,397 @@ export class CampusWorld {
     truss.position.set(baseX + 3.5, 11.2, minZ + 4.5);
     this.scene.add(truss);
 
-    // 4. 西北側全新【專屬獨立封閉式樓梯間】(Dedicated Enclosed Stairwell Tower to 4F)
-    // 樓梯間區域：X: 62.0 ~ 70.0, Z: 22.0 ~ 36.5
-    // 與演藝廳主場地完全隔絕，配置專屬出入門戶、大觀景窗，物理碰撞與台階幾何 100% 數學對齊！
-    const stairStepMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
-    const nosingMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 }); // 防滑止滑踏條
-
-    // 東側隔離隔音牆 (將專屬樓梯間與演藝廳/舞台徹底隔開)
-    this.buildWall(70.0, 6.0, 29.5, 0.4, 12.0, 15.0, wallMat);
-    // 南側樓梯間端點牆 (1F 留出進入樓梯間的大門 X: 63.5 ~ 66.5)
-    this.buildWall(68.25, 6.0, 36.5, 3.5, 12.0, 0.4, wallMat);
-    this.buildWall(62.75, 6.0, 36.5, 1.5, 12.0, 0.4, wallMat);
-    // 1F 樓梯間門眉上樑
-    const doorBeam = new THREE.Mesh(new THREE.BoxGeometry(2.5, 9.2, 0.4), wallMat);
-    doorBeam.position.set(65.0, 7.4, 36.5);
-    this.scene.add(doorBeam);
-    this.addCollider(63.75, 66.25, 36.3, 36.7, 2.8, 12.0);
-
-    // 1F 樓梯間入口標牌
-    const stairSignCanvas = document.createElement('canvas');
-    stairSignCanvas.width = 512;
-    stairSignCanvas.height = 128;
-    const sctx2 = stairSignCanvas.getContext('2d')!;
-    sctx2.fillStyle = '#16a085';
-    sctx2.fillRect(0, 0, 512, 128);
-    sctx2.strokeStyle = '#ffffff';
-    sctx2.lineWidth = 6;
-    sctx2.strokeRect(4, 4, 504, 120);
-    sctx2.fillStyle = '#ffffff';
-    sctx2.font = 'bold 36px "Noto Sans TC", sans-serif';
-    sctx2.textAlign = 'center';
-    sctx2.textBaseline = 'middle';
-    sctx2.fillText('🚪 專屬安全梯 (直達 4F 羽球館) ⬆️', 256, 64);
-    const stairSignTex = new THREE.CanvasTexture(stairSignCanvas);
-    const stairSignMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: stairSignTex }));
-    stairSignMesh.position.set(65.0, 3.2, 36.75);
-    this.scene.add(stairSignMesh);
-
-    // 實體台階與 100% 精準對齊坡道 (梯級物理碰撞完全貼合)
-    const numSteps = 16;
-    const stepDepth = 9.0 / numSteps; // 0.5625m
-    const stepHeight = 4.0 / numSteps; // 0.25m
-
-    // 一段：1F -> 2F (西側跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 爬升 Y: 0 -> 4.0)
-    this.addRamp(63.0, 66.5, 25.0, 34.0, 4.0, 0);
-    for (let i = 0; i < numSteps; i++) {
-      const sz = 34.0 - (i + 0.5) * stepDepth;
-      const sy = (i + 0.5) * stepHeight;
-      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
-      stepMesh.position.set(64.75, sy, sz);
-      stepMesh.receiveShadow = true;
-      this.scene.add(stepMesh);
-      // 踏條
-      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
-      nosing.position.set(64.75, sy + stepHeight / 2 + 0.01, sz - stepDepth / 2 + 0.04);
-      this.scene.add(nosing);
-    }
-
-    // 二段中繼平台：2F Landing (北側觀景中繼平台 Y = 4.0, X: 63.0 ~ 69.8, Z: 22.0 ~ 25.0)
-    this.addFloorSlab(63.0, 69.8, 22.0, 25.0, 4.0);
-    const land1 = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, 3.0), stageFloorMat);
-    land1.position.set(66.4, 3.825, 23.5);
-    this.scene.add(land1);
-
-    // 二段：2F -> 3F (東側跑道 X: 66.5 ~ 69.8, Z: 25.0 -> 34.0, 爬升 Y: 4.0 -> 8.0)
-    this.addRamp(66.5, 69.8, 25.0, 34.0, 4.0, 8.0);
-    for (let i = 0; i < numSteps; i++) {
-      const sz = 25.0 + (i + 0.5) * stepDepth;
-      const sy = 4.0 + (i + 0.5) * stepHeight;
-      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
-      stepMesh.position.set(68.15, sy, sz);
-      stepMesh.receiveShadow = true;
-      this.scene.add(stepMesh);
-      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
-      nosing.position.set(68.15, sy + stepHeight / 2 + 0.01, sz + stepDepth / 2 - 0.04);
-      this.scene.add(nosing);
-    }
-
-    // 三段中繼平台：3F Landing (南側觀景中繼平台 Y = 8.0, X: 63.0 ~ 69.8, Z: 34.0 ~ 36.5)
-    this.addFloorSlab(63.0, 69.8, 34.0, 36.5, 8.0);
-    const land2 = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, 2.5), stageFloorMat);
-    land2.position.set(66.4, 7.825, 35.25);
-    this.scene.add(land2);
-
-    // 三段：3F -> 4F (西側跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 爬升 Y: 8.0 -> 12.0)
-    this.addRamp(63.0, 66.5, 25.0, 34.0, 12.0, 8.0);
-    for (let i = 0; i < numSteps; i++) {
-      const sz = 34.0 - (i + 0.5) * stepDepth;
-      const sy = 8.0 + (i + 0.5) * stepHeight;
-      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
-      stepMesh.position.set(64.75, sy, sz);
-      stepMesh.receiveShadow = true;
-      this.scene.add(stepMesh);
-      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
-      nosing.position.set(64.75, sy + stepHeight / 2 + 0.01, sz - stepDepth / 2 + 0.04);
-      this.scene.add(nosing);
-    }
-
-    // 四樓樓梯出入口抵達平台 (4F Arrival Landing Y = 12.0, X: 63.0 ~ 70.0, Z: 22.0 ~ 25.0)
-    this.addFloorSlab(63.0, 70.0, 22.0, 25.0, 12.0);
-    const land4 = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.35, 3.0), stageFloorMat);
-    land4.position.set(66.5, 11.825, 23.5);
-    this.scene.add(land4);
-
-    // 4F 樓梯間專屬出口標示
-    const stair4FMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: stairSignTex }));
-    stair4FMesh.position.set(70.2, 14.2, 23.5);
-    stair4FMesh.rotation.y = Math.PI / 2;
-    this.scene.add(stair4FMesh);
-
-    // 5. ⚡ 演藝大樓直達電梯系統 (具備可滑動電梯門與自動出入功能)
-    const liftCabinMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.85, roughness: 0.2 });
-    const liftGlassMat = new THREE.MeshLambertMaterial({ color: 0x00cec9, transparent: true, opacity: 0.45 });
-    const liftDoorMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.8, roughness: 0.2 });
+    // 4. ⚡ 演藝大樓直達景觀電梯塔 (1F ~ 4F 現代化外牆鋼構井道、精緻門廳與電動滑動門)
+    // ----------------------------------------------------------------------------------
+    // 原西北側舊多段樓梯已全數拆除，西側視野通透敞亮，由現代感高科技景觀直達電梯貫穿 1F~4F
+    const shaftFrameMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.85, roughness: 0.25 });
+    const shaftPanelMat = new THREE.MeshStandardMaterial({ color: 0x2f3640, metalness: 0.75, roughness: 0.35 });
+    const shaftSteelMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.9, roughness: 0.15 });
+    const shaftGlassMat = new THREE.MeshLambertMaterial({ color: 0x00cec9, transparent: true, opacity: 0.38 });
+    const liftDoorMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.9, roughness: 0.18 });
     const liftRingMat = new THREE.MeshBasicMaterial({ color: 0x00cec9, transparent: true, opacity: 0.85 });
+    const buttonPlateMat = new THREE.MeshStandardMaterial({ color: 0x718093, metalness: 0.85, roughness: 0.2 });
+    const btnActiveMat = new THREE.MeshBasicMaterial({ color: 0x00d2d3 });
+    const btnDownMat = new THREE.MeshBasicMaterial({ color: 0xff7675 });
+    const handrailMat = new THREE.MeshStandardMaterial({ color: 0xf5f6fa, metalness: 0.95, roughness: 0.1 });
 
-    // 1F 電梯車廂與左右開合電梯門
+    // A. 井道主結構鋼柱 (貫穿 1F 地面 Y: 0.0 至 4F 屋頂 Y: 16.5，四角立體鋼骨框架)
+    const shaftH = 16.5;
+    const shaftMidY = shaftH / 2; // 8.25
+    const columnGeo = new THREE.BoxGeometry(0.24, shaftH, 0.24);
+    // 四根立體鋼骨角柱 (NW, NE, SW, SE)
+    [
+      [63.7, 42.1],
+      [67.3, 42.1],
+      [63.7, 45.1],
+      [67.3, 45.1]
+    ].forEach(([cx, cz]) => {
+      const col = new THREE.Mesh(columnGeo, shaftSteelMat);
+      col.position.set(cx, shaftMidY, cz);
+      col.castShadow = true;
+      this.scene.add(col);
+    });
+
+    // B. 西側外牆 (X: 63.7，從 1F Y: 0 至 4F Y: 16.5m，採光觀景透視幕牆)
+    // 觀光玻璃大面帷幕窗
+    const westGlass = new THREE.Mesh(new THREE.BoxGeometry(0.06, shaftH - 0.5, 2.76), shaftGlassMat);
+    westGlass.position.set(63.7, shaftMidY, 43.6);
+    this.scene.add(westGlass);
+    // 西側中間結構立挺
+    const westMullion = new THREE.Mesh(new THREE.BoxGeometry(0.14, shaftH, 0.1), shaftFrameMat);
+    westMullion.position.set(63.7, shaftMidY, 43.6);
+    this.scene.add(westMullion);
+    // 西側橫向結構分層飾條 (在 1F頂 3.2m、中段 6.0m/9.0m、4F底 12.0m、4F頂 15.0m)
+    [3.2, 6.0, 9.0, 12.0, 15.0].forEach(yPos => {
+      const transom = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 2.9), shaftSteelMat);
+      transom.position.set(63.7, yPos, 43.6);
+      this.scene.add(transom);
+    });
+    // 西外牆完整碰撞體 (防穿牆進入井道)
+    this.addCollider(63.55, 63.85, 42.0, 45.2, 0, 16.5);
+
+    // C. 東側外牆 (X: 67.3，面向挑高演藝大禮堂與觀眾席，全透視景觀幕牆)
+    const eastGlass = new THREE.Mesh(new THREE.BoxGeometry(0.06, shaftH - 0.5, 2.76), shaftGlassMat);
+    eastGlass.position.set(67.3, shaftMidY, 43.6);
+    this.scene.add(eastGlass);
+    const eastMullion = new THREE.Mesh(new THREE.BoxGeometry(0.14, shaftH, 0.1), shaftFrameMat);
+    eastMullion.position.set(67.3, shaftMidY, 43.6);
+    this.scene.add(eastMullion);
+    [3.2, 6.0, 9.0, 12.0, 15.0].forEach(yPos => {
+      const transom = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 2.9), shaftSteelMat);
+      transom.position.set(67.3, yPos, 43.6);
+      this.scene.add(transom);
+    });
+    // 東外牆完整碰撞體
+    this.addCollider(67.15, 67.45, 42.0, 45.2, 0, 16.5);
+
+    // D. 南側後外牆 (Z: 45.1，全金屬封閉壁板與配重滑軌通道，Y: 0 ~ 16.5m)
+    const southWallMesh = new THREE.Mesh(new THREE.BoxGeometry(3.36, shaftH, 0.2), shaftPanelMat);
+    southWallMesh.position.set(65.5, shaftMidY, 45.05);
+    southWallMesh.castShadow = true;
+    this.scene.add(southWallMesh);
+    // 南後牆垂直金屬導軌飾條
+    [-0.9, 0, 0.9].forEach(ox => {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.08, shaftH, 0.06), shaftSteelMat);
+      rib.position.set(65.5 + ox, shaftMidY, 44.92);
+      this.scene.add(rib);
+    });
+    // 南外牆完整碰撞體
+    this.addCollider(63.6, 67.4, 44.95, 45.25, 0, 16.5);
+
+    // E. 井道內部工程細節 (鋼導軌、牽引鋼纜、配重架，從玻璃外可見逼真內部細節)
+    // 兩側主垂直鋼導軌 (Y: 0 ~ 16.5m)
+    const railL = new THREE.Mesh(new THREE.BoxGeometry(0.08, shaftH, 0.08), shaftSteelMat);
+    railL.position.set(63.95, shaftMidY, 43.5);
+    this.scene.add(railL);
+    const railR = new THREE.Mesh(new THREE.BoxGeometry(0.08, shaftH, 0.08), shaftSteelMat);
+    railR.position.set(67.05, shaftMidY, 43.5);
+    this.scene.add(railR);
+    // 牽引鋼纜
+    [-0.2, 0.2].forEach(ox => {
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, shaftH, 8), shaftSteelMat);
+      cable.position.set(65.5 + ox, shaftMidY, 43.5);
+      this.scene.add(cable);
+    });
+    // 配重架 (懸掛在後側滑軌)
+    const counterweight = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.2), shaftFrameMat);
+    counterweight.position.set(65.5, 7.5, 44.75);
+    this.scene.add(counterweight);
+
+    // 頂部機房蓋板 (Y = 16.5)
+    const shaftTopCap = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.3, 3.2), shaftFrameMat);
+    shaftTopCap.position.set(65.5, 16.55, 43.6);
+    this.scene.add(shaftTopCap);
+
+    // F. 北側正面牆、挑高幕牆與 1F/4F 門廳開口 (Z: 42.1)
+    // 1. 中間 2F~3F 挑高景觀帷幕牆 (Y: 3.2 ~ 12.0，面向演藝廳西門廳，透視整座升降井道)
+    const midGlass = new THREE.Mesh(new THREE.BoxGeometry(3.36, 8.8, 0.06), shaftGlassMat);
+    midGlass.position.set(65.5, 7.6, 42.1);
+    this.scene.add(midGlass);
+    [6.0, 9.0].forEach(yPos => {
+      const midTransom = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.16, 0.14), shaftSteelMat);
+      midTransom.position.set(65.5, yPos, 42.1);
+      this.scene.add(midTransom);
+    });
+    this.addCollider(63.6, 67.4, 42.0, 42.3, 3.2, 12.0);
+
+    // 2. 4F 頂部封閉牆 (Y: 15.2 ~ 16.5)
+    const topWallMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.3, 0.2), shaftPanelMat);
+    topWallMesh.position.set(65.5, 15.85, 42.1);
+    this.scene.add(topWallMesh);
+    this.addCollider(63.6, 67.4, 42.0, 42.3, 15.2, 16.5);
+
+    // 3. 1F 門廳結構 (Y: 0.0 ~ 3.2，留出門口 X: 64.75 ~ 66.25, 寬 1.5m, 高 2.65m)
+    // 左側立柱外牆 (X: 63.7 ~ 64.75)
+    const wall1FL = new THREE.Mesh(new THREE.BoxGeometry(1.05, 3.2, 0.2), shaftPanelMat);
+    wall1FL.position.set(64.22, 1.6, 42.1);
+    this.scene.add(wall1FL);
+    this.addCollider(63.6, 64.75, 42.0, 42.3, 0.0, 3.2);
+    // 右側立柱外牆 (X: 66.25 ~ 67.3)
+    const wall1FR = new THREE.Mesh(new THREE.BoxGeometry(1.05, 3.2, 0.2), shaftPanelMat);
+    wall1FR.position.set(66.78, 1.6, 42.1);
+    this.scene.add(wall1FR);
+    this.addCollider(66.25, 67.4, 42.0, 42.3, 0.0, 3.2);
+    // 門楣上方樑 (Y: 2.65 ~ 3.2)
+    const beam1F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 0.2), shaftPanelMat);
+    beam1F.position.set(65.5, 2.925, 42.1);
+    this.scene.add(beam1F);
+    this.addCollider(64.75, 66.25, 42.0, 42.3, 2.65, 3.2);
+
+    // 1F 不鏽鋼門框 (Architrave Portal Frame)
+    const frameJambGeo = new THREE.BoxGeometry(0.1, 2.7, 0.12);
+    const jamb1FL = new THREE.Mesh(frameJambGeo, shaftSteelMat);
+    jamb1FL.position.set(64.72, 1.35, 42.06);
+    this.scene.add(jamb1FL);
+    const jamb1FR = new THREE.Mesh(frameJambGeo, shaftSteelMat);
+    jamb1FR.position.set(66.28, 1.35, 42.06);
+    this.scene.add(jamb1FR);
+    const frameHead1F = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.1, 0.12), shaftSteelMat);
+    frameHead1F.position.set(65.5, 2.7, 42.06);
+    this.scene.add(frameHead1F);
+    // 1F 不鏽鋼門檻踏板
+    const thresh1F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.02, 0.22), shaftSteelMat);
+    thresh1F.position.set(65.5, 0.01, 42.2);
+    this.scene.add(thresh1F);
+
+    // 4. 4F 門廳結構 (Y: 12.0 ~ 15.2，留出門口 X: 64.75 ~ 66.25, 寬 1.5m, 高 2.65m)
+    // 左側立柱外牆
+    const wall4FL = new THREE.Mesh(new THREE.BoxGeometry(1.05, 3.2, 0.2), shaftPanelMat);
+    wall4FL.position.set(64.22, 13.6, 42.1);
+    this.scene.add(wall4FL);
+    this.addCollider(63.6, 64.75, 42.0, 42.3, 12.0, 15.2);
+    // 右側立柱外牆
+    const wall4FR = new THREE.Mesh(new THREE.BoxGeometry(1.05, 3.2, 0.2), shaftPanelMat);
+    wall4FR.position.set(66.78, 13.6, 42.1);
+    this.scene.add(wall4FR);
+    this.addCollider(66.25, 67.4, 42.0, 42.3, 12.0, 15.2);
+    // 門楣上方樑 (Y: 14.65 ~ 15.2)
+    const beam4F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 0.2), shaftPanelMat);
+    beam4F.position.set(65.5, 14.925, 42.1);
+    this.scene.add(beam4F);
+    this.addCollider(64.75, 66.25, 42.0, 42.3, 14.65, 15.2);
+
+    // 4F 不鏽鋼門框
+    const jamb4FL = new THREE.Mesh(frameJambGeo, shaftSteelMat);
+    jamb4FL.position.set(64.72, 13.35, 42.06);
+    this.scene.add(jamb4FL);
+    const jamb4FR = new THREE.Mesh(frameJambGeo, shaftSteelMat);
+    jamb4FR.position.set(66.28, 13.35, 42.06);
+    this.scene.add(jamb4FR);
+    const frameHead4F = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.1, 0.12), shaftSteelMat);
+    frameHead4F.position.set(65.5, 14.7, 42.06);
+    this.scene.add(frameHead4F);
+    // 4F 不鏽鋼門檻踏板
+    const thresh4F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.02, 0.22), shaftSteelMat);
+    thresh4F.position.set(65.5, 12.01, 42.2);
+    this.scene.add(thresh4F);
+
+    // G. 呼叫按鈕面板 (Call Buttons Panel: 1F 與 4F 右側立柱)
+    // 1F 按鈕面板 (上樓按鈕發亮)
+    const btnBox1F = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.38, 0.03), buttonPlateMat);
+    btnBox1F.position.set(66.52, 1.35, 41.98);
+    this.scene.add(btnBox1F);
+    const btnUp1F = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 16), btnActiveMat);
+    btnUp1F.rotation.x = Math.PI / 2;
+    btnUp1F.position.set(66.52, 1.43, 41.96);
+    this.scene.add(btnUp1F);
+    const btnDown1F = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.02, 16), shaftPanelMat);
+    btnDown1F.rotation.x = Math.PI / 2;
+    btnDown1F.position.set(66.52, 1.27, 41.96);
+    this.scene.add(btnDown1F);
+
+    // 4F 按鈕面板 (下樓按鈕發亮)
+    const btnBox4F = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.38, 0.03), buttonPlateMat);
+    btnBox4F.position.set(66.52, 13.35, 41.98);
+    this.scene.add(btnBox4F);
+    const btnUp4F = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.02, 16), shaftPanelMat);
+    btnUp4F.rotation.x = Math.PI / 2;
+    btnUp4F.position.set(66.52, 13.43, 41.96);
+    this.scene.add(btnUp4F);
+    const btnDown4F = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 16), btnDownMat);
+    btnDown4F.rotation.x = Math.PI / 2;
+    btnDown4F.position.set(66.52, 13.27, 41.96);
+    this.scene.add(btnDown4F);
+
+    // H. 樓層指示燈液晶螢幕 (Floor Indicators: 1F 顯示「1F ▲」/ 4F 顯示「4F ▼」)
+    // 1F 指示螢幕 Canvas (512 x 160)
+    const ind1FCanvas = document.createElement('canvas');
+    ind1FCanvas.width = 512;
+    ind1FCanvas.height = 160;
+    const ictx1 = ind1FCanvas.getContext('2d')!;
+    ictx1.fillStyle = '#0a0e17';
+    ictx1.fillRect(0, 0, 512, 160);
+    ictx1.strokeStyle = '#00cec9';
+    ictx1.lineWidth = 6;
+    ictx1.strokeRect(4, 4, 504, 152);
+    ictx1.fillStyle = '#00cec9';
+    ictx1.font = 'bold 64px "Segoe UI", Arial, sans-serif';
+    ictx1.textAlign = 'center';
+    ictx1.textBaseline = 'middle';
+    ictx1.fillText('1F ▲', 256, 56);
+    ictx1.fillStyle = '#dfe6e9';
+    ictx1.font = 'bold 26px "Noto Sans TC", sans-serif';
+    ictx1.fillText('直達 4F 室內羽球館', 256, 116);
+    const ind1FTex = new THREE.CanvasTexture(ind1FCanvas);
+
+    // 1F 指示燈螢幕外框與面板
+    const indFrame1F = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.44, 0.06), shaftFrameMat);
+    indFrame1F.position.set(65.5, 2.95, 42.02);
+    this.scene.add(indFrame1F);
+    const indScreen1F = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 0.38),
+      new THREE.MeshBasicMaterial({ map: ind1FTex, side: THREE.DoubleSide })
+    );
+    indScreen1F.rotation.y = Math.PI; // 正向面向北側門廳
+    indScreen1F.position.set(65.5, 2.95, 41.98);
+    this.scene.add(indScreen1F);
+
+    // 4F 指示螢幕 Canvas (512 x 160)
+    const ind4FCanvas = document.createElement('canvas');
+    ind4FCanvas.width = 512;
+    ind4FCanvas.height = 160;
+    const ictx4 = ind4FCanvas.getContext('2d')!;
+    ictx4.fillStyle = '#0a0e17';
+    ictx4.fillRect(0, 0, 512, 160);
+    ictx4.strokeStyle = '#ff7675';
+    ictx4.lineWidth = 6;
+    ictx4.strokeRect(4, 4, 504, 152);
+    ictx4.fillStyle = '#ff7675';
+    ictx4.font = 'bold 64px "Segoe UI", Arial, sans-serif';
+    ictx4.textAlign = 'center';
+    ictx4.textBaseline = 'middle';
+    ictx4.fillText('4F ▼', 256, 56);
+    ictx4.fillStyle = '#dfe6e9';
+    ictx4.font = 'bold 26px "Noto Sans TC", sans-serif';
+    ictx4.fillText('直達 1F 演藝廳門廳', 256, 116);
+    const ind4FTex = new THREE.CanvasTexture(ind4FCanvas);
+
+    // 4F 指示燈螢幕外框與面板
+    const indFrame4F = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.44, 0.06), shaftFrameMat);
+    indFrame4F.position.set(65.5, 14.95, 42.02);
+    this.scene.add(indFrame4F);
+    const indScreen4F = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 0.38),
+      new THREE.MeshBasicMaterial({ map: ind4FTex, side: THREE.DoubleSide })
+    );
+    indScreen4F.rotation.y = Math.PI;
+    indScreen4F.position.set(65.5, 14.95, 41.98);
+    this.scene.add(indScreen4F);
+
+    // I. 1F 電梯車廂與左右滑動電梯門 (無縫接軌 setElevatorDoorsOpen)
     const lift1FGroup = new THREE.Group();
     lift1FGroup.position.set(65.5, 0, 43.5);
-    const lift1FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
-    lift1FFrame.position.y = 1.6;
-    lift1FGroup.add(lift1FFrame);
-    const lift1FGlass = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.8, 2.4), liftGlassMat);
-    lift1FGlass.position.y = 1.6;
-    lift1FGroup.add(lift1FGlass);
+
+    // 車廂地坪與天井燈飾
+    const carFloor1F = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 2.4), shaftPanelMat);
+    carFloor1F.position.set(0, 0.03, 0.1);
+    lift1FGroup.add(carFloor1F);
     const ring1F = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), liftRingMat);
     ring1F.rotation.x = -Math.PI / 2;
-    ring1F.position.y = 0.04;
+    ring1F.position.set(0, 0.065, 0.1);
     lift1FGroup.add(ring1F);
 
-    // 1F 左電梯門與右電梯門
-    const doorGeo = new THREE.BoxGeometry(0.68, 2.6, 0.06);
+    const carCeil1F = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 2.4), shaftPanelMat);
+    carCeil1F.position.set(0, 2.7, 0.1);
+    lift1FGroup.add(carCeil1F);
+    const light1F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.02, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    light1F.position.set(0, 2.66, 0.1);
+    lift1FGroup.add(light1F);
+
+    // 車廂後側鏡面不鏽鋼壁板與安全扶手
+    const mirror1F = new THREE.Mesh(new THREE.BoxGeometry(2.7, 2.6, 0.04), shaftSteelMat);
+    mirror1F.position.set(0, 1.35, 1.24);
+    lift1FGroup.add(mirror1F);
+    const railBack1F = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.04, 0.04), handrailMat);
+    railBack1F.position.set(0, 0.95, 1.18);
+    lift1FGroup.add(railBack1F);
+
+    // 車廂兩側透明觀景窗
+    const carGlassGeo = new THREE.BoxGeometry(0.04, 2.6, 2.2);
+    const carGlass1FL = new THREE.Mesh(carGlassGeo, shaftGlassMat);
+    carGlass1FL.position.set(-1.35, 1.35, 0.1);
+    lift1FGroup.add(carGlass1FL);
+    const carGlass1FR = new THREE.Mesh(carGlassGeo, shaftGlassMat);
+    carGlass1FR.position.set(1.35, 1.35, 0.1);
+    lift1FGroup.add(carGlass1FR);
+
+    // 1F 雙扇電動滑動門 (Left & Right Sliding Doors)
+    const doorGeo = new THREE.BoxGeometry(1.14, 2.65, 0.06);
     const door1FL = new THREE.Mesh(doorGeo, liftDoorMat);
-    door1FL.position.set(-0.55 - 0.75, 1.35, -1.28);
+    door1FL.position.set(-0.55 - 0.75, 1.325, -1.28);
     lift1FGroup.add(door1FL);
     const door1FR = new THREE.Mesh(doorGeo, liftDoorMat);
-    door1FR.position.set(0.55 + 0.75, 1.35, -1.28);
+    door1FR.position.set(0.55 + 0.75, 1.325, -1.28);
     lift1FGroup.add(door1FR);
+    // 門扇垂直觀景細縫窗
+    const slitGeo = new THREE.BoxGeometry(0.12, 1.6, 0.07);
+    const slit1FL = new THREE.Mesh(slitGeo, shaftGlassMat);
+    slit1FL.position.set(0.2, 0.1, 0);
+    door1FL.add(slit1FL);
+    const slit1FR = new THREE.Mesh(slitGeo, shaftGlassMat);
+    slit1FR.position.set(-0.2, 0.1, 0);
+    door1FR.add(slit1FR);
+
     this.lift1FDoors = { left: door1FL, right: door1FR };
-
     this.scene.add(lift1FGroup);
-    // 電梯車廂外圍碰撞壁
-    this.addCollider(64.1, 64.3, 42.1, 44.9, 0, 3.2);
-    this.addCollider(66.7, 66.9, 42.1, 44.9, 0, 3.2);
-    this.addCollider(64.1, 66.9, 44.7, 44.9, 0, 3.2);
 
-    // 4F 電梯車廂與左右開合電梯門
+    // J. 4F 電梯車廂與左右滑動電梯門
     const lift4FGroup = new THREE.Group();
     lift4FGroup.position.set(65.5, 12.0, 43.5);
-    const lift4FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
-    lift4FFrame.position.y = 1.6;
-    lift4FGroup.add(lift4FFrame);
-    const lift4FGlass = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.8, 2.4), liftGlassMat);
-    lift4FGlass.position.y = 1.6;
-    lift4FGroup.add(lift4FGlass);
+
+    const carFloor4F = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 2.4), shaftPanelMat);
+    carFloor4F.position.set(0, 0.03, 0.1);
+    lift4FGroup.add(carFloor4F);
     const ring4F = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), liftRingMat);
     ring4F.rotation.x = -Math.PI / 2;
-    ring4F.position.y = 0.04;
+    ring4F.position.set(0, 0.065, 0.1);
     lift4FGroup.add(ring4F);
 
+    const carCeil4F = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 2.4), shaftPanelMat);
+    carCeil4F.position.set(0, 2.7, 0.1);
+    lift4FGroup.add(carCeil4F);
+    const light4F = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.02, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    light4F.position.set(0, 2.66, 0.1);
+    lift4FGroup.add(light4F);
+
+    const mirror4F = new THREE.Mesh(new THREE.BoxGeometry(2.7, 2.6, 0.04), shaftSteelMat);
+    mirror4F.position.set(0, 1.35, 1.24);
+    lift4FGroup.add(mirror4F);
+    const railBack4F = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.04, 0.04), handrailMat);
+    railBack4F.position.set(0, 0.95, 1.18);
+    lift4FGroup.add(railBack4F);
+
+    const carGlass4FL = new THREE.Mesh(carGlassGeo, shaftGlassMat);
+    carGlass4FL.position.set(-1.35, 1.35, 0.1);
+    lift4FGroup.add(carGlass4FL);
+    const carGlass4FR = new THREE.Mesh(carGlassGeo, shaftGlassMat);
+    carGlass4FR.position.set(1.35, 1.35, 0.1);
+    lift4FGroup.add(carGlass4FR);
+
+    // 4F 雙扇電動滑動門
     const door4FL = new THREE.Mesh(doorGeo, liftDoorMat);
-    door4FL.position.set(-0.55 - 0.75, 1.35, -1.28);
+    door4FL.position.set(-0.55 - 0.75, 1.325, -1.28);
     lift4FGroup.add(door4FL);
     const door4FR = new THREE.Mesh(doorGeo, liftDoorMat);
-    door4FR.position.set(0.55 + 0.75, 1.35, -1.28);
+    door4FR.position.set(0.55 + 0.75, 1.325, -1.28);
     lift4FGroup.add(door4FR);
+    const slit4FL = new THREE.Mesh(slitGeo, shaftGlassMat);
+    slit4FL.position.set(0.2, 0.1, 0);
+    door4FL.add(slit4FL);
+    const slit4FR = new THREE.Mesh(slitGeo, shaftGlassMat);
+    slit4FR.position.set(-0.2, 0.1, 0);
+    door4FR.add(slit4FR);
+
     this.lift4FDoors = { left: door4FL, right: door4FR };
-
     this.scene.add(lift4FGroup);
-    this.addCollider(64.1, 64.3, 42.1, 44.9, 12.0, 15.2);
-    this.addCollider(66.7, 66.9, 42.1, 44.9, 12.0, 15.2);
-    this.addCollider(64.1, 66.9, 44.7, 44.9, 12.0, 15.2);
 
-    // 6. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
-    // A. 4F 樓地板 (精確避開樓梯天井 X: 63.2 ~ 69.8, Z: 25.0 ~ 34.0，徹底打通樓梯通道！)
-    // 東翼球場大地板 (X: 70.0 ~ 86.0, Z: 22.0 ~ 54.0)
-    const f4E = new THREE.Mesh(new THREE.BoxGeometry(16.0, 0.45, bL), stageFloorMat);
-    f4E.position.set(baseX + 4.0, 11.78, baseZ);
-    f4E.receiveShadow = true;
-    this.scene.add(f4E);
-    this.addFloorSlab(70.0, maxX, minZ, maxZ, 12.0);
-
-    // 西南翼走道地板 (X: 62.0 ~ 70.0, Z: 34.0 ~ 54.0)
-    const f4SW = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.45, 20.0), stageFloorMat);
-    f4SW.position.set(minX + 4.0, 11.78, 44.0);
-    f4SW.receiveShadow = true;
-    this.scene.add(f4SW);
-    this.addFloorSlab(minX, 70.0, 34.0, maxZ, 12.0);
+    // 5. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
+    // A. 4F 完整樓地板 (移除舊安全梯天井後，西側與全場地板完整平鋪密封，杜絕墜落)
+    const f4Floor = new THREE.Mesh(new THREE.BoxGeometry(bW, 0.45, bL), stageFloorMat);
+    f4Floor.position.set(baseX, 11.78, baseZ);
+    f4Floor.receiveShadow = true;
+    this.scene.add(f4Floor);
+    this.addFloorSlab(minX, maxX, minZ, maxZ, 12.0);
 
     // B. 4F 四周外牆與大採光窗 (Y: 12.0 ~ 16.5)
     const h4 = 4.5;
@@ -2519,13 +2723,13 @@ export class CampusWorld {
     deck.receiveShadow = true;
     poolGroup.add(deck);
 
-    // 2. 清澈湛藍碧綠水面 (Crystal Aquamarine Turquoise Water: 14m x 26m)
+    // 2. 陽光下清澈透亮的水藍色泳池水面 (Crystal Sunlit Blue Pool Water: 14m x 26m)
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x00d2d3, // 蔚藍清澈透明泳池水色
+      color: 0x0097e6, // 陽光下清澈透亮的水藍色 (蔚藍水色 0x0097e6 / 0x00a8ff)
       transparent: true,
-      opacity: 0.60,
-      roughness: 0.05,
-      metalness: 0.15
+      opacity: 0.65, // 微透光質感
+      roughness: 0.04, // 晶瑩水面光澤反光
+      metalness: 0.22
     });
     const water = new THREE.Mesh(new THREE.PlaneGeometry(14, 26), waterMat);
     water.rotation.x = -Math.PI / 2;

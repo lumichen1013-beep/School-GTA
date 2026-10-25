@@ -11,6 +11,7 @@ import { HUD, CommissaryItem } from './ui/HUD';
 import { soundManager } from './audio/SoundEffects';
 import { bgmManager } from './audio/BGMManager';
 import { EcologicalGarden } from './world/EcologicalGarden';
+import { WaterSplashVFX } from './effects/WaterSplashVFX';
 
 class SchoolGTASandbox {
   private engine: Engine;
@@ -19,11 +20,22 @@ class SchoolGTASandbox {
   private world: CampusWorld;
   private player: Player;
   private ecologicalGarden: EcologicalGarden;
+  private waterSplashVFX: WaterSplashVFX;
   private bicycles: Bicycle[] = [];
   private npcs: NPC[] = [];
   private shuttlecocks: ShuttlecockProjectile[] = [];
   private wantedSystem: WantedSystem;
   private hud: HUD;
+
+  // 4F 網球挑戰賽 (搶 5 分勝制) 狀態管理
+  private tennisState: 'IDLE' | 'STARTING' | 'PLAYING' | 'FINISHED' = 'IDLE';
+  private tennisPlayerScore: number = 0;
+  private tennisCoachScore: number = 0;
+  private tennisCountdownTimer: number = 0;
+  private tennisLastCountdownSec: number = -1;
+  private tennisServeTimer: number = 0;
+  private tennisFinishedTimer: number = 0;
+  private peCoachDefeated: boolean = false;
 
   // 經濟與武器解鎖計數系統
   private playerCash: number = 100;
@@ -104,6 +116,9 @@ class SchoolGTASandbox {
     // 3. 玩家主角 (全校唯一的玩家實體)
     this.player = new Player(this.engine.scene);
 
+    // 3.5 游泳水花與漣漪特效系統 (Object Pool VFX)
+    this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
+
     // 墜落傷害與死亡回呼
     this.player.onTakeDamageCallback = (amount: number, reason: string) => {
       if (reason === '墜落摔傷') {
@@ -173,6 +188,9 @@ class SchoolGTASandbox {
 
     // 8.1 手機觸控操作系統 (虛擬搖桿、功能按鍵與自動偵測)
     this.setupMobileControls();
+
+    // 8.15 螢幕尺寸自適應與手機旋轉即時校準 (徹底解決直橫屏角色扁平變形問題)
+    this.setupScreenResize();
 
     // 8.2 綁定背景音樂 (BGM) 控制與狀態更新
     this.hud.setupBGMClick(() => this.toggleBGM());
@@ -445,25 +463,15 @@ class SchoolGTASandbox {
       [new THREE.Vector3(118, 0, -40), new THREE.Vector3(118, 0, 60)]
     ));
 
-    // 10. 演藝大樓 4F 羽球館 Boss：熱血體育組長 林教頭 (PE_TEACHER_BOSS)
+    // 10. 演藝大樓 4F 網球場：網球教練 巨石 (PE_TEACHER_BOSS，4F 樓層僅保留一位老師 NPC)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(74, 12.0, 32),
+      new THREE.Vector3(77, 12.0, 31),
       'PE_TEACHER_BOSS',
       [
-        new THREE.Vector3(74, 12.0, 32),
-        new THREE.Vector3(74, 12.0, 44),
-        new THREE.Vector3(70, 12.0, 38),
-        new THREE.Vector3(78, 12.0, 38)
+        new THREE.Vector3(74, 12.0, 31),
+        new THREE.Vector3(80, 12.0, 31)
       ]
-    ));
-
-    // 4F 羽球校隊訓練同學
-    this.npcs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(74, 12.0, 44),
-      'STUDENT',
-      [new THREE.Vector3(70, 12.0, 44), new THREE.Vector3(78, 12.0, 44)]
     ));
   }
 
@@ -552,7 +560,7 @@ class SchoolGTASandbox {
           phase: 'CLOSING',
           timer: 0.5,
           targetY: 12.0,
-          banner: '🛗 電梯抵達【4F 室內羽球館】，電梯門開啟！'
+          banner: '🛗 電梯抵達【4F 演藝廳網球場】，電梯門開啟！'
         };
         this.player.position.set(65.5, 0.0, 43.5);
         this.player.mesh.position.set(65.5, 0.0, 43.5);
@@ -570,6 +578,17 @@ class SchoolGTASandbox {
         this.player.position.set(65.5, 12.0, 43.5);
         this.player.mesh.position.set(65.5, 12.0, 43.5);
         this.wantedSystem.showBanner('🛗 電梯門關閉中，直達 1F...', 1500);
+        return;
+      }
+
+      // 0.88 與演藝大樓 4F 網球老師對話 / 挑戰比賽 (搶 5 分勝制)
+      if (this.hud.isTennisDialogOpen) {
+        this.startTennisMatch();
+        return;
+      }
+      const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+      if (peCoach && this.player.position.distanceTo(peCoach.position) < 3.2 && !peCoach.isKnockedDown && this.tennisState === 'IDLE') {
+        this.openTennisDialog();
         return;
       }
 
@@ -732,24 +751,28 @@ class SchoolGTASandbox {
           return;
         }
 
-        // 1.5 檢測是否回擊網球 (打網球小遊戲：只要揮拍打中球就扣老師血量 5%)
-        const peBoss = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
-        for (const sc of this.shuttlecocks) {
-          if (!sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(this.player.position) < 3.2) {
-            sc.isReturned = true;
-            sc.hasHitOrMissed = true;
-            soundManager.playBadmintonHit();
-            if (peBoss && peBoss.hp > 0) {
-              const dmg = peBoss.maxHp * 0.05;
-              const bossKilled = peBoss.takeDamage(dmg);
-              this.wantedSystem.showBanner('🎾 絕妙回擊！成功反擊網球！體育老師 HP -5%！', 2500);
-              if (bossKilled) {
-                this.handleNpcDefeated(peBoss, 'ATTACK');
+        // 1.5 檢測是否回擊網球 (4F 網球挑戰賽：接發球揮擊回抽，玩家得 1 分)
+        if (this.tennisState === 'PLAYING') {
+          const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+          for (const sc of this.shuttlecocks) {
+            if (!sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(this.player.position) < 3.2) {
+              sc.isReturned = true;
+              sc.hasHitOrMissed = true;
+              soundManager.playBadmintonHit();
+              this.tennisPlayerScore += 1;
+              this.updateTennisScoreboard();
+              if (peCoach) {
+                const dirToCoach = peCoach.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
+                sc.velocity.copy(dirToCoach.multiplyScalar(22.0));
               }
-              const dirToBoss = peBoss.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
-              sc.velocity.copy(dirToBoss.multiplyScalar(22.0));
+              this.wantedSystem.showBanner(`🎾 漂亮回擊！玩家得 1 分！【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 1800);
+              if (this.tennisPlayerScore >= 5) {
+                this.endTennisMatch(true);
+              } else {
+                this.tennisServeTimer = 2.0;
+              }
+              return;
             }
-            return;
           }
         }
 
@@ -794,6 +817,13 @@ class SchoolGTASandbox {
         if (this.hud.isCommissaryOpen) {
           this.hud.closeCommissary();
         }
+        if (this.hud.isTennisDialogOpen) {
+          this.hud.closeTennisDialog();
+        }
+      } else if (e.code === 'Enter') {
+        if (this.hud.isTennisDialogOpen) {
+          this.startTennisMatch();
+        }
       } else if (e.code === 'KeyR') {
         if (!this.isHoldingBasketball && !this.isBallInAir) {
           if (this.player.position.distanceTo(this.world.basketballSpawnPos) < 40) {
@@ -804,6 +834,40 @@ class SchoolGTASandbox {
         }
       }
     });
+
+    // 點擊武器槽直接切換武器 (支援觸控螢幕與滑鼠快速點擊)
+    const slotFist = document.getElementById('slot-fist');
+    const slotNormalBat = document.getElementById('slot-normal-bat');
+    const slotSpecialBat = document.getElementById('slot-special-bat');
+    if (slotFist) {
+      slotFist.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.player.setWeapon('FIST');
+        this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+      });
+    }
+    if (slotNormalBat) {
+      slotNormalBat.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.player.hasNormalBat) {
+          this.player.setWeapon('NORMAL_BAT');
+          this.wantedSystem.showBanner('🏏 切換武器：普通木質棒球棍 (ATK 55)', 1500);
+        } else {
+          this.wantedSystem.showBanner(`🔒 普通棒球棍未解鎖！需擊敗 20 名普通同學 (目前進度: ${this.studentDefeatedCount}/20)`, 2200);
+        }
+      });
+    }
+    if (slotSpecialBat) {
+      slotSpecialBat.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.player.hasSpecialBat) {
+          this.player.setWeapon('SPECIAL_BAT');
+          this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+        } else {
+          this.wantedSystem.showBanner(`🔒 特殊神兵未解鎖！需擊敗生教(1)、校犬(1)、單車糾察(5)`, 2200);
+        }
+      });
+    }
   }
 
   // 統一 NPC 擊倒/擊敗結算 (支援武器揮擊、自行車撞倒、高處墜落摔死)
@@ -838,7 +902,10 @@ class SchoolGTASandbox {
       reward = 150;
     } else if (npc.role === 'PE_TEACHER_BOSS') {
       reward = 180;
-      this.wantedSystem.showBanner('🏸 震撼勝利！強勢擊敗【體育組長 林教頭】！獲得大額獎金 +$180！', 6000);
+      this.wantedSystem.showBanner('🎾 震撼勝利！擊倒【網球教練 巨石】！獲得獎金 +$180！', 5000);
+      if (this.tennisState !== 'IDLE') {
+        this.endTennisMatch(true);
+      }
     }
 
     this.playerCash += reward;
@@ -981,6 +1048,80 @@ class SchoolGTASandbox {
     }
   }
 
+  // 4F 網球挑戰賽 (搶 5 分勝制) 控制方法
+  private openTennisDialog() {
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    this.hud.openTennisDialog(() => {
+      this.startTennisMatch();
+    });
+  }
+
+  private startTennisMatch() {
+    this.hud.closeTennisDialog();
+    this.tennisState = 'STARTING';
+    this.tennisPlayerScore = 0;
+    this.tennisCoachScore = 0;
+    this.tennisCountdownTimer = 3.99;
+    this.tennisLastCountdownSec = -1;
+    this.tennisServeTimer = 0.5;
+    this.tennisFinishedTimer = 0;
+
+    // 清空場上既有球體
+    for (const sc of this.shuttlecocks) {
+      this.engine.scene.remove(sc.mesh);
+    }
+    this.shuttlecocks = [];
+
+    // 將教練定位至發球點 (77, 12, 31)，面朝南側
+    const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+    if (peCoach) {
+      peCoach.position.set(77.0, 12.0, 31.0);
+      peCoach.mesh.position.copy(peCoach.position);
+      peCoach.rotationY = 0;
+      peCoach.mesh.rotation.y = 0;
+      peCoach.isChasing = false;
+      peCoach.shuttlecockCooldown = 0;
+    }
+
+    this.updateTennisScoreboard();
+    this.wantedSystem.showBanner('🎾 4F 網球回擊挑戰賽即將開始！搶 5 分勝制！', 2000);
+    soundManager.playWhistle();
+  }
+
+  private updateTennisScoreboard() {
+    const scoreboardEl = document.getElementById('tennis-scoreboard');
+    if (scoreboardEl) {
+      scoreboardEl.textContent = `🎾 網球挑戰賽 | 玩家: ${this.tennisPlayerScore} - ${this.tennisCoachScore} :教練 (搶5分勝)`;
+      scoreboardEl.style.display = (this.tennisState === 'PLAYING' || this.tennisState === 'STARTING') ? 'flex' : 'none';
+    }
+  }
+
+  private endTennisMatch(playerWon: boolean) {
+    this.tennisState = 'FINISHED';
+    this.tennisFinishedTimer = 4.0;
+
+    for (const sc of this.shuttlecocks) {
+      this.engine.scene.remove(sc.mesh);
+    }
+    this.shuttlecocks = [];
+
+    if (playerWon) {
+      this.peCoachDefeated = true;
+      soundManager.playFanfare();
+      soundManager.playCashRegister();
+      this.playerCash += 200;
+      this.wantedSystem.clearWanted();
+      this.wantedSystem.showBanner(`🏆 挑戰成功！網球教練：「打得好！很有運動天賦！」獎勵 NT$ 200 與操行優良！【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 6000);
+    } else {
+      soundManager.playPunch();
+      this.wantedSystem.showBanner(`❌ 挑戰失敗！網球教練：「體力或反應不足，再接再厲！」【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 4500);
+    }
+
+    this.updateTennisScoreboard();
+  }
+
   // 玩家死亡處理流程 (修復問題 1：角色死亡後敵人的仇恨值徹底歸零、通緝解除、3 秒後重生於保健室)
   private handlePlayerDeath(reason: string) {
     if (this.isHandlingDeath) return;
@@ -1002,6 +1143,7 @@ class SchoolGTASandbox {
     }
 
     this.hud.hidePrompt();
+    this.waterSplashVFX.reset();
     this.wantedSystem.showBanner(`${reason} 已失去意識送往保健室 (3秒後重返校園)...`, 4000);
     bgmManager.duckVolume(3.2); // 昏厥失神時背景音樂壓抑衰減
 
@@ -1023,6 +1165,51 @@ class SchoolGTASandbox {
     }, 3000);
   }
 
+  // 螢幕尺寸縮放與手機翻轉自適應 (支援直向/橫向切換，徹底防止角色拉伸扁平)
+  private setupScreenResize() {
+    const applyResize = () => {
+      const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const aspect = width / height;
+
+      this.engine.resize(width, height);
+      this.cameraCtrl.camera.aspect = aspect;
+      this.cameraCtrl.camera.updateProjectionMatrix();
+      this.cameraCtrl.updateAspect(aspect);
+    };
+
+    // 引擎內部 resize 時同步更新相機投影矩陣
+    this.engine.onResizeCallback = (_w, _h, aspect) => {
+      this.cameraCtrl.camera.aspect = aspect;
+      this.cameraCtrl.camera.updateProjectionMatrix();
+      this.cameraCtrl.updateAspect(aspect);
+    };
+
+    // 視窗標準縮放事件
+    window.addEventListener('resize', applyResize);
+
+    // 手機螢幕旋轉事件 (含多次延遲校正，因行動瀏覽器旋轉時尺寸非同步更新)
+    window.addEventListener('orientationchange', () => {
+      applyResize();
+      setTimeout(applyResize, 80);
+      setTimeout(applyResize, 200);
+      setTimeout(applyResize, 500);
+    });
+
+    // 支援視覺視口縮放 (iOS Safari / Android Chrome Dynamic Toolbar)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', applyResize);
+    }
+
+    // 行動裝置或窄螢幕時，預設收合任務清單，保持遊戲主畫面乾淨不擋視野
+    if (window.innerWidth <= 900 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
+      this.hud.toggleQuestTracker(false);
+    }
+
+    // 初始化立刻套用一次精準 aspect
+    applyResize();
+  }
+
   // 手機觸控操作系統 (虛擬搖桿移動、視角轉動、攻擊、跳躍、衝刺、互動按鍵)
   private setupMobileControls() {
     const container = document.getElementById('mobile-controls-container');
@@ -1034,11 +1221,13 @@ class SchoolGTASandbox {
     const btnJump = document.getElementById('m-btn-jump');
     const btnSprint = document.getElementById('m-btn-sprint');
     const btnInteract = document.getElementById('m-btn-interact');
+    const btnWeapon = document.getElementById('m-btn-weapon');
 
     // 自動偵測觸控裝置：若支援觸控則預設直接展開控制面板
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (isTouchDevice && container) {
       container.style.display = 'block';
+      document.body.classList.add('touch-mode-active');
       if (toggleBtn) toggleBtn.textContent = '📱 隱藏手機鍵盤';
     }
 
@@ -1048,6 +1237,7 @@ class SchoolGTASandbox {
         e.stopPropagation();
         const isCurrentlyOpen = container.style.display === 'block';
         container.style.display = isCurrentlyOpen ? 'none' : 'block';
+        document.body.classList.toggle('touch-mode-active', !isCurrentlyOpen);
         toggleBtn.textContent = isCurrentlyOpen ? '📱 手機虛擬按鍵' : '📱 隱藏手機鍵盤';
       });
     }
@@ -1092,26 +1282,29 @@ class SchoolGTASandbox {
         handleMove(touch.clientX, touch.clientY);
       }, { passive: false });
 
-      joystickZone.addEventListener('touchmove', (e) => {
-        e.preventDefault();
+      window.addEventListener('touchmove', (e) => {
+        if (activeTouchId === null) return;
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === activeTouchId) {
+            e.preventDefault();
             handleMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
             break;
           }
         }
       }, { passive: false });
 
-      joystickZone.addEventListener('touchend', (e) => {
+      const handleTouchEnd = (e: TouchEvent) => {
+        if (activeTouchId === null) return;
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === activeTouchId) {
             handleEnd();
             break;
           }
         }
-      }, { passive: false });
+      };
 
-      joystickZone.addEventListener('touchcancel', handleEnd, { passive: false });
+      window.addEventListener('touchend', handleTouchEnd, { passive: false });
+      window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
       // 滑鼠拖曳除錯支援
       let isMouseDown = false;
@@ -1160,18 +1353,21 @@ class SchoolGTASandbox {
         e.preventDefault();
         e.stopPropagation();
         onPress();
+
+        if (onRelease) {
+          const handleMouseUp = () => {
+            window.removeEventListener('mouseup', handleMouseUp);
+            onRelease();
+          };
+          window.addEventListener('mouseup', handleMouseUp);
+        }
       });
-      if (onRelease) {
-        btn.addEventListener('mouseup', (e) => {
-          e.preventDefault();
-          onRelease();
-        });
-      }
     };
 
     bindButton(btnAttack, () => {
-      this.input.triggerVirtualAttack();
+      this.input.setVirtualAttack(true);
     }, () => {
+      this.input.setVirtualAttack(false);
       if (this.isHoldingBasketball && this.isChargingShot) {
         this.releaseBasketballShot();
       }
@@ -1192,6 +1388,37 @@ class SchoolGTASandbox {
     bindButton(btnInteract, () => {
       this.input.triggerVirtualInteract();
     });
+
+    bindButton(btnWeapon, () => {
+      this.cycleWeapon();
+    });
+  }
+
+  // 循環切換武器 (徒手 -> 普通木棒 -> 黃金神兵 -> 徒手)
+  public cycleWeapon() {
+    const current = this.player.currentWeapon;
+    if (current === 'FIST') {
+      if (this.player.hasNormalBat) {
+        this.player.setWeapon('NORMAL_BAT');
+        this.wantedSystem.showBanner('🏏 切換武器：普通木質棒球棍 (ATK 55)', 1500);
+      } else if (this.player.hasSpecialBat) {
+        this.player.setWeapon('SPECIAL_BAT');
+        this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+      } else {
+        this.wantedSystem.showBanner(`🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/20)`, 1500);
+      }
+    } else if (current === 'NORMAL_BAT') {
+      if (this.player.hasSpecialBat) {
+        this.player.setWeapon('SPECIAL_BAT');
+        this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+      } else {
+        this.player.setWeapon('FIST');
+        this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+      }
+    } else {
+      this.player.setWeapon('FIST');
+      this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+    }
   }
 
   // 角色群體推擠物理 (倒地昏迷時碰撞箱不生效)
@@ -1354,22 +1581,35 @@ class SchoolGTASandbox {
         targetPosition = this.player.position;
         playerRotY = this.player.rotationY;
       } else {
+        // 先檢測水體範圍，使 player.update 當前幀具備即時精確的 isSwimming 狀態
+        const inPool = this.world.isInsideSwimmingPool(this.player.position) || this.ecologicalGarden.isInsideWishingPond(this.player.position);
+        this.player.isSwimming = inPool;
+
         this.player.update(delta, this.input, forwardVec, rightVec, this.world.colliders);
         targetPosition = this.player.position;
         playerRotY = this.player.rotationY;
       }
 
-      // 游泳池水體判定：水面漂浮高度與划水打水音效
-      const inPool = this.world.isInsideSwimmingPool(targetPosition);
-      this.player.isSwimming = inPool;
-      if (inPool) {
-        this.player.position.y = 0.15; // 水面自然浮力
-        if (this.input.forward || this.input.backward || this.input.left || this.input.right) {
+      // 游泳水體判定：水花特效與划水打水音效對齊
+      const inWishingPond = this.ecologicalGarden.isInsideWishingPond(this.player.position);
+      const waterSurfaceY = inWishingPond ? 0.32 : 0.25;
+
+      if (this.player.isSwimming) {
+        if (this.player.isMoving) {
           this.swimSplashTimer -= delta;
           if (this.swimSplashTimer <= 0) {
             soundManager.playWaterSplash();
-            this.swimSplashTimer = 0.48;
+            // 節奏性每隔 0.35~0.4 秒當有位移時觸發划水音效 (常速 0.38s，衝刺 0.35s)
+            this.swimSplashTimer = this.player.isSprinting ? 0.35 : 0.38;
+            this.waterSplashVFX.triggerSplashBurst(
+              this.player.position,
+              this.player.rotationY,
+              this.player.isSprinting,
+              waterSurfaceY
+            );
           }
+        } else {
+          this.swimSplashTimer = 0;
         }
       }
 
@@ -1429,7 +1669,16 @@ class SchoolGTASandbox {
           this.releaseBasketballShot();
         }
       }
-    } else if (this.currentRidingBike) {
+    }
+
+    const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+    if (this.hud.isTennisDialogOpen && peCoach) {
+      if (targetPosition.distanceTo(peCoach.position) > 4.5) {
+        this.hud.closeTennisDialog();
+      }
+    }
+
+    if (this.currentRidingBike) {
       this.hud.showPrompt('E', '下車 (離開載具)');
     } else if (targetPosition.distanceTo(this.world.commissaryPos) < 3.8) {
       this.hud.showPrompt('E', '天天合作社 (買熱食補血)');
@@ -1452,9 +1701,11 @@ class SchoolGTASandbox {
     } else if (this.ecologicalGarden.isNearWishingPond(targetPosition)) {
       this.hud.showPrompt('E', '🪙 向生態池許願投幣 ($30)');
     } else if (this.world.isNear1FElevator(targetPosition)) {
-      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 4F 羽球館 (體育老師 Boss)');
+      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 4F 網球場 (網球教練 巨石)');
     } else if (this.world.isNear4FElevator(targetPosition)) {
       this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 1F 演藝廳門廳');
+    } else if (peCoach && targetPosition.distanceTo(peCoach.position) < 3.2 && !peCoach.isKnockedDown && this.tennisState === 'IDLE') {
+      this.hud.showPrompt('E', '🎾 與網球老師對話 / 挑戰比賽');
     } else {
       let nearBikePatrol = false;
       for (const npc of this.npcs) {
@@ -1638,6 +1889,7 @@ class SchoolGTASandbox {
 
       if (targetPosition.distanceTo(targetSwimCp) < 3.2) {
         soundManager.playWaterSplash();
+        this.waterSplashVFX.triggerSplashBurst(this.player.position, this.player.rotationY, true, 0.25);
         this.swimCheckpointIdx++;
         if (this.swimCheckpointIdx >= this.world.swimCheckpoints.length) {
           this.isSwimmingRace = false;
@@ -1762,22 +2014,87 @@ class SchoolGTASandbox {
       }
     );
 
-    // 體育老師 Boss 羽球遠程飛彈射擊與更新 (4F 羽球館)
-    // 嚴格限制：羽球攻擊只能在羽球場內進行，攻擊球絕對不可離開球場範圍！
-    const peBoss = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+    // 8. 游泳水花微粒與漣漪特效系統 (Object Pool VFX)
+    const inWishingPondForVFX = this.ecologicalGarden.isInsideWishingPond(this.player.position);
+    const waterSurfaceYForVFX = inWishingPondForVFX ? 0.32 : 0.25;
+    this.waterSplashVFX.update(
+      delta,
+      this.player.position,
+      this.player.rotationY,
+      this.player.isSwimming,
+      this.player.isMoving,
+      this.player.isSprinting,
+      waterSurfaceYForVFX
+    );
+
+    // 演藝大樓 4F 網球挑戰賽 (搶 5 分勝制) 狀態機與邏輯更新
+    // 平常處於 IDLE 和平狀態，不主動發球、不追擊玩家、不顯示 Boss 血條
     const isPlayerInBadmintonCourt =
       targetPosition.y >= 11.2 && targetPosition.y <= 17.0 &&
       targetPosition.x >= 63.0 && targetPosition.x <= 85.0 &&
       targetPosition.z >= 23.0 && targetPosition.z <= 53.0;
 
-    if (peBoss && !peBoss.isKnockedDown && peBoss.hp > 0 && !this.player.isDead && isPlayerInBadmintonCourt) {
-      const proj = peBoss.tryShootShuttlecock(targetPosition, this.engine.scene);
-      if (proj) {
-        this.shuttlecocks.push(proj);
+    // 若比賽中玩家離開球場或死亡，終止比賽
+    if (this.tennisState === 'STARTING' || this.tennisState === 'PLAYING') {
+      if (!isPlayerInBadmintonCourt || this.player.isDead || (peCoach && peCoach.isKnockedDown)) {
+        this.tennisState = 'IDLE';
+        for (const sc of this.shuttlecocks) {
+          this.engine.scene.remove(sc.mesh);
+        }
+        this.shuttlecocks = [];
+        this.updateTennisScoreboard();
+        this.wantedSystem.showBanner('🎾 已離開 4F 網球場，挑戰賽已終止。', 2500);
       }
     }
 
-    // 更新飛行中的網球 (打網球小遊戲：合理飛行速度，打中扣老師5%，漏球扣玩家5%)
+    if (this.tennisState === 'STARTING') {
+      // 3-2-1 倒數階段
+      this.tennisCountdownTimer -= delta;
+      const countSec = Math.ceil(this.tennisCountdownTimer);
+      if (countSec > 0 && countSec !== this.tennisLastCountdownSec) {
+        this.tennisLastCountdownSec = countSec;
+        this.wantedSystem.showBanner(`🎾 4F 網球挑戰賽倒數 ${countSec} 秒...`, 1000);
+        soundManager.playBroadcastChime();
+      }
+      if (this.tennisCountdownTimer <= 0) {
+        this.tennisState = 'PLAYING';
+        this.tennisServeTimer = 0.8;
+        this.wantedSystem.showBanner('🎾 比賽開始！接發球揮擊得分！(搶5分勝)', 2500);
+        soundManager.playWhistle();
+        this.updateTennisScoreboard();
+      }
+    } else if (this.tennisState === 'PLAYING') {
+      // 比賽中：教練站在發球區 (77, 12, 31)
+      if (peCoach) {
+        peCoach.position.set(77.0, 12.0, 31.0);
+        peCoach.mesh.position.copy(peCoach.position);
+        peCoach.rotationY = 0;
+        peCoach.mesh.rotation.y = 0;
+        peCoach.isChasing = false;
+
+        // 教練每隔 2.0~2.5 秒發出一記網球朝向玩家
+        this.tennisServeTimer -= delta;
+        if (this.shuttlecocks.length === 0 && this.tennisServeTimer <= 0) {
+          this.tennisServeTimer = 2.2;
+          const targetX = THREE.MathUtils.clamp(targetPosition.x, 72.0, 82.0);
+          const targetZ = THREE.MathUtils.clamp(targetPosition.z, 42.0, 47.0);
+          const serveTarget = new THREE.Vector3(targetX, 12.0, targetZ);
+          peCoach.shuttlecockCooldown = 0;
+          const proj = peCoach.tryShootShuttlecock(serveTarget, this.engine.scene, 2.2);
+          if (proj) {
+            this.shuttlecocks.push(proj);
+          }
+        }
+      }
+    } else if (this.tennisState === 'FINISHED') {
+      this.tennisFinishedTimer -= delta;
+      if (this.tennisFinishedTimer <= 0) {
+        this.tennisState = 'IDLE';
+        this.updateTennisScoreboard();
+      }
+    }
+
+    // 更新飛行中的網球 (搶5分制：成功揮擊回抽得1分，漏球失誤/被砸中教練得1分)
     for (let i = this.shuttlecocks.length - 1; i >= 0; i--) {
       const sc = this.shuttlecocks[i];
       sc.velocity.y -= 9.8 * delta; // 重力拋物線
@@ -1787,60 +2104,86 @@ class SchoolGTASandbox {
       sc.mesh.rotation.y += delta * 8.0;
       sc.life -= delta;
 
-      // 嚴格邊界判定：網球絕對不能離開羽球館/網球館邊界 (X: [62.8, 85.2], Z: [22.8, 53.2], Y: [11.8, 16.8])
+      // 邊界判定：網球離開網球館邊界
       if (
         sc.position.x < 62.8 || sc.position.x > 85.2 ||
         sc.position.z < 22.8 || sc.position.z > 53.2 ||
-        sc.position.y < 11.8 || sc.position.y > 16.8
+        sc.position.y < 11.5 || sc.position.y > 17.5
       ) {
+        if (!sc.hasHitOrMissed && !sc.isReturned && this.tennisState === 'PLAYING') {
+          sc.hasHitOrMissed = true;
+          this.tennisCoachScore += 1;
+          this.updateTennisScoreboard();
+          this.wantedSystem.showBanner(`🎾 出界失誤！教練得 1 分！【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 1800);
+          if (this.tennisCoachScore >= 5) {
+            this.endTennisMatch(false);
+          } else {
+            this.tennisServeTimer = 2.0;
+          }
+        }
         this.engine.scene.remove(sc.mesh);
         this.shuttlecocks.splice(i, 1);
         continue;
       }
 
-      // 玩家打擊回擊網球判定 (按攻擊鍵或在揮擊範圍內回擊)
-      if (!sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(targetPosition) < 2.8) {
-        if (this.input.mouseButtons.left) {
+      // 玩家打擊回擊網球判定 (按攻擊鍵或滑鼠左鍵，在揮擊範圍內回擊)
+      if (this.tennisState === 'PLAYING' && !sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(targetPosition) < 3.0) {
+        if (this.player.isAttacking || this.input.mouseButtons.left) {
           sc.isReturned = true;
           sc.hasHitOrMissed = true;
           soundManager.playBadmintonHit();
-          if (peBoss && peBoss.hp > 0) {
-            const dmg = peBoss.maxHp * 0.05;
-            const bossKilled = peBoss.takeDamage(dmg);
-            this.wantedSystem.showBanner('🎾 漂亮抽擊！打中網球回擊！體育老師 HP -5%！', 2500);
-            if (bossKilled) {
-              this.handleNpcDefeated(peBoss, 'ATTACK');
-            }
-            const dirToBoss = peBoss.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
-            sc.velocity.copy(dirToBoss.multiplyScalar(22.0));
-            continue;
+          this.tennisPlayerScore += 1;
+          this.updateTennisScoreboard();
+          if (peCoach) {
+            const dirToCoach = peCoach.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
+            sc.velocity.copy(dirToCoach.multiplyScalar(22.0));
           }
-        }
-      }
-
-      // 若成功回擊給老師：球飛回老師半場
-      if (sc.isReturned && peBoss) {
-        if (sc.position.distanceTo(peBoss.position) < 2.2 || sc.position.z <= 29.5) {
-          soundManager.playBadmintonHit();
-          this.engine.scene.remove(sc.mesh);
-          this.shuttlecocks.splice(i, 1);
+          this.wantedSystem.showBanner(`🎾 漂亮回擊！玩家得 1 分！【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 1800);
+          if (this.tennisPlayerScore >= 5) {
+            this.endTennisMatch(true);
+            continue;
+          } else {
+            this.tennisServeTimer = 2.0;
+          }
           continue;
         }
       }
 
-      // 漏球失誤判定：若玩家未打到球，球飛過玩家或在玩家半場落地
-      if (!sc.hasHitOrMissed && !sc.isReturned) {
-        if (sc.position.z > targetPosition.z + 1.2 || (sc.position.y <= 12.12 && sc.position.z >= 38.0)) {
-          sc.hasHitOrMissed = true;
-          soundManager.playPunch();
-          const dmg = this.player.maxHp * 0.05;
-          const died = this.player.takeDamage(dmg, '漏接網球扣血');
-          this.wantedSystem.showBanner('🎾 漏球失誤！玩家扣除 5% 體力！抓準時機揮拍回擊！', 3000);
-          if (died) {
-            this.handlePlayerDeath('在網球對決中體力耗盡！');
-          }
+      // 若成功回擊給教練：球飛回教練半場落地或被教練接住
+      if (sc.isReturned && peCoach) {
+        if (sc.position.distanceTo(peCoach.position) < 2.2 || sc.position.z <= 29.5 || sc.position.y <= 12.12) {
+          soundManager.playBadmintonHit();
           this.engine.scene.remove(sc.mesh);
           this.shuttlecocks.splice(i, 1);
+          this.tennisServeTimer = 2.0;
+          continue;
+        }
+      }
+
+      // 漏球失誤或被砸中判定：球落地、飛過玩家或砸中玩家
+      if (this.tennisState === 'PLAYING' && !sc.hasHitOrMissed && !sc.isReturned) {
+        const distToPlayer = sc.position.distanceTo(targetPosition);
+        const isHit = distToPlayer < 0.95;
+        const isPast = sc.position.z > targetPosition.z + 1.2;
+        const isLanded = sc.position.y <= 12.12 && sc.position.z >= 38.0;
+
+        if (isHit || isPast || isLanded) {
+          sc.hasHitOrMissed = true;
+          soundManager.playPunch();
+          if (isHit) {
+            this.player.takeDamage(2, '網球衝擊');
+          }
+          this.tennisCoachScore += 1;
+          this.updateTennisScoreboard();
+          const reason = isHit ? '被球擊中' : (isLanded ? '球落地失誤' : '揮空漏球');
+          this.wantedSystem.showBanner(`🎾 ${reason}！教練得 1 分！【${this.tennisPlayerScore} - ${this.tennisCoachScore}】`, 1800);
+          this.engine.scene.remove(sc.mesh);
+          this.shuttlecocks.splice(i, 1);
+          if (this.tennisCoachScore >= 5) {
+            this.endTennisMatch(false);
+          } else {
+            this.tennisServeTimer = 2.0;
+          }
           continue;
         }
       }
@@ -1852,13 +2195,11 @@ class SchoolGTASandbox {
       }
     }
 
-    // Boss 血條動態顯示 (支援變異食人花王與熱血體育組長林教頭)
+    // Boss 血條動態顯示 (僅在秘境霸主變異食人花王附近時顯示；4F 網球場為和平挑戰賽，不顯示 Boss 血條)
     const distToPlantBoss = targetPosition.distanceTo(this.ecologicalGarden.boss.position);
 
     if (distToPlantBoss < 35.0 && !this.ecologicalGarden.boss.isDead) {
       this.hud.setBossHealth(this.ecologicalGarden.boss.hp, this.ecologicalGarden.boss.maxHp, true, '秘境霸主：變異食人花王', '🌸');
-    } else if (peBoss && isPlayerInBadmintonCourt && !peBoss.isKnockedDown && peBoss.hp > 0) {
-      this.hud.setBossHealth(peBoss.hp, peBoss.maxHp, true, '熱血體育組長 林教頭 (4F網球對決)', '🎾');
     } else {
       this.hud.setBossHealth(0, 1000, false);
     }
@@ -1890,7 +2231,7 @@ class SchoolGTASandbox {
       bikeDefeated: this.bikePatrolDefeatedCount,
       hasSpecialBat: this.player.hasSpecialBat,
       plantBossDefeated: this.ecologicalGarden.boss.isDead,
-      peBossDefeated: peBoss ? peBoss.hp <= 0 : false,
+      peBossDefeated: this.peCoachDefeated || (peCoach ? peCoach.hp <= 0 : false),
       trackRecordText: this.bestTrackTime ? `${this.bestTrackTime.toFixed(1)}s` : '未完成',
       swimRecordText: this.bestSwimTime ? `${this.bestSwimTime.toFixed(1)}s` : '未完成',
       basketballStreak: this.basketballScoreStreak

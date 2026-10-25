@@ -10,8 +10,9 @@ export class InputManager {
   private touchLookId: number | null = null;
   private lastTouchLookX: number = 0;
   private lastTouchLookY: number = 0;
-  private virtualAxisX: number = 0;
-  private virtualAxisY: number = 0;
+  public virtualAxisX: number = 0;
+  public virtualAxisY: number = 0;
+  public virtualAxisMagnitude: number = 0;
   private virtualSprint: boolean = false;
   private virtualJump: boolean = false;
 
@@ -111,44 +112,67 @@ export class InputManager {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         const target = touch.target as HTMLElement;
-        // 如果點在操作按鈕或搖桿上，不觸發視角旋轉
-        if (target.closest('#touch-joystick-zone') || target.closest('#mobile-action-buttons') || target.closest('.weapon-slot') || target.closest('#commissary-modal') || target.closest('#bgm-badge')) {
+        // 如果點在操作按鈕、搖桿或 UI 面板上，不觸發視角旋轉
+        if (
+          target.closest('#touch-joystick-zone') ||
+          target.closest('#mobile-action-buttons') ||
+          target.closest('.mobile-btn') ||
+          target.closest('.weapon-slot') ||
+          target.closest('#commissary-modal') ||
+          target.closest('#bgm-badge') ||
+          target.closest('#toggle-mobile-mode-btn') ||
+          target.closest('#quest-tracker-panel') ||
+          target.closest('.demerit-container') ||
+          target.closest('.status-badge') ||
+          target.closest('.minimap-wrapper') ||
+          target.closest('button')
+        ) {
           continue;
         }
-        // 右半螢幕區域作為攝影機滑動控制
+        // 右側螢幕區域 (避開左側搖桿區) 作為攝影機滑動旋轉視角控制
         if (touch.clientX > window.innerWidth * 0.35 && this.touchLookId === null) {
           this.touchLookId = touch.identifier;
           this.lastTouchLookX = touch.clientX;
           this.lastTouchLookY = touch.clientY;
+          e.preventDefault();
         }
       }
-    }, { passive: true });
+    }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         if (touch.identifier === this.touchLookId) {
+          e.preventDefault();
           const dx = touch.clientX - this.lastTouchLookX;
           const dy = touch.clientY - this.lastTouchLookY;
-          this.mouseDeltaX += dx * 1.6;
-          this.mouseDeltaY += dy * 1.6;
+          this.mouseDeltaX += dx * 1.5;
+          this.mouseDeltaY += dy * 1.5;
           this.lastTouchLookX = touch.clientX;
           this.lastTouchLookY = touch.clientY;
         }
       }
-    }, { passive: true });
+    }, { passive: false });
 
     const clearLookTouch = (e: TouchEvent) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === this.touchLookId) {
-          this.touchLookId = null;
+          this.resetTouchLook();
           break;
         }
       }
     };
 
-    window.addEventListener('touchend', clearLookTouch, { passive: true });
-    window.addEventListener('touchcancel', clearLookTouch, { passive: true });
+    window.addEventListener('touchend', clearLookTouch, { passive: false });
+    window.addEventListener('touchcancel', clearLookTouch, { passive: false });
+    window.addEventListener('orientationchange', () => this.resetTouchLook());
+    window.addEventListener('resize', () => this.resetTouchLook());
+  }
+
+  public resetTouchLook() {
+    this.touchLookId = null;
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
   }
 
   public requestPointerLock() {
@@ -161,6 +185,7 @@ export class InputManager {
   public setVirtualAxis(x: number, y: number) {
     this.virtualAxisX = x;
     this.virtualAxisY = y;
+    this.virtualAxisMagnitude = Math.min(1.0, Math.sqrt(x * x + y * y));
   }
 
   public setVirtualSprint(active: boolean) {
@@ -171,11 +196,17 @@ export class InputManager {
     this.virtualJump = active;
   }
 
+  public setVirtualAttack(isDown: boolean) {
+    this.mouseButtons.left = isDown;
+    if (isDown && this.onAttackCallback) {
+      this.onAttackCallback();
+    }
+  }
+
   public triggerVirtualAttack() {
-    this.mouseButtons.left = true;
-    if (this.onAttackCallback) this.onAttackCallback();
+    this.setVirtualAttack(true);
     setTimeout(() => {
-      this.mouseButtons.left = false;
+      this.setVirtualAttack(false);
     }, 150);
   }
 

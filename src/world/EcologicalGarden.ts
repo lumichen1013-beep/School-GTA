@@ -276,13 +276,13 @@ export class EcologicalGarden {
     stoneRing.receiveShadow = true;
     this.group.add(stoneRing);
 
-    // 自然生態翡翠碧綠水面 (Natural Jade Emerald Pond Water)
+    // 清澈湛藍寶石湖水面 (Crystal Azure Wishing Pond Water)
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x164e3f, // 經典天然荷花生態池深碧綠/玉色水體
+      color: 0x0984e3, // 清澈湛藍的湖水藍色 (寶石藍 / 湛藍湖水)
       transparent: true,
-      opacity: 0.90,
-      roughness: 0.25,
-      metalness: 0.15
+      opacity: 0.80, // 清透透明度 (0.75~0.85)
+      roughness: 0.15, // 具備清透高光反光
+      metalness: 0.20
     });
     const water = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 0.1, 24), waterMat);
     water.position.set(px, 0.32, pz);
@@ -1084,6 +1084,13 @@ export class EcologicalGarden {
   // 檢查玩家是否在生態池許願石碑附近
   public isNearWishingPond(playerPos: THREE.Vector3): boolean {
     return playerPos.distanceTo(this.pondPos) < 4.2;
+  }
+
+  // 判斷玩家是否身處生態池湖水範圍之內 (半徑 4.4m 水體)
+  public isInsideWishingPond(pos: THREE.Vector3): boolean {
+    const dx = pos.x - this.pondPos.x;
+    const dz = pos.z - this.pondPos.z;
+    return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.0;
   }
 
   // Boss 死亡傾倒枯萎動畫

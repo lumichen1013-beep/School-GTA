@@ -31,7 +31,31 @@ export class BGMManager {
   public onModeChange?: (mode: BGMMode, isMuted: boolean) => void;
 
   constructor() {
-    // AudioContext will be initialized on first user interaction
+    this.setupAutoResume();
+  }
+
+  // 鎖屏或切換分頁切回時自動喚醒 Web Audio
+  private setupAutoResume() {
+    const resumeAudio = () => {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        resumeAudio();
+      }
+    });
+
+    window.addEventListener('click', resumeAudio, { passive: true });
+    window.addEventListener('touchstart', resumeAudio, { passive: true });
+  }
+
+  public resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
   }
 
   // Initialize Web Audio Context & Nodes
@@ -176,6 +200,11 @@ export class BGMManager {
     if (!this.ctx) return;
     const secondsPerBeat = 60.0 / this.tempo;
     const secondsPer16th = secondsPerBeat / 4.0;
+
+    // 若切頁或鎖屏導致排程時間落後，立即對齊當前音訊時間，防止喚醒時爆音或大量連續排程
+    if (this.nextStepTime < this.ctx.currentTime) {
+      this.nextStepTime = this.ctx.currentTime + 0.05;
+    }
 
     while (this.nextStepTime < this.ctx.currentTime + this.scheduleAheadSec) {
       this.scheduleStep(this.currentStep, this.nextStepTime);

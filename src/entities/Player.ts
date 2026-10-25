@@ -32,6 +32,8 @@ export class Player {
   public isGrounded: boolean = true;
   public isRidingVehicle: boolean = false;
   public isSwimming: boolean = false; // 游泳狀態
+  public isMoving: boolean = false;   // 當前是否正在移動推進
+  public isSprinting: boolean = false; // 當前是否處於衝刺加速狀態
   public poisonTimer: number = 0;     // 中毒持續時間 (5秒)
   public poisonTickTimer: number = 0; // 中毒跳血計時
   public isInvisible: boolean = false; // 隱形模式 (如三分球投籃瞄準時不遮擋籃框與準心)
@@ -61,6 +63,7 @@ export class Player {
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
+    this.mesh.rotation.order = 'YXZ'; // 採用 Y(航向) -> X(俯仰) -> Z(側滾) 順序，避免自由式俯趴時歐拉角產生萬向節鎖(Gimbal Lock)並支援水中360度靈敏轉向
     this.mesh.position.copy(this.position);
 
     // 1. 建立角色外觀（台灣典型高校制服風格：深藍長褲、白襯衫配後背包）
@@ -256,7 +259,7 @@ export class Player {
   }
 
   public attack() {
-    if (this.isDead) return;
+    if (this.isDead || this.isSwimming) return; // 游泳狀態下雙手劃水，不可出拳揮棒
     if (this.punchTimer <= 0) {
       if (this.currentWeapon === 'SPECIAL_BAT') {
         this.punchTimer = 0.48;
@@ -293,25 +296,58 @@ export class Player {
       this.hitCooldown -= delta;
     }
 
-    // 1. 移動輸入合成 (WASD)
+    // 1. 移動輸入合成 (WASD 與 360 度真類比虛擬搖桿)
     const moveDir = new THREE.Vector3();
-    if (input.forward) moveDir.add(forwardVec);
-    if (input.backward) moveDir.sub(forwardVec);
-    if (input.right) moveDir.add(rightVec);
-    if (input.left) moveDir.sub(rightVec);
+    let analogSpeedScale = 1.0;
+
+    const hasVirtualJoystick = input.virtualAxisMagnitude > 0.05;
+    const hasKeyboard = !!(input.keys['KeyW'] || input.keys['ArrowUp'] ||
+                          input.keys['KeyS'] || input.keys['ArrowDown'] ||
+                          input.keys['KeyA'] || input.keys['ArrowLeft'] ||
+                          input.keys['KeyD'] || input.keys['ArrowRight']);
+
+    if (hasVirtualJoystick && !hasKeyboard) {
+      // 360 度真類比連續方向 (推桿 Y 負為前進，X 正為右移)
+      moveDir.addScaledVector(forwardVec, -input.virtualAxisY);
+      moveDir.addScaledVector(rightVec, input.virtualAxisX);
+      if (moveDir.lengthSq() > 0.001) {
+        moveDir.normalize();
+      }
+      // 支援輕推慢走（依搖桿半徑動態縮放速度 0.35 ~ 1.0）
+      const clampedMag = Math.min(1.0, Math.max(0.05, input.virtualAxisMagnitude));
+      analogSpeedScale = 0.35 + ((clampedMag - 0.05) / 0.95) * (1.0 - 0.35);
+    } else {
+      if (input.forward) moveDir.add(forwardVec);
+      if (input.backward) moveDir.sub(forwardVec);
+      if (input.right) moveDir.add(rightVec);
+      if (input.left) moveDir.sub(rightVec);
+      if (moveDir.lengthSq() > 0.001) {
+        moveDir.normalize();
+      }
+      analogSpeedScale = 1.0;
+    }
 
     const isMoving = moveDir.lengthSq() > 0.001;
-    if (isMoving) moveDir.normalize();
+    this.isMoving = isMoving;
 
     // 2. 衝刺與體力消耗 (Sprint & Stamina)
     let currentSpeed = this.walkSpeed;
-    if (input.sprint && isMoving && this.stamina > 5) {
+    if (this.isSwimming) {
+      currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
+      if (input.sprint && isMoving && this.stamina > 5) {
+        this.stamina = Math.max(0, this.stamina - delta * 24.0);
+      } else {
+        this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
+      }
+    } else if (input.sprint && isMoving && this.stamina > 5) {
       currentSpeed = this.sprintSpeed;
       this.stamina = Math.max(0, this.stamina - delta * 24.0);
     } else {
       // 體力自動恢復
       this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
     }
+
+    currentSpeed *= analogSpeedScale;
 
     // 3. 水平移動速度與擊飛拋物線物理 (Knockback & Launch-Flying)
     if (this.isKnockedFlying) {
@@ -331,22 +367,38 @@ export class Player {
       // 受擊傾斜動畫
       this.mesh.rotation.z = Math.sin(this.knockTimer * 12) * 0.25;
     } else {
-      // 正常地面移動控制
+      // 正常地面或水上移動控制
       this.velocity.x = moveDir.x * currentSpeed;
       this.velocity.z = moveDir.z * currentSpeed;
 
-      // 重力與跳躍
-      if (this.isGrounded) {
-        this.velocity.y = 0;
+      if (this.isSwimming) {
+        // 水中浮力與踏水跳躍物理
         if (input.jump) {
-          this.velocity.y = this.jumpStrength;
+          // 水中踏水躍起 / 攀上池畔
+          this.velocity.y = 6.8;
           this.isGrounded = false;
           soundManager.playJump();
+        } else {
+          // 水面自然浮力平衡 (水面高度約 0.18m，伴隨波浪起伏)
+          const targetWaterY = 0.18 + (isMoving ? Math.sin(this.animTimer * 2.0) * 0.025 : Math.sin(this.animTimer) * 0.035);
+          const yDiff = targetWaterY - this.position.y;
+          this.velocity.y = THREE.MathUtils.clamp(yDiff * 8.0, -2.5, 4.0);
+          this.isGrounded = false;
         }
       } else {
-        this.velocity.y += this.gravity * delta;
+        // 重力與跳躍
+        if (this.isGrounded) {
+          this.velocity.y = 0;
+          if (input.jump) {
+            this.velocity.y = this.jumpStrength;
+            this.isGrounded = false;
+            soundManager.playJump();
+          }
+        } else {
+          this.velocity.y += this.gravity * delta;
+        }
       }
-      this.mesh.rotation.z = 0;
+      if (!this.isSwimming) this.mesh.rotation.z = 0;
     }
 
     // 5. 碰撞檢測與位移更新 (AABB Collision with Step Climbing)
@@ -364,12 +416,17 @@ export class Player {
       const targetRotation = Math.atan2(moveDir.x, moveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
-      this.rotationY += diff * Math.min(delta * 14.0, 1.0);
+      const turnRate = this.isSwimming ? 16.0 : 14.0;
+      this.rotationY += diff * Math.min(delta * turnRate, 1.0);
+      this.mesh.rotation.y = this.rotationY;
+    } else {
       this.mesh.rotation.y = this.rotationY;
     }
 
     // 7. 人物走動與攻擊動畫擺動 (Procedural Animation)
-    this.animatePlayer(delta, isMoving, currentSpeed === this.sprintSpeed);
+    const isSprinting = currentSpeed === (this.isSwimming ? 7.8 : this.sprintSpeed);
+    this.isSprinting = isMoving && isSprinting;
+    this.animatePlayer(delta, isMoving, isSprinting);
   }
 
   private applyMovementAndCollision(delta: number, colliders: CollidableBox[]) {
@@ -442,7 +499,12 @@ export class Player {
     }
 
     // 落地檢測與貼地 (Ground-snapping 下樓防抖動)
-    if (targetY <= groundY || (this.isGrounded && this.position.y - groundY <= 0.65 && this.velocity.y <= 0)) {
+    if (this.isSwimming) {
+      // 游泳狀態下由浮力主導高度，防止穿透泳池底層
+      const poolBottomY = -1.1;
+      this.position.y = Math.max(poolBottomY, targetY);
+      this.isGrounded = false;
+    } else if (targetY <= groundY || (this.isGrounded && this.position.y - groundY <= 0.65 && this.velocity.y <= 0)) {
       const landingSpeedY = this.velocity.y;
       this.position.y = groundY;
       this.velocity.y = 0;
@@ -465,29 +527,70 @@ export class Player {
 
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean) {
     if (this.isSwimming) {
-      // 逼真水平俯臥自由式游泳姿態 (Horizontal Prone Freestyle Swimming)
-      this.mesh.rotation.x = Math.PI / 2.2; // 82 度水平俯臥於水面
-      const strokeRate = isSprinting ? 12 : 7.5;
-      this.animTimer += delta * strokeRate;
+      // 1. 身體俯仰趴平姿態 (Prone Freestyle vs Treading Water)
+      // 自由式划水衝刺/前進時：前傾俯趴約 70~75 度 (1.20 ~ 1.28 rad)
+      // 靜止浮水踩水時：約 18~22 度 (0.32 ~ 0.38 rad)，身體立起、頭部浮出水面踏水
+      const targetPitch = isMoving ? (isSprinting ? 1.28 : 1.18) : 0.32;
+      this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, targetPitch, Math.min(delta * 7.0, 1.0));
 
-      // 自由式手臂大輪迴風車劃水動作 (Windmill Crawl Strokes)
-      this.leftArm.rotation.x = Math.sin(this.animTimer) * 2.2 - 0.5;
-      this.leftArm.rotation.z = Math.cos(this.animTimer) * 0.45;
-      this.rightArm.rotation.x = Math.sin(this.animTimer + Math.PI) * 2.2 - 0.5;
-      this.rightArm.rotation.z = -Math.cos(this.animTimer) * 0.45;
+      if (isMoving) {
+        // 自由式划水衝刺/游泳姿態
+        const strokeRate = isSprinting ? 12.0 : 8.0;
+        this.animTimer += delta * strokeRate;
 
-      // 雙腿水平快速上下交替拍水 (Flutter Kick)
-      const kick = Math.sin(this.animTimer * 3.5) * 0.45;
-      this.leftLeg.rotation.x = kick;
-      this.rightLeg.rotation.x = -kick;
+        // 自由式手臂大輪迴風車劃水動作 (Windmill Crawl Strokes)
+        this.leftArm.rotation.x = Math.sin(this.animTimer) * 2.2 - 0.4;
+        this.leftArm.rotation.z = Math.cos(this.animTimer) * 0.4;
+        this.rightArm.rotation.x = Math.sin(this.animTimer + Math.PI) * 2.2 - 0.4;
+        this.rightArm.rotation.z = -Math.cos(this.animTimer) * 0.4;
 
-      // 游泳時頭部換氣側頭與身體水面微浮動
-      this.headMesh.rotation.y = Math.sin(this.animTimer * 0.5) * 0.5;
-      this.bodyMesh.position.y = 1.05 + Math.sin(this.animTimer * 1.5) * 0.04;
+        // 雙腿水平快速上下交替拍水 (Flutter Kick)
+        const kick = Math.sin(this.animTimer * 3.5) * 0.45;
+        this.leftLeg.rotation.x = kick;
+        this.rightLeg.rotation.x = -kick;
+        this.leftLeg.rotation.z = 0;
+        this.rightLeg.rotation.z = 0;
+
+        // 游泳時頭部換氣側頭與仰頭（臉部浮出水面）
+        this.headMesh.rotation.y = Math.sin(this.animTimer * 0.5) * 0.42;
+        this.headMesh.rotation.x = -0.35;
+
+        // 自由式身體微幅側滾 (Body Roll) 與浮力波浪
+        this.mesh.rotation.z = Math.sin(this.animTimer) * 0.12;
+        this.bodyMesh.position.y = 1.05 + Math.sin(this.animTimer * 2.0) * 0.04;
+      } else {
+        // 靜止浮水踩水 (Treading water)
+        this.animTimer += delta * 3.0;
+
+        // 雙手水平輕推踏水 (Sculling)
+        this.leftArm.rotation.x = 0.25 + Math.sin(this.animTimer) * 0.18;
+        this.leftArm.rotation.z = 0.42 + Math.cos(this.animTimer) * 0.22;
+        this.rightArm.rotation.x = 0.25 + Math.sin(this.animTimer) * 0.18;
+        this.rightArm.rotation.z = -0.42 - Math.cos(this.animTimer) * 0.22;
+
+        // 雙腿交替輕柔踩水 (Gentle tread kick)
+        this.leftLeg.rotation.x = 0.15 + Math.sin(this.animTimer * 0.8) * 0.22;
+        this.rightLeg.rotation.x = 0.15 - Math.sin(this.animTimer * 0.8) * 0.22;
+        this.leftLeg.rotation.z = 0.12;
+        this.rightLeg.rotation.z = -0.12;
+
+        // 頭部放正向前、直立浮水微幅起伏
+        this.headMesh.rotation.y = THREE.MathUtils.lerp(this.headMesh.rotation.y, 0, delta * 6.0);
+        this.headMesh.rotation.x = -0.15;
+        this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, 0, delta * 6.0);
+        this.bodyMesh.position.y = 1.05 + Math.sin(this.animTimer) * 0.035;
+      }
       return;
     } else {
-      this.mesh.rotation.x = 0;
-      this.headMesh.rotation.y = 0;
+      // 脫離水體 / 陸地上：平滑復原身體俯仰與側滾至站立行走姿態
+      this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, 0, Math.min(delta * 9.0, 1.0));
+      this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, 0, Math.min(delta * 9.0, 1.0));
+      this.headMesh.rotation.x = THREE.MathUtils.lerp(this.headMesh.rotation.x, 0, Math.min(delta * 9.0, 1.0));
+      this.headMesh.rotation.y = THREE.MathUtils.lerp(this.headMesh.rotation.y, 0, Math.min(delta * 9.0, 1.0));
+      this.leftLeg.rotation.z = THREE.MathUtils.lerp(this.leftLeg.rotation.z, 0, Math.min(delta * 9.0, 1.0));
+      this.rightLeg.rotation.z = THREE.MathUtils.lerp(this.rightLeg.rotation.z, 0, Math.min(delta * 9.0, 1.0));
+      if (Math.abs(this.mesh.rotation.x) < 0.005) this.mesh.rotation.x = 0;
+      if (Math.abs(this.mesh.rotation.z) < 0.005) this.mesh.rotation.z = 0;
     }
 
     if (this.punchTimer > 0) {
