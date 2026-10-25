@@ -112,7 +112,48 @@ export class HUD {
     this.shotFillEl = document.getElementById('shot-fill');
     this.shotNeedleEl = document.getElementById('shot-needle');
     this.shotFeedbackEl = document.getElementById('shot-feedback');
+
+    // 頂部專屬任務介面 (Mission Tracker Panel)
+    this.questTrackerPanel = document.getElementById('quest-tracker-panel');
+    this.questTrackerToggleBtn = document.getElementById('quest-tracker-toggle-btn');
+    this.questToggleIndicator = document.getElementById('quest-toggle-indicator');
+    this.questListContent = document.getElementById('quest-list-content');
+    this.qBatProgress = document.getElementById('q-bat-progress');
+    this.qBatStatus = document.getElementById('q-bat-status');
+    this.qTeacherProg = document.getElementById('q-teacher-prog');
+    this.qDogProg = document.getElementById('q-dog-prog');
+    this.qBikeProg = document.getElementById('q-bike-prog');
+    this.qSpecialStatus = document.getElementById('q-special-status');
+    this.qPlantStatus = document.getElementById('q-plant-status');
+    this.qPeStatus = document.getElementById('q-pe-status');
+    this.qTrackTime = document.getElementById('q-track-time');
+    this.qSwimTime = document.getElementById('q-swim-time');
+    this.qBasketStreak = document.getElementById('q-basket-streak');
+
+    if (this.questTrackerToggleBtn) {
+      this.questTrackerToggleBtn.addEventListener('click', () => {
+        this.toggleQuestTracker();
+      });
+    }
   }
+
+  // 頂部任務介面屬性
+  private questTrackerPanel: HTMLElement | null;
+  private questTrackerToggleBtn: HTMLElement | null;
+  private questToggleIndicator: HTMLElement | null;
+  private questListContent: HTMLElement | null;
+  private qBatProgress: HTMLElement | null;
+  private qBatStatus: HTMLElement | null;
+  private qTeacherProg: HTMLElement | null;
+  private qDogProg: HTMLElement | null;
+  private qBikeProg: HTMLElement | null;
+  private qSpecialStatus: HTMLElement | null;
+  private qPlantStatus: HTMLElement | null;
+  private qPeStatus: HTMLElement | null;
+  private qTrackTime: HTMLElement | null;
+  private qSwimTime: HTMLElement | null;
+  private qBasketStreak: HTMLElement | null;
+  private isQuestTrackerExpanded: boolean = true;
 
   private shotMeterEl: HTMLElement | null;
   private shotSweetspotEl: HTMLElement | null;
@@ -292,6 +333,97 @@ export class HUD {
         const bStr = bikeDefeated >= 5 ? '車✔' : `車${bikeDefeated}/5`;
         this.specialBatProgressEl.textContent = `${tStr} ${dStr} ${bStr}`;
       }
+    }
+  }
+
+  // 切換任務介面收合/展開
+  public toggleQuestTracker() {
+    this.isQuestTrackerExpanded = !this.isQuestTrackerExpanded;
+    if (this.questListContent && this.questToggleIndicator) {
+      if (this.isQuestTrackerExpanded) {
+        this.questListContent.classList.remove('collapsed');
+        this.questToggleIndicator.textContent = '▼ 收合';
+      } else {
+        this.questListContent.classList.add('collapsed');
+        this.questToggleIndicator.textContent = '▲ 展開';
+      }
+    }
+  }
+
+  // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄)
+  public updateMissionTracker(data: {
+    studentDefeated: number;
+    hasNormalBat: boolean;
+    teacherDefeated: number;
+    dogDefeated: number;
+    bikeDefeated: number;
+    hasSpecialBat: boolean;
+    plantBossDefeated: boolean;
+    peBossDefeated: boolean;
+    trackRecordText: string;
+    swimRecordText: string;
+    basketballStreak: number;
+  }) {
+    if (this.qBatProgress) {
+      this.qBatProgress.textContent = `${Math.min(20, data.studentDefeated)}/20`;
+    }
+    if (this.qBatStatus) {
+      if (data.hasNormalBat) {
+        this.qBatStatus.textContent = '已達成 ✔';
+        this.qBatStatus.className = 'q-status done';
+      } else {
+        this.qBatStatus.textContent = `${data.studentDefeated}/20`;
+        this.qBatStatus.className = 'q-status';
+      }
+    }
+
+    if (this.qTeacherProg) {
+      this.qTeacherProg.textContent = `${Math.min(1, data.teacherDefeated)}/1`;
+    }
+    if (this.qDogProg) {
+      this.qDogProg.textContent = `${Math.min(1, data.dogDefeated)}/1`;
+    }
+    if (this.qBikeProg) {
+      this.qBikeProg.textContent = `${Math.min(5, data.bikeDefeated)}/5`;
+    }
+    if (this.qSpecialStatus) {
+      if (data.hasSpecialBat) {
+        this.qSpecialStatus.textContent = '已達成 ✔';
+        this.qSpecialStatus.className = 'q-status done';
+      } else {
+        this.qSpecialStatus.textContent = '進行中';
+        this.qSpecialStatus.className = 'q-status pending';
+      }
+    }
+
+    if (this.qPlantStatus) {
+      if (data.plantBossDefeated) {
+        this.qPlantStatus.textContent = '已討伐 👑';
+        this.qPlantStatus.className = 'q-status done';
+      } else {
+        this.qPlantStatus.textContent = '棲息中';
+        this.qPlantStatus.className = 'q-status pending';
+      }
+    }
+
+    if (this.qPeStatus) {
+      if (data.peBossDefeated) {
+        this.qPeStatus.textContent = '已擊潰 🏆';
+        this.qPeStatus.className = 'q-status done';
+      } else {
+        this.qPeStatus.textContent = '4F球場守候';
+        this.qPeStatus.className = 'q-status pending';
+      }
+    }
+
+    if (this.qTrackTime) {
+      this.qTrackTime.textContent = data.trackRecordText;
+    }
+    if (this.qSwimTime) {
+      this.qSwimTime.textContent = data.swimRecordText;
+    }
+    if (this.qBasketStreak) {
+      this.qBasketStreak.textContent = `${data.basketballStreak}顆`;
     }
   }
 

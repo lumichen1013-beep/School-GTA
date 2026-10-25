@@ -465,24 +465,29 @@ export class Player {
 
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean) {
     if (this.isSwimming) {
-      this.mesh.rotation.x = 0.45; // 俯臥游水姿勢
-      const strokeRate = isSprinting ? 14 : 9;
+      // 逼真水平俯臥自由式游泳姿態 (Horizontal Prone Freestyle Swimming)
+      this.mesh.rotation.x = Math.PI / 2.2; // 82 度水平俯臥於水面
+      const strokeRate = isSprinting ? 12 : 7.5;
       this.animTimer += delta * strokeRate;
 
-      // 自由式劃水手臂擺動 (前後交替大弧度划水)
-      this.leftArm.rotation.x = Math.sin(this.animTimer) * 1.4 - 0.4;
-      this.rightArm.rotation.x = -Math.sin(this.animTimer) * 1.4 - 0.4;
+      // 自由式手臂大輪迴風車劃水動作 (Windmill Crawl Strokes)
+      this.leftArm.rotation.x = Math.sin(this.animTimer) * 2.2 - 0.5;
+      this.leftArm.rotation.z = Math.cos(this.animTimer) * 0.45;
+      this.rightArm.rotation.x = Math.sin(this.animTimer + Math.PI) * 2.2 - 0.5;
+      this.rightArm.rotation.z = -Math.cos(this.animTimer) * 0.45;
 
-      // 雙腿快速上下交替拍水 (Flutter Kick)
-      const kick = Math.sin(this.animTimer * 2.2) * 0.45;
+      // 雙腿水平快速上下交替拍水 (Flutter Kick)
+      const kick = Math.sin(this.animTimer * 3.5) * 0.45;
       this.leftLeg.rotation.x = kick;
       this.rightLeg.rotation.x = -kick;
 
+      // 游泳時頭部換氣側頭與身體水面微浮動
+      this.headMesh.rotation.y = Math.sin(this.animTimer * 0.5) * 0.5;
       this.bodyMesh.position.y = 1.05 + Math.sin(this.animTimer * 1.5) * 0.04;
-      this.headMesh.position.y = 1.62 + Math.sin(this.animTimer * 1.5) * 0.04;
       return;
     } else {
       this.mesh.rotation.x = 0;
+      this.headMesh.rotation.y = 0;
     }
 
     if (this.punchTimer > 0) {

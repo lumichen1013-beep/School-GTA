@@ -276,13 +276,13 @@ export class EcologicalGarden {
     stoneRing.receiveShadow = true;
     this.group.add(stoneRing);
 
-    // 清澈蔚藍水面 (帶半透明波光)
+    // 自然生態翡翠碧綠水面 (Natural Jade Emerald Pond Water)
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+      color: 0x164e3f, // 經典天然荷花生態池深碧綠/玉色水體
       transparent: true,
-      opacity: 0.85,
-      roughness: 0.1,
-      metalness: 0.2
+      opacity: 0.90,
+      roughness: 0.25,
+      metalness: 0.15
     });
     const water = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 0.1, 24), waterMat);
     water.position.set(px, 0.32, pz);

@@ -230,6 +230,111 @@
       to { transform: scale(1.04); filter: brightness(1.2); }
     }
 
+    /* 頂部專屬任務介面 (Quest / Mission Tracker Panel) */
+    #quest-tracker-panel {
+      position: absolute;
+      top: 75px;
+      left: 20px;
+      width: 380px;
+      max-width: 90vw;
+      background: rgba(13, 19, 33, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 204, 0, 0.4);
+      border-left: 4px solid #ffcc00;
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+      z-index: 40;
+      pointer-events: auto;
+      transition: all 0.25s ease;
+    }
+
+    .quest-tracker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 800;
+      font-size: 13px;
+      color: #ffcc00;
+      gap: 8px;
+    }
+
+    .quest-toggle-indicator {
+      font-size: 11px;
+      color: #aaa;
+      margin-left: auto;
+    }
+
+    .quest-key-badge {
+      background: rgba(255, 204, 0, 0.2);
+      color: #ffcc00;
+      border: 1px solid rgba(255, 204, 0, 0.5);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .quest-list-container {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      transition: all 0.25s ease;
+    }
+
+    .quest-list-container.collapsed {
+      display: none;
+    }
+
+    .quest-item {
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px 8px;
+      border-radius: 5px;
+      gap: 6px;
+      border-left: 2px solid #3498db;
+    }
+
+    .quest-item.boss-quest {
+      border-left-color: #e74c3c;
+      background: rgba(231, 76, 60, 0.08);
+    }
+
+    .quest-item.completed {
+      border-left-color: #2ecc71;
+      opacity: 0.85;
+    }
+
+    .q-icon { font-size: 14px; }
+    .q-name { font-weight: 800; color: #f1c40f; white-space: nowrap; }
+    .q-desc { color: #ecf0f1; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-status { font-weight: 700; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(52, 152, 219, 0.25); color: #74b9ff; white-space: nowrap; }
+    .q-status.done { background: rgba(46, 204, 113, 0.25); color: #2ecc71; }
+    .q-status.pending { background: rgba(231, 76, 60, 0.25); color: #ff7675; }
+
+    @media (max-width: 900px), (pointer: coarse) {
+      #quest-tracker-panel {
+        top: 50px;
+        left: 10px;
+        width: 260px;
+        padding: 5px 8px;
+      }
+      .quest-tracker-header {
+        font-size: 11px;
+      }
+      .quest-item {
+        font-size: 10px;
+      }
+    }
+
     #crosshair {
       position: absolute;
       top: 50%;
@@ -1285,6 +1390,48 @@
           <span id="bgm-text">BGM: 校園漫步</span>
           <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
           <span class="bgm-key-hint">M</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 頂端專屬任務介面 (Quest / Mission Tracker Bar) -->
+    <div id="quest-tracker-panel">
+      <div class="quest-tracker-header" id="quest-tracker-toggle-btn">
+        <span class="quest-title-text">📜 校園歷練與挑戰任務</span>
+        <span class="quest-toggle-indicator" id="quest-toggle-indicator">▼ 收合</span>
+        <span class="quest-key-badge">J</span>
+      </div>
+      <div class="quest-list-container" id="quest-list-content">
+        <!-- 任務項目動態更新 -->
+        <div class="quest-item" id="q-normal-bat">
+          <span class="q-icon">🏏</span>
+          <span class="q-name">普通木棒挑戰:</span>
+          <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/20</span>)</span>
+          <span class="q-status" id="q-bat-status">進行中</span>
+        </div>
+        <div class="quest-item" id="q-special-bat">
+          <span class="q-icon">⚡</span>
+          <span class="q-name">校園霸王神兵:</span>
+          <span class="q-desc">生教 (<span id="q-teacher-prog">0/1</span>) · 校犬 (<span id="q-dog-prog">0/1</span>) · 單車糾察 (<span id="q-bike-prog">0/5</span>)</span>
+          <span class="q-status" id="q-special-status">未達成</span>
+        </div>
+        <div class="quest-item boss-quest" id="q-plant-boss">
+          <span class="q-icon">🌸</span>
+          <span class="q-name">秘境探索:</span>
+          <span class="q-desc">擊敗生態園【變異食人花王】</span>
+          <span class="q-status" id="q-plant-status">未擊潰</span>
+        </div>
+        <div class="quest-item boss-quest" id="q-pe-boss">
+          <span class="q-icon">🏸</span>
+          <span class="q-name">運動組長對決:</span>
+          <span class="q-desc">擊敗演藝大樓 4F【體育組長 林教頭】</span>
+          <span class="q-status" id="q-pe-status">未擊潰</span>
+        </div>
+        <div class="quest-item" id="q-sports">
+          <span class="q-icon">🏆</span>
+          <span class="q-name">校園運動紀錄:</span>
+          <span class="q-desc">操場 200m (<span id="q-track-time">未完成</span>) · 游泳 50m (<span id="q-swim-time">未完成</span>) · 三分球 (<span id="q-basket-streak">0顆</span>)</span>
+          <span class="q-status">挑戰中</span>
         </div>
       </div>
     </div>

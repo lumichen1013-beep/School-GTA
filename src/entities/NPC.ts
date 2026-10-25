@@ -9,6 +9,8 @@ export interface ShuttlecockProjectile {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   life: number;
+  hasHitOrMissed?: boolean;
+  isReturned?: boolean;
 }
 
 export class NPC {
@@ -811,12 +813,12 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 體育老師發射遠程高速羽球飛彈攻擊 (嚴格限制在 4F 羽球館範圍內)
+  // 體育老師發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網)
   public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
 
-    // 嚴格限制：羽球攻擊目標必須在 4F 羽球館內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)，絕不可射出球場外！
+    // 嚴格限制：網球攻擊目標必須在 4F 羽球館/網球場內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)
     if (
       targetPos.y < 11.2 || targetPos.y > 17.0 ||
       targetPos.x < 63.0 || targetPos.x > 85.0 ||
@@ -826,37 +828,54 @@ export class NPC {
     }
 
     const dist = this.position.distanceTo(targetPos);
-    if (dist < 2.5 || dist > 20.0) return null;
+    if (dist < 2.5 || dist > 22.0) return null;
 
-    this.shuttlecockCooldown = 2.4; // 2.4s 冷卻
+    this.shuttlecockCooldown = 2.6; // 每 2.6 秒發一次網球
     soundManager.playBadmintonWhoosh();
 
-    // 建立羽球 3D 飛行物模型
+    // 建立螢光黃綠色標準網球 3D 模型
     const group = new THREE.Group();
-    // 軟木球頭
-    const corkMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const cork = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), corkMat);
-    group.add(cork);
-    // 羽毛裙
-    const featherMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa, side: THREE.DoubleSide });
-    const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.32, 8, 1, true), featherMat);
-    skirt.position.y = 0.16;
-    group.add(skirt);
+    const ballMat = new THREE.MeshLambertMaterial({ color: 0xccff00 }); // 經典螢光網球黃綠
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 12), ballMat);
+    group.add(ball);
 
-    const startPos = this.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+    // 白色縫線條紋裝飾
+    const seamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const seam = new THREE.Mesh(new THREE.TorusGeometry(0.151, 0.012, 6, 16), seamMat);
+    seam.rotation.x = Math.PI / 4;
+    group.add(seam);
+
+    // 網球發光落點預告環 (方便玩家預判位置)
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xccff00, transparent: true, opacity: 0.6 });
+    const shadowRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.45, 16), ringMat);
+    shadowRing.rotation.x = -Math.PI / 2;
+    shadowRing.position.y = -0.14;
+    group.add(shadowRing);
+
+    const startPos = this.position.clone().add(new THREE.Vector3(0, 1.35, 0));
     group.position.copy(startPos);
     scene.add(group);
 
-    const dir = targetPos.clone().add(new THREE.Vector3(0, 1.0, 0)).sub(startPos).normalize();
-    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+    // 合理化網球飛行速度：11.5 m/s，並略帶微弧線上拋過網
+    const toTarget = targetPos.clone().add(new THREE.Vector3(0, 0.8, 0)).sub(startPos);
+    const horizDist = Math.max(2.0, Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z));
+    const speed = 11.5; // 合理網球速度 (11.5 m/s)
+    const flightTime = horizDist / speed;
 
-    const vel = dir.clone().multiplyScalar(18.0);
+    const velX = (toTarget.x / flightTime);
+    const velZ = (toTarget.z / flightTime);
+    // 考慮網高與重力：過網弧線
+    const velY = (toTarget.y / flightTime) + 0.5 * 9.8 * flightTime + 0.8;
+
+    const vel = new THREE.Vector3(velX, velY, velZ);
 
     return {
       mesh: group,
       position: startPos,
       velocity: vel,
-      life: 2.5
+      life: 3.5,
+      hasHitOrMissed: false,
+      isReturned: false
     };
   }
 
@@ -1022,11 +1041,39 @@ export class NPC {
       this.mesh.rotation.x += delta * 12.0;
       this.mesh.rotation.z += delta * 8.0;
 
-      // 著地檢測
-      if (this.position.y <= this.baseFloorY) {
-        this.position.y = this.baseFloorY;
+      // 計算 NPC 當前 (X, Z) 位置下方的真實支撐面 (最高樓板或地面 Y = 0)
+      let supportFloorY = 0;
+      for (const box of colliders) {
+        if (box.isFloorOnly || box.isRamp) {
+          if (
+            this.position.x >= box.min.x && this.position.x <= box.max.x &&
+            this.position.z >= box.min.z && this.position.z <= box.max.z
+          ) {
+            let floorTop = box.max.y;
+            if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
+              const t = THREE.MathUtils.clamp((this.position.z - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
+              floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
+            }
+            if (floorTop <= this.position.y + 0.6 && floorTop > supportFloorY) {
+              supportFloorY = floorTop;
+            }
+          }
+        }
+      }
+
+      // 著地檢測：只有落到真實支撐面 (supportFloorY 或校園地面 Y = 0) 時才著地！
+      if (this.position.y <= supportFloorY) {
+        const fallDistance = this.baseFloorY - supportFloorY;
+        this.position.y = supportFloorY;
+        this.baseFloorY = supportFloorY; // 墜樓後著地，更新所在樓層基準為新高度
         this.isKnockedFlying = false;
         this.knockVelocity.set(0, 0, 0);
+
+        if (fallDistance > 3.0) {
+          // 高空摔出大樓墜樓重擊傷害與音效
+          this.takeDamage(Math.round(fallDistance * 11));
+          soundManager.playFallHit();
+        }
 
         if (this.hp <= 0) {
           // 血量歸零：倒地倒下，10 秒後滿血復活
@@ -1061,6 +1108,25 @@ export class NPC {
     if (this.isKnockedDown) {
       this.reviveTimer -= delta;
       this.updateKOBadge(this.reviveTimer);
+
+      // 倒地重力墜落檢測 (若被打出大樓邊界懸空倒地，持續自由落體墜落至地面)
+      let supportFloorY = 0;
+      for (const box of colliders) {
+        if (box.isFloorOnly || box.isRamp) {
+          if (
+            this.position.x >= box.min.x && this.position.x <= box.max.x &&
+            this.position.z >= box.min.z && this.position.z <= box.max.z
+          ) {
+            if (box.max.y <= this.position.y + 0.6 && box.max.y > supportFloorY) {
+              supportFloorY = box.max.y;
+            }
+          }
+        }
+      }
+      if (this.position.y > supportFloorY) {
+        this.position.y = Math.max(supportFloorY, this.position.y - 22.0 * delta);
+        this.baseFloorY = supportFloorY;
+      }
 
       if (this.reviveTimer <= 0) {
         // 滿血復活！

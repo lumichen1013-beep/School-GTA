@@ -73,6 +73,21 @@ class SchoolGTASandbox {
   private swimCheckpointMarker!: THREE.Mesh;
   private swimSplashTimer: number = 0;
 
+  // 最佳運動競速紀錄
+  private bestTrackTime: number | null = null;
+  private bestSwimTime: number | null = null;
+
+  // 投籃進球防重覆判定
+  private hasScoredThisShot: boolean = false;
+
+  // 演藝大樓電梯平滑過場與自動走出狀態
+  private elevatorTransition: {
+    phase: 'CLOSING' | 'TRAVELING' | 'OPENING' | 'WALKING_OUT';
+    timer: number;
+    targetY: number;
+    banner: string;
+  } | null = null;
+
   constructor() {
     // 1. 初始化引擎核心
     this.engine = new Engine();
@@ -530,19 +545,31 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 0.85 演藝大樓 1F/4F 直達光能電梯搭乘
-      if (this.world.isNear1FElevator(this.player.position)) {
+      // 0.85 演藝大樓 1F/4F 直達光能電梯搭乘 (具備可滑動電梯門與自動出入功能)
+      if (this.world.isNear1FElevator(this.player.position) && !this.elevatorTransition) {
         soundManager.playElevatorDing();
-        this.player.position.set(65.5, 12.0, 43.5);
-        this.player.mesh.position.set(65.5, 12.0, 43.5);
-        this.wantedSystem.showBanner('🛗 已搭乘直達電梯抵達【4F 室內羽球館】！', 3000);
-        return;
-      }
-      if (this.world.isNear4FElevator(this.player.position)) {
-        soundManager.playElevatorDing();
+        this.elevatorTransition = {
+          phase: 'CLOSING',
+          timer: 0.5,
+          targetY: 12.0,
+          banner: '🛗 電梯抵達【4F 室內羽球館】，電梯門開啟！'
+        };
         this.player.position.set(65.5, 0.0, 43.5);
         this.player.mesh.position.set(65.5, 0.0, 43.5);
-        this.wantedSystem.showBanner('🛗 已搭乘直達電梯返回【1F 演藝廳門廳】！', 3000);
+        this.wantedSystem.showBanner('🛗 電梯門關閉中，直達 4F...', 1500);
+        return;
+      }
+      if (this.world.isNear4FElevator(this.player.position) && !this.elevatorTransition) {
+        soundManager.playElevatorDing();
+        this.elevatorTransition = {
+          phase: 'CLOSING',
+          timer: 0.5,
+          targetY: 0.0,
+          banner: '🛗 電梯抵達【1F 演藝廳門廳】，電梯門開啟！'
+        };
+        this.player.position.set(65.5, 12.0, 43.5);
+        this.player.mesh.position.set(65.5, 12.0, 43.5);
+        this.wantedSystem.showBanner('🛗 電梯門關閉中，直達 1F...', 1500);
         return;
       }
 
@@ -705,56 +732,33 @@ class SchoolGTASandbox {
           return;
         }
 
+        // 1.5 檢測是否回擊網球 (打網球小遊戲：只要揮拍打中球就扣老師血量 5%)
+        const peBoss = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+        for (const sc of this.shuttlecocks) {
+          if (!sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(this.player.position) < 3.2) {
+            sc.isReturned = true;
+            sc.hasHitOrMissed = true;
+            soundManager.playBadmintonHit();
+            if (peBoss && peBoss.hp > 0) {
+              const dmg = peBoss.maxHp * 0.05;
+              const bossKilled = peBoss.takeDamage(dmg);
+              this.wantedSystem.showBanner('🎾 絕妙回擊！成功反擊網球！體育老師 HP -5%！', 2500);
+              if (bossKilled) {
+                this.handleNpcDefeated(peBoss, 'ATTACK');
+              }
+              const dirToBoss = peBoss.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
+              sc.velocity.copy(dirToBoss.multiplyScalar(22.0));
+            }
+            return;
+          }
+        }
+
         // 2. 檢測是否命中附近的 NPC (越強獎金越高)
         for (const npc of this.npcs) {
           if (npc.position.distanceTo(this.player.position) < reach + 0.3 && !npc.isKnockedDown) {
             const wasKnocked = npc.launchFlying(playerForward, knockback, damage);
             if (wasKnocked) {
-              let reward = 20;
-              if (npc.role === 'STUDENT') {
-                this.studentDefeatedCount++;
-                reward = 20;
-
-                // 檢查是否解鎖普通棒球棍 (擊敗 20 隻普通同學)
-                if (this.studentDefeatedCount >= 20 && !this.player.hasNormalBat) {
-                  this.player.hasNormalBat = true;
-                  this.player.setWeapon('NORMAL_BAT');
-                  this.wantedSystem.showBanner('🎉 達成成就【制霸走廊】！擊敗20名普通同學，解鎖【普通木質棒球棍】！(按 2 裝備，ATK 55)', 6000);
-                  soundManager.playBatHit();
-                }
-              } else if (npc.role === 'INSPECTOR') {
-                reward = 40;
-              } else if (npc.role === 'BIKE_PATROL') {
-                this.bikePatrolDefeatedCount++;
-                reward = 60;
-              } else if (npc.role === 'TEACHER') {
-                this.teacherDefeatedCount++;
-                reward = 80;
-              } else if (npc.role === 'BANDIT') {
-                reward = 100;
-              } else if (npc.role === 'DOG') {
-                this.dogDefeatedCount++;
-                reward = 120;
-              } else if (npc.role === 'INSTRUCTOR') {
-                this.teacherDefeatedCount++;
-                reward = 150;
-              } else if (npc.role === 'PE_TEACHER_BOSS') {
-                reward = 180;
-                this.wantedSystem.showBanner('🏸 震撼勝利！強勢擊敗【體育組長 林教頭】！獲得大額獎金 +$180！', 6000);
-              }
-
-              this.playerCash += reward;
-
-              // 檢查是否解鎖特殊棒球棍 (擊敗身教孝全 x1, 校犬 x1, 單車糾察 x5)
-              if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !this.player.hasSpecialBat) {
-                this.player.hasSpecialBat = true;
-                this.player.setWeapon('SPECIAL_BAT');
-                this.wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名單車糾察，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 120)', 7000);
-                soundManager.playSpecialBatHit();
-              }
-
-              this.wantedSystem.reportCrime(1, `擊倒${npc.getRoleTitle()}`);
-              this.wantedSystem.showBanner(`${npc.getRoleTitle()} 倒地！獲得獎金 +$${reward}！(10秒後復活)`, 3500);
+              this.handleNpcDefeated(npc, 'ATTACK');
             } else {
               this.wantedSystem.reportCrime(1, '校園打架鬥毆');
               npc.isChasing = true; // 目標激怒追擊！
@@ -765,7 +769,7 @@ class SchoolGTASandbox {
       }
     });
 
-    // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、R 鍵發球、ESC 關閉合作社
+    // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、R 鍵發球、J 鍵任務、ESC 關閉合作社
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Digit1') {
         this.player.setWeapon('FIST');
@@ -784,6 +788,8 @@ class SchoolGTASandbox {
         } else {
           this.wantedSystem.showBanner(`🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、單車糾察(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`, 2500);
         }
+      } else if (e.code === 'KeyJ') {
+        this.hud.toggleQuestTracker();
       } else if (e.code === 'Escape') {
         if (this.hud.isCommissaryOpen) {
           this.hud.closeCommissary();
@@ -798,6 +804,57 @@ class SchoolGTASandbox {
         }
       }
     });
+  }
+
+  // 統一 NPC 擊倒/擊敗結算 (支援武器揮擊、自行車撞倒、高處墜落摔死)
+  private handleNpcDefeated(npc: NPC, source: 'ATTACK' | 'BIKE' | 'FALL' = 'ATTACK') {
+    let reward = 20;
+    if (npc.role === 'STUDENT') {
+      this.studentDefeatedCount++;
+      reward = 20;
+
+      // 檢查是否解鎖普通棒球棍 (擊敗 20 隻普通同學)
+      if (this.studentDefeatedCount >= 20 && !this.player.hasNormalBat) {
+        this.player.hasNormalBat = true;
+        this.player.setWeapon('NORMAL_BAT');
+        this.wantedSystem.showBanner('🎉 達成成就【制霸走廊】！擊敗20名普通同學，解鎖【普通木質棒球棍】！(按 2 裝備，ATK 55)', 6000);
+        soundManager.playBatHit();
+      }
+    } else if (npc.role === 'INSPECTOR') {
+      reward = 40;
+    } else if (npc.role === 'BIKE_PATROL') {
+      this.bikePatrolDefeatedCount++;
+      reward = 60;
+    } else if (npc.role === 'TEACHER') {
+      this.teacherDefeatedCount++;
+      reward = 80;
+    } else if (npc.role === 'BANDIT') {
+      reward = 100;
+    } else if (npc.role === 'DOG') {
+      this.dogDefeatedCount++;
+      reward = 120;
+    } else if (npc.role === 'INSTRUCTOR') {
+      this.teacherDefeatedCount++;
+      reward = 150;
+    } else if (npc.role === 'PE_TEACHER_BOSS') {
+      reward = 180;
+      this.wantedSystem.showBanner('🏸 震撼勝利！強勢擊敗【體育組長 林教頭】！獲得大額獎金 +$180！', 6000);
+    }
+
+    this.playerCash += reward;
+    this.hud.setCash(this.playerCash);
+
+    // 檢查是否解鎖特殊棒球棍 (擊敗身教 x1, 校犬 x1, 單車糾察 x5)
+    if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !this.player.hasSpecialBat) {
+      this.player.hasSpecialBat = true;
+      this.player.setWeapon('SPECIAL_BAT');
+      this.wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名單車糾察，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 120)', 7000);
+      soundManager.playSpecialBatHit();
+    }
+
+    const sourceDesc = source === 'BIKE' ? '遭單車強力撞飛' : source === 'FALL' ? '高處摔落' : '倒地';
+    this.wantedSystem.reportCrime(1, `${npc.getRoleTitle()}${sourceDesc}`);
+    this.wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！(10秒後復活)`, 3500);
   }
 
   // 合作社購買熱食補血回呼
@@ -855,6 +912,7 @@ class SchoolGTASandbox {
     this.isBallInAir = true;
     this.ballResetTimer = 3.8;
     this.targetShotQuality = quality;
+    this.hasScoredThisShot = false;
 
     // 尋找玩家鏡頭中央準心所對準的最佳目標籃框
     const camDir = new THREE.Vector3();
@@ -1202,6 +1260,49 @@ class SchoolGTASandbox {
 
     const delta = this.engine.getDelta();
 
+    // 0. 電梯過場動畫與自動走出
+    if (this.elevatorTransition) {
+      const et = this.elevatorTransition;
+      et.timer -= delta;
+
+      if (et.phase === 'CLOSING') {
+        const ratio = Math.max(0, et.timer / 0.5);
+        this.world.setElevatorDoorsOpen(ratio);
+        if (et.timer <= 0) {
+          et.phase = 'TRAVELING';
+          et.timer = 0.4;
+        }
+      } else if (et.phase === 'TRAVELING') {
+        if (et.timer <= 0) {
+          this.player.position.set(65.5, et.targetY, 43.5);
+          this.player.mesh.position.set(65.5, et.targetY, 43.5);
+          soundManager.playElevatorDing();
+          et.phase = 'OPENING';
+          et.timer = 0.5;
+        }
+      } else if (et.phase === 'OPENING') {
+        const ratio = Math.min(1.0, 1.0 - et.timer / 0.5);
+        this.world.setElevatorDoorsOpen(ratio);
+        if (et.timer <= 0) {
+          this.world.setElevatorDoorsOpen(1.0);
+          et.phase = 'WALKING_OUT';
+          et.timer = 0.8;
+          this.wantedSystem.showBanner(et.banner, 3000);
+        }
+      } else if (et.phase === 'WALKING_OUT') {
+        // 自動走出電梯門外 (從 Z: 43.5 朝北走向 Z: 40.5，走進大廳/球場)
+        const progress = Math.min(1.0, 1.0 - (et.timer / 0.8));
+        const curZ = THREE.MathUtils.lerp(43.5, 40.5, progress);
+        this.player.position.set(65.5, et.targetY, curZ);
+        this.player.mesh.position.copy(this.player.position);
+        this.player.rotationY = Math.PI; // 面向北方走出
+        this.player.mesh.rotation.y = Math.PI;
+        if (et.timer <= 0) {
+          this.elevatorTransition = null;
+        }
+      }
+    }
+
     // 1. 處理滑鼠視角旋轉
     const mouseDelta = this.input.consumeMouseDelta();
     this.cameraCtrl.updateRotation(mouseDelta.x, mouseDelta.y);
@@ -1240,7 +1341,7 @@ class SchoolGTASandbox {
             const wasKnocked = npc.launchFlying(launchDir, speed, dmg);
 
             if (wasKnocked) {
-              this.wantedSystem.showBanner(`${npc.getRoleTitle()} 被單車強力撞飛倒地！(10秒後復活)`, 3500);
+              this.handleNpcDefeated(npc, 'BIKE');
             } else {
               this.wantedSystem.showBanner(`${npc.getRoleTitle()} 被單車撞飛！`, 2000);
             }
@@ -1249,9 +1350,14 @@ class SchoolGTASandbox {
         }
       }
     } else {
-      this.player.update(delta, this.input, forwardVec, rightVec, this.world.colliders);
-      targetPosition = this.player.position;
-      playerRotY = this.player.rotationY;
+      if (this.elevatorTransition) {
+        targetPosition = this.player.position;
+        playerRotY = this.player.rotationY;
+      } else {
+        this.player.update(delta, this.input, forwardVec, rightVec, this.world.colliders);
+        targetPosition = this.player.position;
+        playerRotY = this.player.rotationY;
+      }
 
       // 游泳池水體判定：水面漂浮高度與划水打水音效
       const inPool = this.world.isInsideSwimmingPool(targetPosition);
@@ -1410,51 +1516,52 @@ class SchoolGTASandbox {
       this.basketballMesh.position.addScaledVector(this.ballVelocity, delta);
       this.basketballMesh.rotation.x += delta * 12.0;
 
-      // 命中籃框檢測 (智能命中判定與手感時機回饋)
-      for (const hoop of this.world.hoopTargets) {
-        const distToHoop = this.basketballMesh.position.distanceTo(hoop);
-        if (distToHoop < 0.85 && this.ballVelocity.y < 0) {
-          this.isBallInAir = false;
+      // 命中籃框檢測 (智能命中判定與手感時機回饋，防重覆計分，球正常穿網墜地絕不卡框)
+      if (!this.hasScoredThisShot) {
+        for (const hoop of this.world.hoopTargets) {
+          const distToHoop = this.basketballMesh.position.distanceTo(hoop);
+          if (distToHoop < 0.95 && this.ballVelocity.y < 0) {
+            this.hasScoredThisShot = true;
 
-          if (this.targetShotQuality === 'PERFECT') {
-            soundManager.playSwish();
-            this.basketballScoreStreak++;
-            const basePts = this.currentActiveHotspot ? this.currentActiveHotspot.bonusPoints : 150;
-            const streakBonus = (this.basketballScoreStreak > 1) ? ` (連進 ${this.basketballScoreStreak} 球🔥)` : '';
-            this.wantedSystem.showBanner(`🏀【PERFECT! 完美空心入網！】得分 +${basePts}！精力回滿！${streakBonus}`, 4000);
-            this.player.stamina = this.player.maxStamina;
-            this.ballVelocity.set(0, -3.0, 0); // 垂直空心墜地
-            this.ballResetTimer = 2.5;
-          } else if (this.targetShotQuality === 'GOOD') {
-            soundManager.playRimHit();
-            setTimeout(() => soundManager.playSwish(), 180);
-            this.basketballScoreStreak++;
-            const basePts = 100;
-            this.wantedSystem.showBanner(`🏀【擦板彈框入網！】得分 +${basePts}！`, 3500);
-            this.ballVelocity.set(0, -2.5, 0);
-            this.ballResetTimer = 2.5;
-          } else {
-            soundManager.playRimHit();
-            this.basketballScoreStreak = 0;
-            this.wantedSystem.showBanner('🏀【打鐵不進！】請抓準綠色完美出手時機！', 2500);
-            this.ballVelocity.x *= -0.5;
-            this.ballVelocity.y = 3.5;
-            this.ballVelocity.z *= -0.5;
-            this.ballResetTimer = 3.5;
+            if (this.targetShotQuality === 'PERFECT') {
+              soundManager.playSwish();
+              this.basketballScoreStreak++;
+              const basePts = this.currentActiveHotspot ? this.currentActiveHotspot.bonusPoints : 150;
+              const streakBonus = (this.basketballScoreStreak > 1) ? ` (連進 ${this.basketballScoreStreak} 球🔥)` : '';
+              this.wantedSystem.showBanner(`🏀【PERFECT! 完美空心入網！】得分 +${basePts}！精力回滿！${streakBonus}`, 4000);
+              this.player.stamina = this.player.maxStamina;
+              this.ballVelocity.set(this.ballVelocity.x * 0.1, -4.8, this.ballVelocity.z * 0.1); // 垂直空心穿網下墜
+            } else if (this.targetShotQuality === 'GOOD') {
+              soundManager.playRimHit();
+              setTimeout(() => soundManager.playSwish(), 180);
+              this.basketballScoreStreak++;
+              const basePts = 100;
+              this.wantedSystem.showBanner(`🏀【擦板彈框入網！】得分 +${basePts}！`, 3500);
+              this.ballVelocity.set(this.ballVelocity.x * 0.25, -4.0, this.ballVelocity.z * 0.25);
+            } else {
+              soundManager.playRimHit();
+              this.basketballScoreStreak = 0;
+              this.wantedSystem.showBanner('🏀【打鐵不進！】請抓準綠色完美出手時機！', 2500);
+              this.ballVelocity.x *= -0.6;
+              this.ballVelocity.y = 3.8;
+              this.ballVelocity.z *= -0.6;
+            }
+            break;
           }
-          break;
         }
       }
 
-      // 地面彈跳檢測
+      // 地面彈跳檢測 (真實自然彈跳並衰減平息)
       if (this.basketballMesh.position.y <= 0.24) {
         this.basketballMesh.position.y = 0.24;
-        if (Math.abs(this.ballVelocity.y) > 1.2) {
-          this.ballVelocity.y = -this.ballVelocity.y * 0.55;
-          this.ballVelocity.x *= 0.70;
-          this.ballVelocity.z *= 0.70;
+        const horizSpeed = Math.sqrt(this.ballVelocity.x * this.ballVelocity.x + this.ballVelocity.z * this.ballVelocity.z);
+        if (Math.abs(this.ballVelocity.y) > 1.2 || horizSpeed > 0.8) {
+          this.ballVelocity.y = Math.abs(this.ballVelocity.y) * 0.52;
+          this.ballVelocity.x *= 0.68;
+          this.ballVelocity.z *= 0.68;
           soundManager.playDribble();
         } else {
+          this.ballVelocity.set(0, 0, 0);
           this.isBallInAir = false;
           this.ballResetTimer = 3.5;
         }
@@ -1484,6 +1591,9 @@ class SchoolGTASandbox {
           this.isRacingTrack = false;
           this.checkpointMarker.visible = false;
           soundManager.playFanfare();
+          if (!this.bestTrackTime || this.raceTimer < this.bestTrackTime) {
+            this.bestTrackTime = this.raceTimer;
+          }
           this.wantedSystem.showBanner(
             `🏆【挑戰成功！】完賽成績: ${this.raceTimer.toFixed(1)} 秒！獲得「校園飛毛腿」稱號！耐力上限提升至 130！`,
             5000
@@ -1533,6 +1643,9 @@ class SchoolGTASandbox {
           this.isSwimmingRace = false;
           this.swimCheckpointMarker.visible = false;
           soundManager.playFanfare();
+          if (!this.bestSwimTime || this.swimRaceTimer < this.bestSwimTime) {
+            this.bestSwimTime = this.swimRaceTimer;
+          }
           this.playerCash += 150;
           this.player.maxStamina = Math.max(this.player.maxStamina, 150);
           this.player.stamina = this.player.maxStamina;
@@ -1664,38 +1777,75 @@ class SchoolGTASandbox {
       }
     }
 
-    // 更新飛行中的高速羽球飛彈
+    // 更新飛行中的網球 (打網球小遊戲：合理飛行速度，打中扣老師5%，漏球扣玩家5%)
     for (let i = this.shuttlecocks.length - 1; i >= 0; i--) {
       const sc = this.shuttlecocks[i];
+      sc.velocity.y -= 9.8 * delta; // 重力拋物線
       sc.position.addScaledVector(sc.velocity, delta);
       sc.mesh.position.copy(sc.position);
+      sc.mesh.rotation.x += delta * 12.0;
+      sc.mesh.rotation.y += delta * 8.0;
       sc.life -= delta;
 
-      // 嚴格邊界判定：林老師的羽球絕對不能離開羽球館邊界 (X: [62.8, 85.2], Z: [22.8, 53.2], Y: [11.8, 16.8])
-      // 只要觸碰到羽球館邊界或球場邊緣，羽球立即撞壁消散！
+      // 嚴格邊界判定：網球絕對不能離開羽球館/網球館邊界 (X: [62.8, 85.2], Z: [22.8, 53.2], Y: [11.8, 16.8])
       if (
         sc.position.x < 62.8 || sc.position.x > 85.2 ||
         sc.position.z < 22.8 || sc.position.z > 53.2 ||
         sc.position.y < 11.8 || sc.position.y > 16.8
       ) {
-        soundManager.playBadmintonHit();
         this.engine.scene.remove(sc.mesh);
         this.shuttlecocks.splice(i, 1);
         continue;
       }
 
-      // 命中玩家判定
-      if (sc.position.distanceTo(targetPosition) < 1.35 && !this.player.isDead) {
-        soundManager.playBadmintonHit();
-        const hitDir = targetPosition.clone().sub(sc.position).normalize();
-        this.player.launchFlying(hitDir, 9.0, 4.5, 18, '遭到體育組長的高速羽球扣殺！');
-        this.wantedSystem.showBanner('🏸 遭到體育組長 林教頭 高速羽球殺球重扣！', 2000);
-        this.engine.scene.remove(sc.mesh);
-        this.shuttlecocks.splice(i, 1);
-        continue;
+      // 玩家打擊回擊網球判定 (按攻擊鍵或在揮擊範圍內回擊)
+      if (!sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(targetPosition) < 2.8) {
+        if (this.input.mouseButtons.left) {
+          sc.isReturned = true;
+          sc.hasHitOrMissed = true;
+          soundManager.playBadmintonHit();
+          if (peBoss && peBoss.hp > 0) {
+            const dmg = peBoss.maxHp * 0.05;
+            const bossKilled = peBoss.takeDamage(dmg);
+            this.wantedSystem.showBanner('🎾 漂亮抽擊！打中網球回擊！體育老師 HP -5%！', 2500);
+            if (bossKilled) {
+              this.handleNpcDefeated(peBoss, 'ATTACK');
+            }
+            const dirToBoss = peBoss.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(sc.position).normalize();
+            sc.velocity.copy(dirToBoss.multiplyScalar(22.0));
+            continue;
+          }
+        }
       }
 
-      // 著地或壽命結束消散
+      // 若成功回擊給老師：球飛回老師半場
+      if (sc.isReturned && peBoss) {
+        if (sc.position.distanceTo(peBoss.position) < 2.2 || sc.position.z <= 29.5) {
+          soundManager.playBadmintonHit();
+          this.engine.scene.remove(sc.mesh);
+          this.shuttlecocks.splice(i, 1);
+          continue;
+        }
+      }
+
+      // 漏球失誤判定：若玩家未打到球，球飛過玩家或在玩家半場落地
+      if (!sc.hasHitOrMissed && !sc.isReturned) {
+        if (sc.position.z > targetPosition.z + 1.2 || (sc.position.y <= 12.12 && sc.position.z >= 38.0)) {
+          sc.hasHitOrMissed = true;
+          soundManager.playPunch();
+          const dmg = this.player.maxHp * 0.05;
+          const died = this.player.takeDamage(dmg, '漏接網球扣血');
+          this.wantedSystem.showBanner('🎾 漏球失誤！玩家扣除 5% 體力！抓準時機揮拍回擊！', 3000);
+          if (died) {
+            this.handlePlayerDeath('在網球對決中體力耗盡！');
+          }
+          this.engine.scene.remove(sc.mesh);
+          this.shuttlecocks.splice(i, 1);
+          continue;
+        }
+      }
+
+      // 壽命結束消散
       if (sc.life <= 0) {
         this.engine.scene.remove(sc.mesh);
         this.shuttlecocks.splice(i, 1);
@@ -1708,7 +1858,7 @@ class SchoolGTASandbox {
     if (distToPlantBoss < 35.0 && !this.ecologicalGarden.boss.isDead) {
       this.hud.setBossHealth(this.ecologicalGarden.boss.hp, this.ecologicalGarden.boss.maxHp, true, '秘境霸主：變異食人花王', '🌸');
     } else if (peBoss && isPlayerInBadmintonCourt && !peBoss.isKnockedDown && peBoss.hp > 0) {
-      this.hud.setBossHealth(peBoss.hp, peBoss.maxHp, true, '熱血體育組長 林教頭 (4F羽球館)', '🏸');
+      this.hud.setBossHealth(peBoss.hp, peBoss.maxHp, true, '熱血體育組長 林教頭 (4F網球對決)', '🎾');
     } else {
       this.hud.setBossHealth(0, 1000, false);
     }
@@ -1730,6 +1880,21 @@ class SchoolGTASandbox {
       this.dogDefeatedCount,
       this.bikePatrolDefeatedCount
     );
+
+    // 即時更新頂端任務看板 (擊倒進度、神兵挑戰、兩大 Boss 討伐、運動競速紀錄)
+    this.hud.updateMissionTracker({
+      studentDefeated: this.studentDefeatedCount,
+      hasNormalBat: this.player.hasNormalBat,
+      teacherDefeated: this.teacherDefeatedCount,
+      dogDefeated: this.dogDefeatedCount,
+      bikeDefeated: this.bikePatrolDefeatedCount,
+      hasSpecialBat: this.player.hasSpecialBat,
+      plantBossDefeated: this.ecologicalGarden.boss.isDead,
+      peBossDefeated: peBoss ? peBoss.hp <= 0 : false,
+      trackRecordText: this.bestTrackTime ? `${this.bestTrackTime.toFixed(1)}s` : '未完成',
+      swimRecordText: this.bestSwimTime ? `${this.bestSwimTime.toFixed(1)}s` : '未完成',
+      basketballStreak: this.basketballScoreStreak
+    });
 
     this.hud.update(
       targetPosition,

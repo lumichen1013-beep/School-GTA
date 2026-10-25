@@ -45,6 +45,23 @@ export class CampusWorld {
   public hoopTargets: THREE.Vector3[] = [];
   public shootingHotspots: ShootingHotspot[] = [];
 
+  // 演藝大樓電梯滑動門物件引用
+  public lift1FDoors: { left: THREE.Mesh; right: THREE.Mesh } | null = null;
+  public lift4FDoors: { left: THREE.Mesh; right: THREE.Mesh } | null = null;
+  public liftDoorOpenRatio: number = 1.0; // 預設敞開狀態
+
+  public setElevatorDoorsOpen(ratio: number) {
+    this.liftDoorOpenRatio = THREE.MathUtils.clamp(ratio, 0, 1);
+    if (this.lift1FDoors) {
+      this.lift1FDoors.left.position.x = -0.55 - this.liftDoorOpenRatio * 0.75;
+      this.lift1FDoors.right.position.x = 0.55 + this.liftDoorOpenRatio * 0.75;
+    }
+    if (this.lift4FDoors) {
+      this.lift4FDoors.left.position.x = -0.55 - this.liftDoorOpenRatio * 0.75;
+      this.lift4FDoors.right.position.x = 0.55 + this.liftDoorOpenRatio * 0.75;
+    }
+  }
+
   // 判斷玩家是否身處游泳池水體範圍之內
   public isInsideSwimmingPool(pos: THREE.Vector3): boolean {
     return pos.x >= 67.5 && pos.x <= 82.5 && pos.z >= -48.5 && pos.z <= -21.5 && pos.y <= 0.8;
@@ -2038,63 +2055,122 @@ export class CampusWorld {
     truss.position.set(baseX + 3.5, 11.2, minZ + 4.5);
     this.scene.add(truss);
 
-    // 4. 西北側全新真實雙跑折返景觀大樓梯 (Switchback Grand Stairs to 4F)
-    // 樓梯間區域：X: 63.2 ~ 69.8, Z: 22.0 ~ 36.5
-    // 坡度平緩寬闊 (寬度 3.0m)，兩側無錯位，上樓頭頂 100% 垂直淨空，絕不擋頭卡腳！
-    const stairRailMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+    // 4. 西北側全新【專屬獨立封閉式樓梯間】(Dedicated Enclosed Stairwell Tower to 4F)
+    // 樓梯間區域：X: 62.0 ~ 70.0, Z: 22.0 ~ 36.5
+    // 與演藝廳主場地完全隔絕，配置專屬出入門戶、大觀景窗，物理碰撞與台階幾何 100% 數學對齊！
+    const stairStepMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
+    const nosingMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 }); // 防滑止滑踏條
 
-    // 一段：1F -> 2F (西道跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 向上攀升 Y: 0 -> 4.0)
-    this.addRamp(63.2, 66.2, 25.0, 34.0, 4.0, 0);
-    const r1 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
-    r1.position.set(64.7, 2.0, 29.5);
-    r1.rotation.x = -Math.atan2(4.0, 9.0);
-    this.scene.add(r1);
+    // 東側隔離隔音牆 (將專屬樓梯間與演藝廳/舞台徹底隔開)
+    this.buildWall(70.0, 6.0, 29.5, 0.4, 12.0, 15.0, wallMat);
+    // 南側樓梯間端點牆 (1F 留出進入樓梯間的大門 X: 63.5 ~ 66.5)
+    this.buildWall(68.25, 6.0, 36.5, 3.5, 12.0, 0.4, wallMat);
+    this.buildWall(62.75, 6.0, 36.5, 1.5, 12.0, 0.4, wallMat);
+    // 1F 樓梯間門眉上樑
+    const doorBeam = new THREE.Mesh(new THREE.BoxGeometry(2.5, 9.2, 0.4), wallMat);
+    doorBeam.position.set(65.0, 7.4, 36.5);
+    this.scene.add(doorBeam);
+    this.addCollider(63.75, 66.25, 36.3, 36.7, 2.8, 12.0);
 
-    // 二段中繼平台：2F Landing (北側觀景中繼平台 Y = 4.0, X: 63.2 ~ 69.8, Z: 22.0 ~ 25.0)
-    this.addFloorSlab(63.2, 69.8, 22.0, 25.0, 4.0);
-    const land1 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
-    land1.position.set(66.5, 3.825, 23.5);
+    // 1F 樓梯間入口標牌
+    const stairSignCanvas = document.createElement('canvas');
+    stairSignCanvas.width = 512;
+    stairSignCanvas.height = 128;
+    const sctx2 = stairSignCanvas.getContext('2d')!;
+    sctx2.fillStyle = '#16a085';
+    sctx2.fillRect(0, 0, 512, 128);
+    sctx2.strokeStyle = '#ffffff';
+    sctx2.lineWidth = 6;
+    sctx2.strokeRect(4, 4, 504, 120);
+    sctx2.fillStyle = '#ffffff';
+    sctx2.font = 'bold 36px "Noto Sans TC", sans-serif';
+    sctx2.textAlign = 'center';
+    sctx2.textBaseline = 'middle';
+    sctx2.fillText('🚪 專屬安全梯 (直達 4F 羽球館) ⬆️', 256, 64);
+    const stairSignTex = new THREE.CanvasTexture(stairSignCanvas);
+    const stairSignMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: stairSignTex }));
+    stairSignMesh.position.set(65.0, 3.2, 36.75);
+    this.scene.add(stairSignMesh);
+
+    // 實體台階與 100% 精準對齊坡道 (梯級物理碰撞完全貼合)
+    const numSteps = 16;
+    const stepDepth = 9.0 / numSteps; // 0.5625m
+    const stepHeight = 4.0 / numSteps; // 0.25m
+
+    // 一段：1F -> 2F (西側跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 爬升 Y: 0 -> 4.0)
+    this.addRamp(63.0, 66.5, 25.0, 34.0, 4.0, 0);
+    for (let i = 0; i < numSteps; i++) {
+      const sz = 34.0 - (i + 0.5) * stepDepth;
+      const sy = (i + 0.5) * stepHeight;
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
+      stepMesh.position.set(64.75, sy, sz);
+      stepMesh.receiveShadow = true;
+      this.scene.add(stepMesh);
+      // 踏條
+      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
+      nosing.position.set(64.75, sy + stepHeight / 2 + 0.01, sz - stepDepth / 2 + 0.04);
+      this.scene.add(nosing);
+    }
+
+    // 二段中繼平台：2F Landing (北側觀景中繼平台 Y = 4.0, X: 63.0 ~ 69.8, Z: 22.0 ~ 25.0)
+    this.addFloorSlab(63.0, 69.8, 22.0, 25.0, 4.0);
+    const land1 = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, 3.0), stageFloorMat);
+    land1.position.set(66.4, 3.825, 23.5);
     this.scene.add(land1);
 
-    // 二段：2F -> 3F (東道跑道 X: 66.8 ~ 69.8, Z: 25.0 -> 34.0, 向上攀升 Y: 4.0 -> 8.0)
-    this.addRamp(66.8, 69.8, 25.0, 34.0, 4.0, 8.0);
-    const r2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
-    r2.position.set(68.3, 6.0, 29.5);
-    r2.rotation.x = Math.atan2(4.0, 9.0);
-    this.scene.add(r2);
+    // 二段：2F -> 3F (東側跑道 X: 66.5 ~ 69.8, Z: 25.0 -> 34.0, 爬升 Y: 4.0 -> 8.0)
+    this.addRamp(66.5, 69.8, 25.0, 34.0, 4.0, 8.0);
+    for (let i = 0; i < numSteps; i++) {
+      const sz = 25.0 + (i + 0.5) * stepDepth;
+      const sy = 4.0 + (i + 0.5) * stepHeight;
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
+      stepMesh.position.set(68.15, sy, sz);
+      stepMesh.receiveShadow = true;
+      this.scene.add(stepMesh);
+      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
+      nosing.position.set(68.15, sy + stepHeight / 2 + 0.01, sz + stepDepth / 2 - 0.04);
+      this.scene.add(nosing);
+    }
 
-    // 三段中繼平台：3F Landing (南側觀景中繼平台 Y = 8.0, X: 63.2 ~ 69.8, Z: 34.0 ~ 37.0)
-    this.addFloorSlab(63.2, 69.8, 34.0, 37.0, 8.0);
-    const land2 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
-    land2.position.set(66.5, 7.825, 35.5);
+    // 三段中繼平台：3F Landing (南側觀景中繼平台 Y = 8.0, X: 63.0 ~ 69.8, Z: 34.0 ~ 36.5)
+    this.addFloorSlab(63.0, 69.8, 34.0, 36.5, 8.0);
+    const land2 = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, 2.5), stageFloorMat);
+    land2.position.set(66.4, 7.825, 35.25);
     this.scene.add(land2);
 
-    // 三段：3F -> 4F (西道跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 向上攀升 Y: 8.0 -> 12.0)
-    this.addRamp(63.2, 66.2, 25.0, 34.0, 12.0, 8.0);
-    const r3 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.2), stageFloorMat);
-    r3.position.set(64.7, 10.0, 29.5);
-    r3.rotation.x = -Math.atan2(4.0, 9.0);
-    this.scene.add(r3);
+    // 三段：3F -> 4F (西側跑道 X: 63.2 ~ 66.2, Z: 34.0 -> 25.0, 爬升 Y: 8.0 -> 12.0)
+    this.addRamp(63.0, 66.5, 25.0, 34.0, 12.0, 8.0);
+    for (let i = 0; i < numSteps; i++) {
+      const sz = 34.0 - (i + 0.5) * stepDepth;
+      const sy = 8.0 + (i + 0.5) * stepHeight;
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.2, stepHeight, stepDepth + 0.02), stairStepMat);
+      stepMesh.position.set(64.75, sy, sz);
+      stepMesh.receiveShadow = true;
+      this.scene.add(stepMesh);
+      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.02, 0.08), nosingMat);
+      nosing.position.set(64.75, sy + stepHeight / 2 + 0.01, sz - stepDepth / 2 + 0.04);
+      this.scene.add(nosing);
+    }
 
-    // 四樓樓梯出入口抵達平台 (4F Arrival Landing Y = 12.0, X: 63.2 ~ 69.8, Z: 22.0 ~ 25.0)
-    this.addFloorSlab(63.2, 69.8, 22.0, 25.0, 12.0);
-    const land4 = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.35, 3.0), stageFloorMat);
+    // 四樓樓梯出入口抵達平台 (4F Arrival Landing Y = 12.0, X: 63.0 ~ 70.0, Z: 22.0 ~ 25.0)
+    this.addFloorSlab(63.0, 70.0, 22.0, 25.0, 12.0);
+    const land4 = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.35, 3.0), stageFloorMat);
     land4.position.set(66.5, 11.825, 23.5);
     this.scene.add(land4);
 
-    // 樓梯防護欄杆 (避免摔落天井)
-    const stairRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.2, 11.5), stairRailMat);
-    stairRail.position.set(69.85, 12.6, 30.5);
-    this.scene.add(stairRail);
-    this.addCollider(69.7, 70.0, 24.8, 36.2, 12.0, 13.5);
+    // 4F 樓梯間專屬出口標示
+    const stair4FMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: stairSignTex }));
+    stair4FMesh.position.set(70.2, 14.2, 23.5);
+    stair4FMesh.rotation.y = Math.PI / 2;
+    this.scene.add(stair4FMesh);
 
-    // 5. ⚡ 演藝大樓直達電梯系統 (1F ⇄ 4F Express Elevator)
-    // 電梯位於 1F 門廳 X: 65.5, Z: 43.5，外觀具備高科技藍光立體框架與地面發光圈
-    const liftCabinMat = new THREE.MeshStandardMaterial({ color: 0x34495e, metalness: 0.85, roughness: 0.2 });
+    // 5. ⚡ 演藝大樓直達電梯系統 (具備可滑動電梯門與自動出入功能)
+    const liftCabinMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.85, roughness: 0.2 });
     const liftGlassMat = new THREE.MeshLambertMaterial({ color: 0x00cec9, transparent: true, opacity: 0.45 });
+    const liftDoorMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.8, roughness: 0.2 });
     const liftRingMat = new THREE.MeshBasicMaterial({ color: 0x00cec9, transparent: true, opacity: 0.85 });
 
-    // 1F 電梯車廂與發光踏圈
+    // 1F 電梯車廂與左右開合電梯門
     const lift1FGroup = new THREE.Group();
     lift1FGroup.position.set(65.5, 0, 43.5);
     const lift1FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
@@ -2107,13 +2183,24 @@ export class CampusWorld {
     ring1F.rotation.x = -Math.PI / 2;
     ring1F.position.y = 0.04;
     lift1FGroup.add(ring1F);
+
+    // 1F 左電梯門與右電梯門
+    const doorGeo = new THREE.BoxGeometry(0.68, 2.6, 0.06);
+    const door1FL = new THREE.Mesh(doorGeo, liftDoorMat);
+    door1FL.position.set(-0.55 - 0.75, 1.35, -1.28);
+    lift1FGroup.add(door1FL);
+    const door1FR = new THREE.Mesh(doorGeo, liftDoorMat);
+    door1FR.position.set(0.55 + 0.75, 1.35, -1.28);
+    lift1FGroup.add(door1FR);
+    this.lift1FDoors = { left: door1FL, right: door1FR };
+
     this.scene.add(lift1FGroup);
-    // 電梯車廂碰撞柱
+    // 電梯車廂外圍碰撞壁
     this.addCollider(64.1, 64.3, 42.1, 44.9, 0, 3.2);
     this.addCollider(66.7, 66.9, 42.1, 44.9, 0, 3.2);
     this.addCollider(64.1, 66.9, 44.7, 44.9, 0, 3.2);
 
-    // 4F 電梯車廂與發光踏圈
+    // 4F 電梯車廂與左右開合電梯門
     const lift4FGroup = new THREE.Group();
     lift4FGroup.position.set(65.5, 12.0, 43.5);
     const lift4FFrame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.2, 2.6), liftCabinMat);
@@ -2126,8 +2213,16 @@ export class CampusWorld {
     ring4F.rotation.x = -Math.PI / 2;
     ring4F.position.y = 0.04;
     lift4FGroup.add(ring4F);
+
+    const door4FL = new THREE.Mesh(doorGeo, liftDoorMat);
+    door4FL.position.set(-0.55 - 0.75, 1.35, -1.28);
+    lift4FGroup.add(door4FL);
+    const door4FR = new THREE.Mesh(doorGeo, liftDoorMat);
+    door4FR.position.set(0.55 + 0.75, 1.35, -1.28);
+    lift4FGroup.add(door4FR);
+    this.lift4FDoors = { left: door4FL, right: door4FR };
+
     this.scene.add(lift4FGroup);
-    // 4F 電梯碰撞柱
     this.addCollider(64.1, 64.3, 42.1, 44.9, 12.0, 15.2);
     this.addCollider(66.7, 66.9, 42.1, 44.9, 12.0, 15.2);
     this.addCollider(64.1, 66.9, 44.7, 44.9, 12.0, 15.2);
@@ -2424,21 +2519,22 @@ export class CampusWorld {
     deck.receiveShadow = true;
     poolGroup.add(deck);
 
-    // 2. 清澈湛藍水面 (Crystal Water Surface: 14m x 26m)
+    // 2. 清澈湛藍碧綠水面 (Crystal Aquamarine Turquoise Water: 14m x 26m)
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x00a8ff,
+      color: 0x00d2d3, // 蔚藍清澈透明泳池水色
       transparent: true,
-      opacity: 0.75,
-      roughness: 0.1,
-      metalness: 0.1
+      opacity: 0.60,
+      roughness: 0.05,
+      metalness: 0.15
     });
     const water = new THREE.Mesh(new THREE.PlaneGeometry(14, 26), waterMat);
     water.rotation.x = -Math.PI / 2;
     water.position.set(0, 0.25, 0);
     poolGroup.add(water);
 
-    // 3. 水下池底深槽 (Sunken Pool Basin)
-    const basinBottomMat = new THREE.MeshLambertMaterial({ color: 0x0984e3 });
+    // 3. 水下池底深槽 (Sunken Pool Basin with Blue & White Mosaic Tile Texture)
+    const basinTileTex = CampusWorld.createTileTexture('#e0f7fa', '#0097e6', 14, 26);
+    const basinBottomMat = new THREE.MeshLambertMaterial({ map: basinTileTex });
     const basinBottom = new THREE.Mesh(new THREE.PlaneGeometry(14, 26), basinBottomMat);
     basinBottom.rotation.x = -Math.PI / 2;
     basinBottom.position.set(0, -1.2, 0);
