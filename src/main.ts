@@ -65,7 +65,7 @@ class SchoolGTASandbox {
   // 校園惡搞廣播彩蛋狀態
   private broadcastCooldown: number = 0;
   private readonly announcements: string[] = [
-    '📢【全校緊急廣播】三年二班陳彥旭，你媽拿便當來校門口了，還帶了你忘記穿的衛生褲！',
+    '📢【全校緊急廣播】三年二班葉大雄，你媽拿便當來校門口了，還帶了你忘記穿的衛生褲！',
     '📢【訓導處通告】報告主任教官！你的假髮被風吹掉在司令台單槓上了，請速去撿！',
     '📢【生教組廣播】請全體糾察隊立刻到福利社集合，今天大肉包買一送一，限時搶購！',
     '📢【校長室特別通知】各位同學請注意！全體立正站好發呆 4 秒鐘，不准亂動！',
@@ -915,9 +915,9 @@ class SchoolGTASandbox {
           try {
             const orientation = screen.orientation as any;
             if (orientation && orientation.lock) {
-              await orientation.lock('landscape').catch(() => {});
+              await orientation.lock('landscape').catch(() => { });
             }
-          } catch (_) {}
+          } catch (_) { }
         } else {
           const doc = document as any;
           if (doc.exitFullscreen) {
