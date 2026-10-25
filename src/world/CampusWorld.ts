@@ -101,10 +101,94 @@ export class CampusWorld {
     });
   }
 
+  // 建立地磚/鋪路石紋理 (Procedural Tile Texture)
+  public static createTileTexture(baseColor: string = '#cfd8dc', groutColor: string = '#90a4ae', repX: number = 24, repY: number = 24): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(0, 0, 128, 128);
+    // 細緻磨石子雜斑
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let i = 0; i < 50; i++) {
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let i = 0; i < 40; i++) {
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    // 磁磚溝縫與倒角立體感
+    ctx.strokeStyle = groutColor;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(1, 1, 126, 126);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(3, 3, 122, 122);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repX, repY);
+    return tex;
+  }
+
+  // 建立外牆二丁掛瓷磚紋理 (Procedural Wall Brick Texture)
+  public static createWallBrickTexture(baseColor: string = '#faebd7', groutColor: string = '#d7ccc8', repX: number = 10, repY: number = 4): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.strokeStyle = groutColor;
+    ctx.lineWidth = 2;
+    for (let y = 0; y <= 128; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(128, y);
+      ctx.stroke();
+      const row = Math.floor(y / 16);
+      const offset = (row % 2) * 16;
+      for (let x = offset; x <= 128; x += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 16);
+        ctx.stroke();
+      }
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repX, repY);
+    return tex;
+  }
+
+  // 建立柏油瀝青路面紋理 (Procedural Asphalt Texture)
+  public static createAsphaltTexture(repX: number = 16, repY: number = 4): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#2d3436';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    for (let i = 0; i < 90; i++) {
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for (let i = 0; i < 60; i++) {
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 3, 3);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repX, repY);
+    return tex;
+  }
+
   private buildRichCampus() {
-    // 1. 全校主地坪 (Ground Base)
+    // 1. 全校主地坪 (Ground Base) - 鋪路磨石子地磚紋理
+    const groundTex = CampusWorld.createTileTexture('#cfd8dc', '#90a4ae', 32, 32);
     const groundGeo = new THREE.PlaneGeometry(260, 260);
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0xcfd8dc });
+    const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
@@ -117,11 +201,13 @@ export class CampusWorld {
     // 3. 升旗司令台 (Flag-raising Stage) - 移至北側廣場外圍 (Z: -34)，確保旗桿與台階徹底遠離跑道
     this.buildRostrum(-55, 0, -34);
 
-    // 4. 實作可上下樓、有走廊、有內部教室的大樓 (敬業樓 A 棟 & 樂群樓 B 棟)
-    // 敬業樓：Z 從 1 到 35
+    // 4. 實作可上下樓、有走廊、有內部教室的大樓
+    // 敬業樓 A 棟：Z 從 1 到 35
     this.buildWalkableSchoolBuilding(38, 0, 18, '敬業樓 (三年級部)', true);
-    // 樂群樓：Z 從 55 到 89
+    // 樂群樓 B 棟：Z 從 55 到 89
     this.buildWalkableSchoolBuilding(38, 0, 72, '樂群樓 (一二年級部)', false);
+    // 至善樓 C 棟 (科技與藝術綜合大樓)：西南側，Z 從 59 到 93
+    this.buildWalkableSchoolBuilding(-42, 0, 76, '至善樓 (科技與資訊館)', false);
 
     // 5. 兩棟大樓之間的空中走廊天橋連結 (連接敬業樓與樂群樓 2F & 3F)
     this.buildConnectingSkybridge(38, 0, 45);
@@ -132,13 +218,13 @@ export class CampusWorld {
     // 7. 腳踏車專用車棚
     this.buildBicycleShed(-55, 0, -65);
 
-    // 8. 學校大門與警衛室
+    // 8. 學校大門與警衛室 (Z = 105)
     this.buildSchoolMainGate(0, 0, 105);
 
     // 9. 校園生活細節 (洗手台、垃圾站、花圃、大榕樹)
     this.buildCampusDetails();
 
-    // 10. 校園外圍圍牆
+    // 10. 校園外圍圍牆與四面環繞環校馬路
     this.buildBoundaryWalls();
 
     // 11. 方案 D 趣味設施：學務處廣播台、操場 200m 起跑/終點拱門 (東主直道北端 Z: 14)
@@ -147,6 +233,9 @@ export class CampusWorld {
 
     // 12. 天天國中 25m 標準游泳館與水上競速起跑線
     this.buildSwimmingPool(75, 0, -35);
+
+    // 13. 演藝大樓 (1~3F 挑高國際演藝廳，4F 室內羽球館與體育老師 Boss 林教頭)
+    this.buildPerformingArtsBuilding(74, 0, 38);
   }
 
   // 建造可上下樓、有真實雙跑折返樓梯間、通暢走廊與教室內部、空中天橋貫通的立體校舍
@@ -158,8 +247,10 @@ export class CampusWorld {
     const woodColor = 0x8d6e63; // 課桌木色
     const blackboardColor = 0x1b4332; // 深綠粉筆黑板
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: wallColor });
-    const floorMat = new THREE.MeshLambertMaterial({ color: floorColor });
+    const wallTex = CampusWorld.createWallBrickTexture('#faebd7', '#d7ccc8', 10, 4);
+    const floorTex = CampusWorld.createTileTexture('#b0bec5', '#78909c', 10, 16);
+    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
     const railMat = new THREE.MeshLambertMaterial({ color: railColor });
     const innerWallMat = new THREE.MeshLambertMaterial({ color: innerWallColor });
     const woodMat = new THREE.MeshLambertMaterial({ color: woodColor });
@@ -1682,49 +1773,401 @@ export class CampusWorld {
     });
   }
 
-  // 校園外圍圍牆
+  // 校園外圍圍牆與四面環繞環校馬路 (圍牆在校內邊界 Z: ±105, X: ±105，外側四面皆由環校馬路包圍)
   private buildBoundaryWalls() {
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
-    const wH = 3.0;
+    const wallTex = CampusWorld.createWallBrickTexture('#bdc3c7', '#7f8c8d', 16, 2);
+    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const wH = 3.2;
     const wT = 0.8;
-    const size = 120;
+    const campusSize = 105; // 學校圍牆邊界嚴格位於 ±105
 
-    this.buildWall(0, wH / 2, -size, size * 2, wH, wT, wallMat);
-    this.buildWall(-size, wH / 2, 0, wT, wH, size * 2, wallMat);
-    this.buildWall(size, wH / 2, 0, wT, wH, size * 2, wallMat);
+    // A. 北側圍牆 (Z = -105)
+    this.buildWall(0, wH / 2, -campusSize, campusSize * 2, wH, wT, wallMat);
+    // B. 西側圍牆 (X = -105)
+    this.buildWall(-campusSize, wH / 2, 0, wT, wH, campusSize * 2, wallMat);
+    // C. 東側圍牆 (X = 105)
+    this.buildWall(campusSize, wH / 2, 0, wT, wH, campusSize * 2, wallMat);
 
-    const leftW = size - 15;
-    this.buildWall(-(leftW / 2 + 15), wH / 2, size, leftW, wH, wT, wallMat);
-    const rightW = size - 22;
-    this.buildWall(rightW / 2 + 22, wH / 2, size, rightW, wH, wT, wallMat);
+    // D. 南側圍牆 (Z = 105，中央留出 X: -9 ~ 9 供校門進出，嚴格對齊校門兩側石柱)
+    const southWallLen = campusSize - 9; // 96m
+    this.buildWall(-(campusSize + 9) / 2, wH / 2, campusSize, southWallLen, wH, wT, wallMat); // 左段 (X: -105 ~ -9)
+    this.buildWall((campusSize + 9) / 2, wH / 2, campusSize, southWallLen, wH, wT, wallMat);  // 右段 (X: 9 ~ 105)
 
-    // 校門外馬路與人行道 (Outside City Street where Bandits roam)
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x2d3436 });
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(140, 36), roadMat);
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0.02, 126);
-    road.receiveShadow = true;
-    this.scene.add(road);
-
-    // 雙黃線 (Center Yellow Lines)
+    // E. 圍牆外圍四面環校道路 (Ring Roads completely surrounding campus outside walls)
+    const roadTex = CampusWorld.createAsphaltTexture(20, 2);
+    const roadMat = new THREE.MeshLambertMaterial({ map: roadTex });
+    const curbMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
     const yellowLineMat = new THREE.MeshBasicMaterial({ color: 0xf1c40f });
-    const yLine1 = new THREE.Mesh(new THREE.PlaneGeometry(140, 0.2), yellowLineMat);
-    yLine1.rotation.x = -Math.PI / 2;
-    yLine1.position.set(0, 0.03, 125.85);
-    this.scene.add(yLine1);
-    const yLine2 = new THREE.Mesh(new THREE.PlaneGeometry(140, 0.2), yellowLineMat);
-    yLine2.rotation.x = -Math.PI / 2;
-    yLine2.position.set(0, 0.03, 126.15);
-    this.scene.add(yLine2);
+    const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // 斑馬線 (Crosswalk outside school gate)
-    const zebraMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    for (let zi = -5; zi <= 5; zi += 1.2) {
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(8, 0.6), zebraMat);
+    // 1. 南側外環大道 (校門外大街，強盜主要巡邏熱點)
+    // 道路寬度 20m (Z: 108 ~ 128)，中心 Z = 118
+    const southRoad = new THREE.Mesh(new THREE.PlaneGeometry(260, 20), roadMat);
+    southRoad.rotation.x = -Math.PI / 2;
+    southRoad.position.set(0, 0.02, 118);
+    southRoad.receiveShadow = true;
+    this.scene.add(southRoad);
+
+    // 南側人行道 (圍牆 Z: 105 與馬路 Z: 108 之間 3m 人行道)
+    const southWalk = new THREE.Mesh(new THREE.PlaneGeometry(260, 3), curbMat);
+    southWalk.rotation.x = -Math.PI / 2;
+    southWalk.position.set(0, 0.04, 106.5);
+    southWalk.receiveShadow = true;
+    this.scene.add(southWalk);
+
+    // 南側雙黃線
+    const sy1 = new THREE.Mesh(new THREE.PlaneGeometry(260, 0.2), yellowLineMat);
+    sy1.rotation.x = -Math.PI / 2;
+    sy1.position.set(0, 0.03, 117.85);
+    this.scene.add(sy1);
+    const sy2 = new THREE.Mesh(new THREE.PlaneGeometry(260, 0.2), yellowLineMat);
+    sy2.rotation.x = -Math.PI / 2;
+    sy2.position.set(0, 0.03, 118.15);
+    this.scene.add(sy2);
+
+    // 校門口正前方斑馬線 (Crosswalk outside school gate: Z 108 ~ 128, X: -4 ~ 4)
+    for (let zi = 109; zi <= 127; zi += 1.4) {
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(8, 0.65), whiteLineMat);
       stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(3.5, 0.035, 114 + zi);
+      stripe.position.set(0, 0.035, zi);
       this.scene.add(stripe);
     }
+
+    // 2. 北側外環道路 (北圍牆 Z: -105 之外，Z: -128 ~ -108，中心 Z = -118)
+    const northRoad = new THREE.Mesh(new THREE.PlaneGeometry(260, 20), roadMat);
+    northRoad.rotation.x = -Math.PI / 2;
+    northRoad.position.set(0, 0.02, -118);
+    northRoad.receiveShadow = true;
+    this.scene.add(northRoad);
+
+    const northWalk = new THREE.Mesh(new THREE.PlaneGeometry(260, 3), curbMat);
+    northWalk.rotation.x = -Math.PI / 2;
+    northWalk.position.set(0, 0.04, -106.5);
+    northWalk.receiveShadow = true;
+    this.scene.add(northWalk);
+
+    const ny1 = new THREE.Mesh(new THREE.PlaneGeometry(260, 0.2), yellowLineMat);
+    ny1.rotation.x = -Math.PI / 2;
+    ny1.position.set(0, 0.03, -117.85);
+    this.scene.add(ny1);
+    const ny2 = new THREE.Mesh(new THREE.PlaneGeometry(260, 0.2), yellowLineMat);
+    ny2.rotation.x = -Math.PI / 2;
+    ny2.position.set(0, 0.03, -118.15);
+    this.scene.add(ny2);
+
+    // 3. 西側外環道路 (西圍牆 X: -105 之外，X: -128 ~ -108，中心 X = -118)
+    const westRoad = new THREE.Mesh(new THREE.PlaneGeometry(20, 260), roadMat);
+    westRoad.rotation.x = -Math.PI / 2;
+    westRoad.position.set(-118, 0.02, 0);
+    westRoad.receiveShadow = true;
+    this.scene.add(westRoad);
+
+    const westWalk = new THREE.Mesh(new THREE.PlaneGeometry(3, 260), curbMat);
+    westWalk.rotation.x = -Math.PI / 2;
+    westWalk.position.set(-106.5, 0.04, 0);
+    westWalk.receiveShadow = true;
+    this.scene.add(westWalk);
+
+    const wy1 = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 260), yellowLineMat);
+    wy1.rotation.x = -Math.PI / 2;
+    wy1.position.set(-117.85, 0.03, 0);
+    this.scene.add(wy1);
+    const wy2 = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 260), yellowLineMat);
+    wy2.rotation.x = -Math.PI / 2;
+    wy2.position.set(-118.15, 0.03, 0);
+    this.scene.add(wy2);
+
+    // 4. 東側外環道路 (東圍牆 X: 105 之外，X: 108 ~ 128，中心 X = 118)
+    const eastRoad = new THREE.Mesh(new THREE.PlaneGeometry(20, 260), roadMat);
+    eastRoad.rotation.x = -Math.PI / 2;
+    eastRoad.position.set(118, 0.02, 0);
+    eastRoad.receiveShadow = true;
+    this.scene.add(eastRoad);
+
+    const eastWalk = new THREE.Mesh(new THREE.PlaneGeometry(3, 260), curbMat);
+    eastWalk.rotation.x = -Math.PI / 2;
+    eastWalk.position.set(106.5, 0.04, 0);
+    eastWalk.receiveShadow = true;
+    this.scene.add(eastWalk);
+
+    const ey1 = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 260), yellowLineMat);
+    ey1.rotation.x = -Math.PI / 2;
+    ey1.position.set(117.85, 0.03, 0);
+    this.scene.add(ey1);
+    const ey2 = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 260), yellowLineMat);
+    ey2.rotation.x = -Math.PI / 2;
+    ey2.position.set(118.15, 0.03, 0);
+    this.scene.add(ey2);
+  }
+
+  // 13. 演藝大樓 (1~3F 打通挑高國際演藝大禮堂，4F 為專業室內羽球館)
+  public buildPerformingArtsBuilding(baseX: number, baseY: number, baseZ: number) {
+    const wallTex = CampusWorld.createWallBrickTexture('#f5f6fa', '#bdc3c7', 8, 4);
+    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const woodFloorTex = CampusWorld.createTileTexture('#d35400', '#ba4a00', 8, 8);
+    const stageFloorMat = new THREE.MeshLambertMaterial({ map: woodFloorTex });
+    const redVelvetMat = new THREE.MeshLambertMaterial({ color: 0xc0392b });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, metalness: 0.7, roughness: 0.3 });
+
+    const bW = 24; // X: 62 ~ 86
+    const bL = 32; // Z: 22 ~ 54
+
+    const minX = baseX - bW / 2; // 62
+    const maxX = baseX + bW / 2; // 86
+    const minZ = baseZ - bL / 2; // 22
+    const maxZ = baseZ + bL / 2; // 54
+
+    // 1. 一樓演藝廳地坪
+    const gFloor = new THREE.Mesh(new THREE.PlaneGeometry(bW, bL), new THREE.MeshLambertMaterial({ color: 0x2c3e50 }));
+    gFloor.rotation.x = -Math.PI / 2;
+    gFloor.position.set(baseX, 0.02, baseZ);
+    gFloor.receiveShadow = true;
+    this.scene.add(gFloor);
+
+    // 2. 1~3F 挑高外牆 (Y: 0 ~ 12.0)
+    const wH = 12.0;
+    // 北牆 (Stage 背後)
+    this.buildWall(baseX, wH / 2, minZ, bW, wH, 0.6, wallMat);
+    // 東牆 (外側)
+    this.buildWall(maxX, wH / 2, baseZ, 0.6, wH, bL, wallMat);
+    // 西牆 (留出大門 X: 62, Z: 36 ~ 40)
+    const westL1 = (36 - minZ);
+    this.buildWall(minX, wH / 2, minZ + westL1 / 2, 0.6, wH, westL1, wallMat);
+    const westL2 = (maxZ - 40);
+    this.buildWall(minX, wH / 2, 40 + westL2 / 2, 0.6, wH, westL2, wallMat);
+    // 南牆 (留出南向雙開門 Z: 54, X: 71 ~ 77)
+    const southW1 = (71 - minX);
+    this.buildWall(minX + southW1 / 2, wH / 2, maxZ, southW1, wH, 0.6, wallMat);
+    const southW2 = (maxX - 77);
+    this.buildWall(77 + southW2 / 2, wH / 2, maxZ, southW2, wH, 0.6, wallMat);
+
+    // 3. 挑高演藝廳 (1~3F Grand Auditorium)
+    // A. 舞台大平台 (Stage Platform: X: 64 ~ 84, Z: 23 ~ 29, 高度 Y = 1.0)
+    const stageW = 20;
+    const stageL = 6;
+    const stageH = 1.0;
+    const stage = new THREE.Mesh(new THREE.BoxGeometry(stageW, stageH, stageL), stageFloorMat);
+    stage.position.set(baseX, stageH / 2, minZ + stageL / 2 + 1.2);
+    stage.receiveShadow = true;
+    stage.castShadow = true;
+    this.scene.add(stage);
+    this.addFloorSlab(baseX - stageW / 2, baseX + stageW / 2, minZ + 1.2, minZ + stageL + 1.2, stageH);
+
+    // 舞台台階 (Stage front stairs: Z = minZ + stageL + 1.2 = 29.2)
+    const step = new THREE.Mesh(new THREE.BoxGeometry(stageW, 0.5, 0.8), stageFloorMat);
+    step.position.set(baseX, 0.25, minZ + stageL + 1.6);
+    this.scene.add(step);
+    this.addFloorSlab(baseX - stageW / 2, baseX + stageW / 2, minZ + stageL + 1.2, minZ + stageL + 2.0, 0.5);
+
+    // B. 舞台大紅布幕 (Red Stage Velvet Curtains)
+    const curtainGeo = new THREE.BoxGeometry(2.4, 8.5, 0.3);
+    const curtainL = new THREE.Mesh(curtainGeo, redVelvetMat);
+    curtainL.position.set(baseX - stageW / 2 + 1.2, stageH + 4.25, minZ + 1.5);
+    this.scene.add(curtainL);
+    const curtainR = new THREE.Mesh(curtainGeo, redVelvetMat);
+    curtainR.position.set(baseX + stageW / 2 - 1.2, stageH + 4.25, minZ + 1.5);
+    this.scene.add(curtainR);
+    const valance = new THREE.Mesh(new THREE.BoxGeometry(stageW, 1.4, 0.35), redVelvetMat);
+    valance.position.set(baseX, stageH + 8.2, minZ + 1.5);
+    this.scene.add(valance);
+
+    // C. 舞台三腳大鋼琴 (Grand Piano)
+    const pianoGroup = new THREE.Group();
+    pianoGroup.position.set(baseX - 5.5, stageH, minZ + 3.8);
+    const pianoMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
+    const pianoBody = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.6, 2.2), pianoMat);
+    pianoBody.position.y = 0.8;
+    pianoGroup.add(pianoBody);
+    const keys = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.3), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    keys.position.set(0, 0.85, 1.15);
+    pianoGroup.add(keys);
+    // 鋼琴腳
+    [[-0.8, -0.8], [0.8, -0.8], [0, 0.8]].forEach(([px, pz]) => {
+      const pLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.8, 8), pianoMat);
+      pLeg.position.set(px, 0.4, pz);
+      pianoGroup.add(pLeg);
+    });
+    this.scene.add(pianoGroup);
+
+    // D. 演講司儀講台 (Speech Podium)
+    const podium = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
+    podium.position.set(baseX + 4.5, stageH + 0.55, minZ + 3.8);
+    this.scene.add(podium);
+
+    // E. 觀眾席階梯看台座椅 (Tiered Seating Rows)
+    const seatColor = 0xc0392b;
+    const seatMat = new THREE.MeshLambertMaterial({ color: seatColor });
+    const seatW = 0.55;
+    for (let row = 0; row < 4; row++) {
+      const rowZ = 34 + row * 4.2;
+      const rowY = row * 0.4;
+      // 階梯地坪
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(bW - 4, 0.4, 4.0), new THREE.MeshLambertMaterial({ color: 0x34495e }));
+      riser.position.set(baseX, rowY + 0.2, rowZ);
+      this.scene.add(riser);
+      this.addFloorSlab(baseX - (bW - 4) / 2, baseX + (bW - 4) / 2, rowZ - 2.0, rowZ + 2.0, rowY + 0.4);
+
+      // 左翼座位
+      for (let s = 0; s < 6; s++) {
+        const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
+        chair.position.set(baseX - 8.5 + s * 0.9, rowY + 0.4 + 0.32, rowZ);
+        chair.castShadow = true;
+        this.scene.add(chair);
+      }
+      // 右翼座位
+      for (let s = 0; s < 6; s++) {
+        const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
+        chair.position.set(baseX + 3.5 + s * 0.9, rowY + 0.4 + 0.32, rowZ);
+        chair.castShadow = true;
+        this.scene.add(chair);
+      }
+    }
+
+    // F. 大禮堂挑高橫樑與舞台探照燈 (Truss & Stage Lights at Y = 11.2)
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(stageW, 0.4, 0.4), metalMat);
+    truss.position.set(baseX, 11.2, minZ + 4.5);
+    this.scene.add(truss);
+
+    // G. 西側直達 4F 羽球場階梯樓梯間 (Walkable Stairs to 4F)
+    // 樓梯位於西側走廊通道 (X: 63.0 ~ 66.5)
+    // 1F -> 2F (Y: 0 -> 4.0, Z: 43 ~ 51)
+    this.addRamp(63.0, 66.5, 43.0, 51.0, 0, 4.0);
+    const r1 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
+    r1.position.set(64.75, 2.0, 47.0);
+    r1.rotation.x = Math.atan2(4.0, 8.0);
+    this.scene.add(r1);
+
+    // 2F Landing (Y = 4.0, Z: 51 ~ 53.5)
+    this.addFloorSlab(63.0, 66.5, 51.0, 53.5, 4.0);
+    const land1 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 2.5), stageFloorMat);
+    land1.position.set(64.75, 3.85, 52.25);
+    this.scene.add(land1);
+
+    // 2F -> 3F (Y: 4.0 -> 8.0, Z: 51 ~ 43)
+    this.addRamp(63.0, 66.5, 43.0, 51.0, 8.0, 4.0);
+    const r2 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
+    r2.position.set(64.75, 6.0, 47.0);
+    r2.rotation.x = -Math.atan2(4.0, 8.0);
+    this.scene.add(r2);
+
+    // 3F Landing (Y = 8.0, Z: 40.5 ~ 43.0)
+    this.addFloorSlab(63.0, 66.5, 40.5, 43.0, 8.0);
+    const land2 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 2.5), stageFloorMat);
+    land2.position.set(64.75, 7.85, 41.75);
+    this.scene.add(land2);
+
+    // 3F -> 4F (Y: 8.0 -> 12.0, Z: 43 ~ 51)
+    this.addRamp(63.0, 66.5, 43.0, 51.0, 8.0, 12.0);
+    const r3 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.25, 8.2), stageFloorMat);
+    r3.position.set(64.75, 10.0, 47.0);
+    r3.rotation.x = Math.atan2(4.0, 8.0);
+    this.scene.add(r3);
+
+    // 4. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
+    // A. 4F 完整樓地板 (Y = 12.0)
+    const floor4 = new THREE.Mesh(new THREE.BoxGeometry(bW, 0.45, bL), stageFloorMat);
+    floor4.position.set(baseX, 11.78, baseZ);
+    floor4.receiveShadow = true;
+    this.scene.add(floor4);
+    this.addFloorSlab(minX, maxX, minZ, maxZ, 12.0);
+
+    // B. 4F 四周外牆與大採光窗 (Y: 12.0 ~ 16.5)
+    const h4 = 4.5;
+    const midY4 = 12.0 + h4 / 2;
+    this.buildWall(baseX, midY4, minZ, bW, h4, 0.6, wallMat);
+    this.buildWall(baseX, midY4, maxZ, bW, h4, 0.6, wallMat);
+    this.buildWall(maxX, midY4, baseZ, 0.6, h4, bL, wallMat);
+    this.buildWall(minX, midY4, baseZ, 0.6, h4, bL, wallMat);
+
+    // C. 4F 標準室內羽球場 PVC 地墊 (綠色地墊 + 白線)
+    const matW = 14;
+    const matL = 24;
+    const courtMat = new THREE.MeshLambertMaterial({ color: 0x16a085 }); // 專業羽球綠地墊
+    const court = new THREE.Mesh(new THREE.PlaneGeometry(matW, matL), courtMat);
+    court.rotation.x = -Math.PI / 2;
+    court.position.set(baseX, 12.02, baseZ);
+    court.receiveShadow = true;
+    this.scene.add(court);
+
+    // 羽球場白線 (單打/雙打邊線、發球線、中線)
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    // 外邊線
+    const lineEdges = [
+      { x: baseX, z: baseZ - matL / 2 + 0.1, w: matW, d: 0.1 },
+      { x: baseX, z: baseZ + matL / 2 - 0.1, w: matW, d: 0.1 },
+      { x: baseX - matW / 2 + 0.1, z: baseZ, w: 0.1, d: matL },
+      { x: baseX + matW / 2 - 0.1, z: baseZ, w: 0.1, d: matL },
+      // 發球中線 (Center line)
+      { x: baseX, z: baseZ, w: 0.08, d: matL - 4 },
+      // 前發球線 (Short service lines: ±2.0m from net)
+      { x: baseX, z: baseZ - 2.0, w: matW, d: 0.08 },
+      { x: baseX, z: baseZ + 2.0, w: matW, d: 0.08 }
+    ];
+    lineEdges.forEach(l => {
+      const lm = new THREE.Mesh(new THREE.PlaneGeometry(l.w, l.d), whiteMat);
+      lm.rotation.x = -Math.PI / 2;
+      lm.position.set(l.x, 12.03, l.z);
+      this.scene.add(lm);
+    });
+
+    // D. 中央羽球網 (Badminton Net at Z = baseZ = 38, Y: 12.0 ~ 13.55)
+    const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.6, 8);
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x34495e, metalness: 0.8 });
+    const postL = new THREE.Mesh(postGeo, postMat);
+    postL.position.set(baseX - matW / 2 - 0.2, 12.8, baseZ);
+    this.scene.add(postL);
+    this.addCollider(baseX - matW / 2 - 0.4, baseX - matW / 2, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
+
+    const postR = new THREE.Mesh(postGeo, postMat);
+    postR.position.set(baseX + matW / 2 + 0.2, 12.8, baseZ);
+    this.scene.add(postR);
+    this.addCollider(baseX + matW / 2, baseX + matW / 2 + 0.4, baseZ - 0.2, baseZ + 0.2, 12.0, 13.6);
+
+    // 白色球網本體
+    const netMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(matW + 0.4, 0.76, 0.04),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+    );
+    netMesh.position.set(baseX, 13.15, baseZ);
+    this.scene.add(netMesh);
+    this.addCollider(baseX - matW / 2, baseX + matW / 2, baseZ - 0.1, baseZ + 0.1, 12.0, 13.55);
+
+    // E. 裁判高腳椅 (Referee Tower)
+    const refGroup = new THREE.Group();
+    refGroup.position.set(baseX - matW / 2 - 1.2, 12.0, baseZ);
+    const refChairMat = new THREE.MeshLambertMaterial({ color: 0x2980b9 });
+    const refLegs = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 2.0, 8), refChairMat);
+    refLegs.position.y = 1.0;
+    refGroup.add(refLegs);
+    const refSeat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.7), refChairMat);
+    refSeat.position.y = 2.05;
+    refGroup.add(refSeat);
+    this.scene.add(refGroup);
+
+    // F. 屋頂與高空採光天窗 (Y = 16.5)
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(bW + 1.0, 0.5, bL + 1.0), wallMat);
+    roof.position.set(baseX, 16.5, baseZ);
+    this.scene.add(roof);
+
+    // G. 招牌橫匾
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 512;
+    signCanvas.height = 128;
+    const sctx = signCanvas.getContext('2d')!;
+    sctx.fillStyle = '#2c3e50';
+    sctx.fillRect(0, 0, 512, 128);
+    sctx.strokeStyle = '#f1c40f';
+    sctx.lineWidth = 6;
+    sctx.strokeRect(4, 4, 504, 120);
+    sctx.fillStyle = '#ffffff';
+    sctx.font = 'bold 36px "Noto Sans TC", sans-serif';
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.fillText('🎭 演藝大樓 (1-3F演藝廳 / 4F羽球館) 🎭', 256, 64);
+    const signTex = new THREE.CanvasTexture(signCanvas);
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(12, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
+    signMesh.position.set(baseX, 10.5, maxZ + 0.35);
+    this.scene.add(signMesh);
   }
 
   private buildWall(x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material) {

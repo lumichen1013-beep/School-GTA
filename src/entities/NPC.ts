@@ -2,7 +2,14 @@ import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { soundManager } from '../audio/SoundEffects';
 
-export type NPCRole = 'STUDENT' | 'INSPECTOR' | 'TEACHER' | 'INSTRUCTOR' | 'DOG' | 'BIKE_PATROL' | 'BANDIT';
+export type NPCRole = 'STUDENT' | 'INSPECTOR' | 'TEACHER' | 'INSTRUCTOR' | 'DOG' | 'BIKE_PATROL' | 'BANDIT' | 'PE_TEACHER_BOSS';
+
+export interface ShuttlecockProjectile {
+  mesh: THREE.Group;
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  life: number;
+}
 
 export class NPC {
   public mesh: THREE.Group;
@@ -16,6 +23,7 @@ export class NPC {
   public chaseSpeed: number = 10.0; // 統一基準跑步速度
   public attackPower: number = 12;
   public attackRange: number = 1.6;
+  public shuttlecockCooldown: number = 0; // 羽球發射遠程冷卻
 
   // HP 系統與倒地復活機制
   public hp: number;
@@ -78,7 +86,14 @@ export class NPC {
     this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), startPos.clone().add(new THREE.Vector3(8, 0, 0))];
 
     // 初始化各角色數值：行走 5.0 | 跑步 10.0 | 騎車 15.0
-    if (role === 'TEACHER' || role === 'INSTRUCTOR') {
+    if (role === 'PE_TEACHER_BOSS') {
+      // 體育組長 林教頭 (羽球場霸主)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
+      this.maxHp = 950;
+      this.speed = 4.2;
+      this.chaseSpeed = 8.5;
+      this.attackPower = 28;
+      this.attackRange = 2.4;
+    } else if (role === 'TEACHER' || role === 'INSTRUCTOR') {
       // 生教組長 / 教官：血量 315，行走 5.0，跑步 10.0
       this.maxHp = 315;
       this.speed = 5.0;
@@ -456,6 +471,10 @@ export class NPC {
       // 教官卡其色軍訓制服
       shirtColor = 0xbeb698;
       pantsColor = 0x82775c;
+    } else if (this.role === 'PE_TEACHER_BOSS') {
+      // 體育組長 林教頭：熱血深紅運動夾克與黑色運動長褲
+      shirtColor = 0xc0392b;
+      pantsColor = 0x2c3e50;
     }
 
     const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });
@@ -469,7 +488,7 @@ export class NPC {
     torso.castShadow = true;
     this.mesh.add(torso);
 
-    // 風紀糾察紅色值星臂章
+    // 角色專屬配飾 (臂章、反光背心、裁判哨)
     if (this.role === 'INSPECTOR') {
       const armBandMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), armBandMat);
@@ -481,6 +500,20 @@ export class NPC {
       const vest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.7, 0.38), vestMat);
       vest.position.y = 1.05;
       this.mesh.add(vest);
+    } else if (this.role === 'PE_TEACHER_BOSS') {
+      // 體育組長胸前裁判金屬哨子與白色運動條紋
+      const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const stripeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
+      stripeL.position.set(-0.25, 1.05, 0);
+      this.mesh.add(stripeL);
+      const stripeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
+      stripeR.position.set(0.25, 1.05, 0);
+      this.mesh.add(stripeR);
+
+      const whistleMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.85, roughness: 0.2 });
+      const whistle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.08), whistleMat);
+      whistle.position.set(0, 1.22, 0.2);
+      this.mesh.add(whistle);
     }
 
     // 頭部
@@ -514,6 +547,41 @@ export class NPC {
     this.rightArm = new THREE.Mesh(armGeo, shirtMat);
     this.rightArm.position.set(0.45, 1.05, 0);
     this.mesh.add(this.rightArm);
+
+    // 體育老師專屬羽球拍 3D 裝備 (Attached to right arm)
+    if (this.role === 'PE_TEACHER_BOSS') {
+      const racketGroup = new THREE.Group();
+      // 握把 (Grip)
+      const grip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      grip.position.y = 0.12;
+      racketGroup.add(grip);
+      // 中桿 (Shaft)
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.42, 8),
+        new THREE.MeshLambertMaterial({ color: 0x2d3436 })
+      );
+      shaft.position.y = 0.45;
+      racketGroup.add(shaft);
+      // 拍框 (Frame)
+      const frame = new THREE.Mesh(
+        new THREE.TorusGeometry(0.16, 0.016, 8, 16),
+        new THREE.MeshLambertMaterial({ color: 0xe74c3c })
+      );
+      frame.position.y = 0.82;
+      racketGroup.add(frame);
+      // 拍線網面 (Strings)
+      const stringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+      const strings = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), stringMat);
+      strings.position.y = 0.82;
+      racketGroup.add(strings);
+
+      racketGroup.position.set(0, -0.28, 0.12);
+      racketGroup.rotation.x = -Math.PI / 3;
+      this.rightArm.add(racketGroup);
+    }
 
     const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
     this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
@@ -597,6 +665,7 @@ export class NPC {
 
   public getRoleTitle(): string {
     switch (this.role) {
+      case 'PE_TEACHER_BOSS': return '體育組長 林教頭';
       case 'BANDIT': return '校外強盜';
       case 'TEACHER': return '巡堂老師';
       case 'INSTRUCTOR': return '主任教官';
@@ -685,7 +754,7 @@ export class NPC {
     return wasKnockedDown;
   }
 
-  // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍)
+  // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
   public triggerAttackAnimation(delta: number = 0.016) {
     this.attackAnimTimer = 0.35;
     if (this.role === 'DOG') {
@@ -694,6 +763,8 @@ export class NPC {
       soundManager.playBicycleBell();
     } else if (this.role === 'BANDIT') {
       soundManager.playBanditSlash();
+    } else if (this.role === 'PE_TEACHER_BOSS') {
+      soundManager.playBadmintonWhoosh();
     } else {
       soundManager.playPunch();
     }
@@ -702,6 +773,9 @@ export class NPC {
   // 獲取各角色攻擊傷害與擊飛衝量規格
   public getAttackSpecs(): { damage: number; hForce: number; vForce: number } {
     switch (this.role) {
+      case 'PE_TEACHER_BOSS':
+        // 體育組長 林教頭：羽球拍近戰殺球重扣，極高傷害與震飛
+        return { damage: 28, hForce: 13.0, vForce: 7.0 };
       case 'BANDIT':
         // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高
         return { damage: 22, hForce: 8.5, vForce: 4.8 };
@@ -722,6 +796,59 @@ export class NPC {
         // 平民學生：反擊揮拳
         return { damage: 12, hForce: 6.0, vForce: 3.5 };
     }
+  }
+
+  // 失去自行車 (遭到玩家搶奪)
+  public loseBike() {
+    if (this.bikeFrontWheel) this.bikeFrontWheel.visible = false;
+    if (this.bikeRearWheel) this.bikeRearWheel.visible = false;
+    this.role = 'STUDENT';
+    this.maxHp = 112;
+    this.hp = Math.min(this.hp, this.maxHp);
+    this.speed = 5.0;
+    this.chaseSpeed = 10.0;
+    this.isKnockedDown = true;
+    this.reviveTimer = 3.0;
+  }
+
+  // 體育老師發射遠程高速羽球飛彈攻擊
+  public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene): ShuttlecockProjectile | null {
+    if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
+    if (this.shuttlecockCooldown > 0) return null;
+
+    const dist = this.position.distanceTo(targetPos);
+    if (dist < 3.2 || dist > 22.0) return null;
+
+    this.shuttlecockCooldown = 2.4; // 2.4s 冷卻
+    soundManager.playBadmintonWhoosh();
+
+    // 建立羽球 3D 飛行物模型
+    const group = new THREE.Group();
+    // 軟木球頭
+    const corkMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const cork = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), corkMat);
+    group.add(cork);
+    // 羽毛裙
+    const featherMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa, side: THREE.DoubleSide });
+    const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.32, 8, 1, true), featherMat);
+    skirt.position.y = 0.16;
+    group.add(skirt);
+
+    const startPos = this.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+    group.position.copy(startPos);
+    scene.add(group);
+
+    const dir = targetPos.clone().add(new THREE.Vector3(0, 1.0, 0)).sub(startPos).normalize();
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+
+    const vel = dir.clone().multiplyScalar(18.0);
+
+    return {
+      mesh: group,
+      position: startPos,
+      velocity: vel,
+      life: 2.5
+    };
   }
 
   // 清除仇恨與追擊狀態
@@ -808,7 +935,8 @@ export class NPC {
     }
 
     // 垂直高度差檢測：若垂直高度差超過 2.6m（位於不同樓層），視線被樓板與天花板遮擋
-    if (Math.abs(playerPos.y - this.position.y) > 2.6) {
+    const maxYDiff = this.role === 'PE_TEACHER_BOSS' ? 4.5 : 2.6;
+    if (Math.abs(playerPos.y - this.position.y) > maxYDiff) {
       return false;
     }
 
@@ -816,7 +944,7 @@ export class NPC {
     const dist = toPlayer.length();
 
     // 視距半徑
-    const maxViewDist = this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
+    const maxViewDist = this.role === 'PE_TEACHER_BOSS' ? 24.0 : this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
     if (dist > maxViewDist) return false;
 
     const forward = new THREE.Vector3(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
@@ -962,6 +1090,7 @@ export class NPC {
     if (this.whistleCooldown > 0) this.whistleCooldown -= delta;
     if (this.attackAnimTimer > 0) this.attackAnimTimer -= delta;
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
+    if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
 
     // 2. 仇恨判定：若玩家已死亡，全體 NPC 立即解除追捕
     if (isPlayerDead) {
@@ -971,8 +1100,8 @@ export class NPC {
       this.dynamicSpeed = this.speed;
     } else if (this.role === 'BANDIT') {
       // 校外強盜特殊仇恨判定：
-      // 當玩家離開校園 (Z >= 106.5 或 |X| >= 118.0 或 Z <= -118.0)，強盜無差別凶猛追殺！
-      const isPlayerOutside = playerPos.z >= 106.5 || Math.abs(playerPos.x) >= 118.0 || playerPos.z <= -118.0;
+      // 當玩家離開校園外圍圍牆 (Z >= 105.5 或 |X| >= 105.5 或 Z <= -105.5)，強盜無差別凶猛追殺！
+      const isPlayerOutside = playerPos.z >= 105.5 || Math.abs(playerPos.x) >= 105.5 || playerPos.z <= -105.5;
       const distToPlayer = this.position.distanceTo(playerPos);
       if (isPlayerOutside && distToPlayer < 45.0) {
         this.isChasing = true;

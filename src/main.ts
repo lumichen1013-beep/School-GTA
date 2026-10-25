@@ -5,7 +5,7 @@ import { ThirdPersonCamera } from './camera/ThirdPersonCamera';
 import { CampusWorld, ShootingHotspot } from './world/CampusWorld';
 import { Player } from './entities/Player';
 import { Bicycle } from './vehicles/Bicycle';
-import { NPC } from './entities/NPC';
+import { NPC, ShuttlecockProjectile } from './entities/NPC';
 import { WantedSystem } from './systems/WantedSystem';
 import { HUD, CommissaryItem } from './ui/HUD';
 import { soundManager } from './audio/SoundEffects';
@@ -21,6 +21,7 @@ class SchoolGTASandbox {
   private ecologicalGarden: EcologicalGarden;
   private bicycles: Bicycle[] = [];
   private npcs: NPC[] = [];
+  private shuttlecocks: ShuttlecockProjectile[] = [];
   private wantedSystem: WantedSystem;
   private hud: HUD;
 
@@ -415,6 +416,63 @@ class SchoolGTASandbox {
       'BANDIT',
       [new THREE.Vector3(-18, 0, 128), new THREE.Vector3(18, 0, 128)]
     ));
+    // 西側與東側外環道路巡邏強盜
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-118, 0, 10),
+      'BANDIT',
+      [new THREE.Vector3(-118, 0, -40), new THREE.Vector3(-118, 0, 60)]
+    ));
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(118, 0, 10),
+      'BANDIT',
+      [new THREE.Vector3(118, 0, -40), new THREE.Vector3(118, 0, 60)]
+    ));
+
+    // 10. 至善樓 C 棟 (科技與藝術綜合館) 師生
+    // 1F (Y = 0) 走廊巡堂老師
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-49, 0, 76),
+      'TEACHER',
+      [new THREE.Vector3(-49, 0, 65), new THREE.Vector3(-49, 0, 87)]
+    ));
+    // 2F (Y = 6.0) 走廊學生
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-49, 6.0, 76),
+      'STUDENT',
+      [new THREE.Vector3(-49, 6.0, 65), new THREE.Vector3(-49, 6.0, 87)]
+    ));
+    // 3F (Y = 12.0) 電腦教室課堂學生
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-38, 12.0, 70),
+      'STUDENT',
+      [new THREE.Vector3(-38, 12.0, 70), new THREE.Vector3(-44, 12.0, 70)]
+    ));
+
+    // 11. 演藝大樓 4F 羽球館 Boss：熱血體育組長 林教頭 (PE_TEACHER_BOSS)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(74, 12.0, 32),
+      'PE_TEACHER_BOSS',
+      [
+        new THREE.Vector3(74, 12.0, 32),
+        new THREE.Vector3(74, 12.0, 44),
+        new THREE.Vector3(70, 12.0, 38),
+        new THREE.Vector3(78, 12.0, 38)
+      ]
+    ));
+
+    // 4F 羽球校隊訓練同學
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(74, 12.0, 44),
+      'STUDENT',
+      [new THREE.Vector3(70, 12.0, 44), new THREE.Vector3(78, 12.0, 44)]
+    ));
   }
 
   private setupInteractions() {
@@ -428,20 +486,70 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 0.5 自然生態探索園區野生香菇採摘 (生命紅仙菇回血 / 劇毒紫斑蕈扣血中毒)
+      // 0.5 自然生態探索園區野生香菇採摘 (效果完全隨機與外觀無關：補血、爆發體力、劇毒侵蝕、麻痺減速、幸運金幣、輕功高跳)
       const mushroomResult = this.ecologicalGarden.tryPickMushroom(this.player.position);
-      if (mushroomResult.picked && mushroomResult.mushroom) {
-        if (mushroomResult.mushroom.type === 'HEAL') {
-          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 35);
-          soundManager.playEatFood();
-          this.wantedSystem.showBanner('🍄 採摘【生命紅仙菇】！體力恢復 +35 HP！', 3000);
-        } else {
-          this.player.takeDamage(12, '紫斑毒蕈');
-          this.player.poisonTimer = 5.0;
-          this.player.poisonTickTimer = 0.0;
-          soundManager.playPoisonTick();
-          this.wantedSystem.showBanner('☠️ 誤食【劇毒紫斑蕈】！中毒持續扣血 5 秒！', 4000);
+      if (mushroomResult.picked && mushroomResult.effect) {
+        switch (mushroomResult.effect) {
+          case 'HEAL':
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
+            soundManager.playEatFood();
+            break;
+          case 'STAMINA':
+            this.player.stamina = this.player.maxStamina;
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + 20);
+            soundManager.playEatFood();
+            break;
+          case 'POISON':
+            this.player.takeDamage(12, '奇異毒菇');
+            this.player.poisonTimer = 5.0;
+            this.player.poisonTickTimer = 0.0;
+            soundManager.playPoisonTick();
+            break;
+          case 'PARALYSIS':
+            this.player.takeDamage(8, '麻痺孢子');
+            this.player.walkSpeed = 2.5;
+            this.player.sprintSpeed = 5.0;
+            setTimeout(() => {
+              this.player.walkSpeed = 5.0;
+              this.player.sprintSpeed = 10.0;
+            }, 5000);
+            break;
+          case 'LUCKY_GOLD':
+            this.playerCash += 80;
+            this.hud.setCash(this.playerCash);
+            soundManager.playCoinToss();
+            break;
+          case 'SUPER_JUMP':
+            this.player.jumpStrength = 14.5;
+            setTimeout(() => {
+              this.player.jumpStrength = 8.5;
+            }, 8000);
+            break;
         }
+        this.wantedSystem.showBanner(`${mushroomResult.title} ${mushroomResult.desc}`, 3500);
+        return;
+      }
+
+      // 0.8 自然生態池許願投幣 (湖中女神許願小遊戲：金幣贈予、清泉甘霖、極速微風、噴水淘氣)
+      if (this.ecologicalGarden.isNearWishingPond(this.player.position)) {
+        const pondResult = this.ecologicalGarden.tossCoinToPond(this.playerCash);
+        if (pondResult.success) {
+          this.playerCash = Math.max(0, this.playerCash - 30 + pondResult.rewardCash);
+          this.hud.setCash(this.playerCash);
+          if (pondResult.healHp > 0) {
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + pondResult.healHp);
+            this.player.stamina = this.player.maxStamina;
+          }
+          if (pondResult.speedBoostDuration > 0) {
+            this.player.walkSpeed = 8.5;
+            this.player.sprintSpeed = 16.0;
+            setTimeout(() => {
+              this.player.walkSpeed = 5.0;
+              this.player.sprintSpeed = 10.0;
+            }, pondResult.speedBoostDuration * 1000);
+          }
+        }
+        this.wantedSystem.showBanner(pondResult.message, 4500);
         return;
       }
 
@@ -505,20 +613,41 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 5. 單車上下車互動
+      // 5. 單車上下車互動 (支援強行搶奪單車糾察隊同學的自行車)
       if (this.currentRidingBike) {
         this.currentRidingBike.dismount(this.player, this.engine.scene);
         this.player.isRidingVehicle = false;
         this.currentRidingBike = null;
         this.cameraCtrl.setMode(false);
       } else {
-        for (const bike of this.bicycles) {
-          if (bike.position.distanceTo(this.player.position) < 3.0) {
-            bike.mount(this.player);
-            this.currentRidingBike = bike;
+        // 先判定是否搶奪騎單車糾察隊同學的單車 (Requirement 3: 可以搶騎著單車的學生的自行車)
+        let hijackedBike = false;
+        for (const npc of this.npcs) {
+          if (npc.role === 'BIKE_PATROL' && !npc.isKnockedDown && npc.position.distanceTo(this.player.position) < 3.2) {
+            hijackedBike = true;
+            soundManager.playBikeHijack();
+            npc.loseBike();
+            const stolenBike = new Bicycle(this.engine.scene, npc.position, 0x3498db);
+            this.bicycles.push(stolenBike);
+            stolenBike.mount(this.player);
+            this.currentRidingBike = stolenBike;
             this.player.isRidingVehicle = true;
             this.cameraCtrl.setMode(true);
+            this.wantedSystem.reportCrime(2, '強行搶奪同學自行車');
+            this.wantedSystem.showBanner('🚲 成功搶奪同學的自行車！風馳電掣！按 [E] 可下車', 3000);
             break;
+          }
+        }
+
+        if (!hijackedBike) {
+          for (const bike of this.bicycles) {
+            if (bike.position.distanceTo(this.player.position) < 3.0) {
+              bike.mount(this.player);
+              this.currentRidingBike = bike;
+              this.player.isRidingVehicle = true;
+              this.cameraCtrl.setMode(true);
+              break;
+            }
           }
         }
       }
@@ -616,6 +745,9 @@ class SchoolGTASandbox {
               } else if (npc.role === 'INSTRUCTOR') {
                 this.teacherDefeatedCount++;
                 reward = 150;
+              } else if (npc.role === 'PE_TEACHER_BOSS') {
+                reward = 180;
+                this.wantedSystem.showBanner('🏸 震撼勝利！強勢擊敗【體育組長 林教頭】！獲得大額獎金 +$180！', 6000);
               }
 
               this.playerCash += reward;
@@ -1218,30 +1350,44 @@ class SchoolGTASandbox {
       this.hud.showPrompt('E', '參加 50m 自由式水上競速挑戰');
     } else if (this.isSwimmingRace) {
       this.hud.showPrompt('🏊', `泳池計時: ${this.swimRaceTimer.toFixed(1)}s (檢查點 ${this.swimCheckpointIdx + 1}/${this.world.swimCheckpoints.length})`);
+    } else if (this.ecologicalGarden.isNearWishingPond(targetPosition)) {
+      this.hud.showPrompt('E', '🪙 向生態池許願投幣 ($30)');
     } else {
-      let nearMushroom = false;
-      for (const m of this.ecologicalGarden.mushrooms) {
-        if (!m.isPicked && targetPosition.distanceTo(m.position) < 2.4) {
-          nearMushroom = true;
+      let nearBikePatrol = false;
+      for (const npc of this.npcs) {
+        if (npc.role === 'BIKE_PATROL' && !npc.isKnockedDown && targetPosition.distanceTo(npc.position) < 3.2) {
+          nearBikePatrol = true;
           break;
         }
       }
-      if (nearMushroom) {
-        this.hud.showPrompt('E', '🍄 採摘野生香菇 (生態秘境)');
+
+      if (nearBikePatrol) {
+        this.hud.showPrompt('E', '🚲 搶奪同學自行車！');
       } else {
-        let nearBike: Bicycle | null = null;
-        if (!this.player.isDead) {
-          for (const bike of this.bicycles) {
-            if (bike.position.distanceTo(this.player.position) < 3.0) {
-              nearBike = bike;
-              break;
-            }
+        let nearMushroom = false;
+        for (const m of this.ecologicalGarden.mushrooms) {
+          if (!m.isPicked && targetPosition.distanceTo(m.position) < 2.4) {
+            nearMushroom = true;
+            break;
           }
         }
-        if (nearBike && !this.player.isDead) {
-          this.hud.showPrompt('E', '騎乘火柴人腳踏車');
+        if (nearMushroom) {
+          this.hud.showPrompt('E', '🍄 採摘野生奇異菇 (效果隨機)');
         } else {
-          this.hud.hidePrompt();
+          let nearBike: Bicycle | null = null;
+          if (!this.player.isDead) {
+            for (const bike of this.bicycles) {
+              if (bike.position.distanceTo(this.player.position) < 3.0) {
+                nearBike = bike;
+                break;
+              }
+            }
+          }
+          if (nearBike && !this.player.isDead) {
+            this.hud.showPrompt('E', '騎乘腳踏車');
+          } else {
+            this.hud.hidePrompt();
+          }
         }
       }
     }
@@ -1506,12 +1652,50 @@ class SchoolGTASandbox {
       }
     );
 
-    // 變異食人花王 Boss 血條動態顯示 (玩家在 35 米範圍內且 Boss 存活時顯現)
-    const distToBoss = targetPosition.distanceTo(this.ecologicalGarden.boss.position);
-    if (distToBoss < 35.0 && !this.ecologicalGarden.boss.isDead) {
-      this.hud.setBossHealth(this.ecologicalGarden.boss.hp, this.ecologicalGarden.boss.maxHp, true);
+    // 體育老師 Boss 羽球遠程飛彈射擊與更新 (4F 羽球館)
+    const peBoss = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+    if (peBoss && !peBoss.isKnockedDown && peBoss.hp > 0 && !this.player.isDead) {
+      const proj = peBoss.tryShootShuttlecock(targetPosition, this.engine.scene);
+      if (proj) {
+        this.shuttlecocks.push(proj);
+      }
+    }
+
+    // 更新飛行中的高速羽球飛彈
+    for (let i = this.shuttlecocks.length - 1; i >= 0; i--) {
+      const sc = this.shuttlecocks[i];
+      sc.position.addScaledVector(sc.velocity, delta);
+      sc.mesh.position.copy(sc.position);
+      sc.life -= delta;
+
+      // 命中玩家判定
+      if (sc.position.distanceTo(targetPosition) < 1.35 && !this.player.isDead) {
+        soundManager.playBadmintonHit();
+        const hitDir = targetPosition.clone().sub(sc.position).normalize();
+        this.player.launchFlying(hitDir, 9.0, 4.5, 18, '遭到體育組長的高速羽球扣殺！');
+        this.wantedSystem.showBanner('🏸 遭到體育組長 林教頭 高速羽球殺球重扣！', 2000);
+        this.engine.scene.remove(sc.mesh);
+        this.shuttlecocks.splice(i, 1);
+        continue;
+      }
+
+      // 著地或壽命結束消散
+      if (sc.life <= 0 || sc.position.y <= 0.15) {
+        this.engine.scene.remove(sc.mesh);
+        this.shuttlecocks.splice(i, 1);
+      }
+    }
+
+    // Boss 血條動態顯示 (支援變異食人花王與熱血體育組長林教頭)
+    const distToPlantBoss = targetPosition.distanceTo(this.ecologicalGarden.boss.position);
+    const distToPeBoss = peBoss ? targetPosition.distanceTo(peBoss.position) : 999;
+
+    if (distToPlantBoss < 35.0 && !this.ecologicalGarden.boss.isDead) {
+      this.hud.setBossHealth(this.ecologicalGarden.boss.hp, this.ecologicalGarden.boss.maxHp, true, '秘境霸主：變異食人花王', '🌸');
+    } else if (peBoss && distToPeBoss < 28.0 && !peBoss.isKnockedDown && peBoss.hp > 0) {
+      this.hud.setBossHealth(peBoss.hp, peBoss.maxHp, true, '熱血體育組長 林教頭 (4F羽球館)', '🏸');
     } else {
-      this.hud.setBossHealth(0, 1200, false);
+      this.hud.setBossHealth(0, 1000, false);
     }
 
     // 8. 更新 HUD 介面、小地圖、外框被追捕紅色閃爍特效 (Pursuit Alert) 與武器欄

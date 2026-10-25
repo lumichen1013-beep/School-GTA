@@ -46,6 +46,8 @@ export class HUD {
   private bossHudEl: HTMLElement | null;
   private bossHpTextEl: HTMLElement | null;
   private bossBarFillEl: HTMLElement | null;
+  private bossNameTextEl: HTMLElement | null;
+  private bossIconEl: HTMLElement | null;
 
   // Weapon HUD
   private slotFistEl: HTMLElement | null;
@@ -85,6 +87,8 @@ export class HUD {
     this.bossHudEl = document.getElementById('boss-hud');
     this.bossHpTextEl = document.getElementById('boss-hp-text');
     this.bossBarFillEl = document.getElementById('boss-bar-fill');
+    this.bossNameTextEl = document.getElementById('boss-name-text');
+    this.bossIconEl = document.getElementById('boss-icon-el');
 
     this.slotFistEl = document.getElementById('slot-fist');
     this.slotNormalBatEl = document.getElementById('slot-normal-bat');
@@ -225,8 +229,8 @@ export class HUD {
     }
   }
 
-  // 變異食人花 Boss 血條顯示與更新
-  public setBossHealth(currentHp: number, maxHp: number, visible: boolean) {
+  // Boss 血條顯示與更新 (支援變異食人花王與體育老師林教頭)
+  public setBossHealth(currentHp: number, maxHp: number, visible: boolean, bossName?: string, bossIcon?: string) {
     if (!this.bossHudEl || !this.bossHpTextEl || !this.bossBarFillEl) return;
 
     if (!visible || currentHp <= 0) {
@@ -235,6 +239,12 @@ export class HUD {
     }
 
     this.bossHudEl.style.display = 'block';
+    if (this.bossNameTextEl && bossName) {
+      this.bossNameTextEl.textContent = bossName;
+    }
+    if (this.bossIconEl && bossIcon) {
+      this.bossIconEl.textContent = bossIcon;
+    }
     const pct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
     this.bossBarFillEl.style.width = `${pct}%`;
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;

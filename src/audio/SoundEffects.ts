@@ -615,6 +615,145 @@ export class SoundEffects {
     osc.start(now);
     osc.stop(now + 0.21);
   }
+
+  // 羽球殺球清脆爆裂擊球聲 (Badminton Smash Hit)
+  public playBadmintonHit() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(320, now + 0.08);
+
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.11);
+  }
+
+  // 羽球拍破空橫掃呼嘯聲 (Badminton Racket Swing)
+  public playBadmintonWhoosh() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(650, now);
+    osc.frequency.exponentialRampToValueAtTime(160, now + 0.16);
+
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.19);
+  }
+
+  // 許願池投幣清脆金幣落水聲 (Coin Toss Into Pond)
+  public playCoinToss() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    // 1. 金幣叮噹聲
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1980, now);
+    osc.frequency.setValueAtTime(2450, now + 0.06);
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.3, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.3);
+
+    // 2. 隨後的水花咚聲
+    setTimeout(() => {
+      this.playWaterSplash();
+    }, 120);
+  }
+
+  // 湖中女神神聖降臨靈光仙音 (Goddess of the Lake Divine Chime)
+  public playGoddessChime() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98]; // C5, E5, G5, C6, E6, G6
+    const now = this.ctx.currentTime;
+
+    notes.forEach((freq, idx) => {
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+      gain.gain.setValueAtTime(0, now + idx * 0.08);
+      gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.08 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.6);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.7);
+    });
+  }
+
+  // 生態園昆蟲窸窣嘶鳴聲 (Garden Bug Scurry & Click)
+  public playBugChirp() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(3200 + i * 400, now + i * 0.05);
+      osc.frequency.exponentialRampToValueAtTime(1100, now + i * 0.05 + 0.04);
+
+      gain.gain.setValueAtTime(0.22, now + i * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.05);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now + i * 0.05);
+      osc.stop(now + i * 0.05 + 0.06);
+    }
+  }
+
+  // 搶奪腳踏車踹人驚叫與倒地碰撞 (Bike Hijack Shove & Impact)
+  public playBikeHijack() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    this.playPunch();
+    setTimeout(() => {
+      this.playBicycleBell();
+    }, 150);
+  }
 }
 
 export const soundManager = new SoundEffects();

@@ -23,15 +23,58 @@ export interface PoisonSpore {
   life: number;
 }
 
+export type MushroomEffectType =
+  | 'HEAL'         // 治癒體力 (+45 HP)
+  | 'STAMINA'      // 精力爆發 (體力+20, Stamina全滿)
+  | 'POISON'       // 劇毒侵蝕 (-12 HP, 5秒持續毒)
+  | 'PARALYSIS'    // 麻痺孢子 (-8 HP, 短暫減速3秒)
+  | 'LUCKY_GOLD'   // 幸運金幣 (+80 零用錢)
+  | 'SUPER_JUMP';  // 輕功彩虹菇 (跳躍力暫時倍增10秒)
+
+export interface MushroomPickResult {
+  picked: boolean;
+  effect?: MushroomEffectType;
+  title?: string;
+  desc?: string;
+  mushroom?: InteractiveMushroom;
+}
+
 export interface InteractiveMushroom {
   id: number;
   position: THREE.Vector3;
-  type: 'HEAL' | 'POISON';
+  visualColor: number;
   name: string;
   mesh: THREE.Group;
   light: THREE.PointLight;
   isPicked: boolean;
   respawnTimer: number;
+}
+
+export interface GardenBug {
+  id: number;
+  position: THREE.Vector3;
+  mesh: THREE.Group;
+  legs: THREE.Mesh[];
+  velocity: THREE.Vector3;
+  wanderTarget: THREE.Vector3;
+  wanderTimer: number;
+  speed: number;           // 7.8 m/s (比玩家 5.0 快！)
+  attackDamage: number;    // 4 HP (攻擊力低)
+  attackCooldown: number;  // 0.35s (攻擊速度快！)
+  hp: number;
+  maxHp: number;
+  isDead: boolean;
+  animTimer: number;
+  respawnTimer: number;
+}
+
+export interface GoddessTossResult {
+  success: boolean;
+  message: string;
+  blessingType: 'GOLD' | 'FULL_HEAL' | 'SPEED_BOOST' | 'PRANK';
+  rewardCash: number;
+  healHp: number;
+  speedBoostDuration: number;
 }
 
 export class EcologicalGarden {
@@ -42,8 +85,18 @@ export class EcologicalGarden {
   // 敵意生物：食人刺藤
   public hostileVines: HostileVine[] = [];
 
-  // 可摘採野菇 (回血靈芝菇 vs 劇毒斑紋蕈)
+  // 可摘採野菇 (外觀隨機豐富、效果吃下時隨機決定)
   public mushrooms: InteractiveMushroom[] = [];
+
+  // 生態園快速移動毒甲蟲 (跑得比玩家快、攻速快、攻擊力低、永不出園)
+  public bugs: GardenBug[] = [];
+
+  // 生態蓮花許願池與湖中女神
+  public pondPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -86);
+  public lakeGoddessMesh!: THREE.Group;
+  public isGoddessActive: boolean = false;
+  public goddessTimer: number = 0;
+  public tossCount: number = 0;
 
   // 秘境霸主：變異食人花王 (Mutant Piranha Boss)
   public boss = {
@@ -70,7 +123,9 @@ export class EcologicalGarden {
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.buildGardenTerrain();
+    this.buildEcologicalPond();
     this.spawnInteractiveMushrooms();
+    this.spawnGardenBugs();
     this.spawnHostilePlants();
     this.buildBossModel();
     this.scene.add(this.group);
@@ -209,26 +264,257 @@ export class EcologicalGarden {
     });
   }
 
-  // 建造園區內可摘採之神秘野菇 (紅傘生命仙菇 vs 紫斑劇毒斑紋蕈)
+  // 1.5 建造生態蓮花許願池 (Ecological Pond & Goddess Wishing Well)
+  private buildEcologicalPond() {
+    const px = this.pondPos.x;
+    const pz = this.pondPos.z;
+
+    // 池塘天然鵝卵石石圈基座 (半徑 4.5m)
+    const stoneRingMat = new THREE.MeshLambertMaterial({ color: 0x7f8c8d });
+    const stoneRing = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.2, 0.45, 24), stoneRingMat);
+    stoneRing.position.set(px, 0.22, pz);
+    stoneRing.receiveShadow = true;
+    this.group.add(stoneRing);
+
+    // 清澈蔚藍水面 (帶半透明波光)
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.1,
+      metalness: 0.2
+    });
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 0.1, 24), waterMat);
+    water.position.set(px, 0.32, pz);
+    this.group.add(water);
+
+    // 水面漂浮蓮葉 (荷葉)
+    const lilyMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+    const flowerMat = new THREE.MeshLambertMaterial({ color: 0xf472b6 });
+    const lilyCoords = [
+      [-1.8, -1.2], [1.5, 1.4], [-1.2, 2.0], [2.1, -1.5], [-0.5, -2.4]
+    ];
+    lilyCoords.forEach(([lx, lz], i) => {
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.04, 12), lilyMat);
+      pad.position.set(px + lx, 0.38, pz + lz);
+      this.group.add(pad);
+
+      if (i % 2 === 0) {
+        // 粉紅睡蓮花朵
+        const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), flowerMat);
+        flower.position.set(px + lx, 0.48, pz + lz);
+        this.group.add(flower);
+      }
+    });
+
+    // 木質觀景小橋棧道
+    const woodMat = new THREE.MeshLambertMaterial({ color: 0x6d4c41 });
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.25, 4.5), woodMat);
+    bridge.position.set(px + 4.2, 0.45, pz);
+    bridge.castShadow = true;
+    this.group.add(bridge);
+
+    // 許願古樸石碑 (Wishing Stone Tablet)
+    const tabletMat = new THREE.MeshLambertMaterial({ color: 0x34495e });
+    const tablet = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.3), tabletMat);
+    tablet.position.set(px + 3.8, 0.9, pz - 2.5);
+    tablet.castShadow = true;
+    this.group.add(tablet);
+
+    const runeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const rune = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7), runeMat);
+    rune.position.set(px + 3.8, 1.0, pz - 2.34);
+    this.group.add(rune);
+
+    // 建造湖中女神 3D 模型 (平時潛藏於水底 Y = -3.5，投幣時昇起顯現)
+    this.lakeGoddessMesh = new THREE.Group();
+    this.lakeGoddessMesh.position.set(px, -3.5, pz);
+
+    // 女神白色仙氣長裙
+    const dressMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc, transparent: true, opacity: 0.92 });
+    const dress = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.9, 1.8, 16), dressMat);
+    dress.position.y = 0.9;
+    this.lakeGoddessMesh.add(dress);
+
+    // 女神身軀
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.75, 12), bodyMat);
+    body.position.y = 1.95;
+    this.lakeGoddessMesh.add(body);
+
+    // 女神面容
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 14), bodyMat);
+    head.position.y = 2.55;
+    this.lakeGoddessMesh.add(head);
+
+    // 金色長髮
+    const hairMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), hairMat);
+    hair.position.set(0, 2.62, -0.06);
+    this.lakeGoddessMesh.add(hair);
+
+    // 神聖水靈神環 (Golden Halo)
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.04, 8, 24), haloMat);
+    halo.position.set(0, 2.95, 0);
+    halo.rotation.x = Math.PI / 2;
+    this.lakeGoddessMesh.add(halo);
+
+    // 湖水靈光
+    const goddessGlow = new THREE.PointLight(0x38bdf8, 1.5, 8.0);
+    goddessGlow.position.y = 2.0;
+    this.lakeGoddessMesh.add(goddessGlow);
+
+    this.group.add(this.lakeGoddessMesh);
+  }
+
+  // 向生態池投幣許願 (小遊戲)
+  public tossCoinToPond(playerCash: number): GoddessTossResult {
+    if (playerCash < 30) {
+      return {
+        success: false,
+        message: '🪙 你的零用錢不足 $30，無法向湖中女神許願！',
+        blessingType: 'PRANK',
+        rewardCash: 0,
+        healHp: 0,
+        speedBoostDuration: 0
+      };
+    }
+
+    this.tossCount++;
+    this.isGoddessActive = true;
+    this.goddessTimer = 7.0; // 女神顯現 7 秒鐘
+
+    // 連續投幣超過 3 次触發淘氣水花彩蛋
+    if (this.tossCount >= 4) {
+      this.tossCount = 0;
+      return {
+        success: true,
+        message: '🌊 湖中女神淘氣笑噴水花：「別太貪心喔～心誠則靈！」全身濕透減速 3 秒！',
+        blessingType: 'PRANK',
+        rewardCash: 0,
+        healHp: 0,
+        speedBoostDuration: -3
+      };
+    }
+
+    // 隨機抽選 3 種神奇祝福
+    const rolls: Array<'GOLD' | 'FULL_HEAL' | 'SPEED_BOOST'> = ['GOLD', 'FULL_HEAL', 'SPEED_BOOST'];
+    const blessing = rolls[Math.floor(Math.random() * rolls.length)];
+
+    if (blessing === 'GOLD') {
+      return {
+        success: true,
+        message: '👑 湖中女神顯靈微笑：「誠實的同學啊！你掉的是這枚金幣嗎？」退還金幣並加贈 $80 獎金！',
+        blessingType: 'GOLD',
+        rewardCash: 110, // 30 本金 + 80 獎勵
+        healHp: 20,
+        speedBoostDuration: 0
+      };
+    } else if (blessing === 'FULL_HEAL') {
+      return {
+        success: true,
+        message: '✨ 湖中女神降下清泉甘霖：「願純潔之水治癒你的身心！」生命值與體力全滿回復！',
+        blessingType: 'FULL_HEAL',
+        rewardCash: 0,
+        healHp: 100,
+        speedBoostDuration: 0
+      };
+    } else {
+      return {
+        success: true,
+        message: '⚡ 湖中女神賜予靈水微風：「走吧！感受如風般疾馳的自由！」獲得 20 秒極速加護！',
+        blessingType: 'SPEED_BOOST',
+        rewardCash: 0,
+        healHp: 30,
+        speedBoostDuration: 20
+      };
+    }
+  }
+
+  // 1.8 生成生態園快速移動毒甲蟲 (跑得比玩家快、攻速快、攻擊力低、永不出園)
+  private spawnGardenBugs() {
+    const bugSpawns = [
+      new THREE.Vector3(-80, 0, -82),
+      new THREE.Vector3(-62, 0, -80),
+      new THREE.Vector3(-86, 0, -100),
+      new THREE.Vector3(-55, 0, -105),
+      new THREE.Vector3(-75, 0, -112)
+    ];
+
+    const shellMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 }); // 暗赤色毒甲
+    const legMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 }); // 發光綠眼
+
+    bugSpawns.forEach((pos, idx) => {
+      const bugGroup = new THREE.Group();
+      bugGroup.position.copy(pos);
+
+      // 橢圓甲蟲身軀
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), shellMat);
+      body.position.y = 0.28;
+      body.scale.set(1.0, 0.65, 1.4);
+      body.castShadow = true;
+      bugGroup.add(body);
+
+      // 發光綠眼
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
+      eyeL.position.set(0.14, 0.32, 0.42);
+      bugGroup.add(eyeL);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
+      eyeR.position.set(-0.14, 0.32, 0.42);
+      bugGroup.add(eyeR);
+
+      // 6 條爬行節肢
+      const legs: THREE.Mesh[] = [];
+      for (let s = -1; s <= 1; s += 2) {
+        for (let l = -0.18; l <= 0.18; l += 0.18) {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 4), legMat);
+          leg.position.set(s * 0.34, 0.14, l);
+          leg.rotation.z = s * (Math.PI / 3);
+          bugGroup.add(leg);
+          legs.push(leg);
+        }
+      }
+
+      this.group.add(bugGroup);
+
+      this.bugs.push({
+        id: idx,
+        position: pos.clone(),
+        mesh: bugGroup,
+        legs,
+        velocity: new THREE.Vector3(),
+        wanderTarget: pos.clone(),
+        wanderTimer: Math.random() * 3.0,
+        speed: 7.8,          // 7.8 m/s (比玩家 5.0 快！)
+        attackDamage: 4,     // 4 HP (攻擊力低)
+        attackCooldown: 0.35,// 0.35s (攻擊速度快！)
+        hp: 25,
+        maxHp: 25,
+        isDead: false,
+        animTimer: idx * 2.0,
+        respawnTimer: 0
+      });
+    });
+  }
+
+  // 建造園區內神秘野菇 (外觀隨機豐富絢爛、吃下效果完全隨機決定)
   private spawnInteractiveMushrooms() {
     const mushConfigs = [
-      { pos: new THREE.Vector3(-82, 0, -85), type: 'HEAL' as const, name: '生命紅仙菇' },
-      { pos: new THREE.Vector3(-60, 0, -84), type: 'POISON' as const, name: '劇毒紫斑蕈' },
-      { pos: new THREE.Vector3(-84, 0, -98), type: 'POISON' as const, name: '劇毒紫斑蕈' },
-      { pos: new THREE.Vector3(-58, 0, -102), type: 'HEAL' as const, name: '生命紅仙菇' },
-      { pos: new THREE.Vector3(-80, 0, -112), type: 'HEAL' as const, name: '生命紅仙菇' },
-      { pos: new THREE.Vector3(-60, 0, -114), type: 'POISON' as const, name: '劇毒紫斑蕈' },
-      { pos: new THREE.Vector3(-75, 0, -93), type: 'HEAL' as const, name: '生命紅仙菇' },
-      { pos: new THREE.Vector3(-65, 0, -95), type: 'POISON' as const, name: '劇毒紫斑蕈' }
+      { pos: new THREE.Vector3(-82, 0, -85), color: 0xe74c3c, glow: 0xff7675, name: '赤紅斑點菇' },
+      { pos: new THREE.Vector3(-60, 0, -84), color: 0x8e44ad, glow: 0xa29bfe, name: '幽冥紫晶蕈' },
+      { pos: new THREE.Vector3(-84, 0, -98), color: 0xf1c40f, glow: 0xffeaa7, name: '璀璨黃金菇' },
+      { pos: new THREE.Vector3(-58, 0, -102), color: 0x00cec9, glow: 0x81ecec, name: '冰晶蔚藍蕈' },
+      { pos: new THREE.Vector3(-80, 0, -112), color: 0x2ecc71, glow: 0x55efc4, name: '碧玉青露菇' },
+      { pos: new THREE.Vector3(-60, 0, -114), color: 0xffffff, glow: 0xdfe6e9, name: '純白幻影蕈' },
+      { pos: new THREE.Vector3(-75, 0, -93), color: 0xff7675, glow: 0xd63031, name: '烈焰朱砂菇' },
+      { pos: new THREE.Vector3(-65, 0, -95), color: 0x6c5ce7, glow: 0xa29bfe, name: '雷霆電紋蕈' }
     ];
 
     mushConfigs.forEach((cfg, idx) => {
       const group = new THREE.Group();
       group.position.copy(cfg.pos);
-
-      const isHeal = cfg.type === 'HEAL';
-      const capColor = isHeal ? 0xe74c3c : 0x8e44ad;
-      const glowColor = isHeal ? 0x2ecc71 : 0x9b59b6;
 
       // 菇柄
       const stem = new THREE.Mesh(
@@ -241,13 +527,13 @@ export class EcologicalGarden {
       // 菇傘
       const cap = new THREE.Mesh(
         new THREE.ConeGeometry(0.65, 0.55, 10),
-        new THREE.MeshLambertMaterial({ color: capColor })
+        new THREE.MeshLambertMaterial({ color: cfg.color })
       );
       cap.position.y = 0.9;
       group.add(cap);
 
       // 菇斑圓點
-      const dotMat = new THREE.MeshBasicMaterial({ color: isHeal ? 0xffffff : 0x2ecc71 });
+      const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
       for (let i = 0; i < 5; i++) {
         const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), dotMat);
         const ang = (i / 5) * Math.PI * 2;
@@ -256,7 +542,7 @@ export class EcologicalGarden {
       }
 
       // 地面光暈
-      const glow = new THREE.PointLight(glowColor, 0.7, 4.0);
+      const glow = new THREE.PointLight(cfg.glow, 0.75, 4.2);
       glow.position.y = 0.95;
       group.add(glow);
 
@@ -265,7 +551,7 @@ export class EcologicalGarden {
       this.mushrooms.push({
         id: idx,
         position: cfg.pos.clone(),
-        type: cfg.type,
+        visualColor: cfg.color,
         name: cfg.name,
         mesh: group,
         light: glow,
@@ -275,8 +561,8 @@ export class EcologicalGarden {
     });
   }
 
-  // 嘗試採集附近的神秘野菇
-  public tryPickMushroom(playerPos: THREE.Vector3): { picked: boolean; mushroom?: InteractiveMushroom } {
+  // 嘗試採集野菇 (效果完全隨機決定，與外觀無關！)
+  public tryPickMushroom(playerPos: THREE.Vector3): MushroomPickResult {
     for (const m of this.mushrooms) {
       if (m.isPicked) continue;
       const dist = playerPos.distanceTo(m.position);
@@ -285,7 +571,46 @@ export class EcologicalGarden {
         m.respawnTimer = 15.0; // 15秒後重新長出
         m.mesh.visible = false;
         m.light.intensity = 0;
-        return { picked: true, mushroom: m };
+
+        // 隨機決定 6 種不同效果之一 (效果完全隨機，與外觀顏色無關)
+        const roll = Math.random();
+        let effect: MushroomEffectType = 'HEAL';
+        let title = '💚【生命甘霖】';
+        let desc = '大補血！體力恢復 +45 HP！';
+
+        if (roll < 0.35) {
+          effect = 'HEAL';
+          title = '💚【生命甘霖】';
+          desc = '大補血！體力恢復 +45 HP！';
+        } else if (roll < 0.52) {
+          effect = 'STAMINA';
+          title = '⚡【精力爆發】';
+          desc = '體力 +20，精力充沛完全回滿！';
+        } else if (roll < 0.74) {
+          effect = 'POISON';
+          title = '☠️【劇毒侵蝕】';
+          desc = '誤食毒菇！受到 12 傷害並中毒持續扣血 5 秒！';
+        } else if (roll < 0.86) {
+          effect = 'PARALYSIS';
+          title = '🌀【麻痺孢子】';
+          desc = '四肢發麻！受到 8 傷害且短暫減速 3 秒！';
+        } else if (roll < 0.94) {
+          effect = 'LUCKY_GOLD';
+          title = '💰【意外之財】';
+          desc = '蘑菇根部藏有私房錢！獲得獎金 +$80！';
+        } else {
+          effect = 'SUPER_JUMP';
+          title = '🌈【輕功彩虹菇】';
+          desc = '飄飄欲仙！10 秒內跳躍力倍增！';
+        }
+
+        return {
+          picked: true,
+          effect,
+          title,
+          desc,
+          mushroom: m
+        };
       }
     }
     return { picked: false };
@@ -568,6 +893,104 @@ export class EcologicalGarden {
         }
       }
     }
+
+    // E. 湖中女神顯靈浮動動畫
+    if (this.lakeGoddessMesh) {
+      if (this.isGoddessActive) {
+        this.goddessTimer -= delta;
+        // 女神緩緩自水面升起並神聖浮動
+        const targetY = 1.0 + Math.sin(Date.now() * 0.0035) * 0.18;
+        this.lakeGoddessMesh.position.y = THREE.MathUtils.lerp(this.lakeGoddessMesh.position.y, targetY, delta * 2.5);
+        this.lakeGoddessMesh.rotation.y += delta * 0.8;
+        if (this.goddessTimer <= 0) {
+          this.isGoddessActive = false;
+        }
+      } else {
+        // 女神退隱沉入湖底
+        if (this.lakeGoddessMesh.position.y > -1.2) {
+          this.lakeGoddessMesh.position.y = THREE.MathUtils.lerp(this.lakeGoddessMesh.position.y, -1.3, delta * 3.0);
+        }
+      }
+    }
+
+    // F. 生態園快速移動毒甲蟲 AI (速度 7.8 m/s, 攻擊力 4, 攻速 0.35s, 嚴格限制在園內)
+    const gardenMinX = -92;
+    const gardenMaxX = -48;
+    const gardenMinZ = -116;
+    const gardenMaxZ = -78;
+    const isPlayerInGarden = (
+      playerPos.x >= gardenMinX - 1.0 && playerPos.x <= gardenMaxX + 1.0 &&
+      playerPos.z >= gardenMinZ - 1.0 && playerPos.z <= gardenMaxZ + 1.0
+    );
+
+    for (const bug of this.bugs) {
+      if (bug.isDead) {
+        bug.respawnTimer -= delta;
+        if (bug.respawnTimer <= 0) {
+          bug.isDead = false;
+          bug.hp = bug.maxHp;
+          bug.mesh.visible = true;
+          bug.position.set(
+            gardenMinX + 5 + Math.random() * (gardenMaxX - gardenMinX - 10),
+            0,
+            gardenMinZ + 5 + Math.random() * (gardenMaxZ - gardenMinZ - 10)
+          );
+        }
+        continue;
+      }
+
+      // 腿部高速爬行律動
+      bug.animTimer += delta * 18.0;
+      bug.legs.forEach((leg, li) => {
+        leg.rotation.x = Math.sin(bug.animTimer + li * 1.2) * 0.45;
+      });
+
+      if (bug.attackCooldown > 0) bug.attackCooldown -= delta;
+
+      if (isPlayerInGarden && !player.isDead) {
+        // 追擊玩家 (速度 7.8 比玩家 5.0 快)
+        const dir = new THREE.Vector3().subVectors(playerPos, bug.position);
+        dir.y = 0;
+        const dist = dir.length();
+        if (dist > 0.05) {
+          dir.normalize();
+          bug.position.addScaledVector(dir, bug.speed * delta);
+          bug.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+
+        // 貼身快速啃咬攻擊
+        if (dist < 1.15 && bug.attackCooldown <= 0) {
+          bug.attackCooldown = 0.35; // 極快攻速
+          soundManager.playBugChirp();
+          onPlayerHit(bug.attackDamage, '遭生態園毒甲蟲刺螯快速咬傷！');
+        }
+      } else {
+        // 玩家不在園區內：在園內巡邏漫遊
+        bug.wanderTimer -= delta;
+        if (bug.wanderTimer <= 0) {
+          bug.wanderTimer = 2.0 + Math.random() * 3.0;
+          bug.wanderTarget.set(
+            gardenMinX + 4 + Math.random() * (gardenMaxX - gardenMinX - 8),
+            0,
+            gardenMinZ + 4 + Math.random() * (gardenMaxZ - gardenMinZ - 8)
+          );
+        }
+        const wDir = new THREE.Vector3().subVectors(bug.wanderTarget, bug.position);
+        wDir.y = 0;
+        const wDist = wDir.length();
+        if (wDist > 0.4) {
+          wDir.normalize();
+          bug.position.addScaledVector(wDir, bug.speed * 0.45 * delta);
+          bug.mesh.rotation.y = Math.atan2(wDir.x, wDir.z);
+        }
+      }
+
+      // 嚴格座標鉗制：絕對不會跑出生態園區
+      bug.position.x = THREE.MathUtils.clamp(bug.position.x, gardenMinX, gardenMaxX);
+      bug.position.z = THREE.MathUtils.clamp(bug.position.z, gardenMinZ, gardenMaxZ);
+      bug.position.y = 0;
+      bug.mesh.position.copy(bug.position);
+    }
   }
 
   // 發射劇毒孢子
@@ -638,7 +1061,29 @@ export class EcologicalGarden {
       }
     }
 
+    // 判定生態園毒甲蟲
+    for (const bug of this.bugs) {
+      if (bug.isDead) continue;
+      const bDist = hitOrigin.distanceTo(bug.position);
+      if (bDist < hitRadius + 0.6) {
+        bug.hp -= damage;
+        soundManager.playPunch();
+        if (bug.hp <= 0) {
+          bug.isDead = true;
+          bug.mesh.visible = false;
+          bug.respawnTimer = 22.0;
+          return { hit: true, name: '生態園毒甲蟲', defeated: true, isBoss: false };
+        }
+        return { hit: true, name: '生態園毒甲蟲', defeated: false, isBoss: false };
+      }
+    }
+
     return { hit: false, name: '', defeated: false, isBoss: false };
+  }
+
+  // 檢查玩家是否在生態池許願石碑附近
+  public isNearWishingPond(playerPos: THREE.Vector3): boolean {
+    return playerPos.distanceTo(this.pondPos) < 4.2;
   }
 
   // Boss 死亡傾倒枯萎動畫
