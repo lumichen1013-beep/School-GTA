@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>學校GTA - 校園開放世界</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Changa+One&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f141c;
+      font-family: 'Noto Sans TC', sans-serif;
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    /* HUD UI Overlay */
+    #hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+    }
+
+    /* Top Bar */
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .hud-title-zone {
+      background: rgba(13, 19, 33, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 10px 18px;
+      border-radius: 8px;
+      border-left: 4px solid #ffcc00;
+      color: #fff;
+    }
+
+    .school-badge {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #ffcc00;
+      font-weight: 700;
+    }
+
+    .location-name {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #ffffff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    }
+
+    /* Wanted & Status Container */
+    .hud-top-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    /* GTA Style 5-Star Wanted Level */
+    .wanted-stars {
+      display: flex;
+      gap: 6px;
+      background: rgba(13, 19, 33, 0.7);
+      padding: 8px 14px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .star {
+      font-size: 26px;
+      color: rgba(255, 255, 255, 0.2);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      text-shadow: 0 0 5px rgba(0,0,0,0.8);
+    }
+
+    .star.active {
+      color: #ffcc00;
+      transform: scale(1.15);
+      text-shadow: 0 0 12px rgba(255, 204, 0, 0.8), 0 0 24px rgba(255, 100, 0, 0.5);
+      animation: pulseStar 1s infinite alternate;
+    }
+
+    .star.danger {
+      color: #ff3344;
+      text-shadow: 0 0 14px rgba(255, 51, 68, 0.9), 0 0 28px rgba(255, 0, 0, 0.6);
+    }
+
+    .star.evading {
+      animation: evadingBlink 0.45s infinite alternate !important;
+    }
+
+    @keyframes pulseStar {
+      from { transform: scale(1.1); filter: brightness(1); }
+      to { transform: scale(1.25); filter: brightness(1.3); }
+    }
+
+    @keyframes evadingBlink {
+      from { opacity: 0.25; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* Clock & Cash */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(13, 19, 33, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 8px 16px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      border-right: 3px solid #2ecc71;
+    }
+
+    .cash-val {
+      color: #2ecc71;
+      font-family: 'Changa One', monospace;
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+
+    .time-val {
+      color: #f1c40f;
+      font-family: 'Changa One', monospace;
+      font-size: 17px;
+    }
+
+    /* BGM Control Badge */
+    .bgm-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(13, 19, 33, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      border-right: 3px solid #3498db;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      pointer-events: auto;
+    }
+
+    .bgm-badge:hover {
+      background: rgba(26, 38, 66, 0.95);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(52, 152, 219, 0.35);
+    }
+
+    .bgm-badge.pursuit {
+      border-right-color: #e74c3c;
+      animation: bgmPulse 1s infinite alternate;
+    }
+
+    .bgm-badge.muted {
+      border-right-color: #7f8c8d;
+      opacity: 0.7;
+    }
+
+    .bgm-btn-pill {
+      background: rgba(52, 152, 219, 0.3);
+      color: #3498db;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .bgm-badge.pursuit .bgm-btn-pill {
+      background: rgba(231, 76, 60, 0.35);
+      color: #ff4d4d;
+    }
+
+    .bgm-badge.muted .bgm-btn-pill {
+      background: rgba(127, 140, 141, 0.3);
+      color: #bdc3c7;
+    }
+
+    .bgm-key-hint {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      color: #ffcc00;
+    }
+
+    @keyframes bgmPulse {
+      from { transform: scale(1); filter: brightness(1); }
+      to { transform: scale(1.04); filter: brightness(1.2); }
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    /* 籃球專用瞄準準心 (Basketball Aiming Reticle) */
+    #crosshair.aiming-basketball {
+      width: 26px;
+      height: 26px;
+      border: 2px solid #ff9f43;
+      background: rgba(255, 159, 67, 0.2);
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(255, 159, 67, 0.95), inset 0 0 8px rgba(255, 159, 67, 0.5);
+      animation: crosshairAimPulse 1.1s infinite alternate;
+    }
+
+    #crosshair.aiming-basketball::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      background: #ffcc00;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px #ffcc00;
+    }
+
+    @keyframes crosshairAimPulse {
+      0% { transform: translate(-50%, -50%) scale(1.0); border-color: #ff9f43; }
+      100% { transform: translate(-50%, -50%) scale(1.18); border-color: #ff5252; box-shadow: 0 0 18px rgba(255, 82, 82, 0.9); }
+    }
+
+    /* Basketball Shot Timing Gauge */
+    #shot-meter {
+      position: absolute;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 175px;
+      background: rgba(15, 23, 42, 0.90);
+      backdrop-filter: blur(8px);
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 159, 67, 0.7);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 159, 67, 0.35);
+      display: none;
+      pointer-events: none;
+      z-index: 10;
+      transition: opacity 0.15s ease;
+    }
+
+    .shot-meter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #ff9f43;
+      margin-bottom: 5px;
+      letter-spacing: 0.5px;
+    }
+
+    .shot-meter-hint {
+      color: #a4b0be;
+      font-size: 10px;
+    }
+
+    .shot-meter-track {
+      position: relative;
+      width: 100%;
+      height: 14px;
+      background: #1e293b;
+      border-radius: 7px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* 最佳綠色出手區間 (Sweet Spot) */
+    .shot-meter-sweetspot {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 68%;
+      width: 18%;
+      background: linear-gradient(90deg, rgba(46, 204, 113, 0.7), rgba(46, 204, 113, 1), rgba(46, 204, 113, 0.7));
+      box-shadow: 0 0 8px #2ecc71;
+      z-index: 2;
+    }
+
+    .shot-meter-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 0%;
+      background: linear-gradient(90deg, #3498db, #f1c40f, #e67e22);
+      border-radius: 7px;
+      transition: width 0.02s linear;
+      z-index: 1;
+    }
+
+    .shot-meter-needle {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      left: 0%;
+      width: 3px;
+      background: #ffffff;
+      box-shadow: 0 0 6px #ffffff, 0 0 10px #ffcc00;
+      z-index: 3;
+      transform: translateX(-50%);
+    }
+
+    .shot-meter-feedback {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 900;
+      margin-top: 5px;
+      letter-spacing: 1px;
+      display: none;
+    }
+
+    .shot-meter-feedback.perfect {
+      color: #2ecc71;
+      text-shadow: 0 0 10px rgba(46, 204, 113, 0.9);
+      display: block;
+    }
+
+    .shot-meter-feedback.good {
+      color: #f1c40f;
+      text-shadow: 0 0 8px rgba(241, 196, 15, 0.8);
+      display: block;
+    }
+
+    .shot-meter-feedback.bad {
+      color: #e74c3c;
+      text-shadow: 0 0 8px rgba(231, 76, 60, 0.8);
+      display: block;
+    }
+
+    #action-prompt {
+      position: absolute;
+      top: 58%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 204, 0, 0.5);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    #action-prompt .key {
+      display: inline-block;
+      background: #ffcc00;
+      color: #000;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 900;
+      margin-right: 6px;
+    }
+
+    /* Notification Banner */
+    #hud-banner {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: linear-gradient(90deg, rgba(231, 76, 60, 0) 0%, rgba(231, 76, 60, 0.9) 30%, rgba(231, 76, 60, 0.9) 70%, rgba(231, 76, 60, 0) 100%);
+      color: #fff;
+      padding: 10px 48px;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: all 0.4s ease;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+
+    #hud-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #pointer-unlock-hint {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #ffcc00;
+      color: #ffcc00;
+      padding: 10px 24px;
+      border-radius: 30px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      animation: pulseHint 1.2s infinite alternate;
+    }
+
+    @keyframes pulseHint {
+      from { transform: translateX(-50%) scale(0.98); opacity: 0.9; }
+      to { transform: translateX(-50%) scale(1.02); opacity: 1; }
+    }
+
+    /* Bottom Section */
+    .hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+    }
+
+    /* Radar & Stats Left */
+    .radar-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 18px;
+    }
+
+    .minimap-wrapper {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(10, 16, 26, 0.85);
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+    }
+
+    #minimap-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .radar-center-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ffcc00;
+      border: 2px solid #fff;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px #ffcc00;
+    }
+
+    .bars-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 8px;
+      width: 180px;
+    }
+
+    .meter-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #bbb;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .meter-bar {
+      width: 100%;
+      height: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 5px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 5px;
+      transition: width 0.15s ease-out;
+    }
+
+    .fill-hp { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+    .fill-stamina { background: linear-gradient(90deg, #2980b9, #3498db); }
+
+    /* Controls Guide Overlay */
+    .controls-panel {
+      background: rgba(13, 19, 33, 0.7);
+      backdrop-filter: blur(8px);
+      padding: 12px 18px;
+      border-radius: 10px;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      line-height: 1.8;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .key-badge {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      margin: 0 2px;
+      font-family: monospace;
+    }
+
+    /* 變異食人花 Boss 血條 */
+    #boss-hud {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 440px;
+      background: rgba(13, 19, 33, 0.85);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 12px 18px;
+      border: 2px solid #8e44ad;
+      box-shadow: 0 0 25px rgba(142, 68, 173, 0.6), inset 0 0 15px rgba(231, 76, 60, 0.3);
+      display: none;
+      z-index: 20;
+      pointer-events: none;
+      animation: bossHudGlow 2s infinite alternate;
+    }
+
+    @keyframes bossHudGlow {
+      from { box-shadow: 0 0 15px rgba(142, 68, 173, 0.4); }
+      to { box-shadow: 0 0 28px rgba(231, 76, 60, 0.7); }
+    }
+
+    .boss-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 900;
+    }
+
+    .boss-name {
+      color: #ff7675;
+      font-size: 15px;
+      letter-spacing: 1px;
+      text-shadow: 0 0 8px rgba(255, 118, 117, 0.6);
+    }
+
+    .boss-hp-text {
+      color: #ffeaa7;
+      font-family: 'Changa One', monospace;
+      font-size: 15px;
+    }
+
+    .boss-bar-track {
+      width: 100%;
+      height: 14px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 7px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .boss-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #d63031, #e84393, #8e44ad);
+      border-radius: 7px;
+      transition: width 0.2s ease-out;
+      box-shadow: 0 0 12px rgba(232, 67, 147, 0.8);
+    }
+
+    /* 武器庫 HUD (Weapon HUD Slots) */
+    #weapon-hud {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      pointer-events: auto;
+      margin-top: 10px;
+    }
+
+    .weapon-slot {
+      background: rgba(13, 19, 33, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 90px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .weapon-slot:hover {
+      background: rgba(26, 38, 66, 0.95);
+      transform: translateY(-2px);
+    }
+
+    .weapon-slot.active {
+      border-color: #f1c40f;
+      background: rgba(241, 196, 15, 0.15);
+      box-shadow: 0 0 14px rgba(241, 196, 15, 0.45);
+    }
+
+    .weapon-slot.locked {
+      opacity: 0.55;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .slot-key {
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      background: #ffcc00;
+      color: #111;
+      font-size: 10px;
+      font-weight: 900;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .slot-icon {
+      font-size: 20px;
+      margin-bottom: 2px;
+    }
+
+    .slot-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .slot-stat {
+      font-size: 9px;
+      color: #aaa;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .weapon-slot.active .slot-stat {
+      color: #f1c40f;
+    }
+
+    /* 合作社補血熱食部 Modal */
+    .modal-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 8, 15, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 80;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+    }
+
+    .commissary-card {
+      background: #111827;
+      border: 2px solid #2ecc71;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(46, 204, 113, 0.25);
+      border-radius: 16px;
+      width: 600px;
+      max-width: 90vw;
+      padding: 24px 28px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: modalSlide 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes modalSlide {
+      from { opacity: 0; transform: scale(0.92) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .commissary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      padding-bottom: 12px;
+    }
+
+    .commissary-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: #2ecc71;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .commissary-cash {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f1c40f;
+    }
+
+    .commissary-close {
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 28px;
+      cursor: pointer;
+      line-height: 1;
+      transition: color 0.15s ease;
+    }
+
+    .commissary-close:hover {
+      color: #ff4757;
+    }
+
+    .commissary-desc {
+      font-size: 13px;
+      color: #ccc;
+    }
+
+    .commissary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .food-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+
+    .food-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: #2ecc71;
+      transform: translateY(-2px);
+    }
+
+    .food-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .food-name {
+      font-weight: 800;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    .food-effect {
+      font-size: 12px;
+      color: #2ecc71;
+      font-weight: 600;
+    }
+
+    .food-price {
+      font-size: 13px;
+      color: #f1c40f;
+      font-weight: 800;
+    }
+
+    .food-buy-btn {
+      background: linear-gradient(135deg, #27ae60, #2ecc71);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .food-buy-btn:hover {
+      filter: brightness(1.15);
+      transform: scale(1.05);
+    }
+
+    .food-buy-btn:disabled {
+      background: #4b5563;
+      color: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Start Screen Overlay */
+    #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(7, 11, 18, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      color: #fff;
+      transition: opacity 0.5s ease;
+    }
+
+    .game-logo {
+      font-size: 64px;
+      font-weight: 900;
+      font-family: 'Changa One', 'Noto Sans TC', sans-serif;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #ffcc00 0%, #ff5500 50%, #e74c3c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 10px 30px rgba(255, 100, 0, 0.4);
+      margin-bottom: 8px;
+    }
+
+    .game-sub {
+      font-size: 18px;
+      color: #ddd;
+      letter-spacing: 2px;
+      margin-bottom: 32px;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, #ffcc00, #ff8800);
+      color: #111;
+      font-size: 18px;
+      font-weight: 900;
+      padding: 16px 48px;
+      border-radius: 40px;
+      border: none;
+      box-shadow: 0 8px 24px rgba(255, 136, 0, 0.4);
+      pointer-events: none;
+      letter-spacing: 1px;
+      animation: pulseBtn 1.5s infinite;
+    }
+
+    @keyframes pulseBtn {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7); }
+      70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(255, 204, 0, 0); }
+      100% { transform: scale(1); }
+    }
+
+    /* 被追捕時外框淡淡的紅色閃爍特效 (Pursuit Alert Vignette) */
+    #pursuit-vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.45s ease-out;
+      box-shadow: inset 0 0 70px 15px rgba(231, 76, 60, 0.38), inset 0 0 140px 40px rgba(192, 57, 43, 0.20);
+    }
+
+    #pursuit-vignette.active {
+      opacity: 1;
+      animation: pursuitPulse 1.25s ease-in-out infinite alternate;
+    }
+
+    #pursuit-vignette.danger {
+      animation: pursuitPulseFast 0.75s ease-in-out infinite alternate;
+      box-shadow: inset 0 0 95px 25px rgba(231, 76, 60, 0.55), inset 0 0 170px 55px rgba(192, 57, 43, 0.32);
+    }
+
+    @keyframes pursuitPulse {
+      0% {
+        opacity: 0.25;
+        box-shadow: inset 0 0 50px 12px rgba(231, 76, 60, 0.25), inset 0 0 100px 25px rgba(192, 57, 43, 0.12);
+      }
+      50% {
+        opacity: 0.75;
+        box-shadow: inset 0 0 85px 22px rgba(231, 76, 60, 0.48), inset 0 0 155px 45px rgba(214, 48, 49, 0.25);
+      }
+      100% {
+        opacity: 0.35;
+        box-shadow: inset 0 0 60px 15px rgba(231, 76, 60, 0.30), inset 0 0 120px 30px rgba(192, 57, 43, 0.15);
+      }
+    }
+
+    @keyframes pursuitPulseFast {
+      0% {
+        opacity: 0.4;
+        box-shadow: inset 0 0 65px 18px rgba(231, 76, 60, 0.35), inset 0 0 125px 35px rgba(192, 57, 43, 0.20);
+      }
+      100% {
+        opacity: 0.9;
+        box-shadow: inset 0 0 105px 30px rgba(231, 76, 60, 0.65), inset 0 0 185px 60px rgba(214, 48, 49, 0.38);
+      }
+    }
+
+    /* 中毒生病墨綠暗角特效 (Poison Vignette) */
+    #poison-vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 6;
+      opacity: 0;
+      transition: opacity 0.35s ease-out;
+      box-shadow: inset 0 0 85px 25px rgba(46, 204, 113, 0.5), inset 0 0 160px 50px rgba(39, 174, 96, 0.3);
+    }
+
+    #poison-vignette.active {
+      opacity: 1;
+      animation: poisonPulse 1.1s infinite alternate;
+    }
+
+    @keyframes poisonPulse {
+      0% { opacity: 0.35; filter: hue-rotate(0deg); }
+      100% { opacity: 0.95; filter: hue-rotate(30deg); }
+    }
+
+    /* 學校懲戒記過等級 (School Disciplinary Demerits) */
+    .demerit-container {
+      background: rgba(13, 19, 33, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .demerit-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .demerit-status {
+      font-size: 13px;
+      color: #2ecc71;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      transition: color 0.2s ease;
+    }
+
+    .demerit-badges {
+      display: flex;
+      gap: 5px;
+    }
+
+    .demerit-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #7f8c8d;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.2s ease;
+      letter-spacing: 0.5px;
+    }
+
+    .demerit-badge.active {
+      background: linear-gradient(135deg, #d35400, #e67e22);
+      color: #fff;
+      border-color: #f39c12;
+      box-shadow: 0 0 8px rgba(230, 126, 34, 0.6);
+      transform: scale(1.05);
+    }
+
+    .demerit-badge.active.evading {
+      animation: evadingBlink 0.45s infinite alternate !important;
+    }
+
+    .demerit-badge.danger.active {
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      border-color: #ff4757;
+      box-shadow: 0 0 12px rgba(231, 76, 60, 0.85);
+      animation: dangerPulse 0.8s infinite alternate;
+    }
+
+    @keyframes dangerPulse {
+      from { transform: scale(1.05); filter: brightness(1); }
+      to { transform: scale(1.15); filter: brightness(1.3); }
+    }
+
+    /* 手機觸控操作介面 (Mobile On-Screen Touch Controls) */
+    #mobile-controls-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+    }
+
+    #touch-joystick-zone {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 140px;
+      height: 140px;
+      pointer-events: auto;
+    }
+
+    #touch-joystick-base {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(13, 19, 33, 0.55);
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 12px rgba(255, 255, 255, 0.1);
+      position: relative;
+      touch-action: none;
+    }
+
+    #touch-joystick-thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #3498db 0%, #2980b9 100%);
+      box-shadow: 0 0 12px rgba(52, 152, 219, 0.8);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: transform 0.05s ease-out;
+    }
+
+    #mobile-action-buttons {
+      position: absolute;
+      bottom: 25px;
+      right: 25px;
+      display: grid;
+      grid-template-columns: repeat(2, 64px);
+      gap: 14px;
+      pointer-events: auto;
+    }
+
+    .mobile-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      transition: transform 0.1s, filter 0.1s;
+    }
+
+    .mobile-btn:active {
+      transform: scale(0.92);
+      filter: brightness(1.3);
+    }
+
+    .btn-attack { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .btn-jump { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .btn-sprint { background: linear-gradient(135deg, #f39c12, #d35400); }
+    .btn-interact { background: linear-gradient(135deg, #3498db, #2980b9); }
+
+    #toggle-mobile-mode-btn {
+      position: absolute;
+      top: 14px;
+      right: 170px;
+      background: rgba(13, 19, 33, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #00cec9;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 60;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s;
+    }
+
+    #toggle-mobile-mode-btn:hover {
+      background: rgba(26, 38, 66, 0.95);
+      border-color: #00cec9;
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 900px), (pointer: coarse) {
+      #mobile-controls-container {
+        display: block !important;
+      }
+      .controls-panel {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D WebGL Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- 被追捕時的緊張外框紅色暗角閃爍特效 -->
+  <div id="pursuit-vignette"></div>
+  <!-- 中毒時的生病墨綠暗角特效 -->
+  <div id="poison-vignette"></div>
+
+  <!-- HUD Interface -->
+  <div id="hud-overlay">
+    <!-- Top Bar -->
+    <div class="hud-top">
+      <div class="hud-title-zone">
+        <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
+        <div class="location-name" id="current-zone">教學大樓前 中庭廣場</div>
+      </div>
+
+      <div class="hud-top-right">
+        <!-- 學校懲戒記過等級 (School Disciplinary Demerits) -->
+        <div class="demerit-container" id="stars-box">
+          <div class="demerit-header">
+            <span class="demerit-icon">📋</span>
+            <span class="demerit-label">校規處分:</span>
+            <span class="demerit-status" id="demerit-status-title">操行良好</span>
+          </div>
+          <div class="demerit-badges">
+            <span class="demerit-badge" data-level="1" title="警告 1 次">警告</span>
+            <span class="demerit-badge" data-level="2" title="記小過 1 次">小過</span>
+            <span class="demerit-badge" data-level="3" title="記小過 2 次">小過二</span>
+            <span class="demerit-badge" data-level="4" title="記大過 1 次">大過</span>
+            <span class="demerit-badge danger-badge" data-level="5" title="記大過 2 次 (留校察看)">留校察看</span>
+          </div>
+          <!-- 隱藏保留 .star 標籤相容任何舊引用 -->
+          <div class="wanted-stars" style="display: none;">
+            <span class="star" data-star="1">★</span>
+            <span class="star" data-star="2">★</span>
+            <span class="star" data-star="3">★</span>
+            <span class="star" data-star="4">★</span>
+            <span class="star" data-star="5">★</span>
+          </div>
+        </div>
+
+        <div class="status-badge">
+          <span>零用錢 <span class="cash-val" id="cash-text">NT$ 250</span></span>
+          <span>時間 <span class="time-val" id="clock-text">12:15 PM</span></span>
+        </div>
+
+        <button id="toggle-mobile-mode-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
+
+        <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 M 鍵)">
+          <span id="bgm-icon">🎵</span>
+          <span id="bgm-text">BGM: 校園漫步</span>
+          <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+          <span class="bgm-key-hint">M</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 秘境霸主：變異食人花王 Boss 血條 -->
+    <div id="boss-hud">
+      <div class="boss-title-row">
+        <span class="boss-icon">🌸</span>
+        <span class="boss-name">秘境霸主：變異食人花王</span>
+        <span class="boss-hp-text" id="boss-hp-text">1200 / 1200</span>
+      </div>
+      <div class="boss-bar-track">
+        <div class="boss-bar-fill" id="boss-bar-fill" style="width: 100%;"></div>
+      </div>
+    </div>
+
+    <!-- Center Interaction Prompt -->
+    <div id="crosshair"></div>
+    <div id="action-prompt"><span class="key" id="prompt-key">E</span><span id="prompt-text">騎乘腳踏車</span></div>
+
+    <!-- Basketball Shot Timing Gauge (投籃蓄力時機條) -->
+    <div id="shot-meter">
+      <div class="shot-meter-header">
+        <span class="shot-meter-title">投籃蓄力時機</span>
+        <span class="shot-meter-hint">放開左鍵出手</span>
+      </div>
+      <div class="shot-meter-track">
+        <div class="shot-meter-sweetspot" id="shot-sweetspot"></div>
+        <div class="shot-meter-fill" id="shot-fill"></div>
+        <div class="shot-meter-needle" id="shot-needle"></div>
+      </div>
+      <div class="shot-meter-feedback" id="shot-feedback">PERFECT!</div>
+    </div>
+
+    <!-- Alert / Incident Banner -->
+    <div id="hud-banner">生教組長發動走廊巡查！</div>
+
+    <!-- Mouse Released / Re-lock Hint -->
+    <div id="pointer-unlock-hint">【滑鼠已釋放】點擊畫面鎖定視角 / 拖曳旋轉視角 (按 ESC 釋放)</div>
+
+    <!-- Bottom Section -->
+    <div class="hud-bottom">
+      <div class="radar-container">
+        <!-- Circular Minimap -->
+        <div class="minimap-wrapper">
+          <canvas id="minimap-canvas" width="140" height="140"></canvas>
+          <div class="radar-center-ring"></div>
+        </div>
+
+        <!-- Health & Stamina Bars & Weapons -->
+        <div class="bars-container">
+          <div class="meter-label"><span>體力 (HP)</span><span id="hp-num">100%</span></div>
+          <div class="meter-bar"><div class="meter-fill fill-hp" id="hp-bar" style="width: 100%;"></div></div>
+
+          <div class="meter-label"><span>精力 (STAMINA)</span><span id="stamina-num">100%</span></div>
+          <div class="meter-bar"><div class="meter-fill fill-stamina" id="stamina-bar" style="width: 100%;"></div></div>
+
+          <!-- 武器裝備欄 (Weapon Inventory Slots) -->
+          <div id="weapon-hud">
+            <div class="weapon-slot active" id="slot-fist" title="按 1 切換徒手">
+              <div class="slot-key">1</div>
+              <div class="slot-icon">🥊</div>
+              <div class="slot-name">徒手</div>
+              <div class="slot-stat">ATK 25</div>
+            </div>
+            <div class="weapon-slot locked" id="slot-normal-bat" title="擊敗20名普通同學解鎖">
+              <div class="slot-key">2</div>
+              <div class="slot-icon">🏏</div>
+              <div class="slot-name">普通球棒</div>
+              <div class="slot-stat" id="normal-bat-progress">同學 0/20</div>
+            </div>
+            <div class="weapon-slot locked" id="slot-special-bat" title="擊敗生教、校犬、5單車同學解鎖">
+              <div class="slot-key">3</div>
+              <div class="slot-icon">⚡</div>
+              <div class="slot-name">特殊球棒</div>
+              <div class="slot-stat" id="special-bat-progress">生教0 犬0 車0/5</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls Guide -->
+      <div class="controls-panel">
+        <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
+        <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
+        <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
+        <div><span class="key-badge">1</span><span class="key-badge">2</span><span class="key-badge">3</span> 切換武器 (球棒/拳)</div>
+        <div><span class="key-badge">E</span> 合作社買食物 / 騎單車 / 採集 / 競速</div>
+        <div><span class="key-badge">M</span> 開啟 / 靜音 BGM 音樂</div>
+        <div><span class="key-badge">左鍵</span> 揮擊武器 / 投籃蓄力</div>
+      </div>
+    </div>
+
+    <!-- 手機端虛擬搖桿與專屬觸控動作按鈕 -->
+    <div id="mobile-controls-container">
+      <div id="touch-joystick-zone">
+        <div id="touch-joystick-base">
+          <div id="touch-joystick-thumb"></div>
+        </div>
+      </div>
+
+      <div id="mobile-action-buttons">
+        <button class="mobile-btn btn-attack" id="m-btn-attack" title="攻擊 / 出拳 / 揮棒">🥊</button>
+        <button class="mobile-btn btn-jump" id="m-btn-jump" title="跳躍">🦘</button>
+        <button class="mobile-btn btn-sprint" id="m-btn-sprint" title="衝刺">🏃</button>
+        <button class="mobile-btn btn-interact" id="m-btn-interact" title="互動 (E)">🚲</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 天天合作社 (熱食補血部) 彈出式選單 -->
+  <div id="commissary-modal" class="modal-backdrop">
+    <div class="commissary-card">
+      <div class="commissary-header">
+        <div class="commissary-title">🏪 天天合作社 (熱食補血部)</div>
+        <div class="commissary-cash">錢包：<span id="commissary-cash-val">NT$ 100</span></div>
+        <button class="commissary-close" id="commissary-close-btn">&times;</button>
+      </div>
+      <div class="commissary-desc">吃熱騰騰美味餐點，立刻恢復 HP 體力與精力！</div>
+      <div class="commissary-grid" id="commissary-grid">
+        <!-- JS 動態生成品項 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Game / Click to Lock Mouse -->
+  <div id="start-screen">
+    <div class="game-logo">學校GTA</div>
+    <div class="game-sub">校園開放世界 · 第三人稱沙盒冒險</div>
+    <button class="btn-start">點擊進入學校GTA (開始遊戲)</button>
+  </div>
+
+  <!-- Main Game Script -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
