@@ -941,11 +941,11 @@ export class HUD {
     if (!this.locationEl) return;
 
     let zone = '教學中庭廣場';
-    if (pos.z > 107.0 || Math.abs(pos.x) > 118.0) {
+    if (pos.z > 105.0 || pos.z < -105.0 || Math.abs(pos.x) > 105.0) {
       zone = '🏙️ 校外大街 (強盜出沒警戒區)';
     } else if (pos.x >= 63 && pos.x <= 87 && pos.z >= -55 && pos.z <= -15) {
       zone = '🏊 天天國中 25m 標準游泳館';
-    } else if (pos.x < -45 && pos.z < -75) {
+    } else if (pos.x >= -95 && pos.x <= -45 && pos.z >= -104 && pos.z <= -77) {
       zone = '🌿 自然生態探索園區 (秘境霸主)';
     } else if (pos.y > 8.0) {
       zone = '教學大樓 A 棟 · 天台高空';
@@ -1007,8 +1007,8 @@ export class HUD {
       ctx.fillRect((bx - playerPos.x - bw / 2) * mapScale, (bz - playerPos.z - bd / 2) * mapScale, bw * mapScale, bd * mapScale);
     };
 
-    // 生態探索園區 (西北深綠森林泥土地)
-    drawBuilding(-70, -98, 50, 42, '#14532d');
+    // 生態探索園區 (西北深綠森林泥土地，位於北圍牆內側)
+    drawBuilding(-70, -90.5, 50, 27, '#14532d');
 
     // 25m 標準游泳館
     drawBuilding(75, -35, 20, 32, '#0284c7');

@@ -19,6 +19,7 @@ export class InputManager {
   private canvas: HTMLCanvasElement;
   private onInteractCallback: (() => void) | null = null;
   private onAttackCallback: (() => void) | null = null;
+  private onAttackReleaseCallback: (() => void) | null = null;
   private onToggleBGMCallback: (() => void) | null = null;
   private lastMouseX: number | null = null;
   private lastMouseY: number | null = null;
@@ -67,7 +68,10 @@ export class InputManager {
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouseButtons.left = false;
+      if (e.button === 0) {
+        this.mouseButtons.left = false;
+        if (this.onAttackReleaseCallback) this.onAttackReleaseCallback();
+      }
       if (e.button === 2) this.mouseButtons.right = false;
       this.lastMouseX = null;
       this.lastMouseY = null;
@@ -200,6 +204,8 @@ export class InputManager {
     this.mouseButtons.left = isDown;
     if (isDown && this.onAttackCallback) {
       this.onAttackCallback();
+    } else if (!isDown && this.onAttackReleaseCallback) {
+      this.onAttackReleaseCallback();
     }
   }
 
@@ -220,6 +226,10 @@ export class InputManager {
 
   public onAttack(callback: () => void) {
     this.onAttackCallback = callback;
+  }
+
+  public onAttackRelease(callback: () => void) {
+    this.onAttackReleaseCallback = callback;
   }
 
   public onToggleBGM(callback: () => void) {

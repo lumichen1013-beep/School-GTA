@@ -96,6 +96,7 @@ export class NPC {
   private attackAnimTimer: number = 0;
 
   // 人型角色肢體
+  private humanoidParts: THREE.Object3D[] = [];
   private leftArm?: THREE.Mesh;
   private rightArm?: THREE.Mesh;
   private leftLeg?: THREE.Mesh;
@@ -110,6 +111,7 @@ export class NPC {
   private dogHead?: THREE.Object3D;
 
   // 單車糾察隊與單車組件追蹤
+  public isOriginalBikePatrol: boolean = false;
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
   private bikeParts: THREE.Object3D[] = [];
@@ -145,11 +147,11 @@ export class NPC {
       this.attackPower = 36;
       this.attackRange = 1.8;
     } else if (role === 'BANDIT') {
-      // 校外強盜：走路 6.8 (比玩家 5.0 快)，跑步 11.5 (比玩家 10.0 快)，攻擊間隔 0.55s 極快
+      // 校外強盜：走路 8.5 (比單車巡邏快)，跑步 16.5 (超越單車極速 15.0)，攻擊力提高為兩倍 44
       this.maxHp = 180;
-      this.speed = 6.8;
-      this.chaseSpeed = 11.5;
-      this.attackPower = 22;
+      this.speed = 8.5;
+      this.chaseSpeed = 16.5;
+      this.attackPower = 44;
       this.attackRange = 1.9;
     } else if (role === 'DOG') {
       // 校犬柴柴：敏捷四足犬，巡邏步態 3.8，追捕奔馳 11.5，極速狂飆 13.8
@@ -192,6 +194,7 @@ export class NPC {
     if (role === 'DOG') {
       this.buildDogModel();
     } else if (role === 'BIKE_PATROL') {
+      this.isOriginalBikePatrol = true;
       this.buildBikePatrolModel();
       // 記錄騎士身體(軀幹/頭/帽/臂/腿)與單車全部子物件，被搶車時一併移除
       this.bikeModelParts = this.mesh.children.slice();
@@ -511,6 +514,12 @@ export class NPC {
 
   // 3. 建造普通人型 NPC 3D 模型 (生教、步巡糾察、普通學生)
   private buildHumanoidModel() {
+    this.humanoidParts = [];
+    const addHumanoidPart = (part: THREE.Object3D) => {
+      this.mesh.add(part);
+      this.humanoidParts.push(part);
+    };
+
     let shirtColor = 0xf8f9fa;
     let pantsColor = 0x1b263b;
 
@@ -539,41 +548,41 @@ export class NPC {
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.35), shirtMat);
     torso.position.y = 1.05;
     torso.castShadow = true;
-    this.mesh.add(torso);
+    addHumanoidPart(torso);
 
     // 角色專屬配飾 (臂章、反光背心、裁判哨)
     if (this.role === 'INSPECTOR') {
       const armBandMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), armBandMat);
       band.position.set(-0.45, 1.25, 0);
-      this.mesh.add(band);
+      addHumanoidPart(band);
     } else if (this.role === 'TEACHER') {
       // 生教組長螢光背心
       const vestMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
       const vest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.7, 0.38), vestMat);
       vest.position.y = 1.05;
-      this.mesh.add(vest);
+      addHumanoidPart(vest);
     } else if (this.role === 'PE_TEACHER_BOSS') {
       // 體育組長胸前裁判金屬哨子與白色運動條紋
       const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
       const stripeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
       stripeL.position.set(-0.25, 1.05, 0);
-      this.mesh.add(stripeL);
+      addHumanoidPart(stripeL);
       const stripeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
       stripeR.position.set(0.25, 1.05, 0);
-      this.mesh.add(stripeR);
+      addHumanoidPart(stripeR);
 
       const whistleMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.85, roughness: 0.2 });
       const whistle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.08), whistleMat);
       whistle.position.set(0, 1.22, 0.2);
-      this.mesh.add(whistle);
+      addHumanoidPart(whistle);
     }
 
     // 頭部
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), skinMat);
     head.position.y = 1.62;
     head.castShadow = true;
-    this.mesh.add(head);
+    addHumanoidPart(head);
 
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
     hair.position.set(0, 0.16, 0);
@@ -595,11 +604,11 @@ export class NPC {
     const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
     this.leftArm = new THREE.Mesh(armGeo, shirtMat);
     this.leftArm.position.set(-0.45, 1.05, 0);
-    this.mesh.add(this.leftArm);
+    addHumanoidPart(this.leftArm);
 
     this.rightArm = new THREE.Mesh(armGeo, shirtMat);
     this.rightArm.position.set(0.45, 1.05, 0);
-    this.mesh.add(this.rightArm);
+    addHumanoidPart(this.rightArm);
 
     // 體育老師專屬羽球拍 3D 裝備 (Attached to right arm)
     if (this.role === 'PE_TEACHER_BOSS') {
@@ -639,11 +648,11 @@ export class NPC {
     const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
     this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
     this.leftLeg.position.set(-0.18, 0.35, 0);
-    this.mesh.add(this.leftLeg);
+    addHumanoidPart(this.leftLeg);
 
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
-    this.mesh.add(this.rightLeg);
+    addHumanoidPart(this.rightLeg);
   }
 
   // 建造校外強盜 3D 外觀 (蒙面黑衣、手持鋼刀/砍刀)
@@ -831,8 +840,8 @@ export class NPC {
         // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
       case 'BANDIT':
-        // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高
-        return { damage: 22, hForce: 8.5, vForce: 4.8 };
+        // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高 (攻擊力提高兩倍)
+        return { damage: 44, hForce: 10.0, vForce: 5.5 };
       case 'TEACHER':
         // 生教組長/教官：強烈教官拳擊，強力擊退擊飛
         return { damage: 28, hForce: 10.0, vForce: 6.0 };
@@ -892,6 +901,50 @@ export class NPC {
     this.chaseSpeed = 10.0;
     this.isKnockedDown = true;
     this.reviveTimer = 3.0;
+  }
+
+  // 恢復騎乘單車巡邏狀態 (復活時還原為單車巡邏同學)
+  public restoreBikePatrol() {
+    // 妥善銷毀並從 this.mesh 移除 this.humanoidParts 的幾何體與材質
+    for (const part of this.humanoidParts) {
+      this.mesh.remove(part);
+      part.traverse((obj) => {
+        const m = obj as THREE.Mesh;
+        if (m.isMesh) {
+          if (m.geometry) m.geometry.dispose();
+          if (m.material) {
+            if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
+            else m.material.dispose();
+          }
+        }
+      });
+    }
+    this.humanoidParts.length = 0;
+    this.leftArm = undefined;
+    this.rightArm = undefined;
+    this.leftLeg = undefined;
+    this.rightLeg = undefined;
+
+    // 設定角色為 BIKE_PATROL 並重新組裝模型
+    this.role = 'BIKE_PATROL';
+    this.buildBikePatrolModel();
+    this.bikeModelParts = this.mesh.children.filter(c => c !== this.hpBarGroup && c !== this.koBadgeSprite);
+
+    // 恢復自行車巡邏數值
+    this.maxHp = 225;
+    this.hp = 225;
+    this.speed = 1.88;
+    this.chaseSpeed = 3.75;
+    this.attackPower = 26;
+    this.dynamicSpeed = 1.88;
+    this.attackRange = 2.4;
+
+    // 旋轉與姿勢回正
+    this.mesh.rotation.set(0, this.rotationY, 0);
+    this.mesh.position.y = this.baseFloorY;
+
+    // 播放清脆自行車鈴聲
+    soundManager.playBicycleBell();
   }
 
   // 建立標準 3D 羽球模型 (共享幾何體與材質 + 物件池復用 0-GC)
@@ -1265,7 +1318,7 @@ export class NPC {
     }
 
     if (this.role === 'BIKE_PATROL') return 1.88;
-    if (this.role === 'BANDIT') return 6.8;
+    if (this.role === 'BANDIT') return 8.5;
     return this.speed;
   }
 
@@ -1372,14 +1425,18 @@ export class NPC {
         this.koBadgeSprite.visible = false;
         this.lastKoBadgeSec = -1;
 
-        // 重新站立回正
-        this.mesh.rotation.x = 0;
-        this.mesh.rotation.z = 0;
-        this.mesh.position.y = this.baseFloorY;
-        this.isChasing = false;
-        this.isBurstSprinting = false;
-        this.dynamicSpeed = this.speed;
-        this.lostSightTimer = 0;
+        if (this.isOriginalBikePatrol && this.role !== 'BIKE_PATROL') {
+          this.restoreBikePatrol();
+        } else {
+          // 重新站立回正
+          this.mesh.rotation.x = 0;
+          this.mesh.rotation.z = 0;
+          this.mesh.position.y = this.baseFloorY;
+          this.isChasing = false;
+          this.isBurstSprinting = false;
+          this.dynamicSpeed = this.speed;
+          this.lostSightTimer = 0;
+        }
       } else {
         // 維持倒地姿勢與高度
         if (this.role === 'DOG' || this.role === 'BIKE_PATROL') {

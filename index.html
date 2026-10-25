@@ -1318,14 +1318,21 @@
       height: 100%;
       background: rgba(7, 11, 18, 0.85);
       backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       z-index: 100;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      cursor: pointer;
+      cursor: wait;
       color: #fff;
       transition: opacity 0.5s ease;
+      padding: env(safe-area-inset-top, 16px) env(safe-area-inset-right, 16px) env(safe-area-inset-bottom, 16px) env(safe-area-inset-left, 16px);
+      box-sizing: border-box;
+    }
+
+    #start-screen.loaded {
+      cursor: pointer;
     }
 
     .game-logo {
@@ -1339,13 +1346,92 @@
       -webkit-text-fill-color: transparent;
       text-shadow: 0 10px 30px rgba(255, 100, 0, 0.4);
       margin-bottom: 8px;
+      text-align: center;
     }
 
     .game-sub {
       font-size: 18px;
       color: #ddd;
       letter-spacing: 2px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    /* 載入進度條容器 (Loading Progress Bar) */
+    #loading-container {
+      width: 380px;
+      max-width: 90vw;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(245, 158, 11, 0.35);
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-sizing: border-box;
+      pointer-events: auto;
+    }
+
+    .loading-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #loading-status-text {
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    #loading-percent-text {
+      color: #f59e0b;
+      font-weight: 900;
+      font-family: 'Changa One', monospace, sans-serif;
+      font-size: 16px;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+      flex-shrink: 0;
+    }
+
+    .loading-bar-track {
+      width: 100%;
+      height: 14px;
+      background: #0f172a;
+      border-radius: 999px;
+      border: 1.5px solid rgba(245, 158, 11, 0.4);
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      position: relative;
+      padding: 2px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+    }
+
+    #loading-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #f39c12, #e67e22, #f1c40f);
+      border-radius: 999px;
+      box-shadow: 0 0 12px rgba(241, 196, 15, 0.7);
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .loading-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+      letter-spacing: 0.5px;
     }
 
     .btn-start {
@@ -1357,15 +1443,39 @@
       border-radius: 40px;
       border: none;
       box-shadow: 0 8px 24px rgba(255, 136, 0, 0.4);
-      pointer-events: none;
       letter-spacing: 1px;
+      opacity: 0.65;
+      cursor: wait;
+      pointer-events: none;
+      filter: grayscale(30%);
+      animation: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-start.is-ready {
+      opacity: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      filter: none;
       animation: pulseBtn 1.5s infinite;
     }
 
+    .btn-start.is-ready:hover {
+      transform: scale(1.05);
+      box-shadow: 0 10px 30px rgba(255, 170, 0, 0.65);
+    }
+
+    .btn-start.is-ready:active {
+      transform: scale(0.97);
+    }
+
     @keyframes pulseBtn {
-      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7); }
-      70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(255, 204, 0, 0); }
-      100% { transform: scale(1); }
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7), 0 8px 24px rgba(255, 136, 0, 0.4); }
+      70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(255, 204, 0, 0), 0 12px 30px rgba(255, 136, 0, 0.6); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0), 0 8px 24px rgba(255, 136, 0, 0.4); }
     }
 
     /* 被追捕時外框淡淡的紅色閃爍特效 (Pursuit Alert Vignette) */
@@ -1789,6 +1899,28 @@
         display: none !important;
       }
 
+      /* 手機端開始畫面載入進度條與按鈕自適應 */
+      #loading-container {
+        width: min(88vw, 360px) !important;
+        padding: 14px 16px !important;
+        margin-bottom: 20px !important;
+      }
+      .game-logo {
+        font-size: clamp(34px, 8vw, 54px) !important;
+        letter-spacing: 2px !important;
+        margin-bottom: 6px !important;
+      }
+      .game-sub {
+        font-size: clamp(12px, 3.5vw, 15px) !important;
+        margin-bottom: 16px !important;
+      }
+      .btn-start {
+        font-size: clamp(14px, 4vw, 17px) !important;
+        padding: 14px 32px !important;
+        width: min(88vw, 360px) !important;
+        text-align: center;
+      }
+
       /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
       #mobile-controls-container {
         display: block !important;
@@ -1924,6 +2056,47 @@
         font-size: 11px !important;
         padding: 3px 12px !important;
         border-radius: 16px !important;
+      }
+
+      /* 橫屏手機矮螢幕開始畫面自適應 */
+      #start-screen {
+        padding: max(8px, env(safe-area-inset-top, 8px)) 16px max(8px, env(safe-area-inset-bottom, 8px)) 16px !important;
+        justify-content: center !important;
+      }
+      .game-logo {
+        font-size: clamp(24px, 6.5vh, 38px) !important;
+        margin-bottom: 2px !important;
+      }
+      .game-sub {
+        font-size: clamp(10px, 3vh, 12px) !important;
+        margin-bottom: 8px !important;
+      }
+      #loading-container {
+        width: min(88vw, 340px) !important;
+        padding: 8px 14px !important;
+        margin-bottom: 8px !important;
+        gap: 5px !important;
+      }
+      .loading-info-row {
+        font-size: 11px !important;
+      }
+      #loading-status-text {
+        font-size: 11px !important;
+      }
+      #loading-percent-text {
+        font-size: 13px !important;
+      }
+      .loading-bar-track {
+        height: 10px !important;
+        padding: 1px !important;
+      }
+      .loading-hint {
+        font-size: 9.5px !important;
+      }
+      .btn-start {
+        padding: 8px 24px !important;
+        font-size: 13px !important;
+        width: min(88vw, 340px) !important;
       }
     }
 
@@ -2316,7 +2489,20 @@
   <div id="start-screen">
     <div class="game-logo">學校GTA</div>
     <div class="game-sub">校園開放世界 · 第三人稱沙盒冒險</div>
-    <button class="btn-start">點擊進入學校GTA (開始遊戲)</button>
+
+    <!-- 載入進度條容器 (Loading Progress Bar) -->
+    <div id="loading-container">
+      <div class="loading-info-row">
+        <span id="loading-status-text">正在初始化遊戲核心資源...</span>
+        <span id="loading-percent-text">0%</span>
+      </div>
+      <div class="loading-bar-track">
+        <div id="loading-bar-fill" style="width: 0%;"></div>
+      </div>
+      <div class="loading-hint">⚡ 載入完成後即可直接點擊螢幕暢玩</div>
+    </div>
+
+    <button class="btn-start" id="btn-start" disabled>載入資源中 (0%)...</button>
   </div>
 
   <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援) -->

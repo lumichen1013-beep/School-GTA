@@ -26,22 +26,22 @@ const _scratchCamDir = new THREE.Vector3();
 const _scratchCamForward = new THREE.Vector3();
 
 class SchoolGTASandbox {
-  private engine: Engine;
-  private input: InputManager;
-  private cameraCtrl: ThirdPersonCamera;
-  private world: CampusWorld;
-  private player: Player;
-  private ecologicalGarden: EcologicalGarden;
-  private waterSplashVFX: WaterSplashVFX;
+  private engine!: Engine;
+  private input!: InputManager;
+  private cameraCtrl!: ThirdPersonCamera;
+  private world!: CampusWorld;
+  private player!: Player;
+  private ecologicalGarden!: EcologicalGarden;
+  private waterSplashVFX!: WaterSplashVFX;
   private bicycles: Bicycle[] = [];
   private npcs: NPC[] = [];
-  private wantedSystem: WantedSystem;
-  private hud: HUD;
+  private wantedSystem!: WantedSystem;
+  private hud!: HUD;
 
   // 模組化小遊戲系統
-  private basketballGame: BasketballGame;
-  private racingGame: RacingGame;
-  private tennisGame: TennisGame;
+  private basketballGame!: BasketballGame;
+  private racingGame!: RacingGame;
+  private tennisGame!: TennisGame;
 
   // 經濟與任務解鎖統計系統
   private playerCash: number = 100;
@@ -56,6 +56,7 @@ class SchoolGTASandbox {
   private hasTastedHotFood: boolean = false;
 
   private currentRidingBike: Bicycle | null = null;
+  private isGameLoaded: boolean = false;
   private isGameRunning: boolean = false;
   private wasDogChasing: boolean = false;
   private isHandlingDeath: boolean = false;
@@ -80,22 +81,37 @@ class SchoolGTASandbox {
   } | null = null;
 
   constructor() {
-    // 1. 初始化引擎核心
+    // 綁定開始畫面監聽
+    this.setupStartScreen();
+    // 異步管線初始化資源
+    void this.init();
+  }
+
+  private async init() {
+    this.updateProgress(0, '正在初始化遊戲核心資源...');
+    await new Promise(r => requestAnimationFrame(r));
+
+    // 階段 0 (5%)：初始化 3D 圖形與音訊引擎核心
+    this.updateProgress(5, '正在啟動 3D 圖形與音訊引擎核心...');
     this.engine = new Engine();
     this.input = new InputManager(this.engine.canvas);
     this.cameraCtrl = new ThirdPersonCamera(65, window.innerWidth / window.innerHeight, 0.1, 350);
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 2. 建置 3D 校園世界
+    // 階段 1 (25%)：建置 3D 校園地圖、教學大樓、泳池與跑道
+    this.updateProgress(25, '正在建置 3D 校園地圖、教學大樓、泳池與跑道...');
     this.world = new CampusWorld(this.engine.scene);
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 2.5 建置自然生態探索園區 (含食人刺藤怪物與變異食人花王 Boss)
+    // 階段 2 (45%)：建置自然生態探索區與變異食人花 Boss
+    this.updateProgress(45, '正在建置自然生態探索區與變異食人花 Boss...');
     this.ecologicalGarden = new EcologicalGarden(this.engine.scene);
     this.world.colliders.push(...this.ecologicalGarden.colliders);
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 3. 玩家主角
+    // 階段 3 (65%)：生成主角模型、校園單車與水花特效系統
+    this.updateProgress(65, '正在生成主角模型、校園單車與水花特效系統...');
     this.player = new Player(this.engine.scene);
-
-    // 3.5 游泳水花特效系統 (Object Pool VFX)
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
 
     // 墜落傷害與死亡回呼
@@ -108,7 +124,7 @@ class SchoolGTASandbox {
       this.handlePlayerDeath('體力耗盡重傷！');
     };
 
-    // 4. 載具系統：在校園多處配置單車
+    // 載具系統：在校園多處配置單車
     const bikeSpawns = [
       { pos: new THREE.Vector3(8, 0, 15), color: 0xf39c12 },   // 中庭黃色單車
       { pos: new THREE.Vector3(14, 0, -38), color: 0xe74c3c },  // 籃球場旁紅色單車
@@ -120,11 +136,11 @@ class SchoolGTASandbox {
     for (const b of bikeSpawns) {
       this.bicycles.push(new Bicycle(this.engine.scene, b.pos, b.color));
     }
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 5. 生成校園 NPC
+    // 階段 4 (80%)：生成校園師生、主任教官、校犬柴柴與大如老師
+    this.updateProgress(80, '正在生成校園師生、主任教官、校犬柴柴與大如老師...');
     this.spawnCampusNPCs();
-
-    // 6. 通緝系統與 HUD
     this.wantedSystem = new WantedSystem();
     this.wantedSystem.onWantedCleared = () => {
       for (const n of this.npcs) {
@@ -132,46 +148,116 @@ class SchoolGTASandbox {
       }
     };
     this.hud = new HUD();
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 7. 初始化模組化小遊戲系統 (三分球、田徑水上競速、4F 羽球比賽)
+    // 階段 5 (92%)：初始化三分球、競速賽道、4F羽球館與電影劇院
+    this.updateProgress(92, '正在初始化三分球、競速賽道、4F羽球館與電影劇院...');
     this.basketballGame = new BasketballGame(this.engine.scene, this.world.basketballSpawnPos);
     this.racingGame = new RacingGame(this.engine.scene);
     this.tennisGame = new TennisGame();
 
-    // 8. 綁定按鍵互動與操作
+    // 綁定按鍵互動與操作
     this.setupInteractions();
     this.setupMobileControls();
     this.setupScreenResize();
     this.setupFullscreen();
 
-    // 8.2 綁定背景音樂 (BGM)
+    // 綁定背景音樂 (BGM)
     this.hud.setupBGMClick(() => this.toggleBGM());
     this.input.onToggleBGM(() => this.toggleBGM());
     bgmManager.onModeChange = (mode, isMuted) => {
       this.hud.updateBGMStatus(mode, isMuted);
     };
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 9. 開始遊戲畫面
-    this.setupStartScreen();
+    // 階段 6 (100%)：著色器預熱與首幀渲染準備就緒
+    this.updateProgress(98, '正在預熱著色器與首幀圖形編譯...');
+    this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+    await new Promise(r => requestAnimationFrame(r));
 
-    // 10. 啟動遊戲主迴圈
+    this.onLoadingComplete();
+  }
+
+  private updateProgress(percent: number, statusText: string) {
+    const barFill = document.getElementById('loading-bar-fill');
+    const percentText = document.getElementById('loading-percent-text');
+    const statusEl = document.getElementById('loading-status-text');
+    const btnStart = document.getElementById('btn-start');
+
+    if (barFill) barFill.style.width = `${percent}%`;
+    if (percentText) percentText.textContent = `${percent}%`;
+    if (statusEl) statusEl.textContent = statusText;
+    if (btnStart && !this.isGameLoaded) {
+      btnStart.textContent = `載入資源中 (${percent}%)...`;
+    }
+  }
+
+  private onLoadingComplete() {
+    this.isGameLoaded = true;
+    this.updateProgress(100, '✅ 遊戲資源載入完成！');
+
+    const startScreen = document.getElementById('start-screen');
+    const btnStart = document.getElementById('btn-start') as HTMLButtonElement | null;
+    const loadingHint = document.querySelector('.loading-hint');
+
+    if (startScreen) {
+      startScreen.classList.add('loaded');
+    }
+
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    if (btnStart) {
+      btnStart.removeAttribute('disabled');
+      btnStart.disabled = false;
+      btnStart.classList.add('is-ready');
+
+      if (isTouch) {
+        btnStart.textContent = '🎮 點擊螢幕開始遊玩';
+      } else {
+        btnStart.textContent = '🎮 點擊進入學校GTA (開始遊戲)';
+      }
+    }
+
+    if (loadingHint) {
+      loadingHint.textContent = isTouch ? '⚡ 載入完成！輕觸螢幕任何地方即可暢玩' : '⚡ 載入完成！點擊螢幕或按鈕即可進入遊戲';
+    }
+
+    // 啟動遊戲主迴圈
     this.tick();
   }
 
   private setupStartScreen() {
     const startScreen = document.getElementById('start-screen');
+    const btnStart = document.getElementById('btn-start');
     if (!startScreen) return;
 
-    startScreen.addEventListener('click', () => {
+    let hasStarted = false;
+    const handleStartGame = (e: Event) => {
+      // 未載入完成前不可提前誤觸進入
+      if (!this.isGameLoaded) return;
+      if (hasStarted) return;
+      hasStarted = true;
+
+      e.preventDefault();
+      e.stopPropagation();
+
       this.input.requestPointerLock();
       soundManager.playSchoolBell();
       bgmManager.start();
       startScreen.style.opacity = '0';
+      startScreen.style.pointerEvents = 'none';
       setTimeout(() => {
         startScreen.style.display = 'none';
         this.isGameRunning = true;
       }, 500);
-    });
+    };
+
+    startScreen.addEventListener('click', handleStartGame);
+    startScreen.addEventListener('touchend', handleStartGame, { passive: false });
+    if (btnStart) {
+      btnStart.addEventListener('click', handleStartGame);
+      btnStart.addEventListener('touchend', handleStartGame, { passive: false });
+    }
   }
 
   private spawnCampusNPCs() {
@@ -563,6 +649,18 @@ class SchoolGTASandbox {
             break;
           }
         }
+      }
+    });
+
+    // 滑鼠左鍵鬆開：投籃出手 (電腦版)
+    this.input.onAttackRelease(() => {
+      if (this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
+        this.basketballGame.releaseShot(
+          this.player,
+          this.cameraCtrl.camera,
+          this.hud,
+          this.world.hoopTargets
+        );
       }
     });
 
@@ -1255,7 +1353,8 @@ class SchoolGTASandbox {
       this.hud,
       this.wantedSystem,
       this.world.hoopTargets,
-      this.world.shootingHotspots
+      this.world.shootingHotspots,
+      this.cameraCtrl.camera
     );
 
     // 4. 更新 4F 羽球比賽

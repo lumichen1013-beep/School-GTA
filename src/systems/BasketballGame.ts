@@ -211,7 +211,8 @@ export class BasketballGame {
     hud: HUD,
     wantedSystem: WantedSystem,
     hoopTargets: THREE.Vector3[],
-    hotspots: ShootingHotspot[]
+    hotspots: ShootingHotspot[],
+    camera: THREE.Camera
   ) {
     if (this.isHolding) {
       // 籃球持球位置：位於胸前右下方
@@ -262,8 +263,11 @@ export class BasketballGame {
           hud.updateShotMeter(this.shotChargeRatio);
           if (this.shotChargeRatio >= 1.08) {
             // 自動出手
-            this.releaseShot(player, hud['crosshairEl'] as any || player.mesh, hud, hoopTargets);
+            this.releaseShot(player, camera, hud, hoopTargets);
           }
+        } else {
+          // 電腦版玩家鬆開滑鼠左鍵，蓄力出手投籃！
+          this.releaseShot(player, camera, hud, hoopTargets);
         }
       }
     } else if (this.isBallInAir) {

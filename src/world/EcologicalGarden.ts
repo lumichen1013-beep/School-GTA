@@ -139,11 +139,11 @@ export class EcologicalGarden {
   // 1. 建造生態園地形、圍欄、拱門與發光奇花異草
   private buildGardenTerrain() {
     const cx = -70;
-    const cz = -98;
+    const cz = -90.5;
     const sizeX = 50;
-    const sizeZ = 42;
+    const sizeZ = 27;
 
-    // A. 專屬深色森林泥土與青苔地表
+    // A. 專屬深色森林泥土與青苔地表 (嚴格限定在校園北圍牆 Z = -104.0 ~ -77.0 範圍內，絕不超出圍牆)
     const soilMat = new THREE.MeshLambertMaterial({ color: 0x223127 });
     const soilGeo = new THREE.PlaneGeometry(sizeX, sizeZ);
     const soil = new THREE.Mesh(soilGeo, soilMat);
@@ -216,8 +216,8 @@ export class EcologicalGarden {
     // 南圍欄 (留出中間 7 米通道)
     addFenceSegment(cx - sizeX / 2, cx - 3.5, -77);
     addFenceSegment(cx + 3.5, cx + sizeX / 2, -77);
-    // 北圍欄
-    addFenceSegment(cx - sizeX / 2, cx + sizeX / 2, -119);
+    // 北圍欄 (緊鄰學校北側圍牆 Z = -105 內側，位於 Z = -104.0，絕不超出圍牆)
+    addFenceSegment(cx - sizeX / 2, cx + sizeX / 2, -104.0);
 
     // 西側與東側圍欄
     const addSideFence = (x: number, minZ: number, maxZ: number) => {
@@ -231,13 +231,13 @@ export class EcologicalGarden {
         max: new THREE.Vector3(x + 0.2, 1.5, maxZ)
       });
     };
-    addSideFence(cx - sizeX / 2, -119, -77);
-    addSideFence(cx + sizeX / 2, -119, -77);
+    addSideFence(cx - sizeX / 2, -104.0, -77);
+    addSideFence(cx + sizeX / 2, -104.0, -77);
 
-    // D. 園區內部蜿蜒石板小徑
+    // D. 園區內部蜿蜒石板小徑 (全數分佈在圍牆內側)
     const stoneMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
     const pathPoints = [
-      [-70, -82], [-70, -88], [-68, -94], [-70, -100], [-70, -105]
+      [-70, -82], [-70, -87], [-68, -92], [-70, -97], [-70, -101]
     ];
     pathPoints.forEach(([px, pz]) => {
       const slab = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.08, 12), stoneMat);
@@ -249,10 +249,10 @@ export class EcologicalGarden {
     // E. 奇異巨型發光神秘野菇 (Interactive Mushrooms)
     // 移至 spawnInteractiveMushrooms() 統一生成與管理
 
-    // F. 茂密巨木
+    // F. 茂密巨木 (全數位於圍牆內側，樹冠完全不越界)
     const treeMat = new THREE.MeshLambertMaterial({ color: 0x2e4053 });
     const leafMat = new THREE.MeshLambertMaterial({ color: 0x196f3d });
-    [[-88, -80], [-52, -80], [-88, -115], [-52, -115], [-70, -116]].forEach(([tx, tz]) => {
+    [[-88, -80], [-52, -80], [-88, -98], [-52, -98], [-70, -100]].forEach(([tx, tz]) => {
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 5.0, 8), treeMat);
       trunk.position.set(tx, 2.5, tz);
       trunk.castShadow = true;
@@ -437,14 +437,14 @@ export class EcologicalGarden {
     }
   }
 
-  // 1.8 生成生態園快速移動毒甲蟲 (跑得比玩家快、攻速快、攻擊力低、永不出園)
+  // 1.8 生成生態園快速移動毒甲蟲 (跑得比玩家快、攻速快、攻擊力低、永不出園且絕不超出圍牆)
   private spawnGardenBugs() {
     const bugSpawns = [
       new THREE.Vector3(-80, 0, -82),
       new THREE.Vector3(-62, 0, -80),
-      new THREE.Vector3(-86, 0, -100),
-      new THREE.Vector3(-55, 0, -105),
-      new THREE.Vector3(-75, 0, -112)
+      new THREE.Vector3(-84, 0, -95),
+      new THREE.Vector3(-56, 0, -98),
+      new THREE.Vector3(-74, 0, -101)
     ];
 
     const shellMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 }); // 暗赤色毒甲
@@ -504,15 +504,15 @@ export class EcologicalGarden {
     });
   }
 
-  // 建造園區內神秘野菇 (外觀隨機豐富絢爛、吃下效果完全隨機決定)
+  // 建造園區內神秘野菇 (外觀隨機豐富絢爛、吃下效果完全隨機決定，全數分佈在圍牆內側)
   private spawnInteractiveMushrooms() {
     const mushConfigs = [
       { pos: new THREE.Vector3(-82, 0, -85), color: 0xe74c3c, glow: 0xff7675, name: '赤紅斑點菇' },
       { pos: new THREE.Vector3(-60, 0, -84), color: 0x8e44ad, glow: 0xa29bfe, name: '幽冥紫晶蕈' },
       { pos: new THREE.Vector3(-84, 0, -98), color: 0xf1c40f, glow: 0xffeaa7, name: '璀璨黃金菇' },
-      { pos: new THREE.Vector3(-58, 0, -102), color: 0x00cec9, glow: 0x81ecec, name: '冰晶蔚藍蕈' },
-      { pos: new THREE.Vector3(-80, 0, -112), color: 0x2ecc71, glow: 0x55efc4, name: '碧玉青露菇' },
-      { pos: new THREE.Vector3(-60, 0, -114), color: 0xffffff, glow: 0xdfe6e9, name: '純白幻影蕈' },
+      { pos: new THREE.Vector3(-58, 0, -101), color: 0x00cec9, glow: 0x81ecec, name: '冰晶蔚藍蕈' },
+      { pos: new THREE.Vector3(-80, 0, -92), color: 0x2ecc71, glow: 0x55efc4, name: '碧玉青露菇' },
+      { pos: new THREE.Vector3(-62, 0, -99), color: 0xffffff, glow: 0xdfe6e9, name: '純白幻影蕈' },
       { pos: new THREE.Vector3(-75, 0, -93), color: 0xff7675, glow: 0xd63031, name: '烈焰朱砂菇' },
       { pos: new THREE.Vector3(-65, 0, -95), color: 0x6c5ce7, glow: 0xa29bfe, name: '雷霆電紋蕈' }
     ];
@@ -922,11 +922,11 @@ export class EcologicalGarden {
       }
     }
 
-    // F. 生態園快速移動毒甲蟲 AI (速度 7.8 m/s, 攻擊力 4, 攻速 0.35s, 嚴格限制在園內)
+    // F. 生態園快速移動毒甲蟲 AI (速度 4.8 m/s, 攻擊力 1, 攻速 1.0s, 嚴格限制在園內且絕不超出學校圍牆)
     const gardenMinX = -92;
     const gardenMaxX = -48;
-    const gardenMinZ = -116;
-    const gardenMaxZ = -78;
+    const gardenMinZ = -102.5;
+    const gardenMaxZ = -78.5;
     const isPlayerInGarden = (
       playerPos.x >= gardenMinX - 1.0 && playerPos.x <= gardenMaxX + 1.0 &&
       playerPos.z >= gardenMinZ - 1.0 && playerPos.z <= gardenMaxZ + 1.0
@@ -940,9 +940,9 @@ export class EcologicalGarden {
           bug.hp = bug.maxHp;
           bug.mesh.visible = true;
           bug.position.set(
-            gardenMinX + 5 + Math.random() * (gardenMaxX - gardenMinX - 10),
+            gardenMinX + 3 + Math.random() * (gardenMaxX - gardenMinX - 6),
             0,
-            gardenMinZ + 5 + Math.random() * (gardenMaxZ - gardenMinZ - 10)
+            gardenMinZ + 3 + Math.random() * (gardenMaxZ - gardenMinZ - 6)
           );
         }
         continue;
@@ -957,7 +957,7 @@ export class EcologicalGarden {
       if (bug.attackCooldown > 0) bug.attackCooldown -= delta;
 
       if (isPlayerInGarden && !player.isDead) {
-        // 追擊玩家 (速度 7.8 比玩家 5.0 快，0-GC Scratch Vector)
+        // 追擊玩家 (速度 4.8 比玩家 5.0 稍慢，0-GC Scratch Vector)
         _ecoScratchDir.subVectors(playerPos, bug.position);
         _ecoScratchDir.y = 0;
         const dist = _ecoScratchDir.length();
@@ -979,9 +979,9 @@ export class EcologicalGarden {
         if (bug.wanderTimer <= 0) {
           bug.wanderTimer = 2.0 + Math.random() * 3.0;
           bug.wanderTarget.set(
-            gardenMinX + 4 + Math.random() * (gardenMaxX - gardenMinX - 8),
+            gardenMinX + 3 + Math.random() * (gardenMaxX - gardenMinX - 6),
             0,
-            gardenMinZ + 4 + Math.random() * (gardenMaxZ - gardenMinZ - 8)
+            gardenMinZ + 3 + Math.random() * (gardenMaxZ - gardenMinZ - 6)
           );
         }
         _ecoScratchWDir.subVectors(bug.wanderTarget, bug.position);
@@ -994,7 +994,7 @@ export class EcologicalGarden {
         }
       }
 
-      // 嚴格座標鉗制：絕對不會跑出生態園區
+      // 嚴格座標鉗制：絕對不會跑出生態園區與學校圍牆
       bug.position.x = THREE.MathUtils.clamp(bug.position.x, gardenMinX, gardenMaxX);
       bug.position.z = THREE.MathUtils.clamp(bug.position.z, gardenMinZ, gardenMaxZ);
       bug.position.y = 0;
