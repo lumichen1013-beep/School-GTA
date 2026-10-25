@@ -641,7 +641,7 @@ export class NPC {
       racketGroup.add(strings);
 
       racketGroup.position.set(0, -0.28, 0.12);
-      racketGroup.rotation.x = -Math.PI / 3;
+      racketGroup.rotation.x = Math.PI / 3; // 正角度朝向前方+Z
       this.rightArm.add(racketGroup);
     }
 

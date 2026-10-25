@@ -124,7 +124,7 @@ export class Player {
     barrel1.position.y = 0.58;
     this.normalBatMesh.add(barrel1);
     this.normalBatMesh.position.set(0, -0.28, 0.12);
-    this.normalBatMesh.rotation.x = -Math.PI / 3;
+    this.normalBatMesh.rotation.x = Math.PI / 3; // 正角度朝前方+Z上仰，避免朝後方背刺
     this.normalBatMesh.visible = false;
     this.rightArm.add(this.normalBatMesh);
 
@@ -150,7 +150,7 @@ export class Player {
     crown.position.y = 1.02;
     this.specialBatMesh.add(crown);
     this.specialBatMesh.position.set(0, -0.28, 0.12);
-    this.specialBatMesh.rotation.x = -Math.PI / 3;
+    this.specialBatMesh.rotation.x = Math.PI / 3; // 正角度朝前方+Z上仰
     this.specialBatMesh.visible = false;
     this.rightArm.add(this.specialBatMesh);
 
@@ -603,9 +603,10 @@ export class Player {
       if (this.currentWeapon !== 'FIST') {
         const totalDuration = this.currentWeapon === 'SPECIAL_BAT' ? 0.48 : 0.42;
         const swingProgress = 1 - Math.max(0, this.punchTimer / totalDuration);
-        this.rightArm.rotation.x = -Math.PI / 3 - Math.sin(swingProgress * Math.PI) * 1.3;
-        this.rightArm.rotation.y = -Math.sin(swingProgress * Math.PI) * 1.5;
-        this.rightArm.position.z = 0.3;
+        const swingCurve = Math.sin(swingProgress * Math.PI);
+        this.rightArm.rotation.x = -swingCurve * 1.1;
+        this.rightArm.rotation.y = -swingCurve * 1.3;
+        this.rightArm.position.z = swingCurve * 0.25;
       } else {
         this.rightArm.rotation.x = -Math.PI / 2 + Math.sin(this.punchTimer * 15) * 0.5;
         this.rightArm.rotation.y = 0;
