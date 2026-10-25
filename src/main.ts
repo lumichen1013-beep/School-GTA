@@ -109,8 +109,8 @@ class SchoolGTASandbox {
     this.world.colliders.push(...this.ecologicalGarden.colliders);
     await new Promise(r => requestAnimationFrame(r));
 
-    // 階段 3 (65%)：生成主角模型、校園單車與水花特效系統
-    this.updateProgress(65, '正在生成主角模型、校園單車與水花特效系統...');
+    // 階段 3 (65%)：生成主角模型、火柴人自行車與水花特效系統
+    this.updateProgress(65, '正在生成主角模型、火柴人自行車與水花特效系統...');
     this.player = new Player(this.engine.scene);
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
 
@@ -545,7 +545,7 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 11. 單車上下車互動 (支援強行搶奪單車糾察隊同學自行車)
+      // 11. 火柴人自行車上下車互動 (支援強行搶奪火柴人自行車騎士之自行車)
       if (this.currentRidingBike) {
         this.currentRidingBike.dismount(this.player, this.engine.scene);
         this.player.isRidingVehicle = false;
@@ -564,8 +564,8 @@ class SchoolGTASandbox {
             this.currentRidingBike = stolenBike;
             this.player.isRidingVehicle = true;
             this.cameraCtrl.setMode(true);
-            this.wantedSystem.reportCrime(2, '強行搶奪同學自行車');
-            this.wantedSystem.showBanner('🚲 成功搶奪同學的自行車！風馳電掣！按 [E] 可下車', 3000);
+            this.wantedSystem.reportCrime(2, '強行搶奪火柴人自行車');
+            this.wantedSystem.showBanner('🚲 成功搶奪火柴人自行車！風馳電掣！按 [E] 可下車', 3000);
             break;
           }
         }
@@ -681,7 +681,7 @@ class SchoolGTASandbox {
           this.player.setWeapon('SPECIAL_BAT');
           this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
         } else {
-          this.wantedSystem.showBanner(`🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、單車糾察(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`, 2500);
+          this.wantedSystem.showBanner(`🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`, 2500);
         }
       } else if (e.code === 'KeyJ') {
         this.hud.toggleQuestTracker();
@@ -763,11 +763,11 @@ class SchoolGTASandbox {
     if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !this.player.hasSpecialBat) {
       this.player.hasSpecialBat = true;
       this.player.setWeapon('SPECIAL_BAT');
-      this.wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名單車糾察，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 120)', 7000);
+      this.wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 120)', 7000);
       soundManager.playSpecialBatHit();
     }
 
-    const sourceDesc = source === 'BIKE' ? '遭單車強力撞飛' : source === 'FALL' ? '高處摔落' : '倒地';
+    const sourceDesc = source === 'BIKE' ? '遭火柴人自行車強力撞飛' : source === 'FALL' ? '高處摔落' : '倒地';
     this.wantedSystem.reportCrime(1, `${npc.getRoleTitle()}${sourceDesc}`);
     this.wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！(10秒後復活)`, 3500);
   }
@@ -1274,13 +1274,13 @@ class SchoolGTASandbox {
       playerRotY = this.currentRidingBike.rotationY;
       this.player.position.copy(targetPosition);
 
-      // 單車衝撞 NPC
+      // 火柴人自行車衝撞 NPC
       if (Math.abs(this.currentRidingBike.speed) > 4.0) {
         for (const npc of this.npcs) {
           if (npc.position.distanceTo(targetPosition) < 2.5 && !npc.isKnockedDown && !npc.isKnockedFlying && npc.hitCooldown <= 0) {
             const speed = Math.abs(this.currentRidingBike.speed);
             const dmg = Math.round(speed * 4.5 + 20);
-            this.wantedSystem.reportCrime(2, '單車高速衝撞師生');
+            this.wantedSystem.reportCrime(2, '火柴人自行車高速衝撞師生');
 
             _scratchBikeForward.set(Math.sin(playerRotY), 0, Math.cos(playerRotY)).normalize();
             const relX = npc.position.x - targetPosition.x;
@@ -1294,7 +1294,7 @@ class SchoolGTASandbox {
             if (wasKnocked) {
               this.handleNpcDefeated(npc, 'BIKE');
             } else {
-              this.wantedSystem.showBanner(`${npc.getRoleTitle()} 被單車撞飛！`, 2000);
+              this.wantedSystem.showBanner(`${npc.getRoleTitle()} 被火柴人自行車撞飛！`, 2000);
             }
             break;
           }
@@ -1406,7 +1406,7 @@ class SchoolGTASandbox {
     } else if (this.basketballGame.isHolding) {
       // 籃球內部已處理 showPrompt
     } else if (this.currentRidingBike) {
-      this.hud.showPrompt('E', '下車 (離開載具)');
+      this.hud.showPrompt('E', '下車 (停放火柴人自行車)');
     } else if (targetPosition.distanceTo(this.world.commissaryPos) < 3.8) {
       this.hud.showPrompt('E', '天天合作社 (買熱食補血)');
     } else if (targetPosition.distanceTo(this.world.broadcastStationPos) < 2.5) {
@@ -1443,7 +1443,7 @@ class SchoolGTASandbox {
       }
 
       if (nearBikePatrol) {
-        this.hud.showPrompt('E', '🚲 搶奪同學自行車！');
+        this.hud.showPrompt('E', '🚲 搶奪火柴人自行車！');
       } else {
         let nearMushroom = false;
         for (const m of this.ecologicalGarden.mushrooms) {
@@ -1465,7 +1465,7 @@ class SchoolGTASandbox {
             }
           }
           if (nearBike && !this.player.isDead) {
-            this.hud.showPrompt('E', '騎乘腳踏車');
+            this.hud.showPrompt('E', '騎乘火柴人自行車');
           } else {
             this.hud.hidePrompt();
           }
@@ -1564,7 +1564,7 @@ class SchoolGTASandbox {
           this.currentRidingBike = null;
           this.player.isRidingVehicle = false;
           this.cameraCtrl.setMode(false);
-          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下單車！`, 2500);
+          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下火柴人自行車！`, 2500);
         } else {
           this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
         }

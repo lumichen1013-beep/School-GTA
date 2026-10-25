@@ -960,7 +960,7 @@ export class HUD {
     } else if (pos.x < 5 && pos.x > -25 && pos.z < -40) {
       zone = '🏪 天天合作社 (熱食補血部)';
     } else if (pos.x < -35 && pos.z < -40) {
-      zone = '腳踏車專用車棚';
+      zone = '火柴人自行車棚';
     } else if (pos.z > 80) {
       zone = '校門口 & 警衛守衛室';
     }

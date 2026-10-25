@@ -161,10 +161,10 @@ export class NPC {
       this.attackPower = 30;
       this.attackRange = 2.0;
     } else if (role === 'BIKE_PATROL') {
-      // 單車同學：速度降為原本 1/4 (巡邏 1.88、追捕 3.75)
+      // 火柴人自行車騎士：巡邏與追捕速度統一為 15.0 (與玩家騎乘火柴人自行車極速完全一致)
       this.maxHp = 225;
-      this.speed = 1.88;
-      this.chaseSpeed = 3.75;
+      this.speed = 15.0;
+      this.chaseSpeed = 15.0;
       this.attackPower = 26;
       this.attackRange = 2.4;
     } else if (role === 'INSPECTOR') {
@@ -732,7 +732,7 @@ export class NPC {
       case 'TEACHER': return '巡堂老師';
       case 'INSTRUCTOR': return '主任教官';
       case 'DOG': return '校犬柴柴';
-      case 'BIKE_PATROL': return '單車糾察隊';
+      case 'BIKE_PATROL': return '火柴人自行車騎士';
       case 'INSPECTOR': return '風紀糾察';
       case 'STUDENT': default: return '同學';
     }
@@ -930,13 +930,13 @@ export class NPC {
     this.buildBikePatrolModel();
     this.bikeModelParts = this.mesh.children.filter(c => c !== this.hpBarGroup && c !== this.koBadgeSprite);
 
-    // 恢復自行車巡邏數值
+    // 恢復火柴人自行車巡邏數值 (速度統一為 15.0)
     this.maxHp = 225;
     this.hp = 225;
-    this.speed = 1.88;
-    this.chaseSpeed = 3.75;
+    this.speed = 15.0;
+    this.chaseSpeed = 15.0;
     this.attackPower = 26;
-    this.dynamicSpeed = 1.88;
+    this.dynamicSpeed = 15.0;
     this.attackRange = 2.4;
 
     // 旋轉與姿勢回正
@@ -1296,8 +1296,12 @@ export class NPC {
     }
   }
 
-  // 計算追捕移動速度 (包含校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
+  // 計算追捕移動速度 (包含火柴人自行車騎士 15.0、校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
   private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number): number {
+    if (this.role === 'BIKE_PATROL') {
+      return 15.0;
+    }
+
     if (this.role === 'DOG') {
       if (isPlayerRidingBike) {
         this.isBurstSprinting = true;
@@ -1317,7 +1321,6 @@ export class NPC {
       return this.chaseSpeed;
     }
 
-    if (this.role === 'BIKE_PATROL') return 1.88;
     if (this.role === 'BANDIT') return 8.5;
     return this.speed;
   }
@@ -1477,7 +1480,14 @@ export class NPC {
       targetPos = this.lostSightTimer > 0 ? this.lastKnownPos : playerPos;
 
       // 追捕動態節奏計時 (忽快忽慢：爆發衝刺 vs 喘氣慢跑)
-      if (isPlayerRidingBike && this.role !== 'BIKE_PATROL') {
+      if (this.role === 'BIKE_PATROL') {
+        this.isBurstSprinting = true;
+        this.chasePacingTimer = 2.0;
+        if (Math.random() < 0.05 && this.whistleCooldown <= 0) {
+          soundManager.playBicycleBell();
+          this.whistleCooldown = 4.0;
+        }
+      } else if (isPlayerRidingBike) {
         this.isBurstSprinting = true;
         this.chasePacingTimer = 2.0;
       } else {
@@ -1488,7 +1498,6 @@ export class NPC {
             this.chasePacingTimer = this.role === 'DOG' ? (2.0 + Math.random() * 1.5) : (0.5 + Math.random() * 1.0);
             if (Math.random() < 0.25 && this.whistleCooldown <= 0) {
               if (this.role === 'DOG') soundManager.playDogBark();
-              else if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell();
               else soundManager.playWhistle();
               this.whistleCooldown = 4.0;
             }
@@ -1503,7 +1512,7 @@ export class NPC {
       const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq);
 
       // 平滑速度過渡
-      const accelRate = this.role === 'DOG' ? 6.0 : 4.0;
+      const accelRate = this.role === 'DOG' ? 6.0 : (this.role === 'BIKE_PATROL' ? 8.0 : 4.0);
       this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
     } else {
@@ -1512,7 +1521,8 @@ export class NPC {
       currentSpeed = this.speed;
 
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
-      if (this.position.distanceToSquared(targetPos) < 3.24) { // 1.8m
+      const wpDistSq = this.role === 'BIKE_PATROL' ? 12.25 : 3.24; // 火柴人自行車 15m/s 適度擴大檢查半徑 (3.5m) 避免高速繞圈
+      if (this.position.distanceToSquared(targetPos) < wpDistSq) {
         this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
       }
     }
@@ -1645,7 +1655,7 @@ export class NPC {
       // 轉向與俯仰姿態
       const targetRotation = Math.atan2(_npcMoveDir.x, _npcMoveDir.z);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
-      const turnRate = this.role === 'DOG' ? 14.0 : 10.0;
+      const turnRate = this.role === 'DOG' ? 14.0 : (this.role === 'BIKE_PATROL' ? 12.0 : 10.0);
       this.rotationY += diff * Math.min(delta * turnRate, 1.0);
       this.mesh.rotation.y = this.rotationY;
 
