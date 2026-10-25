@@ -1676,10 +1676,10 @@ export class CampusWorld {
     this.buildRecyclingStation(-28, 0, -55);
     this.buildCentralPlanter(0, 0, 15);
 
-    // 操場與跑道範圍內絕對不可有樹木，樹木配置於校園外圍圍牆邊與綠化帶
+    // 操場與跑道範圍內絕對不可有樹木，樹木配置於校園外圍圍牆邊與綠化帶（[75, 20] 位於演藝廳北牆與舞台範圍內已移除）
     const treeCoords = [
       [-105, 30], [-105, 65], [-105, -5],
-      [10, -25], [-15, 85], [75, 20], [75, 70],
+      [10, -25], [-15, 85], [75, 70],
       [-85, -45], [-10, 35]
     ];
 
@@ -1952,11 +1952,8 @@ export class CampusWorld {
     const westL2 = (maxZ - 42); // 12m
     this.buildWall(minX, wH / 2, 42 + westL2 / 2, 0.6, wH, westL2, wallMat);
 
-    // 南牆：留出南向寬闊雙開副門開口 (Z: 54, X: 71 ~ 77，寬度 6.0m)
-    const southW1 = (71 - minX);
-    this.buildWall(minX + southW1 / 2, wH / 2, maxZ, southW1, wH, 0.6, wallMat);
-    const southW2 = (maxX - 77);
-    this.buildWall(77 + southW2 / 2, wH / 2, maxZ, southW2, wH, 0.6, wallMat);
+    // 南牆 (Solid South Wall：單一連續封閉實體隔音大牆，徹底封閉南側，營造電影院專屬暗房沉浸感)
+    this.buildWall(baseX, wH / 2, maxZ, bW, wH, 0.6, wallMat);
 
     // =========================================================================
     // 西側正門宏偉門面系統 (Grand West Entrance: Door 3.2m < Canopy 3.4m < Sign 5.6m)
@@ -2096,123 +2093,8 @@ export class CampusWorld {
     this.scene.add(redCarpet);
 
     // =========================================================================
-    // 南側副門門面系統 (South Secondary Entrance: 補齊門楣外牆、門框與雨遮)
+    // 3. 專屬頂級電影劇院 (1~3F Exclusive Cinema Theater)
     // =========================================================================
-    // 門楣上方實體外牆與碰撞體 (Y: 3.2m ~ 12.0m，高 8.8m，寬 6.0m)
-    this.buildWall(74, 7.6, maxZ, 6.0, 8.8, 0.6, wallMat);
-
-    // 南側金屬門框與門楣橫樑 (Y: 3.05 ~ 3.2m)
-    const southTransomBeam = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.16, 0.35), doorFrameMat);
-    southTransomBeam.position.set(74, 3.12, maxZ);
-    southTransomBeam.castShadow = true;
-    this.scene.add(southTransomBeam);
-
-    const southJambL = new THREE.Mesh(new THREE.BoxGeometry(0.2, doorHeight, 0.3), doorFrameMat);
-    southJambL.position.set(71.1, doorHeight / 2, maxZ);
-    this.scene.add(southJambL);
-
-    const southJambR = new THREE.Mesh(new THREE.BoxGeometry(0.2, doorHeight, 0.3), doorFrameMat);
-    southJambR.position.set(76.9, doorHeight / 2, maxZ);
-    this.scene.add(southJambR);
-
-    // 中間金屬立挺 (X: 72.5 & X: 75.5，中央 3.0m 通道)
-    const southMullionL = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorHeight, 0.24), doorFrameMat);
-    southMullionL.position.set(72.5, doorHeight / 2, maxZ);
-    this.scene.add(southMullionL);
-
-    const southMullionR = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorHeight, 0.24), doorFrameMat);
-    southMullionR.position.set(75.5, doorHeight / 2, maxZ);
-    this.scene.add(southMullionR);
-
-    // 兩側固定採光玻璃側窗
-    const southSideGlassL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.9, 0.06), doorGlassMat);
-    southSideGlassL.position.set(71.8, 1.55, maxZ);
-    this.scene.add(southSideGlassL);
-    const southSideSillL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.24), doorFrameMat);
-    southSideSillL.position.set(71.8, 0.06, maxZ);
-    this.scene.add(southSideSillL);
-    this.addCollider(71.0, 72.5, maxZ - 0.2, maxZ + 0.2, 0, doorHeight);
-
-    const southSideGlassR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.9, 0.06), doorGlassMat);
-    southSideGlassR.position.set(76.2, 1.55, maxZ);
-    this.scene.add(southSideGlassR);
-    const southSideSillR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.24), doorFrameMat);
-    southSideSillR.position.set(76.2, 0.06, maxZ);
-    this.scene.add(southSideSillR);
-    this.addCollider(75.5, 77.0, maxZ - 0.2, maxZ + 0.2, 0, doorHeight);
-
-    // 南側中央雙開玻璃大門 (向室內 -Z 敞開，留出暢通中央走道 X: 72.7 ~ 75.3)
-    const southDoorLeafW = 1.35;
-    const southDoorLGroup = new THREE.Group();
-    southDoorLGroup.position.set(72.6, 0, maxZ);
-    southDoorLGroup.rotation.y = 1.15; // 迎賓向室內 -Z 敞開
-
-    const sFrameLOuter = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
-    sFrameLOuter.position.set(southDoorLeafW - 0.05, doorLeafH / 2, 0);
-    southDoorLGroup.add(sFrameLOuter);
-    const sFrameLHinge = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
-    sFrameLHinge.position.set(0.05, doorLeafH / 2, 0);
-    southDoorLGroup.add(sFrameLHinge);
-    const sTopL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.12, 0.08), doorFrameMat);
-    sTopL.position.set(southDoorLeafW / 2, doorLeafH - 0.06, 0);
-    southDoorLGroup.add(sTopL);
-    const sBottomL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.18, 0.08), doorFrameMat);
-    sBottomL.position.set(southDoorLeafW / 2, 0.09, 0);
-    southDoorLGroup.add(sBottomL);
-
-    const sGlassL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW - 0.2, doorLeafH - 0.3, 0.04), doorGlassMat);
-    sGlassL.position.set(southDoorLeafW / 2, (doorLeafH + 0.06) / 2, 0);
-    southDoorLGroup.add(sGlassL);
-    const sHandleLOut = new THREE.Mesh(handleGeo, doorGoldMat);
-    sHandleLOut.position.set(southDoorLeafW - 0.15, 1.35, 0.06);
-    southDoorLGroup.add(sHandleLOut);
-    const sHandleLIn = new THREE.Mesh(handleGeo, doorGoldMat);
-    sHandleLIn.position.set(southDoorLeafW - 0.15, 1.35, -0.06);
-    southDoorLGroup.add(sHandleLIn);
-    this.scene.add(southDoorLGroup);
-
-    const southDoorRGroup = new THREE.Group();
-    southDoorRGroup.position.set(75.4, 0, maxZ);
-    southDoorRGroup.rotation.y = -1.15; // 迎賓向室內 -Z 敞開
-
-    const sFrameROuter = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
-    sFrameROuter.position.set(-southDoorLeafW + 0.05, doorLeafH / 2, 0);
-    southDoorRGroup.add(sFrameROuter);
-    const sFrameRHinge = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
-    sFrameRHinge.position.set(-0.05, doorLeafH / 2, 0);
-    southDoorRGroup.add(sFrameRHinge);
-    const sTopR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.12, 0.08), doorFrameMat);
-    sTopR.position.set(-southDoorLeafW / 2, doorLeafH - 0.06, 0);
-    southDoorRGroup.add(sTopR);
-    const sBottomR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.18, 0.08), doorFrameMat);
-    sBottomR.position.set(-southDoorLeafW / 2, 0.09, 0);
-    southDoorRGroup.add(sBottomR);
-
-    const sGlassR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW - 0.2, doorLeafH - 0.3, 0.04), doorGlassMat);
-    sGlassR.position.set(-southDoorLeafW / 2, (doorLeafH + 0.06) / 2, 0);
-    southDoorRGroup.add(sGlassR);
-    const sHandleROut = new THREE.Mesh(handleGeo, doorGoldMat);
-    sHandleROut.position.set(-southDoorLeafW + 0.15, 1.35, 0.06);
-    southDoorRGroup.add(sHandleROut);
-    const sHandleRIn = new THREE.Mesh(handleGeo, doorGoldMat);
-    sHandleRIn.position.set(-southDoorLeafW + 0.15, 1.35, -0.06);
-    southDoorRGroup.add(sHandleRIn);
-    this.scene.add(southDoorRGroup);
-
-    // 南側副門迎賓雨遮 (Canopy at Y = 3.4m)
-    const southCanopy = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 2.0), canopyMat);
-    southCanopy.position.set(74, 3.4, maxZ + 0.9);
-    southCanopy.castShadow = true;
-    this.scene.add(southCanopy);
-
-    [-2.8, 2.8].forEach(ox => {
-      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.4), rodMat);
-      bracket.position.set(74 + ox, 3.24, maxZ + 0.6);
-      bracket.rotation.x = 0.3;
-      this.scene.add(bracket);
-    });
-
-    // 3. 挑高演藝廳 (1~3F Grand Auditorium)
     // A. 舞台大平台 (位於東北側 X: 70 ~ 85, Z: 23 ~ 29, 高度 Y = 1.0)
     const stageW = 15;
     const stageL = 6;
@@ -2230,21 +2112,63 @@ export class CampusWorld {
     this.scene.add(step);
     this.addFloorSlab(baseX + 3.5 - stageW / 2, baseX + 3.5 + stageW / 2, minZ + stageL + 1.2, minZ + stageL + 2.0, 0.5);
 
-    // B. 舞台大紅布幕 (Red Stage Velvet Curtains)
-    const curtainGeo = new THREE.BoxGeometry(2.0, 8.5, 0.3);
+    // B. 電影巨幕 (Cinema Giant Projection Screen: 16:9 豪華 IMAX 規格大銀幕)
+    const screenCenter = new THREE.Vector3(baseX + 3.5, 5.2, minZ + 1.8);
+    const screenFrameMat = new THREE.MeshStandardMaterial({ color: 0x0f141c, roughness: 0.9 });
+    const screenWhiteMat = new THREE.MeshBasicMaterial({ color: 0xf8f9fa });
+
+    // 1. 深黑金屬吸光巨幕外框 (寬 11.5m, 高 6.5m, 厚 0.18m)
+    const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(11.5, 6.5, 0.18), screenFrameMat);
+    screenFrame.position.copy(screenCenter);
+    screenFrame.castShadow = true;
+    this.scene.add(screenFrame);
+
+    // 2. 純白微珠光漫反射銀幕面 (寬 10.9m, 高 6.13m, 貼合於外框前表面)
+    const screenFace = new THREE.Mesh(new THREE.PlaneGeometry(10.9, 6.13), screenWhiteMat);
+    screenFace.position.set(screenCenter.x, screenCenter.y, screenCenter.z + 0.092);
+    this.scene.add(screenFace);
+
+    // 3. 劇院紅絲絨垂簾系統 (側簾、橫楣簾與下簾環繞銀幕)
+    const curtainGeo = new THREE.BoxGeometry(2.2, 8.5, 0.35);
     const curtainL = new THREE.Mesh(curtainGeo, redVelvetMat);
-    curtainL.position.set(baseX + 3.5 - stageW / 2 + 1.0, stageH + 4.25, minZ + 1.5);
+    curtainL.position.set(baseX + 3.5 - 5.75 - 0.7, stageH + 4.25, minZ + 1.85);
     this.scene.add(curtainL);
     const curtainR = new THREE.Mesh(curtainGeo, redVelvetMat);
-    curtainR.position.set(baseX + 3.5 + stageW / 2 - 1.0, stageH + 4.25, minZ + 1.5);
+    curtainR.position.set(baseX + 3.5 + 5.75 + 0.7, stageH + 4.25, minZ + 1.85);
     this.scene.add(curtainR);
-    const valance = new THREE.Mesh(new THREE.BoxGeometry(stageW, 1.4, 0.35), redVelvetMat);
-    valance.position.set(baseX + 3.5, stageH + 8.2, minZ + 1.5);
+    const valance = new THREE.Mesh(new THREE.BoxGeometry(stageW, 1.4, 0.4), redVelvetMat);
+    valance.position.set(baseX + 3.5, stageH + 8.2, minZ + 1.85);
     this.scene.add(valance);
+    const valanceBottom = new THREE.Mesh(new THREE.BoxGeometry(11.8, 0.8, 0.25), redVelvetMat);
+    valanceBottom.position.set(baseX + 3.5, stageH + 0.4, minZ + 1.85);
+    this.scene.add(valanceBottom);
 
-    // C. 舞台三腳大鋼琴 (Grand Piano)
+    // 4. 舞台銀幕排燈系統 (頂部下照式筒燈與底部微型腳燈)
+    const lightFixtureMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.3 });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff275 });
+    for (let lx = -4.8; lx <= 4.8; lx += 1.6) {
+      // 頂部吸光排燈燈筒與柔光球
+      const lampHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.14, 12), lightFixtureMat);
+      lampHousing.position.set(screenCenter.x + lx, screenCenter.y + 3.25, screenCenter.z + 0.15);
+      this.scene.add(lampHousing);
+
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), bulbMat);
+      bulb.position.set(screenCenter.x + lx, screenCenter.y + 3.17, screenCenter.z + 0.15);
+      this.scene.add(bulb);
+
+      // 舞台前方微型條燈
+      const footFixture = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.12), lightFixtureMat);
+      footFixture.position.set(screenCenter.x + lx, stageH + 0.04, minZ + 2.0);
+      this.scene.add(footFixture);
+
+      const footBulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), bulbMat);
+      footBulb.position.set(screenCenter.x + lx, stageH + 0.08, minZ + 2.0);
+      this.scene.add(footBulb);
+    }
+
+    // C. 舞台三腳大鋼琴 (移至左側翼側，不遮擋中央 16:9 電影巨幕)
     const pianoGroup = new THREE.Group();
-    pianoGroup.position.set(baseX + 1.0, stageH, minZ + 3.8);
+    pianoGroup.position.set(baseX - 2.2, stageH, minZ + 3.8);
     const pianoMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
     const pianoBody = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.6, 2.2), pianoMat);
     pianoBody.position.y = 0.8;
@@ -2259,37 +2183,138 @@ export class CampusWorld {
     });
     this.scene.add(pianoGroup);
 
-    // D. 演講司儀講台 (Speech Podium)
+    // D. 演講司儀講台 (移至右側翼側，維持舞台功能與視野開闊)
     const podium = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
-    podium.position.set(baseX + 7.5, stageH + 0.55, minZ + 3.8);
+    podium.position.set(baseX + 9.5, stageH + 0.55, minZ + 3.8);
     this.scene.add(podium);
 
-    // E. 觀眾席看台座椅 (東側看台 X: 72 ~ 84, Z: 33 ~ 51，西側走廊徹底暢通無阻)
-    const seatColor = 0xc0392b;
-    const seatMat = new THREE.MeshLambertMaterial({ color: seatColor });
-    const seatW = 0.55;
+    // E. 高級電影院看台座椅 (Luxury Cinema Seats with Armrests, Cup Holders, Headrests & Aisle Guide Lights)
+    const cinemaVelvetMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 }); // 酒紅色絲絨厚沙發
+    const cinemaArmMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, roughness: 0.5, metalness: 0.6 }); // 深灰金屬/黑塑料扶手
+    const cupHolderMat = new THREE.MeshStandardMaterial({ color: 0x0f141c, roughness: 0.8, metalness: 0.3 }); // 杯架
+    const cupDrinkMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); // 電影院飲料紙杯
+    const stepLightMat = new THREE.MeshBasicMaterial({ color: 0x00cec9, transparent: true, opacity: 0.9 }); // 階梯冰藍導引燈
+
+    const seatW = 0.58;
+    const seatD = 0.50;
+
     for (let row = 0; row < 4; row++) {
       const rowZ = 34 + row * 4.2;
       const rowY = row * 0.35;
+      const floorY = rowY + 0.35;
       const riserW = 12.0;
+
       // 階梯地坪 (東側半區)
       const riser = new THREE.Mesh(new THREE.BoxGeometry(riserW, 0.35, 3.8), new THREE.MeshLambertMaterial({ color: 0x34495e }));
       riser.position.set(baseX + 4.5, rowY + 0.175, rowZ);
       this.scene.add(riser);
-      this.addFloorSlab(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, rowY + 0.35);
+      this.addFloorSlab(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, floorY);
 
-      // 看台座椅 (留出中間走道)
+      // 階梯看台邊緣微型柔和地腳導引地燈 (Aisle Guide Lights)
+      // 中央走道踏階導引燈條
+      const aisleStepLight = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.025, 0.05), stepLightMat);
+      aisleStepLight.position.set(baseX + 4.7, floorY + 0.01, rowZ - 1.88);
+      this.scene.add(aisleStepLight);
+      // 西側走道踏階導引燈條
+      const westAisleLight = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.025, 0.05), stepLightMat);
+      westAisleLight.position.set(baseX - 1.05, floorY + 0.01, rowZ - 1.88);
+      this.scene.add(westAisleLight);
+
+      // 階梯立面圓形導引地燈
+      [baseX - 1.4, baseX + 3.7, baseX + 5.7].forEach(px => {
+        const puckHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 16), cinemaArmMat);
+        puckHousing.rotation.x = Math.PI / 2;
+        puckHousing.position.set(px, rowY + 0.175, rowZ - 1.91);
+        this.scene.add(puckHousing);
+
+        const puckLens = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.035, 16), stepLightMat);
+        puckLens.rotation.x = Math.PI / 2;
+        puckLens.position.set(px, rowY + 0.175, rowZ - 1.915);
+        this.scene.add(puckLens);
+      });
+
+      // 建立高級電影院座椅構造函數
+      const buildCinemaSeat = (chairX: number, seatIndex: number) => {
+        const chairGroup = new THREE.Group();
+        chairGroup.position.set(chairX, floorY, rowZ);
+
+        // 1. 金屬支撐基座與腳座
+        const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.12), cinemaArmMat);
+        pedestal.position.set(0, 0.11, 0);
+        chairGroup.add(pedestal);
+        const basePlate = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.24), cinemaArmMat);
+        basePlate.position.set(0, 0.015, 0);
+        chairGroup.add(basePlate);
+
+        // 2. 影院厚沙發坐墊 (紅絲絨軟墊，厚度 0.16m，寬度 seatW)
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.16, seatD), cinemaVelvetMat);
+        cushion.position.set(0, 0.30, -0.02);
+        cushion.castShadow = true;
+        cushion.receiveShadow = true;
+        chairGroup.add(cushion);
+
+        // 3. 人體工學高椅背與頭枕 (高約 0.72m，頂部微突出頭枕，微幅後傾 0.1 rad)
+        const backrestGroup = new THREE.Group();
+        backrestGroup.position.set(0, 0.32, 0.16);
+        backrestGroup.rotation.x = 0.1; // 微幅後傾 0.1 rad
+
+        // 主椅背 (高 0.54m, 厚 0.14m)
+        const backMesh = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.54, 0.14), cinemaVelvetMat);
+        backMesh.position.set(0, 0.27, 0);
+        backMesh.castShadow = true;
+        backrestGroup.add(backMesh);
+        // 後背防踢外殼
+        const backShell = new THREE.Mesh(new THREE.BoxGeometry(seatW + 0.01, 0.55, 0.03), cinemaArmMat);
+        backShell.position.set(0, 0.27, 0.07);
+        backrestGroup.add(backShell);
+
+        // 頂部突出頭枕 (高 0.18m, 厚 0.18m，總高約 0.72m)
+        const headrest = new THREE.Mesh(new THREE.BoxGeometry(seatW - 0.04, 0.18, 0.18), cinemaVelvetMat);
+        headrest.position.set(0, 0.63, -0.02);
+        headrest.castShadow = true;
+        backrestGroup.add(headrest);
+        const headrestBack = new THREE.Mesh(new THREE.BoxGeometry(seatW - 0.02, 0.18, 0.03), cinemaArmMat);
+        headrestBack.position.set(0, 0.63, 0.07);
+        backrestGroup.add(headrestBack);
+
+        chairGroup.add(backrestGroup);
+
+        // 4. 兩側杯架扶手 (Armrests with Cup Holders)
+        [-seatW / 2 - 0.035, seatW / 2 + 0.035].forEach((ax, armIdx) => {
+          // 扶手立柱
+          const armPost = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.26, 0.08), cinemaArmMat);
+          armPost.position.set(ax, 0.33, 0);
+          chairGroup.add(armPost);
+          // 扶手軟面
+          const armPad = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.36), cinemaArmMat);
+          armPad.position.set(ax, 0.46, 0.02);
+          chairGroup.add(armPad);
+          // 扶手前端小圓杯架
+          const cupHolder = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.06, 16), cupHolderMat);
+          cupHolder.position.set(ax, 0.46, -0.19);
+          chairGroup.add(cupHolder);
+
+          // 部分扶手放有電影院紙杯與吸管
+          if ((seatIndex + armIdx + row) % 3 === 0) {
+            const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.022, 0.10, 12), cupDrinkMat);
+            cup.position.set(ax, 0.52, -0.19);
+            chairGroup.add(cup);
+            const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.07, 8), bulbMat);
+            straw.position.set(ax + 0.01, 0.58, -0.19);
+            straw.rotation.z = 0.2;
+            chairGroup.add(straw);
+          }
+        });
+
+        this.scene.add(chairGroup);
+      };
+
+      // 看台座椅 (留出中間走道，每排兩側各有 4 張高級電影院沙發座椅)
       for (let s = 0; s < 4; s++) {
-        const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
-        chair.position.set(baseX + 0.2 + s * 1.0, rowY + 0.35 + 0.32, rowZ);
-        chair.castShadow = true;
-        this.scene.add(chair);
+        buildCinemaSeat(baseX + 0.2 + s * 1.0, s);
       }
       for (let s = 0; s < 4; s++) {
-        const chair = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.65, 0.5), seatMat);
-        chair.position.set(baseX + 6.2 + s * 1.0, rowY + 0.35 + 0.32, rowZ);
-        chair.castShadow = true;
-        this.scene.add(chair);
+        buildCinemaSeat(baseX + 6.2 + s * 1.0, s + 4);
       }
     }
 
@@ -2764,7 +2789,7 @@ export class CampusWorld {
     roof.position.set(baseX, 16.5, baseZ);
     this.scene.add(roof);
 
-    // G. 招牌橫匾 (正面西門上方與南門上方)
+    // G. 招牌橫匾 (正面西門上方與南外牆上方)
     const signCanvas = document.createElement('canvas');
     signCanvas.width = 512;
     signCanvas.height = 128;
@@ -2778,7 +2803,7 @@ export class CampusWorld {
     sctx.font = 'bold 34px "Noto Sans TC", sans-serif';
     sctx.textAlign = 'center';
     sctx.textBaseline = 'middle';
-    sctx.fillText('🎭 演藝大樓 (1-3F演藝廳 / 4F羽球館) 🎭', 256, 64);
+    sctx.fillText('🎬 演藝大樓 (1-3F電影劇院 / 4F羽球館) 🎬', 256, 64);
     const signTex = new THREE.CanvasTexture(signCanvas);
 
     // 西側正門招牌 (中心 Y = 5.6m, 高度 2.0m，其底部 4.6m > 雨遮 3.4m > 大門 3.2m，層次分明)
@@ -2792,7 +2817,7 @@ export class CampusWorld {
     signWest.position.set(minX - 0.38, 5.6, 38);
     this.scene.add(signWest);
 
-    // 南側副門招牌 (中心 Y = 5.6m, 高度 2.0m，端正固定於門楣上方)
+    // 南側實外牆招牌 (中心 Y = 5.6m, 高度 2.0m，端正固定於南向封閉實牆外側)
     const signSouthBack = new THREE.Mesh(new THREE.BoxGeometry(9.2, 2.1, 0.08), signBackMat);
     signSouthBack.position.set(baseX, 5.6, maxZ + 0.33);
     this.scene.add(signSouthBack);

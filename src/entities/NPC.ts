@@ -19,14 +19,40 @@ const _npcToPlayer = new THREE.Vector3();
 const _npcForward = new THREE.Vector3();
 const _npcEyePos = new THREE.Vector3();
 const _npcTargetEye = new THREE.Vector3();
+const _npcLookTarget = new THREE.Vector3();
 
-// 羽球靜態共享幾何體與材質 (全域快取複用，避免頻繁發球時洩漏 GPU 資源)
-const _tennisBallGeo = new THREE.SphereGeometry(0.15, 12, 12);
-const _tennisBallMat = new THREE.MeshLambertMaterial({ color: 0xccff00 });
-const _tennisSeamGeo = new THREE.TorusGeometry(0.151, 0.012, 6, 16);
-const _tennisSeamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-const _tennisRingGeo = new THREE.RingGeometry(0.2, 0.45, 16);
-const _tennisRingMat = new THREE.MeshBasicMaterial({ color: 0xccff00, transparent: true, opacity: 0.6 });
+// 3D 羽球靜態共享幾何體與材質 (0-GC 全域快取複用，杜絕頻繁發球引發 GC 微卡頓或 GPU 洩漏)
+// 1. 軟木塞球頭 (Cork Head)：半徑約 0.075m 橢圓小球，位於飛行方向最前端 (+Z)
+const _shuttleCorkGeo = new THREE.SphereGeometry(0.075, 16, 12);
+_shuttleCorkGeo.scale(1.0, 1.0, 1.15);
+_shuttleCorkGeo.translate(0, 0, 0.02);
+const _shuttleCorkMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa });
+
+// 2. 軟木塞與羽毛交界處飾條 (經典深綠色膠帶貼條)
+const _shuttleBandGeo = new THREE.CylinderGeometry(0.076, 0.076, 0.02, 16, 1, true);
+_shuttleBandGeo.rotateX(-Math.PI / 2);
+_shuttleBandGeo.translate(0, 0, 0.005);
+const _shuttleBandMat = new THREE.MeshLambertMaterial({ color: 0x1b4332, side: THREE.DoubleSide });
+
+// 3. 羽毛裙 (Feather Skirt)：16 根向後擴散外張漏斗錐台羽毛 (前端半徑 0.075, 後端張開 0.16, 長度 0.22)
+const _shuttleSkirtGeo = new THREE.CylinderGeometry(0.16, 0.075, 0.22, 16, 1, true);
+_shuttleSkirtGeo.rotateX(-Math.PI / 2);
+_shuttleSkirtGeo.translate(0, 0, -0.11);
+const _shuttleSkirtMat = new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  flatShading: true
+});
+
+// 4. 羽毛裙羽線箍環 (固定羽毛的細 Torus 線圈)
+const _shuttleThread1Geo = new THREE.TorusGeometry(0.13, 0.004, 4, 16);
+_shuttleThread1Geo.translate(0, 0, -0.14);
+const _shuttleThread2Geo = new THREE.TorusGeometry(0.10, 0.004, 4, 16);
+_shuttleThread2Geo.translate(0, 0, -0.07);
+const _shuttleThreadMat = new THREE.MeshBasicMaterial({ color: 0xdcdde1 });
+
+// 羽球 3D 模型物件池 (0-GC，循環復用 Group)
+const _shuttlecockPool: THREE.Group[] = [];
 
 export class NPC {
   public mesh: THREE.Group;
@@ -868,12 +894,48 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 羽球投射物專屬安全銷毀處置
+  // 建立標準 3D 羽球模型 (共享幾何體與材質 + 物件池復用 0-GC)
+  public static createShuttlecockMesh(): THREE.Group {
+    if (_shuttlecockPool.length > 0) {
+      const pooled = _shuttlecockPool.pop()!;
+      pooled.visible = true;
+      return pooled;
+    }
+    const group = new THREE.Group();
+
+    // 1. 軟木塞球頭 (Cork Head)
+    const cork = new THREE.Mesh(_shuttleCorkGeo, _shuttleCorkMat);
+    cork.castShadow = true;
+    group.add(cork);
+
+    // 2. 軟木塞與羽毛交界處飾條
+    const band = new THREE.Mesh(_shuttleBandGeo, _shuttleBandMat);
+    group.add(band);
+
+    // 3. 16 根向後外張漏斗錐台羽毛裙
+    const skirt = new THREE.Mesh(_shuttleSkirtGeo, _shuttleSkirtMat);
+    skirt.castShadow = true;
+    group.add(skirt);
+
+    // 4. 羽毛裙羽線固定箍環
+    const thread1 = new THREE.Mesh(_shuttleThread1Geo, _shuttleThreadMat);
+    group.add(thread1);
+    const thread2 = new THREE.Mesh(_shuttleThread2Geo, _shuttleThreadMat);
+    group.add(thread2);
+
+    return group;
+  }
+
+  // 羽球投射物專屬安全銷毀處置 (0-GC 回收至物件池)
   public static disposeProjectile(projectile: ShuttlecockProjectile, scene?: THREE.Scene) {
     if (scene) {
       scene.remove(projectile.mesh);
     } else if (projectile.mesh.parent) {
       projectile.mesh.parent.remove(projectile.mesh);
+    }
+    projectile.mesh.visible = false;
+    if (!_shuttlecockPool.includes(projectile.mesh)) {
+      _shuttlecockPool.push(projectile.mesh);
     }
   }
 
@@ -898,25 +960,11 @@ export class NPC {
     soundManager.playBadmintonWhoosh();
     this.triggerAttackAnimation();
 
-    // 建立標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏)
-    const group = new THREE.Group();
-    const ball = new THREE.Mesh(_tennisBallGeo, _tennisBallMat);
-    group.add(ball);
-
-    // 白色縫線條紋裝飾
-    const seam = new THREE.Mesh(_tennisSeamGeo, _tennisSeamMat);
-    seam.rotation.x = Math.PI / 4;
-    group.add(seam);
-
-    // 羽球發光落點預告環 (方便玩家預判位置)
-    const shadowRing = new THREE.Mesh(_tennisRingGeo, _tennisRingMat);
-    shadowRing.rotation.x = -Math.PI / 2;
-    shadowRing.position.y = -0.14;
-    group.add(shadowRing);
+    // 建立/復用標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏 0-GC)
+    const group = NPC.createShuttlecockMesh();
 
     const startPos = new THREE.Vector3(this.position.x, this.position.y + 1.35, this.position.z);
     group.position.copy(startPos);
-    scene.add(group);
 
     // 合理化羽球飛行速度：11.5 m/s，並略帶微弧線上拋過網 (純純量運算，0 暫存 Vector3 分配)
     const toTargetX = targetPos.x - startPos.x;
@@ -932,6 +980,12 @@ export class NPC {
     const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + 0.8;
 
     const vel = new THREE.Vector3(velX, velY, velZ);
+
+    // 飛行朝向初始化：球頭始終朝向初速度飛行方向，羽毛裙拖在後方
+    _npcLookTarget.copy(startPos).add(vel);
+    group.lookAt(_npcLookTarget);
+
+    scene.add(group);
 
     return {
       mesh: group,

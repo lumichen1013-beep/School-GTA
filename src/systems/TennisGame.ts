@@ -8,6 +8,7 @@ import { InputManager } from '../core/InputManager';
 
 const _scratchServeTarget = new THREE.Vector3();
 const _scratchDirToCoach = new THREE.Vector3();
+const _scratchLookTarget = new THREE.Vector3();
 
 export class TennisGame {
   public tennisState: 'IDLE' | 'STARTING' | 'PLAYING' | 'FINISHED' = 'IDLE';
@@ -188,8 +189,14 @@ export class TennisGame {
       sc.velocity.y -= 9.8 * delta;
       sc.position.addScaledVector(sc.velocity, delta);
       sc.mesh.position.copy(sc.position);
-      sc.mesh.rotation.x += delta * 12.0;
-      sc.mesh.rotation.y += delta * 8.0;
+
+      // 飛行朝向 (Trajectory Orientation)：球頭始終指向速度向量，羽毛裙拖在後方，呈現真實羽球劃破空氣姿態
+      if (sc.velocity.lengthSq() > 0.001) {
+        _scratchLookTarget.copy(sc.position).add(sc.velocity);
+        sc.mesh.lookAt(_scratchLookTarget);
+        // 沿飛行軸自轉 (真實羽球旋轉下壓姿態)
+        sc.mesh.rotateZ(sc.life * 22.0);
+      }
       sc.life -= delta;
 
       // 出界判定
@@ -226,6 +233,9 @@ export class TennisGame {
             _scratchDirToCoach.set(peCoach.position.x, peCoach.position.y + 1.2, peCoach.position.z)
               .sub(sc.position).normalize();
             sc.velocity.copy(_scratchDirToCoach.multiplyScalar(22.0));
+            // 抽球反彈時，羽球即刻掉頭朝向對方場區飛行
+            _scratchLookTarget.copy(sc.position).add(sc.velocity);
+            sc.mesh.lookAt(_scratchLookTarget);
           }
           if (this.playerScore >= 5) {
             this.endMatch(true, wantedSystem, hud, scene, onRewardCash);
