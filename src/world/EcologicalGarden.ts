@@ -104,7 +104,8 @@ export class EcologicalGarden {
 
   // 秘境霸主：變異食人花王 (Mutant Piranha Boss)
   public boss = {
-    position: new THREE.Vector3(-70, 0, -105),
+    // 校園北牆位於 Z=-105 (厚 0.8)，Boss 必須在牆內側 (Z > -104.6) 的開闊空地
+    position: new THREE.Vector3(-70, 0, -95),
     mesh: new THREE.Group(),
     headGroup: new THREE.Group(),
     upperJaw: new THREE.Mesh(),

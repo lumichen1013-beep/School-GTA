@@ -2724,10 +2724,13 @@ export class CampusWorld {
 
     // 1. 池畔防滑磁磚甲板 (Pool Deck: 20m 寬 x 32m 長)
     const deckMat = new THREE.MeshLambertMaterial({ color: 0xdff9fb });
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(20, 0.3, 32), deckMat);
-    deck.position.y = 0.15;
-    deck.receiveShadow = true;
-    poolGroup.add(deck);
+    // 甲板分四塊環繞泳池，中間挖空以露出藍色池底 (避免整塊甲板蓋住池底與水面)
+    [[20, 3, 0, -14.5], [20, 3, 0, 14.5], [3, 26, -8.5, 0], [3, 26, 8.5, 0]].forEach(([dw, dl, dx, dz]) => {
+      const deckPart = new THREE.Mesh(new THREE.BoxGeometry(dw, 0.3, dl), deckMat);
+      deckPart.position.set(dx, 0.15, dz);
+      deckPart.receiveShadow = true;
+      poolGroup.add(deckPart);
+    });
 
     // 2. 陽光下清澈透亮的水藍色泳池水面 (Crystal Sunlit Blue Pool Water: 14m x 26m)
     const waterMat = new THREE.MeshStandardMaterial({
@@ -2743,8 +2746,15 @@ export class CampusWorld {
     poolGroup.add(water);
 
     // 3. 水下池底深槽 (Sunken Pool Basin with Blue & White Mosaic Tile Texture)
-    const basinTileTex = CampusWorld.createTileTexture('#e0f7fa', '#0097e6', 14, 26);
-    const basinBottomMat = new THREE.MeshLambertMaterial({ map: basinTileTex });
+    const basinTileTex = CampusWorld.createTileTexture('#0984e3', '#0652dd', 14, 26);
+    const basinBottomMat = new THREE.MeshLambertMaterial({ map: basinTileTex, color: 0x74b9ff });
+    // 池壁 (藍色磁磚)
+    const basinWallMat = new THREE.MeshLambertMaterial({ map: CampusWorld.createTileTexture('#0984e3', '#0652dd', 14, 2), color: 0x74b9ff });
+    [[14, 0.2, 0, -13], [14, 0.2, 0, 13], [0.2, 26, -7, 0], [0.2, 26, 7, 0]].forEach(([ww, wl, wx, wz]) => {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, 1.5, wl), basinWallMat);
+      wall.position.set(wx, -0.45, wz);
+      poolGroup.add(wall);
+    });
     const basinBottom = new THREE.Mesh(new THREE.PlaneGeometry(14, 26), basinBottomMat);
     basinBottom.rotation.x = -Math.PI / 2;
     basinBottom.position.set(0, -1.2, 0);

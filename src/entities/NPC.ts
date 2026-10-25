@@ -87,6 +87,7 @@ export class NPC {
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
   private bikeParts: THREE.Object3D[] = [];
+  private bikeModelParts: THREE.Object3D[] = []; // 騎車姿態模型全部零件 (單車 + 坐姿騎士)
 
   private hpBarGroup: THREE.Group;
   private hpBarBgMesh: THREE.Mesh;
@@ -166,6 +167,8 @@ export class NPC {
       this.buildDogModel();
     } else if (role === 'BIKE_PATROL') {
       this.buildBikePatrolModel();
+      // 記錄騎士身體(軀幹/頭/帽/臂/腿)與單車全部子物件，被搶車時一併移除
+      this.bikeModelParts = this.mesh.children.slice();
     } else if (role === 'BANDIT') {
       this.buildBanditModel();
     } else {
@@ -835,9 +838,28 @@ export class NPC {
       }
     }
     this.bikeParts.length = 0;
+    // 移除並釋放坐姿騎士身體 (軀幹、頭、帽、臂章、手臂、彎曲雙腿)
+    for (const part of this.bikeModelParts) {
+      this.mesh.remove(part);
+      const m = part as THREE.Mesh;
+      if (m.isMesh && m.geometry) m.geometry.dispose();
+      if (m.isMesh && m.material) {
+        if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
+        else m.material.dispose();
+      }
+    }
+    this.bikeModelParts.length = 0;
     this.bikeFrontWheel = undefined;
     this.bikeRearWheel = undefined;
     this.role = 'STUDENT';
+    // 重建站立步行人形模型，並還原姿態
+    this.buildHumanoidModel();
+    this.mesh.rotation.set(0, this.rotationY, 0);
+    this.mesh.position.set(this.position.x, this.baseFloorY, this.position.z);
+    this.dynamicSpeed = 5.0;
+    this.isChasing = false;
+    this.isBurstSprinting = false;
+    this.attackAnimTimer = 0;
     this.maxHp = 112;
     this.hp = Math.min(this.hp, this.maxHp);
     this.speed = 5.0;
