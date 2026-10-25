@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>學校GTA - 校園開放世界</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f141c">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Changa+One&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
@@ -315,6 +322,56 @@
       font-size: 15px;
     }
 
+    .hud-action-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hud-pill-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      background: rgba(13, 19, 33, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 5px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-right: 3px solid #f1c40f;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      pointer-events: auto;
+      outline: none;
+    }
+
+    .hud-pill-btn:hover {
+      background: rgba(26, 38, 66, 0.95);
+      border-color: rgba(241, 196, 15, 0.6);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(241, 196, 15, 0.35);
+    }
+
+    .hud-pill-btn:active {
+      transform: translateY(0);
+      filter: brightness(0.9);
+    }
+
+    #toggle-mobile-mode-btn {
+      border-right-color: #9b59b6;
+    }
+
+    #toggle-mobile-mode-btn:hover {
+      border-color: rgba(155, 89, 182, 0.6);
+      box-shadow: 0 6px 16px rgba(155, 89, 182, 0.35);
+    }
+
     /* BGM Control Badge */
     .bgm-badge {
       display: flex;
@@ -383,24 +440,25 @@
       to { transform: scale(1.04); filter: brightness(1.2); }
     }
 
-    /* 專屬任務介面 (Quest / Mission Tracker Panel) - 電腦端置於左側小地圖下方避開重疊 */
+    /* 專屬任務看板 (Quest / Mission Tracker Panel) - 頂級毛玻璃手遊風格看板 */
     #quest-tracker-panel {
       position: absolute;
       top: 140px;
       left: max(18px, env(safe-area-inset-left, 18px));
-      width: 320px;
+      width: 326px;
       max-width: 90vw;
-      background: rgba(13, 19, 33, 0.88);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 204, 0, 0.4);
-      border-left: 4px solid #ffcc00;
-      border-radius: 8px;
-      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 10px 12px;
       color: #fff;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.15) inset;
       z-index: 40;
       pointer-events: auto;
-      transition: all 0.25s ease;
+      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
     }
 
     .quest-tracker-header {
@@ -409,69 +467,245 @@
       justify-content: space-between;
       cursor: pointer;
       user-select: none;
-      font-weight: 800;
-      font-size: 13px;
-      color: #ffcc00;
       gap: 8px;
+    }
+
+    .quest-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .quest-title-text {
+      font-weight: 800;
+      font-size: 13.5px;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #fef08a, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+    }
+
+    .quest-progress-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+    }
+
+    .quest-header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .quest-toggle-indicator {
       font-size: 11px;
-      color: #aaa;
-      margin-left: auto;
+      color: #94a3b8;
+      font-weight: 700;
+      transition: transform 0.25s ease;
     }
 
     .quest-key-badge {
-      background: rgba(255, 204, 0, 0.2);
-      color: #ffcc00;
-      border: 1px solid rgba(255, 204, 0, 0.5);
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 4px;
       padding: 1px 5px;
-      font-size: 10px;
-      font-weight: 900;
+      font-size: 9.5px;
+      font-weight: 800;
     }
 
+    /* 金綠色光澤細緻總進度條 */
+    .quest-total-bar-wrap {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 8px 0 8px 0;
+      position: relative;
+    }
+
+    .quest-total-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981, #eab308);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+      border-radius: 2px;
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* 分類標籤切換 Tabs */
+    .quest-tabs-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .quest-tab-btn {
+      flex: 1;
+      padding: 4px 0;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      font-size: 10px;
+      color: #94a3b8;
+      font-weight: 700;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      text-align: center;
+    }
+
+    .quest-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+    }
+
+    .quest-tab-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+
+    /* 任務項目清單容器與客製化捲軸 */
     .quest-list-container {
-      margin-top: 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      max-height: 220px;
+      max-height: 275px;
       overflow-y: auto;
+      padding-right: 3px;
       transition: all 0.25s ease;
     }
 
+    .quest-list-container::-webkit-scrollbar {
+      width: 4px;
+    }
+    .quest-list-container::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 4px;
+    }
+    .quest-list-container::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+    .quest-list-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
     .quest-list-container.collapsed {
-      display: none;
+      display: none !important;
+    }
+
+    #quest-tracker-panel.collapsed .quest-total-bar-wrap,
+    #quest-tracker-panel.collapsed .quest-tabs-bar,
+    #quest-tracker-panel.collapsed .quest-list-container {
+      display: none !important;
+    }
+
+    .quest-category-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    .quest-category-group.hidden {
+      display: none !important;
+    }
+
+    .quest-category-title {
+      font-size: 10px;
+      font-weight: 800;
+      color: #94a3b8;
+      padding: 3px 4px 2px 4px;
+      letter-spacing: 0.5px;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+      margin-bottom: 2px;
     }
 
     .quest-item {
       display: flex;
       align-items: center;
-      font-size: 11px;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 4px 8px;
-      border-radius: 5px;
-      gap: 6px;
-      border-left: 2px solid #3498db;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.2s ease;
     }
 
-    .quest-item.boss-quest {
-      border-left-color: #e74c3c;
-      background: rgba(231, 76, 60, 0.08);
+    .quest-item:hover {
+      background: rgba(255, 255, 255, 0.065);
+      transform: translateX(2px);
     }
 
     .quest-item.completed {
-      border-left-color: #2ecc71;
-      opacity: 0.85;
+      background: rgba(34, 197, 94, 0.08);
+      border-color: rgba(34, 197, 94, 0.25);
     }
 
-    .q-icon { font-size: 14px; }
-    .q-name { font-weight: 800; color: #f1c40f; white-space: nowrap; }
-    .q-desc { color: #ecf0f1; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .q-status { font-weight: 700; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(52, 152, 219, 0.25); color: #74b9ff; white-space: nowrap; }
-    .q-status.done { background: rgba(46, 204, 113, 0.25); color: #2ecc71; }
-    .q-status.pending { background: rgba(231, 76, 60, 0.25); color: #ff7675; }
+    .q-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .q-info {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .q-name {
+      font-weight: 700;
+      font-size: 11px;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .q-desc {
+      font-size: 9.5px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    .q-status {
+      font-weight: 700;
+      font-size: 9.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .q-status.done {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(234, 179, 8, 0.22));
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.5);
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+      text-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+    }
 
     #crosshair {
       position: absolute;
@@ -668,6 +902,8 @@
       opacity: 0;
       transition: all 0.4s ease;
       text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      pointer-events: none;
+      z-index: 100;
     }
 
     #hud-banner.show {
@@ -678,7 +914,7 @@
     /* 4F 網球挑戰賽即時比分橫幅 */
     #tennis-scoreboard {
       position: absolute;
-      top: 135px;
+      top: 10px;
       left: 50%;
       transform: translateX(-50%);
       background: linear-gradient(135deg, rgba(22, 160, 133, 0.95), rgba(44, 62, 80, 0.95));
@@ -686,11 +922,11 @@
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 15px rgba(46, 204, 113, 0.5);
       color: #ffffff;
       font-weight: 800;
-      font-size: 16px;
-      padding: 8px 24px;
-      border-radius: 30px;
+      font-size: 13px;
+      padding: 4px 16px;
+      border-radius: 20px;
       letter-spacing: 0.5px;
-      z-index: 55;
+      z-index: 100;
       display: none;
       align-items: center;
       gap: 8px;
@@ -1352,6 +1588,12 @@
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
       pointer-events: auto;
       transition: transform 0.1s ease, filter 0.1s ease;
+      font-size: 21px;
+      font-weight: 900;
+      font-family: inherit;
+      line-height: 1;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
     }
 
     .mobile-btn:active {
@@ -1359,61 +1601,66 @@
       filter: brightness(1.35);
     }
 
-    /* 攻擊按鍵：位於最舒適的主拇指發力點 */
+    /* 攻擊按鍵：位於最舒適的主拇指發力點 (打) */
     #m-btn-attack {
       bottom: 8px;
       right: 8px;
       width: 62px;
       height: 62px;
-      font-size: 26px;
+      font-size: 22px;
+      font-weight: 900;
       background: radial-gradient(circle, rgba(231, 76, 60, 0.88) 0%, rgba(192, 57, 43, 0.88) 100%);
       border-color: rgba(255, 107, 107, 0.85);
       box-shadow: 0 0 16px rgba(231, 76, 60, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
     }
 
-    /* 跳躍按鍵 */
+    /* 跳躍按鍵 (跳) */
     #m-btn-jump {
       bottom: 86px;
       right: 6px;
       width: 48px;
       height: 48px;
       font-size: 20px;
+      font-weight: 900;
       background: radial-gradient(circle, rgba(46, 204, 113, 0.85) 0%, rgba(39, 174, 96, 0.85) 100%);
       border-color: rgba(46, 204, 113, 0.8);
       box-shadow: 0 0 12px rgba(46, 204, 113, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
     }
 
-    /* 衝刺跑步按鍵 */
+    /* 衝刺跑步按鍵 (跑) */
     #m-btn-sprint {
       bottom: 92px;
       right: 68px;
       width: 48px;
       height: 48px;
       font-size: 20px;
+      font-weight: 900;
       background: radial-gradient(circle, rgba(243, 156, 18, 0.85) 0%, rgba(211, 84, 0, 0.85) 100%);
       border-color: rgba(243, 156, 18, 0.8);
       box-shadow: 0 0 12px rgba(243, 156, 18, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
     }
 
-    /* 互動 / 騎乘按鍵 (E) */
+    /* 互動 / 騎乘按鍵 (動) */
     #m-btn-interact {
       bottom: 12px;
       right: 82px;
       width: 50px;
       height: 50px;
-      font-size: 22px;
+      font-size: 21px;
+      font-weight: 900;
       background: radial-gradient(circle, rgba(52, 152, 219, 0.85) 0%, rgba(41, 128, 185, 0.85) 100%);
       border-color: rgba(52, 152, 219, 0.8);
       box-shadow: 0 0 12px rgba(52, 152, 219, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
     }
 
-    /* 武器切換按鍵 (🔄 循環切換徒手/球棒) */
+    /* 武器切換按鍵 (換) */
     #m-btn-weapon {
       bottom: 70px;
       right: 128px;
-      width: 44px;
-      height: 44px;
-      font-size: 18px;
+      width: 46px;
+      height: 46px;
+      font-size: 20px;
+      font-weight: 900;
       background: radial-gradient(circle, rgba(155, 89, 182, 0.85) 0%, rgba(142, 68, 173, 0.85) 100%);
       border-color: rgba(155, 89, 182, 0.8);
       box-shadow: 0 0 12px rgba(155, 89, 182, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
@@ -1491,52 +1738,50 @@
       .hud-action-pills {
         gap: 4px !important;
       }
-      #toggle-mobile-mode-btn, .bgm-badge {
+      .hud-pill-btn, #toggle-mobile-mode-btn, .bgm-badge {
         font-size: 10px !important;
         padding: 3px 6px !important;
       }
-      #weapon-hud {
-        gap: 4px !important;
-        margin-top: 3px !important;
-      }
-      .weapon-slot {
-        min-width: 50px !important;
-        padding: 2px 4px !important;
-        border-radius: 6px !important;
-      }
-      .slot-key {
-        display: none !important;
-      }
-      .slot-icon {
-        font-size: 14px !important;
-      }
-      .slot-name {
-        font-size: 9px !important;
-      }
-      .slot-stat {
-        font-size: 7.5px !important;
-      }
 
-      /* 任務面板：手機端懸浮於中央頂部，預設收合僅佔用極小空間 */
+      /* 任務看板：手機端預設為頂部輕量懸浮膠囊，展開時優雅滑出任務看板 */
       #quest-tracker-panel {
         top: max(8px, env(safe-area-inset-top, 8px)) !important;
         left: 50% !important;
         transform: translateX(-50%) !important;
-        width: auto !important;
-        min-width: 170px !important;
-        max-width: 290px !important;
-        padding: 4px 8px !important;
+        width: 320px !important;
+        max-width: 90vw !important;
+        padding: 6px 10px !important;
         z-index: 45 !important;
       }
+      #quest-tracker-panel.collapsed {
+        width: auto !important;
+        min-width: 140px !important;
+        max-width: 260px !important;
+        border-radius: 20px !important;
+        padding: 4px 10px !important;
+        background: rgba(15, 23, 42, 0.94) !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+      }
       .quest-tracker-header {
-        font-size: 10.5px !important;
+        font-size: 11px !important;
+      }
+      .quest-title-text {
+        font-size: 12px !important;
+      }
+      .quest-progress-badge {
+        font-size: 9.5px !important;
+        padding: 1px 5px !important;
       }
       .quest-key-badge {
         display: none !important;
       }
       .quest-item {
+        font-size: 9.5px !important;
+        padding: 4px 6px !important;
+      }
+      .quest-tab-btn {
         font-size: 9px !important;
-        padding: 2px 5px !important;
+        padding: 3px 0 !important;
       }
 
       /* 控制導引在手機端隱藏，完全淨空左下角 */
@@ -1554,16 +1799,54 @@
     @media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
       #quest-tracker-panel {
         top: calc(90px + env(safe-area-inset-top, 0px)) !important;
-        left: max(12px, env(safe-area-inset-left, 12px)) !important;
+        left: max(10px, env(safe-area-inset-left, 10px)) !important;
         transform: none !important;
-        max-width: calc(100vw - 24px) !important;
+        width: calc(100vw - 20px) !important;
+        max-width: calc(100vw - 20px) !important;
+      }
+      #quest-tracker-panel.collapsed {
+        top: max(8px, env(safe-area-inset-top, 8px)) !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: auto !important;
+        min-width: 140px !important;
+        max-width: 260px !important;
       }
     }
 
     /* 手機橫屏模式 (高度 <= 520px) 極致緊湊優化 */
     @media (max-height: 520px) {
+      #quest-tracker-panel {
+        top: max(6px, env(safe-area-inset-top, 6px)) !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: 310px !important;
+        max-width: 88vw !important;
+        max-height: calc(100vh - 12px) !important;
+        overflow-y: auto !important;
+      }
+      #quest-tracker-panel .quest-list-container {
+        max-height: 130px !important;
+      }
+      #quest-tracker-panel.collapsed {
+        width: auto !important;
+        min-width: 130px !important;
+        border-radius: 20px !important;
+        padding: 3px 8px !important;
+      }
       #hud-overlay {
         padding: max(4px, env(safe-area-inset-top, 4px)) max(8px, env(safe-area-inset-right, 8px)) max(4px, env(safe-area-inset-bottom, 4px)) max(8px, env(safe-area-inset-left, 8px)) !important;
+      }
+      #hud-banner {
+        top: max(6px, env(safe-area-inset-top, 6px)) !important;
+        font-size: 11px !important;
+        padding: 3px 12px !important;
+      }
+      #tennis-scoreboard {
+        top: max(4px, env(safe-area-inset-top, 4px)) !important;
+        font-size: 10px !important;
+        padding: 2px 10px !important;
+        border-radius: 14px !important;
       }
       .minimap-wrapper {
         width: 60px !important;
@@ -1592,35 +1875,39 @@
         right: max(8px, env(safe-area-inset-right, 8px)) !important;
       }
       .mobile-btn {
-        width: 40px !important;
-        height: 40px !important;
-        font-size: 16px !important;
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 20px !important;
+        font-weight: 900 !important;
       }
       #m-btn-attack {
-        width: 48px !important;
-        height: 48px !important;
-        font-size: 20px !important;
+        width: 52px !important;
+        height: 52px !important;
+        font-size: 22px !important;
         bottom: 6px !important;
         right: 6px !important;
       }
       #m-btn-jump {
-        bottom: 66px !important;
+        bottom: 68px !important;
         right: 4px !important;
+        font-size: 20px !important;
       }
       #m-btn-sprint {
-        bottom: 72px !important;
-        right: 52px !important;
+        bottom: 74px !important;
+        right: 54px !important;
+        font-size: 20px !important;
       }
       #m-btn-interact {
         bottom: 6px !important;
-        right: 64px !important;
+        right: 66px !important;
+        font-size: 21px !important;
       }
       #m-btn-weapon {
-        bottom: 54px !important;
-        right: 102px !important;
-        width: 36px !important;
-        height: 36px !important;
-        font-size: 14px !important;
+        bottom: 56px !important;
+        right: 104px !important;
+        width: 40px !important;
+        height: 40px !important;
+        font-size: 20px !important;
       }
       #boss-hud {
         top: calc(36px + env(safe-area-inset-top, 0px)) !important;
@@ -1628,14 +1915,15 @@
         padding: 5px 10px !important;
       }
       #hud-banner {
-        top: 50px !important;
+        top: max(8px, env(safe-area-inset-top, 8px)) !important;
         font-size: 13px !important;
         padding: 4px 18px !important;
       }
       #tennis-scoreboard {
-        top: 84px !important;
-        font-size: 13px !important;
-        padding: 5px 16px !important;
+        top: max(6px, env(safe-area-inset-top, 6px)) !important;
+        font-size: 11px !important;
+        padding: 3px 12px !important;
+        border-radius: 16px !important;
       }
     }
 
@@ -1736,7 +2024,8 @@
           </div>
 
           <div class="hud-action-pills">
-            <button id="toggle-mobile-mode-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
+            <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
+            <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
             <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 M 鍵)">
               <span id="bgm-icon">🎵</span>
               <span id="bgm-text">BGM: 校園漫步</span>
@@ -1745,69 +2034,171 @@
             </div>
           </div>
         </div>
-
-        <!-- 武器裝備欄 (Weapon Inventory Slots - 置於右上角，方便辨識與點擊) -->
-        <div id="weapon-hud">
-          <div class="weapon-slot active" id="slot-fist" title="按 1 切換徒手 (或點擊切換)">
-            <div class="slot-key">1</div>
-            <div class="slot-icon">🥊</div>
-            <div class="slot-name">徒手</div>
-            <div class="slot-stat">ATK 25</div>
-          </div>
-          <div class="weapon-slot locked" id="slot-normal-bat" title="擊敗20名普通同學解鎖 (按 2 切換)">
-            <div class="slot-key">2</div>
-            <div class="slot-icon">🏏</div>
-            <div class="slot-name">普通球棒</div>
-            <div class="slot-stat" id="normal-bat-progress">同學 0/20</div>
-          </div>
-          <div class="weapon-slot locked" id="slot-special-bat" title="擊敗生教、校犬、5單車同學解鎖 (按 3 切換)">
-            <div class="slot-key">3</div>
-            <div class="slot-icon">⚡</div>
-            <div class="slot-name">神兵球棒</div>
-            <div class="slot-stat" id="special-bat-progress">教0 犬0 車0/5</div>
-          </div>
-        </div>
       </div>
     </div>
 
-    <!-- 專屬任務看板 (Quest / Mission Tracker Bar) -->
+    <!-- 專屬任務看板 (Quest / Mission Tracker Panel) -->
     <div id="quest-tracker-panel">
+      <!-- 頂部 Header -->
       <div class="quest-tracker-header" id="quest-tracker-toggle-btn">
-        <span class="quest-title-text">📜 校園歷練與挑戰任務</span>
-        <span class="quest-toggle-indicator" id="quest-toggle-indicator">▼ 收合</span>
-        <span class="quest-key-badge">J</span>
+        <div class="quest-header-left">
+          <span class="quest-title-text">📜 校園歷練</span>
+          <span class="quest-progress-badge">進度 <span id="q-total-progress">0/12</span></span>
+        </div>
+        <div class="quest-header-right">
+          <span class="quest-toggle-indicator" id="quest-toggle-indicator">▼</span>
+          <span class="quest-key-badge">J</span>
+        </div>
       </div>
+
+      <!-- 細緻的總進度條 -->
+      <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
+        <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
+      </div>
+
+      <!-- 分類標籤切換 Tabs (全部 / 戰鬥 / 競技 / 探索) -->
+      <div class="quest-tabs-bar" id="quest-tabs-bar">
+        <button type="button" class="quest-tab-btn active" data-tab="all">全部</button>
+        <button type="button" class="quest-tab-btn" data-tab="combat">⚔️ 戰鬥</button>
+        <button type="button" class="quest-tab-btn" data-tab="sports">🏆 競技</button>
+        <button type="button" class="quest-tab-btn" data-tab="explore">🌟 探索</button>
+      </div>
+
+      <!-- 任務列表容器 -->
       <div class="quest-list-container" id="quest-list-content">
-        <!-- 任務項目動態更新 -->
-        <div class="quest-item" id="q-normal-bat">
-          <span class="q-icon">🏏</span>
-          <span class="q-name">普通木棒挑戰:</span>
-          <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/20</span>)</span>
-          <span class="q-status" id="q-bat-status">進行中</span>
+        <!-- 分類 1: 戰鬥歷練 -->
+        <div class="quest-category-group" data-category="combat">
+          <div class="quest-category-title">⚔️ 戰鬥歷練</div>
+
+          <!-- 1. 普通球棒解鎖任務 -->
+          <div class="quest-item" id="q-bat-item">
+            <span class="q-icon">🏏</span>
+            <div class="q-info">
+              <span class="q-name">【普通球棒】名揚校園</span>
+              <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/5</span>)</span>
+            </div>
+            <span class="q-status" id="q-bat-status">進行中</span>
+          </div>
+
+          <!-- 2. 神兵球棒解鎖任務 -->
+          <div class="quest-item" id="q-special-item">
+            <span class="q-icon">⚡</span>
+            <div class="q-info">
+              <span class="q-name">【神兵球棒】校園霸王</span>
+              <span class="q-desc">老師(<span id="q-teacher-prog">0/1</span>) · 犬(<span id="q-dog-prog">0/1</span>) · 車(<span id="q-bike-prog">0/5</span>)</span>
+            </div>
+            <span class="q-status" id="q-special-status">進行中</span>
+          </div>
+
+          <!-- 3. 挑戰網球大如老師 -->
+          <div class="quest-item" id="q-pe-item">
+            <span class="q-icon">🎾</span>
+            <div class="q-info">
+              <span class="q-name">挑戰網球大如老師</span>
+              <span class="q-desc">4F球場 · 搶 5 分勝</span>
+            </div>
+            <span class="q-status" id="q-pe-status">進行中</span>
+          </div>
+
+          <!-- 4. 挑戰溫室食人花 Boss -->
+          <div class="quest-item" id="q-plant-item">
+            <span class="q-icon">🌸</span>
+            <div class="q-info">
+              <span class="q-name">挑戰溫室食人花 Boss</span>
+              <span class="q-desc">生態溫室霸主討伐</span>
+            </div>
+            <span class="q-status" id="q-plant-status">進行中</span>
+          </div>
+
+          <!-- 5. 擊倒教官與步巡隊 -->
+          <div class="quest-item" id="q-inspector-item">
+            <span class="q-icon">👮</span>
+            <div class="q-info">
+              <span class="q-name">擊倒教官與步巡隊</span>
+              <span class="q-desc">生教與校園步巡隊 (<span id="q-inspector-prog">0/1</span>)</span>
+            </div>
+            <span class="q-status" id="q-inspector-status">進行中</span>
+          </div>
         </div>
-        <div class="quest-item" id="q-special-bat">
-          <span class="q-icon">⚡</span>
-          <span class="q-name">校園霸王神兵:</span>
-          <span class="q-desc">生教 (<span id="q-teacher-prog">0/1</span>) · 校犬 (<span id="q-dog-prog">0/1</span>) · 單車糾察 (<span id="q-bike-prog">0/5</span>)</span>
-          <span class="q-status" id="q-special-status">未達成</span>
+
+        <!-- 分類 2: 體育競技 -->
+        <div class="quest-category-group" data-category="sports">
+          <div class="quest-category-title">🏆 體育競技</div>
+
+          <!-- 5. 經典三分球投籃挑戰 -->
+          <div class="quest-item" id="q-basketball-item">
+            <span class="q-icon">🏀</span>
+            <div class="q-info">
+              <span class="q-name">經典三分球投籃挑戰</span>
+              <span class="q-desc">三分球紀錄 (<span id="q-basket-streak">0顆</span>)</span>
+            </div>
+            <span class="q-status" id="q-basketball-status">進行中</span>
+          </div>
+
+          <!-- 6. 操場跑道 400m 競速 -->
+          <div class="quest-item" id="q-track-item">
+            <span class="q-icon">🏃</span>
+            <div class="q-info">
+              <span class="q-name">操場跑道 400m 競速</span>
+              <span class="q-desc">最快秒數 (<span id="q-track-time">未完成</span>)</span>
+            </div>
+            <span class="q-status" id="q-track-status">進行中</span>
+          </div>
+
+          <!-- 7. 25m 水上競速挑戰 -->
+          <div class="quest-item" id="q-swim-item">
+            <span class="q-icon">🏊</span>
+            <div class="q-info">
+              <span class="q-name">25m 水上競速挑戰</span>
+              <span class="q-desc">最快秒數 (<span id="q-swim-time">未完成</span>)</span>
+            </div>
+            <span class="q-status" id="q-swim-status">進行中</span>
+          </div>
         </div>
-        <div class="quest-item boss-quest" id="q-plant-boss">
-          <span class="q-icon">🌸</span>
-          <span class="q-name">秘境探索:</span>
-          <span class="q-desc">擊敗生態園【變異食人花王】</span>
-          <span class="q-status" id="q-plant-status">未擊潰</span>
-        </div>
-        <div class="quest-item boss-quest" id="q-pe-boss">
-          <span class="q-icon">🎾</span>
-          <span class="q-name">網球挑戰賽:</span>
-          <span class="q-desc">赴演藝大樓 4F 挑戰【網球教練 巨石】(搶5分勝)</span>
-          <span class="q-status" id="q-pe-status">未達成</span>
-        </div>
-        <div class="quest-item" id="q-sports">
-          <span class="q-icon">🏆</span>
-          <span class="q-name">校園運動紀錄:</span>
-          <span class="q-desc">操場 200m (<span id="q-track-time">未完成</span>) · 游泳 50m (<span id="q-swim-time">未完成</span>) · 三分球 (<span id="q-basket-streak">0顆</span>)</span>
-          <span class="q-status">挑戰中</span>
+
+        <!-- 分類 3: 校園探索 -->
+        <div class="quest-category-group" data-category="explore">
+          <div class="quest-category-title">🌟 校園探索</div>
+
+          <!-- 8. 自由騎乘校園自行車 -->
+          <div class="quest-item" id="q-bike-item">
+            <span class="q-icon">🚲</span>
+            <div class="q-info">
+              <span class="q-name">自由騎乘校園自行車</span>
+              <span class="q-desc">騎乘單車校園漫遊</span>
+            </div>
+            <span class="q-status" id="q-bike-status">進行中</span>
+          </div>
+
+          <!-- 9. 擺脫校犬柴柴追捕 -->
+          <div class="quest-item" id="q-dog-item">
+            <span class="q-icon">🐕</span>
+            <div class="q-info">
+              <span class="q-name">擺脫校犬柴柴追捕</span>
+              <span class="q-desc">走廊避難脫離柴柴</span>
+            </div>
+            <span class="q-status" id="q-dog-status">進行中</span>
+          </div>
+
+          <!-- 10. 生態池許願池投幣 -->
+          <div class="quest-item" id="q-pond-item">
+            <span class="q-icon">🪙</span>
+            <div class="q-info">
+              <span class="q-name">生態池許願池投幣</span>
+              <span class="q-desc">女神許願池祈福</span>
+            </div>
+            <span class="q-status" id="q-pond-status">進行中</span>
+          </div>
+
+          <!-- 11. 天天合作社品嚐熱食 -->
+          <div class="quest-item" id="q-hotfood-item">
+            <span class="q-icon">🍱</span>
+            <div class="q-info">
+              <span class="q-name">天天合作社品嚐熱食</span>
+              <span class="q-desc">合作社品嚐特色美食</span>
+            </div>
+            <span class="q-status" id="q-hotfood-status">進行中</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1846,7 +2237,7 @@
     <div id="hud-banner">生教組長發動走廊巡查！</div>
 
     <!-- 4F 網球挑戰賽比分橫幅 (Tennis Match Scoreboard) -->
-    <div id="tennis-scoreboard">🎾 網球挑戰賽 | 玩家: 0 - 0 :教練 (搶5分勝)</div>
+    <div id="tennis-scoreboard">🎾 網球挑戰賽 | 玩家: 0 - 0 :大如老師 (搶5分勝)</div>
 
     <!-- Mouse Released / Re-lock Hint -->
     <div id="pointer-unlock-hint">【滑鼠已釋放】點擊畫面鎖定視角 / 拖曳旋轉視角 (按 ESC 釋放)</div>
@@ -1877,11 +2268,11 @@
 
       <!-- 右下角 (Bottom-Right)：人體工學拇指按鈕群 (攻擊、跳躍、衝刺、互動、武器切換) -->
       <div id="mobile-action-buttons">
-        <button class="mobile-btn btn-attack" id="m-btn-attack" title="攻擊 / 出拳 / 揮棒">🥊</button>
-        <button class="mobile-btn btn-jump" id="m-btn-jump" title="跳躍 (Space)">🦘</button>
-        <button class="mobile-btn btn-sprint" id="m-btn-sprint" title="衝刺 (Shift)">🏃</button>
-        <button class="mobile-btn btn-interact" id="m-btn-interact" title="互動 / 騎乘 / 購買 (E)">🚲</button>
-        <button class="mobile-btn btn-weapon" id="m-btn-weapon" title="切換武器 (1/2/3)">🔄</button>
+        <button class="mobile-btn btn-attack" id="m-btn-attack" title="攻擊 / 出拳 / 揮棒 (打)">打</button>
+        <button class="mobile-btn btn-jump" id="m-btn-jump" title="跳躍 (跳)">跳</button>
+        <button class="mobile-btn btn-sprint" id="m-btn-sprint" title="衝刺 (跑)">跑</button>
+        <button class="mobile-btn btn-interact" id="m-btn-interact" title="互動 / 騎乘 / 對話 (動)">動</button>
+        <button class="mobile-btn btn-weapon" id="m-btn-weapon" title="切換裝備 (換)">換</button>
       </div>
     </div>
   </div>
@@ -1905,13 +2296,13 @@
   <div id="tennis-modal" class="modal-backdrop">
     <div class="tennis-dialog-card">
       <div class="tennis-dialog-header">
-        <div class="tennis-dialog-title">🎾 網球教練 巨石</div>
+        <div class="tennis-dialog-title">🎾 大如老師 (4F 網球教練)</div>
         <button class="commissary-close" id="tennis-dialog-close-btn">&times;</button>
       </div>
       <div class="tennis-dialog-body">
         <div class="tennis-dialog-avatar">🎾</div>
         <div class="tennis-dialog-text" id="tennis-dialog-text">
-          同學，準備好來一場 4F 網球回擊挑戰賽了嗎？規則是搶 5 分勝制，接發球揮擊得分！
+          大如老師：「同學，準備好來一場 4F 網球回擊挑戰賽了嗎？規則是搶 5 分勝制，接發球揮擊得分！」
         </div>
       </div>
       <div class="tennis-dialog-actions">
@@ -1927,6 +2318,17 @@
     <div class="game-sub">校園開放世界 · 第三人稱沙盒冒險</div>
     <button class="btn-start">點擊進入學校GTA (開始遊戲)</button>
   </div>
+
+  <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('[PWA] Service Worker 註冊失敗:', err);
+        });
+      });
+    }
+  </script>
 
   <!-- Main Game Script -->
   <script type="module" src="/src/main.ts"></script>

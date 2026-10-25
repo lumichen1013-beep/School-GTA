@@ -21,6 +21,26 @@ export const COMMISSARY_MENU: CommissaryItem[] = [
   { id: 'sport-drink', name: '活力運動飲料', icon: '⚡', price: 15, healHp: 10, restoreStamina: true, desc: '迅速補充水分電解質！(+10 HP & 精力全滿)' }
 ];
 
+export interface MissionTrackerData {
+  studentDefeated: number;
+  hasNormalBat: boolean;
+  teacherDefeated: number;
+  dogDefeated: number;
+  bikeDefeated: number;
+  inspectorDefeated: number;
+  hasSpecialBat: boolean;
+  plantBossDefeated: boolean;
+  peBossDefeated: boolean;
+  trackRecordText: string;
+  swimRecordText: string;
+  basketballStreak: number;
+  basketballRecord: number;
+  hasRiddenBike: boolean;
+  hasEscapedDog: boolean;
+  hasWishedPond: boolean;
+  hasTastedHotFood: boolean;
+}
+
 export class HUD {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -49,12 +69,8 @@ export class HUD {
   private bossNameTextEl: HTMLElement | null;
   private bossIconEl: HTMLElement | null;
 
-  // Weapon HUD
-  private slotFistEl: HTMLElement | null;
-  private slotNormalBatEl: HTMLElement | null;
-  private slotSpecialBatEl: HTMLElement | null;
-  private normalBatProgressEl: HTMLElement | null;
-  private specialBatProgressEl: HTMLElement | null;
+  // Weapon HUD - 已整合至頂端任務看板與換武器功能
+  // (保留介面屬性避免外部呼叫報錯)
 
   // Commissary Modal
   private commissaryModalEl: HTMLElement | null;
@@ -97,12 +113,6 @@ export class HUD {
     this.bossBarFillEl = document.getElementById('boss-bar-fill');
     this.bossNameTextEl = document.getElementById('boss-name-text');
     this.bossIconEl = document.getElementById('boss-icon-el');
-
-    this.slotFistEl = document.getElementById('slot-fist');
-    this.slotNormalBatEl = document.getElementById('slot-normal-bat');
-    this.slotSpecialBatEl = document.getElementById('slot-special-bat');
-    this.normalBatProgressEl = document.getElementById('normal-bat-progress');
-    this.specialBatProgressEl = document.getElementById('special-bat-progress');
 
     this.commissaryModalEl = document.getElementById('commissary-modal');
     this.commissaryCashValEl = document.getElementById('commissary-cash-val');
@@ -151,23 +161,82 @@ export class HUD {
     this.questTrackerToggleBtn = document.getElementById('quest-tracker-toggle-btn');
     this.questToggleIndicator = document.getElementById('quest-toggle-indicator');
     this.questListContent = document.getElementById('quest-list-content');
+    this.qTotalProgress = document.getElementById('q-total-progress');
+    this.qTotalBar = document.getElementById('q-total-bar');
+
+    // 12 項任務項目與數值元素 (含普通球棒與神兵球棒解鎖任務)
+    this.qBatItem = document.getElementById('q-bat-item');
     this.qBatProgress = document.getElementById('q-bat-progress');
     this.qBatStatus = document.getElementById('q-bat-status');
+
+    this.qSpecialItem = document.getElementById('q-special-item');
     this.qTeacherProg = document.getElementById('q-teacher-prog');
     this.qDogProg = document.getElementById('q-dog-prog');
     this.qBikeProg = document.getElementById('q-bike-prog');
     this.qSpecialStatus = document.getElementById('q-special-status');
-    this.qPlantStatus = document.getElementById('q-plant-status');
+
+    this.qPeItem = document.getElementById('q-pe-item');
     this.qPeStatus = document.getElementById('q-pe-status');
-    this.qTrackTime = document.getElementById('q-track-time');
-    this.qSwimTime = document.getElementById('q-swim-time');
+
+    this.qPlantItem = document.getElementById('q-plant-item');
+    this.qPlantStatus = document.getElementById('q-plant-status');
+
+    this.qInspectorItem = document.getElementById('q-inspector-item');
+    this.qInspectorProg = document.getElementById('q-inspector-prog');
+    this.qInspectorStatus = document.getElementById('q-inspector-status');
+
+    this.qBasketballItem = document.getElementById('q-basketball-item');
     this.qBasketStreak = document.getElementById('q-basket-streak');
+    this.qBasketballStatus = document.getElementById('q-basketball-status');
+
+    this.qTrackItem = document.getElementById('q-track-item');
+    this.qTrackTime = document.getElementById('q-track-time');
+    this.qTrackStatus = document.getElementById('q-track-status');
+
+    this.qSwimItem = document.getElementById('q-swim-item');
+    this.qSwimTime = document.getElementById('q-swim-time');
+    this.qSwimStatus = document.getElementById('q-swim-status');
+
+    this.qBikeItem = document.getElementById('q-bike-item');
+    this.qBikeStatus = document.getElementById('q-bike-status');
+
+    this.qDogItem = document.getElementById('q-dog-item');
+    this.qDogStatus = document.getElementById('q-dog-status');
+
+    this.qPondItem = document.getElementById('q-pond-item');
+    this.qPondStatus = document.getElementById('q-pond-status');
+
+    this.qHotfoodItem = document.getElementById('q-hotfood-item');
+    this.qHotfoodStatus = document.getElementById('q-hotfood-status');
 
     if (this.questTrackerToggleBtn) {
       this.questTrackerToggleBtn.addEventListener('click', () => {
         this.toggleQuestTracker();
       });
     }
+
+    // 分類 Tab 切換監聽 (全部 / 戰鬥 / 競技 / 探索)
+    const tabBtns = document.querySelectorAll<HTMLButtonElement>('.quest-tab-btn');
+    tabBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tabBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const targetCategory = btn.getAttribute('data-tab');
+        const groups = document.querySelectorAll<HTMLElement>('.quest-category-group');
+        groups.forEach((group) => {
+          if (!targetCategory || targetCategory === 'all') {
+            group.classList.remove('hidden');
+          } else {
+            if (group.getAttribute('data-category') === targetCategory) {
+              group.classList.remove('hidden');
+            } else {
+              group.classList.add('hidden');
+            }
+          }
+        });
+      });
+    });
 
     // 行動裝置或窄螢幕預設將任務看板收合，維持乾淨清爽的開放視野
     const isMobileDevice = window.innerWidth <= 900 || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -181,36 +250,67 @@ export class HUD {
   private questTrackerToggleBtn: HTMLElement | null;
   private questToggleIndicator: HTMLElement | null;
   private questListContent: HTMLElement | null;
+  private qTotalProgress: HTMLElement | null;
+  private qTotalBar: HTMLElement | null;
+
+  // 12 項任務 DOM 參照
+  private qBatItem: HTMLElement | null;
   private qBatProgress: HTMLElement | null;
   private qBatStatus: HTMLElement | null;
+
+  private qSpecialItem: HTMLElement | null;
   private qTeacherProg: HTMLElement | null;
   private qDogProg: HTMLElement | null;
   private qBikeProg: HTMLElement | null;
   private qSpecialStatus: HTMLElement | null;
-  private qPlantStatus: HTMLElement | null;
+
+  private qPeItem: HTMLElement | null;
   private qPeStatus: HTMLElement | null;
-  private qTrackTime: HTMLElement | null;
-  private qSwimTime: HTMLElement | null;
+
+  private qPlantItem: HTMLElement | null;
+  private qPlantStatus: HTMLElement | null;
+
+  private qInspectorItem: HTMLElement | null;
+  private qInspectorProg: HTMLElement | null;
+  private qInspectorStatus: HTMLElement | null;
+
+  private qBasketballItem: HTMLElement | null;
   private qBasketStreak: HTMLElement | null;
+  private qBasketballStatus: HTMLElement | null;
+
+  private qTrackItem: HTMLElement | null;
+  private qTrackTime: HTMLElement | null;
+  private qTrackStatus: HTMLElement | null;
+
+  private qSwimItem: HTMLElement | null;
+  private qSwimTime: HTMLElement | null;
+  private qSwimStatus: HTMLElement | null;
+
+  private qBikeItem: HTMLElement | null;
+  private qBikeStatus: HTMLElement | null;
+
+  private qDogItem: HTMLElement | null;
+  private qDogStatus: HTMLElement | null;
+
+  private qPondItem: HTMLElement | null;
+  private qPondStatus: HTMLElement | null;
+
+  private qHotfoodItem: HTMLElement | null;
+  private qHotfoodStatus: HTMLElement | null;
+
   private isQuestTrackerExpanded: boolean = true;
 
   // 效能優化節流與髒檢查 (Perf 6)
   private minimapDeltaAccumulator: number = 0;
   private lastMinimapTime: number = 0;
   private lastCash: number = -1;
-  private lastMissionData: {
-    studentDefeated: number;
-    hasNormalBat: boolean;
-    teacherDefeated: number;
-    dogDefeated: number;
-    bikeDefeated: number;
-    hasSpecialBat: boolean;
-    plantBossDefeated: boolean;
-    peBossDefeated: boolean;
-    trackRecordText: string;
-    swimRecordText: string;
-    basketballStreak: number;
-  } | null = null;
+  private lastMissionData: MissionTrackerData | null = null;
+  private lastHp: number = -1;
+  private lastStamina: number = -1;
+  private lastLocationZone: string = '';
+  private lastBeingChased: boolean | null = null;
+  private lastHighDanger: boolean | null = null;
+  private lastPoisonActive: boolean | null = null;
 
   private shotMeterEl: HTMLElement | null;
   private shotSweetspotEl: HTMLElement | null;
@@ -310,10 +410,33 @@ export class HUD {
     }
   }
 
+  public isMobile(): boolean {
+    return (
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.innerWidth <= 900 ||
+      document.body.classList.contains('touch-mode-active')
+    );
+  }
+
   public showPrompt(key: string, text: string) {
     if (this.actionPrompt && this.promptKey && this.promptText) {
-      this.promptKey.textContent = key;
-      this.promptText.textContent = text;
+      const isMobile = this.isMobile();
+      let displayKey = key;
+      let displayText = text;
+
+      if (isMobile) {
+        if (displayKey.trim().toUpperCase() === 'E' || displayKey.trim().toUpperCase() === '[E]') {
+          displayKey = '[動]';
+        }
+        displayText = displayText
+          .replace(/\[E\]/gi, '[動]')
+          .replace(/\(E\)/gi, '[動]')
+          .replace(/按\s*E\b/gi, '按 [動]');
+      }
+
+      this.promptKey.textContent = displayKey;
+      this.promptText.textContent = displayText;
       this.actionPrompt.style.display = 'block';
     }
   }
@@ -351,49 +474,17 @@ export class HUD {
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
   }
 
-  // 武器 HUD 狀態更新 (高亮當前武器，顯示解鎖進度)
+  // 武器 HUD 狀態更新 (依需求已移除右上角武器欄，狀態與進度統一由左側任務看板呈現)
   public updateWeaponHUD(
-    currentWeapon: 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT',
-    hasNormal: boolean,
-    hasSpecial: boolean,
-    studentDefeated: number,
-    teacherDefeated: number,
-    dogDefeated: number,
-    bikeDefeated: number
+    _currentWeapon: 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT',
+    _hasNormal: boolean,
+    _hasSpecial: boolean,
+    _studentDefeated: number,
+    _teacherDefeated: number,
+    _dogDefeated: number,
+    _bikeDefeated: number
   ) {
-    // 徒手
-    if (this.slotFistEl) {
-      if (currentWeapon === 'FIST') {
-        this.slotFistEl.className = 'weapon-slot active';
-      } else {
-        this.slotFistEl.className = 'weapon-slot';
-      }
-    }
-
-    // 普通球棒 (需擊敗 20 名普通同學)
-    if (this.slotNormalBatEl && this.normalBatProgressEl) {
-      if (hasNormal) {
-        this.slotNormalBatEl.className = (currentWeapon === 'NORMAL_BAT') ? 'weapon-slot active' : 'weapon-slot';
-        this.normalBatProgressEl.textContent = 'ATK 55 (已裝備/按2)';
-      } else {
-        this.slotNormalBatEl.className = 'weapon-slot locked';
-        this.normalBatProgressEl.textContent = `同學 ${Math.min(20, studentDefeated)}/20`;
-      }
-    }
-
-    // 特殊球棒 (需擊敗生教 x1, 校犬 x1, 單車同學 x5)
-    if (this.slotSpecialBatEl && this.specialBatProgressEl) {
-      if (hasSpecial) {
-        this.slotSpecialBatEl.className = (currentWeapon === 'SPECIAL_BAT') ? 'weapon-slot active' : 'weapon-slot';
-        this.specialBatProgressEl.textContent = 'ATK 120 (神兵/按3)';
-      } else {
-        this.slotSpecialBatEl.className = 'weapon-slot locked';
-        const tStr = teacherDefeated >= 1 ? '教✔' : `教${teacherDefeated}/1`;
-        const dStr = dogDefeated >= 1 ? '犬✔' : `犬${dogDefeated}/1`;
-        const bStr = bikeDefeated >= 5 ? '車✔' : `車${bikeDefeated}/5`;
-        this.specialBatProgressEl.textContent = `${tStr} ${dStr} ${bStr}`;
-      }
-    }
+    // 安全保留空函式，避免呼叫端報錯
   }
 
   // 切換任務介面收合/展開
@@ -403,31 +494,30 @@ export class HUD {
     } else {
       this.isQuestTrackerExpanded = !this.isQuestTrackerExpanded;
     }
-    if (this.questListContent && this.questToggleIndicator) {
+
+    if (this.questTrackerPanel) {
+      if (this.isQuestTrackerExpanded) {
+        this.questTrackerPanel.classList.remove('collapsed');
+      } else {
+        this.questTrackerPanel.classList.add('collapsed');
+      }
+    }
+
+    if (this.questListContent) {
       if (this.isQuestTrackerExpanded) {
         this.questListContent.classList.remove('collapsed');
-        this.questToggleIndicator.textContent = '▼ 收合';
       } else {
         this.questListContent.classList.add('collapsed');
-        this.questToggleIndicator.textContent = '▲ 展開';
       }
+    }
+
+    if (this.questToggleIndicator) {
+      this.questToggleIndicator.textContent = this.isQuestTrackerExpanded ? '▲' : '▼';
     }
   }
 
-  // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄，含髒檢查 Dirty check)
-  public updateMissionTracker(data: {
-    studentDefeated: number;
-    hasNormalBat: boolean;
-    teacherDefeated: number;
-    dogDefeated: number;
-    bikeDefeated: number;
-    hasSpecialBat: boolean;
-    plantBossDefeated: boolean;
-    peBossDefeated: boolean;
-    trackRecordText: string;
-    swimRecordText: string;
-    basketballStreak: number;
-  }) {
+  // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄與探索，含髒檢查 Dirty check)
+  public updateMissionTracker(data: MissionTrackerData) {
     const last = this.lastMissionData;
     if (
       last &&
@@ -436,30 +526,52 @@ export class HUD {
       last.teacherDefeated === data.teacherDefeated &&
       last.dogDefeated === data.dogDefeated &&
       last.bikeDefeated === data.bikeDefeated &&
+      last.inspectorDefeated === data.inspectorDefeated &&
       last.hasSpecialBat === data.hasSpecialBat &&
       last.plantBossDefeated === data.plantBossDefeated &&
       last.peBossDefeated === data.peBossDefeated &&
       last.trackRecordText === data.trackRecordText &&
       last.swimRecordText === data.swimRecordText &&
-      last.basketballStreak === data.basketballStreak
+      last.basketballStreak === data.basketballStreak &&
+      last.basketballRecord === data.basketballRecord &&
+      last.hasRiddenBike === data.hasRiddenBike &&
+      last.hasEscapedDog === data.hasEscapedDog &&
+      last.hasWishedPond === data.hasWishedPond &&
+      last.hasTastedHotFood === data.hasTastedHotFood
     ) {
       return;
     }
     this.lastMissionData = { ...data };
 
+    let completedCount = 0;
+
+    // 1. 普通球棒 / 擊敗普通同學 (5位)
+    const batDone = data.hasNormalBat || data.studentDefeated >= 5;
+    if (batDone) completedCount++;
+    if (this.qBatItem) {
+      if (batDone) this.qBatItem.classList.add('completed');
+      else this.qBatItem.classList.remove('completed');
+    }
     if (this.qBatProgress) {
-      this.qBatProgress.textContent = `${Math.min(20, data.studentDefeated)}/20`;
+      this.qBatProgress.textContent = `${Math.min(5, data.studentDefeated)}/5`;
     }
     if (this.qBatStatus) {
-      if (data.hasNormalBat) {
-        this.qBatStatus.textContent = '已達成 ✔';
+      if (batDone) {
+        this.qBatStatus.textContent = '已達成 ✅';
         this.qBatStatus.className = 'q-status done';
       } else {
-        this.qBatStatus.textContent = `${data.studentDefeated}/20`;
+        this.qBatStatus.textContent = '進行中';
         this.qBatStatus.className = 'q-status';
       }
     }
 
+    // 2. 特殊神兵球棒 / 校園霸王 (生教 x1, 校犬 x1, 單車巡邏 x5)
+    const specialDone = data.hasSpecialBat || (data.teacherDefeated >= 1 && data.dogDefeated >= 1 && data.bikeDefeated >= 5);
+    if (specialDone) completedCount++;
+    if (this.qSpecialItem) {
+      if (specialDone) this.qSpecialItem.classList.add('completed');
+      else this.qSpecialItem.classList.remove('completed');
+    }
     if (this.qTeacherProg) {
       this.qTeacherProg.textContent = `${Math.min(1, data.teacherDefeated)}/1`;
     }
@@ -470,43 +582,205 @@ export class HUD {
       this.qBikeProg.textContent = `${Math.min(5, data.bikeDefeated)}/5`;
     }
     if (this.qSpecialStatus) {
-      if (data.hasSpecialBat) {
-        this.qSpecialStatus.textContent = '已達成 ✔';
+      if (specialDone) {
+        this.qSpecialStatus.textContent = '已達成 ✅';
         this.qSpecialStatus.className = 'q-status done';
       } else {
         this.qSpecialStatus.textContent = '進行中';
-        this.qSpecialStatus.className = 'q-status pending';
+        this.qSpecialStatus.className = 'q-status';
       }
     }
 
-    if (this.qPlantStatus) {
-      if (data.plantBossDefeated) {
-        this.qPlantStatus.textContent = '已討伐 👑';
-        this.qPlantStatus.className = 'q-status done';
-      } else {
-        this.qPlantStatus.textContent = '棲息中';
-        this.qPlantStatus.className = 'q-status pending';
-      }
+    // 2. 挑戰網球大如老師
+    const peDone = data.peBossDefeated;
+    if (peDone) completedCount++;
+    if (this.qPeItem) {
+      if (peDone) this.qPeItem.classList.add('completed');
+      else this.qPeItem.classList.remove('completed');
     }
-
     if (this.qPeStatus) {
-      if (data.peBossDefeated) {
-        this.qPeStatus.textContent = '已獲勝 🏆';
+      if (peDone) {
+        this.qPeStatus.textContent = '已達成 ✅';
         this.qPeStatus.className = 'q-status done';
       } else {
-        this.qPeStatus.textContent = '4F球場守候';
-        this.qPeStatus.className = 'q-status pending';
+        this.qPeStatus.textContent = '進行中';
+        this.qPeStatus.className = 'q-status';
       }
     }
 
+    // 3. 挑戰溫室食人花 Boss
+    const plantDone = data.plantBossDefeated;
+    if (plantDone) completedCount++;
+    if (this.qPlantItem) {
+      if (plantDone) this.qPlantItem.classList.add('completed');
+      else this.qPlantItem.classList.remove('completed');
+    }
+    if (this.qPlantStatus) {
+      if (plantDone) {
+        this.qPlantStatus.textContent = '已達成 ✅';
+        this.qPlantStatus.className = 'q-status done';
+      } else {
+        this.qPlantStatus.textContent = '進行中';
+        this.qPlantStatus.className = 'q-status';
+      }
+    }
+
+    // 4. 擊倒教官與步巡隊
+    const inspectorDone = data.inspectorDefeated > 0;
+    if (inspectorDone) completedCount++;
+    if (this.qInspectorItem) {
+      if (inspectorDone) this.qInspectorItem.classList.add('completed');
+      else this.qInspectorItem.classList.remove('completed');
+    }
+    if (this.qInspectorProg) {
+      this.qInspectorProg.textContent = `${Math.min(1, data.inspectorDefeated)}/1`;
+    }
+    if (this.qInspectorStatus) {
+      if (inspectorDone) {
+        this.qInspectorStatus.textContent = '已達成 ✅';
+        this.qInspectorStatus.className = 'q-status done';
+      } else {
+        this.qInspectorStatus.textContent = '進行中';
+        this.qInspectorStatus.className = 'q-status';
+      }
+    }
+
+    // 5. 經典三分球投籃挑戰
+    const bballDone = data.basketballRecord > 0 || data.basketballStreak > 0;
+    if (bballDone) completedCount++;
+    if (this.qBasketballItem) {
+      if (bballDone) this.qBasketballItem.classList.add('completed');
+      else this.qBasketballItem.classList.remove('completed');
+    }
+    if (this.qBasketStreak) {
+      const displayScore = Math.max(data.basketballStreak, data.basketballRecord);
+      this.qBasketStreak.textContent = `${displayScore}顆`;
+    }
+    if (this.qBasketballStatus) {
+      if (bballDone) {
+        this.qBasketballStatus.textContent = '已達成 ✅';
+        this.qBasketballStatus.className = 'q-status done';
+      } else {
+        this.qBasketballStatus.textContent = '進行中';
+        this.qBasketballStatus.className = 'q-status';
+      }
+    }
+
+    // 6. 操場跑道 400m 競速
+    const trackDone = Boolean(data.trackRecordText && data.trackRecordText !== '未完成');
+    if (trackDone) completedCount++;
+    if (this.qTrackItem) {
+      if (trackDone) this.qTrackItem.classList.add('completed');
+      else this.qTrackItem.classList.remove('completed');
+    }
     if (this.qTrackTime) {
       this.qTrackTime.textContent = data.trackRecordText;
+    }
+    if (this.qTrackStatus) {
+      if (trackDone) {
+        this.qTrackStatus.textContent = '已達成 ✅';
+        this.qTrackStatus.className = 'q-status done';
+      } else {
+        this.qTrackStatus.textContent = '進行中';
+        this.qTrackStatus.className = 'q-status';
+      }
+    }
+
+    // 7. 25m 水上競速挑戰
+    const swimDone = Boolean(data.swimRecordText && data.swimRecordText !== '未完成');
+    if (swimDone) completedCount++;
+    if (this.qSwimItem) {
+      if (swimDone) this.qSwimItem.classList.add('completed');
+      else this.qSwimItem.classList.remove('completed');
     }
     if (this.qSwimTime) {
       this.qSwimTime.textContent = data.swimRecordText;
     }
-    if (this.qBasketStreak) {
-      this.qBasketStreak.textContent = `${data.basketballStreak}顆`;
+    if (this.qSwimStatus) {
+      if (swimDone) {
+        this.qSwimStatus.textContent = '已達成 ✅';
+        this.qSwimStatus.className = 'q-status done';
+      } else {
+        this.qSwimStatus.textContent = '進行中';
+        this.qSwimStatus.className = 'q-status';
+      }
+    }
+
+    // 8. 自由騎乘校園自行車
+    const bikeDone = data.hasRiddenBike;
+    if (bikeDone) completedCount++;
+    if (this.qBikeItem) {
+      if (bikeDone) this.qBikeItem.classList.add('completed');
+      else this.qBikeItem.classList.remove('completed');
+    }
+    if (this.qBikeStatus) {
+      if (bikeDone) {
+        this.qBikeStatus.textContent = '已達成 ✅';
+        this.qBikeStatus.className = 'q-status done';
+      } else {
+        this.qBikeStatus.textContent = '進行中';
+        this.qBikeStatus.className = 'q-status';
+      }
+    }
+
+    // 9. 擺脫校犬柴柴追捕
+    const dogDone = data.hasEscapedDog;
+    if (dogDone) completedCount++;
+    if (this.qDogItem) {
+      if (dogDone) this.qDogItem.classList.add('completed');
+      else this.qDogItem.classList.remove('completed');
+    }
+    if (this.qDogStatus) {
+      if (dogDone) {
+        this.qDogStatus.textContent = '已達成 ✅';
+        this.qDogStatus.className = 'q-status done';
+      } else {
+        this.qDogStatus.textContent = '進行中';
+        this.qDogStatus.className = 'q-status';
+      }
+    }
+
+    // 10. 生態池許願池投幣
+    const pondDone = data.hasWishedPond;
+    if (pondDone) completedCount++;
+    if (this.qPondItem) {
+      if (pondDone) this.qPondItem.classList.add('completed');
+      else this.qPondItem.classList.remove('completed');
+    }
+    if (this.qPondStatus) {
+      if (pondDone) {
+        this.qPondStatus.textContent = '已達成 ✅';
+        this.qPondStatus.className = 'q-status done';
+      } else {
+        this.qPondStatus.textContent = '進行中';
+        this.qPondStatus.className = 'q-status';
+      }
+    }
+
+    // 11. 天天合作社品嚐熱食
+    const hotfoodDone = data.hasTastedHotFood;
+    if (hotfoodDone) completedCount++;
+    if (this.qHotfoodItem) {
+      if (hotfoodDone) this.qHotfoodItem.classList.add('completed');
+      else this.qHotfoodItem.classList.remove('completed');
+    }
+    if (this.qHotfoodStatus) {
+      if (hotfoodDone) {
+        this.qHotfoodStatus.textContent = '已達成 ✅';
+        this.qHotfoodStatus.className = 'q-status done';
+      } else {
+        this.qHotfoodStatus.textContent = '進行中';
+        this.qHotfoodStatus.className = 'q-status';
+      }
+    }
+
+    // 更新總進度與進度條
+    if (this.qTotalProgress) {
+      this.qTotalProgress.textContent = `${completedCount}/12`;
+    }
+    if (this.qTotalBar) {
+      const pct = Math.min(100, Math.round((completedCount / 12) * 100));
+      this.qTotalBar.style.width = `${pct}%`;
     }
   }
 
@@ -575,6 +849,14 @@ export class HUD {
     if (!this.tennisModalEl) return;
     this.isTennisDialogOpen = true;
     this.onTennisStartCallback = onStart;
+    if (this.tennisStartBtnEl) {
+      const isMobile = this.isMobile();
+      this.tennisStartBtnEl.textContent = isMobile ? '🎾 開始比賽 [動]' : '🎾 開始比賽 (E)';
+    }
+    if (this.tennisCancelBtnEl) {
+      const isMobile = this.isMobile();
+      this.tennisCancelBtnEl.textContent = isMobile ? '稍後再來' : '稍後再來 (Esc)';
+    }
     this.tennisModalEl.style.display = 'flex';
   }
 
@@ -603,38 +885,49 @@ export class HUD {
     isHighDanger: boolean = false,
     delta?: number
   ) {
-    // 1. 生命值與體力數值
-    if (this.hpBar && this.hpNum) {
-      this.hpBar.style.width = `${Math.max(0, Math.min(100, hp))}%`;
-      this.hpNum.textContent = `${Math.round(hp)}%`;
-    }
-    if (this.staminaBar && this.staminaNum) {
-      this.staminaBar.style.width = `${Math.max(0, Math.min(100, stamina))}%`;
-      this.staminaNum.textContent = `${Math.round(stamina)}%`;
+    // 1. 生命值與體力數值 (髒檢查：數值變化時才更新 DOM，避免幀重繪 layout thrashing)
+    const roundedHp = Math.round(Math.max(0, Math.min(100, hp)));
+    if (this.lastHp !== roundedHp) {
+      this.lastHp = roundedHp;
+      if (this.hpBar) this.hpBar.style.width = `${roundedHp}%`;
+      if (this.hpNum) this.hpNum.textContent = `${roundedHp}%`;
     }
 
-    // 2. 地點分區偵測
+    const roundedStamina = Math.round(Math.max(0, Math.min(100, stamina)));
+    if (this.lastStamina !== roundedStamina) {
+      this.lastStamina = roundedStamina;
+      if (this.staminaBar) this.staminaBar.style.width = `${roundedStamina}%`;
+      if (this.staminaNum) this.staminaNum.textContent = `${roundedStamina}%`;
+    }
+
+    // 2. 地點分區偵測 (髒檢查)
     this.updateLocationZone(playerPos);
 
     // 3. 繪製 3D 雷達小地圖 (Minimap，25fps 節流控制)
     this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta);
 
-    // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette)
+    // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
     if (this.pursuitVignetteEl) {
-      if (isBeingChased) {
-        this.pursuitVignetteEl.classList.add('active');
-        if (isHighDanger) {
-          this.pursuitVignetteEl.classList.add('danger');
+      if (this.lastBeingChased !== isBeingChased || this.lastHighDanger !== isHighDanger) {
+        this.lastBeingChased = isBeingChased;
+        this.lastHighDanger = isHighDanger;
+        if (isBeingChased) {
+          this.pursuitVignetteEl.classList.add('active');
+          if (isHighDanger) {
+            this.pursuitVignetteEl.classList.add('danger');
+          } else {
+            this.pursuitVignetteEl.classList.remove('danger');
+          }
         } else {
-          this.pursuitVignetteEl.classList.remove('danger');
+          this.pursuitVignetteEl.classList.remove('active', 'danger');
         }
-      } else {
-        this.pursuitVignetteEl.classList.remove('active', 'danger');
       }
     }
   }
 
   public setPoisonActive(active: boolean) {
+    if (this.lastPoisonActive === active) return;
+    this.lastPoisonActive = active;
     if (this.poisonVignetteEl) {
       if (active) {
         this.poisonVignetteEl.classList.add('active');
@@ -672,7 +965,10 @@ export class HUD {
       zone = '校門口 & 警衛守衛室';
     }
 
-    this.locationEl.textContent = zone;
+    if (this.lastLocationZone !== zone) {
+      this.lastLocationZone = zone;
+      this.locationEl.textContent = zone;
+    }
   }
 
   private renderMinimap(playerPos: THREE.Vector3, playerRotY: number, npcs: NPC[], bicycles: Bicycle[], delta?: number) {

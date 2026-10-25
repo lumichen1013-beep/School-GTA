@@ -3,6 +3,10 @@ import { CollidableBox } from './CampusWorld';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
 
+const _ecoScratchDir = new THREE.Vector3();
+const _ecoScratchWDir = new THREE.Vector3();
+const _ecoPushDir = new THREE.Vector3();
+
 export interface HostileVine {
   id: number;
   position: THREE.Vector3;
@@ -58,9 +62,9 @@ export interface GardenBug {
   velocity: THREE.Vector3;
   wanderTarget: THREE.Vector3;
   wanderTimer: number;
-  speed: number;           // 7.8 m/s (比玩家 5.0 快！)
-  attackDamage: number;    // 4 HP (攻擊力低)
-  attackCooldown: number;  // 0.35s (攻擊速度快！)
+  speed: number;           // 4.8 m/s (比玩家 5.0 快！)
+  attackDamage: number;    // 1 HP (攻擊力低)
+  attackCooldown: number;  // 1.0s (攻擊速度快！)
   hp: number;
   maxHp: number;
   isDead: boolean;
@@ -487,9 +491,9 @@ export class EcologicalGarden {
         velocity: new THREE.Vector3(),
         wanderTarget: pos.clone(),
         wanderTimer: Math.random() * 3.0,
-        speed: 7.8,          // 7.8 m/s (比玩家 5.0 快！)
-        attackDamage: 4,     // 4 HP (攻擊力低)
-        attackCooldown: 0.35,// 0.35s (攻擊速度快！)
+        speed: 4.8,          // 4.8 m/s (比玩家 5.0 快！)
+        attackDamage: 1,     // 1 HP (攻擊力低)
+        attackCooldown: 1.0,// 1.0s (攻擊速度快！)
         hp: 25,
         maxHp: 25,
         isDead: false,
@@ -831,9 +835,9 @@ export class EcologicalGarden {
           if (this.boss.attackCooldown <= 0) {
             this.boss.attackCooldown = 1.6;
             soundManager.playBossBite();
-            // 猛烈咬噬：28 點高額傷害 + 強烈擊退
-            const pushDir = playerPos.clone().sub(this.boss.position).normalize();
-            player.launchFlying(pushDir, 12.0, 4.0, 28, '被食人花王巨口猛烈撕咬！');
+            // 猛烈咬噬：28 點高額傷害 + 強烈擊退 (0-GC Scratch Vector)
+            _ecoPushDir.subVectors(playerPos, this.boss.position).normalize();
+            player.launchFlying(_ecoPushDir, 12.0, 4.0, 28, '被食人花王巨口猛烈撕咬！');
           }
         }
 
@@ -859,7 +863,7 @@ export class EcologicalGarden {
       }
     }
 
-    // C. 更新飛行毒液孢子
+    // C. 更新飛行毒液孢子 (資源釋放保護)
     for (let i = this.spores.length - 1; i >= 0; i--) {
       const sp = this.spores[i];
       sp.position.addScaledVector(sp.velocity, delta);
@@ -871,6 +875,8 @@ export class EcologicalGarden {
         onPlayerHit(14, '被變異食人花的劇毒孢子命中！');
         soundManager.playPunch();
         this.scene.remove(sp.mesh);
+        sp.mesh.geometry.dispose();
+        (sp.mesh.material as THREE.Material).dispose();
         this.spores.splice(i, 1);
         continue;
       }
@@ -878,6 +884,8 @@ export class EcologicalGarden {
       // 壽命耗盡或著地消散
       if (sp.life <= 0 || sp.position.y <= 0.1) {
         this.scene.remove(sp.mesh);
+        sp.mesh.geometry.dispose();
+        (sp.mesh.material as THREE.Material).dispose();
         this.spores.splice(i, 1);
       }
     }
@@ -948,19 +956,19 @@ export class EcologicalGarden {
       if (bug.attackCooldown > 0) bug.attackCooldown -= delta;
 
       if (isPlayerInGarden && !player.isDead) {
-        // 追擊玩家 (速度 7.8 比玩家 5.0 快)
-        const dir = new THREE.Vector3().subVectors(playerPos, bug.position);
-        dir.y = 0;
-        const dist = dir.length();
+        // 追擊玩家 (速度 7.8 比玩家 5.0 快，0-GC Scratch Vector)
+        _ecoScratchDir.subVectors(playerPos, bug.position);
+        _ecoScratchDir.y = 0;
+        const dist = _ecoScratchDir.length();
         if (dist > 0.05) {
-          dir.normalize();
-          bug.position.addScaledVector(dir, bug.speed * delta);
-          bug.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+          _ecoScratchDir.normalize();
+          bug.position.addScaledVector(_ecoScratchDir, bug.speed * delta);
+          bug.mesh.rotation.y = Math.atan2(_ecoScratchDir.x, _ecoScratchDir.z);
         }
 
         // 貼身快速啃咬攻擊
-        if (dist < 1.15 && bug.attackCooldown <= 0) {
-          bug.attackCooldown = 0.35; // 極快攻速
+        if (dist < 0.75 && bug.attackCooldown <= 0) {
+          bug.attackCooldown = 1.0; // 極快攻速
           soundManager.playBugChirp();
           onPlayerHit(bug.attackDamage, '遭生態園毒甲蟲刺螯快速咬傷！');
         }
@@ -975,13 +983,13 @@ export class EcologicalGarden {
             gardenMinZ + 4 + Math.random() * (gardenMaxZ - gardenMinZ - 8)
           );
         }
-        const wDir = new THREE.Vector3().subVectors(bug.wanderTarget, bug.position);
-        wDir.y = 0;
-        const wDist = wDir.length();
+        _ecoScratchWDir.subVectors(bug.wanderTarget, bug.position);
+        _ecoScratchWDir.y = 0;
+        const wDist = _ecoScratchWDir.length();
         if (wDist > 0.4) {
-          wDir.normalize();
-          bug.position.addScaledVector(wDir, bug.speed * 0.45 * delta);
-          bug.mesh.rotation.y = Math.atan2(wDir.x, wDir.z);
+          _ecoScratchWDir.normalize();
+          bug.position.addScaledVector(_ecoScratchWDir, bug.speed * 0.45 * delta);
+          bug.mesh.rotation.y = Math.atan2(_ecoScratchWDir.x, _ecoScratchWDir.z);
         }
       }
 

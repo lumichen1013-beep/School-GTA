@@ -2550,13 +2550,19 @@ export class CampusWorld {
     this.scene.add(signSouth);
   }
 
-  // 電梯位置判定方法 (供 main.ts 呼叫)
+  // 電梯位置判定方法 (供 main.ts 呼叫，0-GC 純量運算)
   public isNear1FElevator(pos: THREE.Vector3): boolean {
-    return pos.y < 3.5 && pos.distanceTo(new THREE.Vector3(65.5, 0, 43.5)) < 2.8;
+    if (pos.y >= 3.5) return false;
+    const dx = pos.x - 65.5;
+    const dz = pos.z - 43.5;
+    return (dx * dx + dz * dz) < 7.84; // 2.8 * 2.8 = 7.84
   }
 
   public isNear4FElevator(pos: THREE.Vector3): boolean {
-    return pos.y >= 10.0 && pos.distanceTo(new THREE.Vector3(65.5, 12.0, 43.5)) < 2.8;
+    if (pos.y < 10.0) return false;
+    const dx = pos.x - 65.5;
+    const dz = pos.z - 43.5;
+    return (dx * dx + dz * dz) < 7.84;
   }
 
   private buildWall(x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material) {

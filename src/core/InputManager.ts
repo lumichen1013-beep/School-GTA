@@ -117,10 +117,10 @@ export class InputManager {
           target.closest('#touch-joystick-zone') ||
           target.closest('#mobile-action-buttons') ||
           target.closest('.mobile-btn') ||
-          target.closest('.weapon-slot') ||
           target.closest('#commissary-modal') ||
           target.closest('#bgm-badge') ||
           target.closest('#toggle-mobile-mode-btn') ||
+          target.closest('#btn-fullscreen') ||
           target.closest('#quest-tracker-panel') ||
           target.closest('.demerit-container') ||
           target.closest('.status-badge') ||

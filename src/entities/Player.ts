@@ -5,6 +5,10 @@ import { soundManager } from '../audio/SoundEffects';
 
 export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 
+// 模組頂層靜態共享 Scratch 物件 (0-GC 避免每幀垃圾回收引發微卡頓)
+const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
+const _playerMoveDir = new THREE.Vector3();
+
 export class Player {
   public mesh: THREE.Group;
   public position: THREE.Vector3 = new THREE.Vector3(0, 0, 15);
@@ -214,7 +218,7 @@ export class Player {
     return this.takeDamage(damage, reason);
   }
 
-  public respawn(pos: THREE.Vector3 = new THREE.Vector3(0, 0, 15)) {
+  public respawn(pos: THREE.Vector3 = DEFAULT_RESPAWN_POS) {
     this.hp = this.maxHp;
     this.stamina = this.maxStamina;
     this.isDead = false;
@@ -296,8 +300,8 @@ export class Player {
       this.hitCooldown -= delta;
     }
 
-    // 1. 移動輸入合成 (WASD 與 360 度真類比虛擬搖桿)
-    const moveDir = new THREE.Vector3();
+    // 1. 移動輸入合成 (WASD 與 360 度真類比虛擬搖桿，0-GC 重複利用 Scratch Vector)
+    _playerMoveDir.set(0, 0, 0);
     let analogSpeedScale = 1.0;
 
     const hasVirtualJoystick = input.virtualAxisMagnitude > 0.05;
@@ -308,26 +312,26 @@ export class Player {
 
     if (hasVirtualJoystick && !hasKeyboard) {
       // 360 度真類比連續方向 (推桿 Y 負為前進，X 正為右移)
-      moveDir.addScaledVector(forwardVec, -input.virtualAxisY);
-      moveDir.addScaledVector(rightVec, input.virtualAxisX);
-      if (moveDir.lengthSq() > 0.001) {
-        moveDir.normalize();
+      _playerMoveDir.addScaledVector(forwardVec, -input.virtualAxisY);
+      _playerMoveDir.addScaledVector(rightVec, input.virtualAxisX);
+      if (_playerMoveDir.lengthSq() > 0.001) {
+        _playerMoveDir.normalize();
       }
       // 支援輕推慢走（依搖桿半徑動態縮放速度 0.35 ~ 1.0）
       const clampedMag = Math.min(1.0, Math.max(0.05, input.virtualAxisMagnitude));
       analogSpeedScale = 0.35 + ((clampedMag - 0.05) / 0.95) * (1.0 - 0.35);
     } else {
-      if (input.forward) moveDir.add(forwardVec);
-      if (input.backward) moveDir.sub(forwardVec);
-      if (input.right) moveDir.add(rightVec);
-      if (input.left) moveDir.sub(rightVec);
-      if (moveDir.lengthSq() > 0.001) {
-        moveDir.normalize();
+      if (input.forward) _playerMoveDir.add(forwardVec);
+      if (input.backward) _playerMoveDir.sub(forwardVec);
+      if (input.right) _playerMoveDir.add(rightVec);
+      if (input.left) _playerMoveDir.sub(rightVec);
+      if (_playerMoveDir.lengthSq() > 0.001) {
+        _playerMoveDir.normalize();
       }
       analogSpeedScale = 1.0;
     }
 
-    const isMoving = moveDir.lengthSq() > 0.001;
+    const isMoving = _playerMoveDir.lengthSq() > 0.001;
     this.isMoving = isMoving;
 
     // 2. 衝刺與體力消耗 (Sprint & Stamina)
@@ -355,8 +359,8 @@ export class Player {
       this.knockVelocity.x *= Math.max(0, 1 - delta * 3.5);
       this.knockVelocity.z *= Math.max(0, 1 - delta * 3.5);
 
-      this.velocity.x = this.knockVelocity.x + moveDir.x * currentSpeed * 0.15;
-      this.velocity.z = this.knockVelocity.z + moveDir.z * currentSpeed * 0.15;
+      this.velocity.x = this.knockVelocity.x + _playerMoveDir.x * currentSpeed * 0.15;
+      this.velocity.z = this.knockVelocity.z + _playerMoveDir.z * currentSpeed * 0.15;
 
       // 垂直拋物線重力
       this.knockVelocity.y += this.gravity * delta;
@@ -368,8 +372,8 @@ export class Player {
       this.mesh.rotation.z = Math.sin(this.knockTimer * 12) * 0.25;
     } else {
       // 正常地面或水上移動控制
-      this.velocity.x = moveDir.x * currentSpeed;
-      this.velocity.z = moveDir.z * currentSpeed;
+      this.velocity.x = _playerMoveDir.x * currentSpeed;
+      this.velocity.z = _playerMoveDir.z * currentSpeed;
 
       if (this.isSwimming) {
         // 水中浮力與踏水跳躍物理
@@ -413,7 +417,7 @@ export class Player {
 
     // 6. 朝向旋轉 (Facing Direction)
     if (isMoving && !this.isKnockedFlying) {
-      const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+      const targetRotation = Math.atan2(_playerMoveDir.x, _playerMoveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
       const turnRate = this.isSwimming ? 16.0 : 14.0;
@@ -634,6 +638,28 @@ export class Player {
       this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, delta * 10);
       this.bodyMesh.position.y = 1.05;
       this.headMesh.position.y = 1.62;
+    }
+  }
+
+  // 資源釋放處置 (Resource Disposal)
+  public dispose(scene?: THREE.Scene) {
+    this.mesh.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => m.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      }
+    });
+    if (scene) {
+      scene.remove(this.mesh);
+    } else if (this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
     }
   }
 }

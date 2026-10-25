@@ -13,6 +13,21 @@ export interface ShuttlecockProjectile {
   isReturned?: boolean;
 }
 
+// 模組頂層靜態共享 Scratch Vectors (0-GC 避免每幀垃圾回收引發微卡頓)
+const _npcMoveDir = new THREE.Vector3();
+const _npcToPlayer = new THREE.Vector3();
+const _npcForward = new THREE.Vector3();
+const _npcEyePos = new THREE.Vector3();
+const _npcTargetEye = new THREE.Vector3();
+
+// 網球靜態共享幾何體與材質 (全域快取複用，避免頻繁發球時洩漏 GPU 資源)
+const _tennisBallGeo = new THREE.SphereGeometry(0.15, 12, 12);
+const _tennisBallMat = new THREE.MeshLambertMaterial({ color: 0xccff00 });
+const _tennisSeamGeo = new THREE.TorusGeometry(0.151, 0.012, 6, 16);
+const _tennisSeamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const _tennisRingGeo = new THREE.RingGeometry(0.2, 0.45, 16);
+const _tennisRingMat = new THREE.MeshBasicMaterial({ color: 0xccff00, transparent: true, opacity: 0.6 });
+
 export class NPC {
   public mesh: THREE.Group;
   public position: THREE.Vector3;
@@ -44,8 +59,6 @@ export class NPC {
   public isBurstSprinting: boolean = true;
   private chasePacingTimer: number = 0;
   private dynamicSpeed: number = 5.0;
-  private burstDuration: number = 1.0;   // 每次全力衝刺上限 0.5 ~ 1.5 秒
-  private fatigueDuration: number = 3.5; // 每次喘氣放慢約 3.5 秒
 
   public lostSightTimer: number = 0; // 失去玩家視線計時器
   public lastKnownPos: THREE.Vector3 = new THREE.Vector3(); // 玩家最後被目擊位置
@@ -70,9 +83,10 @@ export class NPC {
   private dogTail?: THREE.Object3D;
   private dogHead?: THREE.Object3D;
 
-  // 單車糾察隊
+  // 單車糾察隊與單車組件追蹤
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
+  private bikeParts: THREE.Object3D[] = [];
 
   private hpBarGroup: THREE.Group;
   private hpBarBgMesh: THREE.Mesh;
@@ -86,11 +100,11 @@ export class NPC {
     this.position = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
     this.role = role;
-    this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), startPos.clone().add(new THREE.Vector3(8, 0, 0))];
+    this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), new THREE.Vector3(startPos.x + 8, startPos.y, startPos.z)];
 
     // 初始化各角色數值：行走 5.0 | 跑步 10.0 | 騎車 15.0
     if (role === 'PE_TEACHER_BOSS') {
-      // 體育組長 林教頭 (羽球場霸主)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
+      // 大如老師 (4F 網球教練)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
       this.maxHp = 950;
       this.speed = 4.2;
       this.chaseSpeed = 8.5;
@@ -419,6 +433,9 @@ export class NPC {
     handlebar.position.set(0, 0.95, 0.65);
     this.mesh.add(handlebar);
 
+    // 註冊單車專屬零件供失竊時清理與處置
+    this.bikeParts = [this.bikeRearWheel, this.bikeFrontWheel, frameTube, handlebar];
+
     // 糾察隊員 (騎坐在車上)
     const riderTorso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.32), shirtMat);
     riderTorso.position.set(0, 1.15, -0.15);
@@ -479,7 +496,7 @@ export class NPC {
       shirtColor = 0xbeb698;
       pantsColor = 0x82775c;
     } else if (this.role === 'PE_TEACHER_BOSS') {
-      // 體育組長 林教頭：熱血深紅運動夾克與黑色運動長褲
+      // 大如老師：熱血深紅運動夾克與黑色運動長褲
       shirtColor = 0xc0392b;
       pantsColor = 0x2c3e50;
     }
@@ -672,7 +689,7 @@ export class NPC {
 
   public getRoleTitle(): string {
     switch (this.role) {
-      case 'PE_TEACHER_BOSS': return '網球教練 巨石';
+      case 'PE_TEACHER_BOSS': return '大如老師';
       case 'BANDIT': return '校外強盜';
       case 'TEACHER': return '巡堂老師';
       case 'INSTRUCTOR': return '主任教官';
@@ -782,7 +799,7 @@ export class NPC {
   public getAttackSpecs(): { damage: number; hForce: number; vForce: number } {
     switch (this.role) {
       case 'PE_TEACHER_BOSS':
-        // 體育組長 林教頭：羽球拍近戰殺球重扣，極高傷害與震飛
+        // 大如老師：網球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
       case 'BANDIT':
         // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高
@@ -806,10 +823,20 @@ export class NPC {
     }
   }
 
-  // 失去自行車 (遭到玩家搶奪)
+  // 失去自行車 (遭到玩家搶奪，妥善卸除並釋放單車零件與幾何體)
   public loseBike() {
-    if (this.bikeFrontWheel) this.bikeFrontWheel.visible = false;
-    if (this.bikeRearWheel) this.bikeRearWheel.visible = false;
+    for (let i = 0; i < this.bikeParts.length; i++) {
+      const part = this.bikeParts[i];
+      part.visible = false;
+      this.mesh.remove(part);
+      if ((part as THREE.Mesh).isMesh) {
+        const mesh = part as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+      }
+    }
+    this.bikeParts.length = 0;
+    this.bikeFrontWheel = undefined;
+    this.bikeRearWheel = undefined;
     this.role = 'STUDENT';
     this.maxHp = 112;
     this.hp = Math.min(this.hp, this.maxHp);
@@ -819,7 +846,16 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 網球教練發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網)
+  // 網球投射物專屬安全銷毀處置
+  public static disposeProjectile(projectile: ShuttlecockProjectile, scene?: THREE.Scene) {
+    if (scene) {
+      scene.remove(projectile.mesh);
+    } else if (projectile.mesh.parent) {
+      projectile.mesh.parent.remove(projectile.mesh);
+    }
+  }
+
+  // 網球教練發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網，靜態幾何複用 0-GC)
   public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene, cooldown: number = 2.2): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
@@ -833,46 +869,45 @@ export class NPC {
       return null;
     }
 
-    const dist = this.position.distanceTo(targetPos);
-    if (dist < 2.5 || dist > 22.0) return null;
+    const distSq = this.position.distanceToSquared(targetPos);
+    if (distSq < 6.25 || distSq > 484.0) return null; // 2.5m ~ 22.0m
 
     this.shuttlecockCooldown = cooldown; // 發球間隔
     soundManager.playBadmintonWhoosh();
     this.triggerAttackAnimation();
 
-    // 建立螢光黃綠色標準網球 3D 模型
+    // 建立螢光黃綠色標準網球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏)
     const group = new THREE.Group();
-    const ballMat = new THREE.MeshLambertMaterial({ color: 0xccff00 }); // 經典螢光網球黃綠
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 12), ballMat);
+    const ball = new THREE.Mesh(_tennisBallGeo, _tennisBallMat);
     group.add(ball);
 
     // 白色縫線條紋裝飾
-    const seamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const seam = new THREE.Mesh(new THREE.TorusGeometry(0.151, 0.012, 6, 16), seamMat);
+    const seam = new THREE.Mesh(_tennisSeamGeo, _tennisSeamMat);
     seam.rotation.x = Math.PI / 4;
     group.add(seam);
 
     // 網球發光落點預告環 (方便玩家預判位置)
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xccff00, transparent: true, opacity: 0.6 });
-    const shadowRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.45, 16), ringMat);
+    const shadowRing = new THREE.Mesh(_tennisRingGeo, _tennisRingMat);
     shadowRing.rotation.x = -Math.PI / 2;
     shadowRing.position.y = -0.14;
     group.add(shadowRing);
 
-    const startPos = this.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const startPos = new THREE.Vector3(this.position.x, this.position.y + 1.35, this.position.z);
     group.position.copy(startPos);
     scene.add(group);
 
-    // 合理化網球飛行速度：11.5 m/s，並略帶微弧線上拋過網
-    const toTarget = targetPos.clone().add(new THREE.Vector3(0, 0.8, 0)).sub(startPos);
-    const horizDist = Math.max(2.0, Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z));
+    // 合理化網球飛行速度：11.5 m/s，並略帶微弧線上拋過網 (純純量運算，0 暫存 Vector3 分配)
+    const toTargetX = targetPos.x - startPos.x;
+    const toTargetY = (targetPos.y + 0.8) - startPos.y;
+    const toTargetZ = targetPos.z - startPos.z;
+    const horizDist = Math.max(2.0, Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ));
     const speed = 11.5; // 合理網球速度 (11.5 m/s)
     const flightTime = horizDist / speed;
 
-    const velX = (toTarget.x / flightTime);
-    const velZ = (toTarget.z / flightTime);
+    const velX = toTargetX / flightTime;
+    const velZ = toTargetZ / flightTime;
     // 考慮網高與重力：過網弧線
-    const velY = (toTarget.y / flightTime) + 0.5 * 9.8 * flightTime + 0.8;
+    const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + 0.8;
 
     const vel = new THREE.Vector3(velX, velY, velZ);
 
@@ -909,58 +944,67 @@ export class NPC {
     return pos.x >= 25.0 && pos.z >= -10.0 && pos.z <= 100.0;
   }
 
-  // 3D 線段與軸對齊包圍盒 (AABB) 相交檢測
-  private segmentIntersectsAABB(p1: THREE.Vector3, p2: THREE.Vector3, min: THREE.Vector3, max: THREE.Vector3): boolean {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const dz = p2.z - p1.z;
+  // 3D 線段與軸對齊包圍盒 (AABB) 高效相交檢測 (純純量運算，0 記憶體配置)
+  public static segmentIntersectsAABBCoords(
+    p1x: number, p1y: number, p1z: number,
+    p2x: number, p2y: number, p2z: number,
+    min: THREE.Vector3, max: THREE.Vector3
+  ): boolean {
+    const dx = p2x - p1x;
+    const dy = p2y - p1y;
+    const dz = p2z - p1z;
 
     let tMin = 0.0;
     let tMax = 1.0;
 
     // X 軸
     if (Math.abs(dx) < 1e-6) {
-      if (p1.x < min.x || p1.x > max.x) return false;
+      if (p1x < min.x || p1x > max.x) return false;
     } else {
       const inv = 1.0 / dx;
-      let t1 = (min.x - p1.x) * inv;
-      let t2 = (max.x - p1.x) * inv;
+      let t1 = (min.x - p1x) * inv;
+      let t2 = (max.x - p1x) * inv;
       if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tMin = Math.max(tMin, t1);
-      tMax = Math.min(tMax, t2);
+      if (t1 > tMin) tMin = t1;
+      if (t2 < tMax) tMax = t2;
       if (tMin > tMax) return false;
     }
 
     // Y 軸
     if (Math.abs(dy) < 1e-6) {
-      if (p1.y < min.y || p1.y > max.y) return false;
+      if (p1y < min.y || p1y > max.y) return false;
     } else {
       const inv = 1.0 / dy;
-      let t1 = (min.y - p1.y) * inv;
-      let t2 = (max.y - p1.y) * inv;
+      let t1 = (min.y - p1y) * inv;
+      let t2 = (max.y - p1y) * inv;
       if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tMin = Math.max(tMin, t1);
-      tMax = Math.min(tMax, t2);
+      if (t1 > tMin) tMin = t1;
+      if (t2 < tMax) tMax = t2;
       if (tMin > tMax) return false;
     }
 
     // Z 軸
     if (Math.abs(dz) < 1e-6) {
-      if (p1.z < min.z || p1.z > max.z) return false;
+      if (p1z < min.z || p1z > max.z) return false;
     } else {
       const inv = 1.0 / dz;
-      let t1 = (min.z - p1.z) * inv;
-      let t2 = (max.z - p1.z) * inv;
+      let t1 = (min.z - p1z) * inv;
+      let t2 = (max.z - p1z) * inv;
       if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tMin = Math.max(tMin, t1);
-      tMax = Math.min(tMax, t2);
+      if (t1 > tMin) tMin = t1;
+      if (t2 < tMax) tMax = t2;
       if (tMin > tMax) return false;
     }
 
     return true;
   }
 
-  // 3D 視錐與障礙物遮擋檢測 (Line of Sight with Obstacle Occlusion)
+  // 3D 線段與軸對齊包圍盒 (AABB) 相交檢測
+  private segmentIntersectsAABB(p1: THREE.Vector3, p2: THREE.Vector3, min: THREE.Vector3, max: THREE.Vector3): boolean {
+    return NPC.segmentIntersectsAABBCoords(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, min, max);
+  }
+
+  // 3D 視錐與障礙物遮擋檢測 (Line of Sight with Obstacle Occlusion, 0-GC 純純量運算)
   public canSeePlayer(playerPos: THREE.Vector3, colliders: CollidableBox[] = []): boolean {
     if (this.isKnockedDown) return false;
 
@@ -969,29 +1013,34 @@ export class NPC {
       return false;
     }
 
-    // 網球教練 巨石：處於和平教學與挑戰模式，不主動鎖定或追捕玩家
+    // 大如老師：處於和平教學與挑戰模式，不主動鎖定或追捕玩家
     if (this.role === 'PE_TEACHER_BOSS') {
       return false;
     }
 
     // 垂直高度差檢測：若垂直高度差超過 2.6m（位於不同樓層），視線被樓板與天花板遮擋
-    const maxYDiff = 2.6;
-    if (Math.abs(playerPos.y - this.position.y) > maxYDiff) {
+    if (Math.abs(playerPos.y - this.position.y) > 2.6) {
       return false;
     }
 
-    const toPlayer = playerPos.clone().sub(this.position);
-    const dist = toPlayer.length();
+    const dx = playerPos.x - this.position.x;
+    const dy = playerPos.y - this.position.y;
+    const dz = playerPos.z - this.position.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
 
     // 視距半徑
     const maxViewDist = this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
-    if (dist > maxViewDist) return false;
+    if (distSq > maxViewDist * maxViewDist) return false;
 
-    const forward = new THREE.Vector3(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
-    toPlayer.y = 0;
-    toPlayer.normalize();
-
-    const dot = forward.dot(toPlayer);
+    // 視錐夾角檢測 (水平前向向量與目標方向向量的點積)
+    const horizDistSq = dx * dx + dz * dz;
+    if (horizDistSq < 1e-4) return true; // 緊貼著直接可見
+    const invHoriz = 1.0 / Math.sqrt(horizDistSq);
+    const dirX = dx * invHoriz;
+    const dirZ = dz * invHoriz;
+    const fwdX = Math.sin(this.rotationY);
+    const fwdZ = Math.cos(this.rotationY);
+    const dot = fwdX * dirX + fwdZ * dirZ;
     if (dot <= (this.role === 'DOG' ? 0.2 : 0.4)) {
       return false; // 不在視野角內
     }
@@ -999,18 +1048,149 @@ export class NPC {
     // 3D 視線障礙物遮擋檢測 (Line of Sight Raycast against Walls & Solid Objects)
     if (colliders.length > 0) {
       const eyeY = this.role === 'DOG' ? 0.6 : 1.5;
-      const eyePos = new THREE.Vector3(this.position.x, this.position.y + eyeY, this.position.z);
-      const targetEye = new THREE.Vector3(playerPos.x, playerPos.y + 1.2, playerPos.z);
+      const eyePosX = this.position.x;
+      const eyePosY = this.position.y + eyeY;
+      const eyePosZ = this.position.z;
+      const targetEyeX = playerPos.x;
+      const targetEyeY = playerPos.y + 1.2;
+      const targetEyeZ = playerPos.z;
 
-      for (const box of colliders) {
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
         if (box.isFloorOnly) continue; // 地板/坡道不遮擋水平視線
-        if (this.segmentIntersectsAABB(eyePos, targetEye, box.min, box.max)) {
+        if (NPC.segmentIntersectsAABBCoords(eyePosX, eyePosY, eyePosZ, targetEyeX, targetEyeY, targetEyeZ, box.min, box.max)) {
           return false; // 視線被實體牆壁、門框或障礙物阻擋！
         }
       }
     }
 
     return true;
+  }
+
+  // 檢測指定 (X, Z) 位置下方的真實支撐面 (最高樓板、坡道或地面 Y = 0)
+  private getFloorHeightAt(posX: number, posY: number, posZ: number, colliders: CollidableBox[]): number {
+    let supportFloorY = 0;
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (box.isFloorOnly || box.isRamp) {
+        if (
+          posX >= box.min.x && posX <= box.max.x &&
+          posZ >= box.min.z && posZ <= box.max.z
+        ) {
+          let floorTop = box.max.y;
+          if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
+            const t = THREE.MathUtils.clamp((posZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
+            floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
+          }
+          if (floorTop <= posY + 0.6 && floorTop > supportFloorY) {
+            supportFloorY = floorTop;
+          }
+        }
+      }
+    }
+    return supportFloorY;
+  }
+
+  // AI 狀態機：仇恨追捕、視線丟失與放棄邏輯 (降低圈複雜度與重複運算)
+  private updateAggroState(
+    delta: number,
+    playerPos: THREE.Vector3,
+    wantedLevel: number,
+    colliders: CollidableBox[],
+    onSpotPlayer: () => void,
+    isPlayerDead: boolean
+  ) {
+    if (isPlayerDead) {
+      this.resetAggro();
+      return;
+    }
+
+    // 校外強盜專屬仇恨邏輯
+    if (this.role === 'BANDIT') {
+      const isPlayerOutside = playerPos.z >= 105.5 || Math.abs(playerPos.x) >= 105.5 || playerPos.z <= -105.5;
+      const distSq = this.position.distanceToSquared(playerPos);
+      if (isPlayerOutside && distSq < 2025.0) { // 45.0m
+        this.isChasing = true;
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        onSpotPlayer();
+      } else {
+        this.resetAggro();
+      }
+      return;
+    }
+
+    // 通緝星級為 0 時，非學生 NPC 解除追捕
+    if (wantedLevel === 0 && this.role !== 'STUDENT') {
+      this.resetAggro();
+      return;
+    }
+
+    // 校犬專屬仇恨邏輯：教學大樓保護禁區
+    if (this.role === 'DOG' && NPC.isInsideTeachingBuilding(playerPos)) {
+      this.resetAggro();
+      return;
+    }
+
+    // 通用視線與追逐判定 (校犬、教官、巡堂老師、糾察隊、激怒學生)
+    const distSq = this.position.distanceToSquared(playerPos);
+    const seesPlayer = this.canSeePlayer(playerPos, colliders);
+
+    // 發現玩家觸發追逐 (通緝中且在視距內)
+    const spotDistSq = this.role === 'DOG' ? 400.0 : 324.0; // 20m vs 18m
+    if (wantedLevel > 0 && seesPlayer && distSq < spotDistSq && this.role !== 'STUDENT') {
+      this.isChasing = true;
+      this.lostSightTimer = 0;
+      this.lastKnownPos.copy(playerPos);
+      if (this.whistleCooldown <= 0) {
+        if (this.role === 'DOG') soundManager.playDogBark();
+        else if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell();
+        else soundManager.playWhistle();
+        this.whistleCooldown = this.role === 'DOG' ? 4.0 : 5.0;
+      }
+      onSpotPlayer();
+    } else if (this.isChasing) {
+      if (!seesPlayer) {
+        this.lostSightTimer += delta;
+        const maxLostTime = this.role === 'DOG' ? 4.0 : (this.role === 'STUDENT' ? 3.0 : 3.5);
+        const maxDistSq = this.role === 'DOG' ? 1024.0 : (this.role === 'STUDENT' ? 625.0 : 900.0); // 32m, 25m, 30m
+        if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
+          this.resetAggro();
+        }
+      } else {
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        if (this.role !== 'STUDENT') {
+          onSpotPlayer();
+        }
+      }
+    }
+  }
+
+  // 計算追捕移動速度 (包含校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
+  private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number): number {
+    if (this.role === 'DOG') {
+      if (isPlayerRidingBike) {
+        this.isBurstSprinting = true;
+        return 13.8;
+      }
+      if (distToPlayerSq > 144.0) { // > 12m
+        this.isBurstSprinting = true;
+        return 12.2;
+      }
+      if (distToPlayerSq > 30.25) { // > 5.5m
+        return this.isBurstSprinting ? 11.5 : 8.8;
+      }
+      return this.isBurstSprinting ? 9.8 : 7.8;
+    }
+
+    if (this.isBurstSprinting) {
+      return this.chaseSpeed;
+    }
+
+    if (this.role === 'BIKE_PATROL') return 1.88;
+    if (this.role === 'BANDIT') return 6.8;
+    return this.speed;
   }
 
   public update(
@@ -1047,24 +1227,7 @@ export class NPC {
       this.mesh.rotation.z += delta * 8.0;
 
       // 計算 NPC 當前 (X, Z) 位置下方的真實支撐面 (最高樓板或地面 Y = 0)
-      let supportFloorY = 0;
-      for (const box of colliders) {
-        if (box.isFloorOnly || box.isRamp) {
-          if (
-            this.position.x >= box.min.x && this.position.x <= box.max.x &&
-            this.position.z >= box.min.z && this.position.z <= box.max.z
-          ) {
-            let floorTop = box.max.y;
-            if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
-              const t = THREE.MathUtils.clamp((this.position.z - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
-              floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
-            }
-            if (floorTop <= this.position.y + 0.6 && floorTop > supportFloorY) {
-              supportFloorY = floorTop;
-            }
-          }
-        }
-      }
+      const supportFloorY = this.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);
 
       // 著地檢測：只有落到真實支撐面 (supportFloorY 或校園地面 Y = 0) 時才著地！
       if (this.position.y <= supportFloorY) {
@@ -1116,19 +1279,7 @@ export class NPC {
       this.updateKOBadge(this.reviveTimer);
 
       // 倒地重力墜落檢測 (若被打出大樓邊界懸空倒地，持續自由落體墜落至地面)
-      let supportFloorY = 0;
-      for (const box of colliders) {
-        if (box.isFloorOnly || box.isRamp) {
-          if (
-            this.position.x >= box.min.x && this.position.x <= box.max.x &&
-            this.position.z >= box.min.z && this.position.z <= box.max.z
-          ) {
-            if (box.max.y <= this.position.y + 0.6 && box.max.y > supportFloorY) {
-              supportFloorY = box.max.y;
-            }
-          }
-        }
-      }
+      const supportFloorY = this.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);
       if (this.position.y > supportFloorY) {
         this.position.y = Math.max(supportFloorY, this.position.y - 22.0 * delta);
         this.baseFloorY = supportFloorY;
@@ -1166,11 +1317,11 @@ export class NPC {
       this.mesh.position.x = this.position.x;
       this.mesh.position.z = this.position.z;
 
-      // 血條與告示牌面朝玩家視角
-      const toPlayer = playerPos.clone().sub(this.position);
-      toPlayer.y = 0;
-      if (toPlayer.lengthSq() > 0.01) {
-        const ang = Math.atan2(toPlayer.x, toPlayer.z);
+      // 血條與告示牌面朝玩家視角 (0-GC 純純量計算)
+      const dx = playerPos.x - this.position.x;
+      const dz = playerPos.z - this.position.z;
+      if (dx * dx + dz * dz > 0.01) {
+        const ang = Math.atan2(dx, dz);
         this.hpBarGroup.rotation.y = ang - this.rotationY;
       }
       return;
@@ -1181,116 +1332,8 @@ export class NPC {
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
 
-    // 2. 仇恨判定：若玩家已死亡，全體 NPC 立即解除追捕
-    if (isPlayerDead) {
-      this.isChasing = false;
-      this.isBurstSprinting = false;
-      this.lostSightTimer = 0;
-      this.dynamicSpeed = this.speed;
-    } else if (this.role === 'BANDIT') {
-      // 校外強盜特殊仇恨判定：
-      // 當玩家離開校園外圍圍牆 (Z >= 105.5 或 |X| >= 105.5 或 Z <= -105.5)，強盜無差別凶猛追殺！
-      const isPlayerOutside = playerPos.z >= 105.5 || Math.abs(playerPos.x) >= 105.5 || playerPos.z <= -105.5;
-      const distToPlayer = this.position.distanceTo(playerPos);
-      if (isPlayerOutside && distToPlayer < 45.0) {
-        this.isChasing = true;
-        this.lostSightTimer = 0;
-        this.lastKnownPos.copy(playerPos);
-        onSpotPlayer();
-      } else {
-        // 玩家回到校園內部，強盜絕不進校園，立即解除追捕！
-        this.isChasing = false;
-        this.isBurstSprinting = false;
-        this.lostSightTimer = 0;
-        this.dynamicSpeed = this.speed;
-      }
-    } else if (wantedLevel === 0 && this.role !== 'STUDENT') {
-      this.isChasing = false;
-      this.isBurstSprinting = false;
-      this.lostSightTimer = 0;
-      this.dynamicSpeed = this.speed;
-    } else if (this.role === 'DOG') {
-      // 校犬特殊仇恨：若玩家已進入教學大樓區域，校犬立即放棄追捕！
-      if (NPC.isInsideTeachingBuilding(playerPos)) {
-        this.isChasing = false;
-        this.isBurstSprinting = false;
-        this.dynamicSpeed = this.speed;
-        this.lostSightTimer = 0;
-      } else {
-        const distToPlayer = this.position.distanceTo(playerPos);
-        const seesPlayer = this.canSeePlayer(playerPos, colliders);
-
-        if (wantedLevel > 0 && seesPlayer && distToPlayer < 20.0) {
-          this.isChasing = true;
-          this.lostSightTimer = 0;
-          this.lastKnownPos.copy(playerPos);
-          if (this.whistleCooldown <= 0) {
-            soundManager.playDogBark();
-            this.whistleCooldown = 4.0;
-          }
-          onSpotPlayer();
-        } else if (this.isChasing) {
-          if (!seesPlayer) {
-            // 失去玩家視線！朝最後目擊位置搜索，若超過 4 秒未見到玩家則放棄追捕
-            this.lostSightTimer += delta;
-            if (this.lostSightTimer >= 4.0 || distToPlayer > 32.0) {
-              this.isChasing = false;
-              this.isBurstSprinting = false;
-              this.dynamicSpeed = this.speed;
-              this.lostSightTimer = 0;
-            }
-          } else {
-            this.lostSightTimer = 0;
-            this.lastKnownPos.copy(playerPos);
-            onSpotPlayer();
-          }
-        }
-      }
-    } else if (this.role !== 'STUDENT') {
-      const distToPlayer = this.position.distanceTo(playerPos);
-      const seesPlayer = this.canSeePlayer(playerPos, colliders);
-
-      if (wantedLevel > 0 && seesPlayer && distToPlayer < 18.0) {
-        this.isChasing = true;
-        this.lostSightTimer = 0;
-        this.lastKnownPos.copy(playerPos);
-        if (this.whistleCooldown <= 0) {
-          if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell();
-          else soundManager.playWhistle();
-          this.whistleCooldown = 5.0;
-        }
-        onSpotPlayer();
-      } else if (this.isChasing) {
-        if (!seesPlayer) {
-          // 失去玩家視線！朝最後目擊位置搜索，若超過 3.5 秒未見到玩家則放棄追捕
-          this.lostSightTimer += delta;
-          if (this.lostSightTimer >= 3.5 || distToPlayer > 30.0) {
-            this.isChasing = false;
-            this.isBurstSprinting = false;
-            this.dynamicSpeed = this.speed;
-            this.lostSightTimer = 0;
-          }
-        } else {
-          this.lostSightTimer = 0;
-          this.lastKnownPos.copy(playerPos);
-          onSpotPlayer();
-        }
-      }
-    } else if (this.role === 'STUDENT' && this.isChasing) {
-      const distToPlayer = this.position.distanceTo(playerPos);
-      const seesPlayer = this.canSeePlayer(playerPos, colliders);
-      if (!seesPlayer) {
-        this.lostSightTimer += delta;
-        if (this.lostSightTimer >= 3.0 || distToPlayer > 25.0) {
-          this.isChasing = false;
-          this.isBurstSprinting = false;
-          this.dynamicSpeed = this.speed;
-          this.lostSightTimer = 0;
-        }
-      } else {
-        this.lostSightTimer = 0;
-      }
-    }
+    // 2. 仇恨判定 (AI 狀態機)
+    this.updateAggroState(delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerDead);
 
     // 3. 移動目標判定與「忽快忽慢」追捕節奏 (Burst Sprinting vs Fatigue Recovery)
     let targetPos: THREE.Vector3;
@@ -1322,39 +1365,9 @@ export class NPC {
         }
       }
 
-      // 目標速度計算
-      let targetChaseSpeed = this.speed;
-      if (this.role === 'DOG') {
-        // 校犬專屬智慧動態追逐與跟隨邏輯：
-        // 1. 若玩家騎乘自行車，校犬全力狂飆追趕
-        if (isPlayerRidingBike) {
-          targetChaseSpeed = 13.8;
-          this.isBurstSprinting = true;
-        } else {
-          const distToP = this.position.distanceTo(playerPos);
-          if (distToP > 12.0) {
-            // 距離遠：極速奔馳追趕
-            targetChaseSpeed = 12.2;
-            this.isBurstSprinting = true;
-          } else if (distToP > 5.5) {
-            // 中距：配合玩家奔馳節奏，衝刺 11.5，小跑 8.8
-            targetChaseSpeed = this.isBurstSprinting ? 11.5 : 8.8;
-          } else {
-            // 近距：準備撲咬，保持 9.8 衝刺或 7.8 緊咬跟隨
-            targetChaseSpeed = this.isBurstSprinting ? 9.8 : 7.8;
-          }
-        }
-      } else if (this.isBurstSprinting) {
-        targetChaseSpeed = this.chaseSpeed;
-      } else {
-        if (this.role === 'BIKE_PATROL') {
-          targetChaseSpeed = 1.88;
-        } else if (this.role === 'BANDIT') {
-          targetChaseSpeed = 6.8; // 強盜放緩期仍維持 6.8 m/s 快走！
-        } else {
-          targetChaseSpeed = this.speed; // 5.0 m/s
-        }
-      }
+      // 目標速度計算 (0-GC 避免重複距離計算)
+      const distToPlayerSq = this.position.distanceToSquared(playerPos);
+      const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq);
 
       // 平滑速度過渡
       const accelRate = this.role === 'DOG' ? 6.0 : 4.0;
@@ -1366,20 +1379,20 @@ export class NPC {
       currentSpeed = this.speed;
 
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
-      if (this.position.distanceTo(targetPos) < 1.8) {
+      if (this.position.distanceToSquared(targetPos) < 3.24) { // 1.8m
         this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
       }
     }
 
-    // 4. 計算移動方向與位移
-    const moveDir = targetPos.clone().sub(this.position);
-    moveDir.y = 0;
+    // 4. 計算移動方向與位移 (0-GC 重複利用 Scratch Vector)
+    _npcMoveDir.subVectors(targetPos, this.position);
+    _npcMoveDir.y = 0;
 
-    if (moveDir.lengthSq() > 0.05) {
-      moveDir.normalize();
+    if (_npcMoveDir.lengthSq() > 0.05) {
+      _npcMoveDir.normalize();
 
-      const moveStepX = moveDir.x * currentSpeed * delta;
-      const moveStepZ = moveDir.z * currentSpeed * delta;
+      const moveStepX = _npcMoveDir.x * currentSpeed * delta;
+      const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
       const radius = this.role === 'DOG' ? 0.35 : 0.45;
 
       // X 軸移動檢測
@@ -1461,7 +1474,7 @@ export class NPC {
         }
       }
 
-      // 網球教練 巨石 邊界回推：嚴格鎖定在 4F 網球場北側發球半場內，絕對不會離開球場
+      // 大如老師 邊界回推：嚴格鎖定在 4F 網球場北側發球半場內，絕對不會離開球場
       if (this.role === 'PE_TEACHER_BOSS') {
         this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
         this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 37.0);
@@ -1497,7 +1510,7 @@ export class NPC {
       }
 
       // 轉向與俯仰姿態
-      const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+      const targetRotation = Math.atan2(_npcMoveDir.x, _npcMoveDir.z);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
       const turnRate = this.role === 'DOG' ? 14.0 : 10.0;
       this.rotationY += diff * Math.min(delta * turnRate, 1.0);
@@ -1564,16 +1577,44 @@ export class NPC {
 
     this.mesh.position.copy(this.position);
     // 柴柴奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
-    if (this.role === 'DOG' && moveDir.lengthSq() > 0.05) {
+    if (this.role === 'DOG' && _npcMoveDir.lengthSq() > 0.05) {
       this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.02);
     }
 
-    // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家
-    const toPlayer = playerPos.clone().sub(this.position);
-    toPlayer.y = 0;
-    if (toPlayer.lengthSq() > 0.01) {
-      const ang = Math.atan2(toPlayer.x, toPlayer.z);
+    // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家 (0-GC 純量計算)
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    if (dx * dx + dz * dz > 0.01) {
+      const ang = Math.atan2(dx, dz);
       this.hpBarGroup.rotation.y = ang - this.rotationY;
+    }
+  }
+
+  // 完整釋放 NPC 佔用的幾何體、材質、畫布與 GPU 紋理 (Resource Disposal)
+  public dispose(scene?: THREE.Scene) {
+    if (this.koBadgeTexture) {
+      this.koBadgeTexture.dispose();
+    }
+    if (this.koBadgeSprite?.material) {
+      this.koBadgeSprite.material.dispose();
+    }
+    this.mesh.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => m.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      }
+    });
+    if (scene) {
+      scene.remove(this.mesh);
+    } else if (this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
     }
   }
 }
