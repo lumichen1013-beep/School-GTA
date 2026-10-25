@@ -20,7 +20,7 @@ const _npcForward = new THREE.Vector3();
 const _npcEyePos = new THREE.Vector3();
 const _npcTargetEye = new THREE.Vector3();
 
-// 網球靜態共享幾何體與材質 (全域快取複用，避免頻繁發球時洩漏 GPU 資源)
+// 羽球靜態共享幾何體與材質 (全域快取複用，避免頻繁發球時洩漏 GPU 資源)
 const _tennisBallGeo = new THREE.SphereGeometry(0.15, 12, 12);
 const _tennisBallMat = new THREE.MeshLambertMaterial({ color: 0xccff00 });
 const _tennisSeamGeo = new THREE.TorusGeometry(0.151, 0.012, 6, 16);
@@ -105,7 +105,7 @@ export class NPC {
 
     // 初始化各角色數值：行走 5.0 | 跑步 10.0 | 騎車 15.0
     if (role === 'PE_TEACHER_BOSS') {
-      // 大如老師 (4F 網球教練)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
+      // 大如老師 (4F 羽球教練)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
       this.maxHp = 950;
       this.speed = 4.2;
       this.chaseSpeed = 8.5;
@@ -802,7 +802,7 @@ export class NPC {
   public getAttackSpecs(): { damage: number; hForce: number; vForce: number } {
     switch (this.role) {
       case 'PE_TEACHER_BOSS':
-        // 大如老師：網球拍近戰殺球重扣，極高傷害與震飛
+        // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
       case 'BANDIT':
         // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高
@@ -868,7 +868,7 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
-  // 網球投射物專屬安全銷毀處置
+  // 羽球投射物專屬安全銷毀處置
   public static disposeProjectile(projectile: ShuttlecockProjectile, scene?: THREE.Scene) {
     if (scene) {
       scene.remove(projectile.mesh);
@@ -877,12 +877,12 @@ export class NPC {
     }
   }
 
-  // 網球教練發射網球 (打網球小遊戲：飛行速度 11.5 m/s，高弧度過網，靜態幾何複用 0-GC)
+  // 羽球教練發射羽球 (羽球小遊戲：飛行速度 11.5 m/s，高弧度過網，靜態幾何複用 0-GC)
   public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene, cooldown: number = 2.2): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
 
-    // 嚴格限制：網球目標必須在 4F 網球場內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)
+    // 嚴格限制：羽球目標必須在 4F 羽球場內部 (Y: 11.2 ~ 17.0, X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0)
     if (
       targetPos.y < 11.2 || targetPos.y > 17.0 ||
       targetPos.x < 63.0 || targetPos.x > 85.0 ||
@@ -898,7 +898,7 @@ export class NPC {
     soundManager.playBadmintonWhoosh();
     this.triggerAttackAnimation();
 
-    // 建立螢光黃綠色標準網球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏)
+    // 建立標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏)
     const group = new THREE.Group();
     const ball = new THREE.Mesh(_tennisBallGeo, _tennisBallMat);
     group.add(ball);
@@ -908,7 +908,7 @@ export class NPC {
     seam.rotation.x = Math.PI / 4;
     group.add(seam);
 
-    // 網球發光落點預告環 (方便玩家預判位置)
+    // 羽球發光落點預告環 (方便玩家預判位置)
     const shadowRing = new THREE.Mesh(_tennisRingGeo, _tennisRingMat);
     shadowRing.rotation.x = -Math.PI / 2;
     shadowRing.position.y = -0.14;
@@ -918,12 +918,12 @@ export class NPC {
     group.position.copy(startPos);
     scene.add(group);
 
-    // 合理化網球飛行速度：11.5 m/s，並略帶微弧線上拋過網 (純純量運算，0 暫存 Vector3 分配)
+    // 合理化羽球飛行速度：11.5 m/s，並略帶微弧線上拋過網 (純純量運算，0 暫存 Vector3 分配)
     const toTargetX = targetPos.x - startPos.x;
     const toTargetY = (targetPos.y + 0.8) - startPos.y;
     const toTargetZ = targetPos.z - startPos.z;
     const horizDist = Math.max(2.0, Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ));
-    const speed = 11.5; // 合理網球速度 (11.5 m/s)
+    const speed = 11.5; // 合理羽球速度 (11.5 m/s)
     const flightTime = horizDist / speed;
 
     const velX = toTargetX / flightTime;
@@ -1496,7 +1496,7 @@ export class NPC {
         }
       }
 
-      // 大如老師 邊界回推：嚴格鎖定在 4F 網球場北側發球半場內，絕對不會離開球場
+      // 大如老師 邊界回推：嚴格鎖定在 4F 羽球場北側發球半場內，絕對不會離開球場
       if (this.role === 'PE_TEACHER_BOSS') {
         this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
         this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 37.0);

@@ -1946,28 +1946,271 @@ export class CampusWorld {
     // 東牆 (外側全封閉)
     this.buildWall(maxX, wH / 2, baseZ, 0.6, wH, bL, wallMat);
 
-    // 西牆：大氣開放寬達 8.0m 的中庭迎賓大正門 (留出大門 X: 62, Z: 34 ~ 42)
+    // 西牆：留出西側宏偉迎賓大正門開口 (X: 62, Z: 34 ~ 42，寬度 8.0m)
     const westL1 = (34 - minZ); // 12m
     this.buildWall(minX, wH / 2, minZ + westL1 / 2, 0.6, wH, westL1, wallMat);
     const westL2 = (maxZ - 42); // 12m
     this.buildWall(minX, wH / 2, 42 + westL2 / 2, 0.6, wH, westL2, wallMat);
 
-    // 南牆：留出南向寬闊雙開副門 (Z: 54, X: 71 ~ 77)
+    // 南牆：留出南向寬闊雙開副門開口 (Z: 54, X: 71 ~ 77，寬度 6.0m)
     const southW1 = (71 - minX);
     this.buildWall(minX + southW1 / 2, wH / 2, maxZ, southW1, wH, 0.6, wallMat);
     const southW2 = (maxX - 77);
     this.buildWall(77 + southW2 / 2, wH / 2, maxZ, southW2, wH, 0.6, wallMat);
 
-    // 西側正門迎賓雨遮與紅毯階梯 (Grand Entrance Canopy & Carpet)
+    // =========================================================================
+    // 西側正門宏偉門面系統 (Grand West Entrance: Door 3.2m < Canopy 3.4m < Sign 5.6m)
+    // =========================================================================
+    // A. 門楣上方實體外牆與碰撞體 (Y: 3.2m ~ 12.0m，高 8.8m，杜絕門口上方穿牆)
+    this.buildWall(minX, 7.6, 38, 0.6, 8.8, 8.0, wallMat);
+
+    // B. 大門開口規範高度為 doorHeight = 3.2m (開口 Y: 0 ~ 3.2m，遠低於招牌 Y: 5.6m)
+    const doorHeight = 3.2;
+    const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, metalness: 0.8, roughness: 0.25 });
+    const doorGlassMat = new THREE.MeshLambertMaterial({ color: 0x81ecec, transparent: true, opacity: 0.45 });
+    const doorGoldMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.9, roughness: 0.2 });
+
+    // 1. 西側宏偉金屬門框 (頂部金屬橫樑 + 兩側門框柱 + 落地窗立挺)
+    const westTransomBeam = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.16, 8.0), doorFrameMat);
+    westTransomBeam.position.set(minX, 3.12, 38);
+    westTransomBeam.castShadow = true;
+    this.scene.add(westTransomBeam);
+
+    const westJambL = new THREE.Mesh(new THREE.BoxGeometry(0.3, doorHeight, 0.2), doorFrameMat);
+    westJambL.position.set(minX, doorHeight / 2, 34.1);
+    this.scene.add(westJambL);
+
+    const westJambR = new THREE.Mesh(new THREE.BoxGeometry(0.3, doorHeight, 0.2), doorFrameMat);
+    westJambR.position.set(minX, doorHeight / 2, 41.9);
+    this.scene.add(westJambR);
+
+    // 中間金屬立挺 (劃分中央 3.8m 雙開通道與兩側 2.1m 固定落地採光窗)
+    const westMullionL = new THREE.Mesh(new THREE.BoxGeometry(0.24, doorHeight, 0.16), doorFrameMat);
+    westMullionL.position.set(minX, doorHeight / 2, 36.1);
+    this.scene.add(westMullionL);
+
+    const westMullionR = new THREE.Mesh(new THREE.BoxGeometry(0.24, doorHeight, 0.16), doorFrameMat);
+    westMullionR.position.set(minX, doorHeight / 2, 39.9);
+    this.scene.add(westMullionR);
+
+    // 2. 兩側固定採光玻璃側窗 (Fixed Sidelights & Colliders)
+    const westSideGlassL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.9, 1.8), doorGlassMat);
+    westSideGlassL.position.set(minX, 1.55, 35.1);
+    this.scene.add(westSideGlassL);
+    const westSideSillL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 1.8), doorFrameMat);
+    westSideSillL.position.set(minX, 0.06, 35.1);
+    this.scene.add(westSideSillL);
+    this.addCollider(minX - 0.2, minX + 0.2, 34.0, 36.1, 0, doorHeight);
+
+    const westSideGlassR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.9, 1.8), doorGlassMat);
+    westSideGlassR.position.set(minX, 1.55, 40.9);
+    this.scene.add(westSideGlassR);
+    const westSideSillR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 1.8), doorFrameMat);
+    westSideSillR.position.set(minX, 0.06, 40.9);
+    this.scene.add(westSideSillR);
+    this.addCollider(minX - 0.2, minX + 0.2, 39.9, 42.0, 0, doorHeight);
+
+    // 3. 中央雙開透明玻璃大門 (附帶精緻金屬框與金色拉手，向室內大開迎賓，暢通無阻)
+    const doorLeafW = 1.75;
+    const doorLeafH = 3.0;
+
+    // 左扇玻璃大門 (鉸鏈 Z: 36.2，向室內 +X 敞開 ~66度)
+    const westDoorLGroup = new THREE.Group();
+    westDoorLGroup.position.set(minX, 0, 36.2);
+    westDoorLGroup.rotation.y = 1.15;
+
+    const dFrameL = new THREE.Mesh(new THREE.BoxGeometry(0.08, doorLeafH, 0.12), doorFrameMat);
+    dFrameL.position.set(0, doorLeafH / 2, doorLeafW - 0.06);
+    westDoorLGroup.add(dFrameL);
+    const dFrameLHinge = new THREE.Mesh(new THREE.BoxGeometry(0.08, doorLeafH, 0.12), doorFrameMat);
+    dFrameLHinge.position.set(0, doorLeafH / 2, 0.06);
+    westDoorLGroup.add(dFrameLHinge);
+    const dTopL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, doorLeafW), doorFrameMat);
+    dTopL.position.set(0, doorLeafH - 0.06, doorLeafW / 2);
+    westDoorLGroup.add(dTopL);
+    const dBottomL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, doorLeafW), doorFrameMat);
+    dBottomL.position.set(0, 0.09, doorLeafW / 2);
+    westDoorLGroup.add(dBottomL);
+
+    const dGlassL = new THREE.Mesh(new THREE.BoxGeometry(0.04, doorLeafH - 0.3, doorLeafW - 0.24), doorGlassMat);
+    dGlassL.position.set(0, (doorLeafH + 0.06) / 2, doorLeafW / 2);
+    westDoorLGroup.add(dGlassL);
+
+    const handleGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.2, 16);
+    const handleLOut = new THREE.Mesh(handleGeo, doorGoldMat);
+    handleLOut.position.set(-0.06, 1.35, doorLeafW - 0.2);
+    westDoorLGroup.add(handleLOut);
+    const handleLIn = new THREE.Mesh(handleGeo, doorGoldMat);
+    handleLIn.position.set(0.06, 1.35, doorLeafW - 0.2);
+    westDoorLGroup.add(handleLIn);
+    this.scene.add(westDoorLGroup);
+
+    // 右扇玻璃大門 (鉸鏈 Z: 39.8，向室內 +X 敞開 ~66度)
+    const westDoorRGroup = new THREE.Group();
+    westDoorRGroup.position.set(minX, 0, 39.8);
+    westDoorRGroup.rotation.y = -1.15;
+
+    const dFrameR = new THREE.Mesh(new THREE.BoxGeometry(0.08, doorLeafH, 0.12), doorFrameMat);
+    dFrameR.position.set(0, doorLeafH / 2, -doorLeafW + 0.06);
+    westDoorRGroup.add(dFrameR);
+    const dFrameRHinge = new THREE.Mesh(new THREE.BoxGeometry(0.08, doorLeafH, 0.12), doorFrameMat);
+    dFrameRHinge.position.set(0, doorLeafH / 2, -0.06);
+    westDoorRGroup.add(dFrameRHinge);
+    const dTopR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, doorLeafW), doorFrameMat);
+    dTopR.position.set(0, doorLeafH - 0.06, -doorLeafW / 2);
+    westDoorRGroup.add(dTopR);
+    const dBottomR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, doorLeafW), doorFrameMat);
+    dBottomR.position.set(0, 0.09, -doorLeafW / 2);
+    westDoorRGroup.add(dBottomR);
+
+    const dGlassR = new THREE.Mesh(new THREE.BoxGeometry(0.04, doorLeafH - 0.3, doorLeafW - 0.24), doorGlassMat);
+    dGlassR.position.set(0, (doorLeafH + 0.06) / 2, -doorLeafW / 2);
+    westDoorRGroup.add(dGlassR);
+
+    const handleROut = new THREE.Mesh(handleGeo, doorGoldMat);
+    handleROut.position.set(-0.06, 1.35, -doorLeafW + 0.2);
+    westDoorRGroup.add(handleROut);
+    const handleRIn = new THREE.Mesh(handleGeo, doorGoldMat);
+    handleRIn.position.set(0.06, 1.35, -doorLeafW + 0.2);
+    westDoorRGroup.add(handleRIn);
+    this.scene.add(westDoorRGroup);
+
+    // 4. 西側正門迎賓雨遮 (Canopy: 精確調整高度至 Y = 3.4m，剛好位於大門 3.2m 上方、招牌 5.6m 下方)
     const canopyMat = new THREE.MeshLambertMaterial({ color: 0x34495e });
-    const canopy = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.35, 9.0), canopyMat);
-    canopy.position.set(minX - 1.2, 4.2, 38);
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 9.0), canopyMat);
+    canopy.position.set(minX - 1.2, 3.4, 38);
+    canopy.castShadow = true;
     this.scene.add(canopy);
+
+    const rodMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.8, roughness: 0.2 });
+    [-3.8, 3.8].forEach(oz => {
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.12), rodMat);
+      bracket.position.set(minX - 0.8, 3.24, 38 + oz);
+      bracket.rotation.z = -0.3;
+      this.scene.add(bracket);
+    });
 
     const redCarpet = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 7.6), new THREE.MeshLambertMaterial({ color: 0x9b59b6 }));
     redCarpet.rotation.x = -Math.PI / 2;
     redCarpet.position.set(minX - 0.5, 0.03, 38);
     this.scene.add(redCarpet);
+
+    // =========================================================================
+    // 南側副門門面系統 (South Secondary Entrance: 補齊門楣外牆、門框與雨遮)
+    // =========================================================================
+    // 門楣上方實體外牆與碰撞體 (Y: 3.2m ~ 12.0m，高 8.8m，寬 6.0m)
+    this.buildWall(74, 7.6, maxZ, 6.0, 8.8, 0.6, wallMat);
+
+    // 南側金屬門框與門楣橫樑 (Y: 3.05 ~ 3.2m)
+    const southTransomBeam = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.16, 0.35), doorFrameMat);
+    southTransomBeam.position.set(74, 3.12, maxZ);
+    southTransomBeam.castShadow = true;
+    this.scene.add(southTransomBeam);
+
+    const southJambL = new THREE.Mesh(new THREE.BoxGeometry(0.2, doorHeight, 0.3), doorFrameMat);
+    southJambL.position.set(71.1, doorHeight / 2, maxZ);
+    this.scene.add(southJambL);
+
+    const southJambR = new THREE.Mesh(new THREE.BoxGeometry(0.2, doorHeight, 0.3), doorFrameMat);
+    southJambR.position.set(76.9, doorHeight / 2, maxZ);
+    this.scene.add(southJambR);
+
+    // 中間金屬立挺 (X: 72.5 & X: 75.5，中央 3.0m 通道)
+    const southMullionL = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorHeight, 0.24), doorFrameMat);
+    southMullionL.position.set(72.5, doorHeight / 2, maxZ);
+    this.scene.add(southMullionL);
+
+    const southMullionR = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorHeight, 0.24), doorFrameMat);
+    southMullionR.position.set(75.5, doorHeight / 2, maxZ);
+    this.scene.add(southMullionR);
+
+    // 兩側固定採光玻璃側窗
+    const southSideGlassL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.9, 0.06), doorGlassMat);
+    southSideGlassL.position.set(71.8, 1.55, maxZ);
+    this.scene.add(southSideGlassL);
+    const southSideSillL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.24), doorFrameMat);
+    southSideSillL.position.set(71.8, 0.06, maxZ);
+    this.scene.add(southSideSillL);
+    this.addCollider(71.0, 72.5, maxZ - 0.2, maxZ + 0.2, 0, doorHeight);
+
+    const southSideGlassR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.9, 0.06), doorGlassMat);
+    southSideGlassR.position.set(76.2, 1.55, maxZ);
+    this.scene.add(southSideGlassR);
+    const southSideSillR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.24), doorFrameMat);
+    southSideSillR.position.set(76.2, 0.06, maxZ);
+    this.scene.add(southSideSillR);
+    this.addCollider(75.5, 77.0, maxZ - 0.2, maxZ + 0.2, 0, doorHeight);
+
+    // 南側中央雙開玻璃大門 (向室內 -Z 敞開，留出暢通中央走道 X: 72.7 ~ 75.3)
+    const southDoorLeafW = 1.35;
+    const southDoorLGroup = new THREE.Group();
+    southDoorLGroup.position.set(72.6, 0, maxZ);
+    southDoorLGroup.rotation.y = 1.15; // 迎賓向室內 -Z 敞開
+
+    const sFrameLOuter = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
+    sFrameLOuter.position.set(southDoorLeafW - 0.05, doorLeafH / 2, 0);
+    southDoorLGroup.add(sFrameLOuter);
+    const sFrameLHinge = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
+    sFrameLHinge.position.set(0.05, doorLeafH / 2, 0);
+    southDoorLGroup.add(sFrameLHinge);
+    const sTopL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.12, 0.08), doorFrameMat);
+    sTopL.position.set(southDoorLeafW / 2, doorLeafH - 0.06, 0);
+    southDoorLGroup.add(sTopL);
+    const sBottomL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.18, 0.08), doorFrameMat);
+    sBottomL.position.set(southDoorLeafW / 2, 0.09, 0);
+    southDoorLGroup.add(sBottomL);
+
+    const sGlassL = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW - 0.2, doorLeafH - 0.3, 0.04), doorGlassMat);
+    sGlassL.position.set(southDoorLeafW / 2, (doorLeafH + 0.06) / 2, 0);
+    southDoorLGroup.add(sGlassL);
+    const sHandleLOut = new THREE.Mesh(handleGeo, doorGoldMat);
+    sHandleLOut.position.set(southDoorLeafW - 0.15, 1.35, 0.06);
+    southDoorLGroup.add(sHandleLOut);
+    const sHandleLIn = new THREE.Mesh(handleGeo, doorGoldMat);
+    sHandleLIn.position.set(southDoorLeafW - 0.15, 1.35, -0.06);
+    southDoorLGroup.add(sHandleLIn);
+    this.scene.add(southDoorLGroup);
+
+    const southDoorRGroup = new THREE.Group();
+    southDoorRGroup.position.set(75.4, 0, maxZ);
+    southDoorRGroup.rotation.y = -1.15; // 迎賓向室內 -Z 敞開
+
+    const sFrameROuter = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
+    sFrameROuter.position.set(-southDoorLeafW + 0.05, doorLeafH / 2, 0);
+    southDoorRGroup.add(sFrameROuter);
+    const sFrameRHinge = new THREE.Mesh(new THREE.BoxGeometry(0.1, doorLeafH, 0.08), doorFrameMat);
+    sFrameRHinge.position.set(-0.05, doorLeafH / 2, 0);
+    southDoorRGroup.add(sFrameRHinge);
+    const sTopR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.12, 0.08), doorFrameMat);
+    sTopR.position.set(-southDoorLeafW / 2, doorLeafH - 0.06, 0);
+    southDoorRGroup.add(sTopR);
+    const sBottomR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW, 0.18, 0.08), doorFrameMat);
+    sBottomR.position.set(-southDoorLeafW / 2, 0.09, 0);
+    southDoorRGroup.add(sBottomR);
+
+    const sGlassR = new THREE.Mesh(new THREE.BoxGeometry(southDoorLeafW - 0.2, doorLeafH - 0.3, 0.04), doorGlassMat);
+    sGlassR.position.set(-southDoorLeafW / 2, (doorLeafH + 0.06) / 2, 0);
+    southDoorRGroup.add(sGlassR);
+    const sHandleROut = new THREE.Mesh(handleGeo, doorGoldMat);
+    sHandleROut.position.set(-southDoorLeafW + 0.15, 1.35, 0.06);
+    southDoorRGroup.add(sHandleROut);
+    const sHandleRIn = new THREE.Mesh(handleGeo, doorGoldMat);
+    sHandleRIn.position.set(-southDoorLeafW + 0.15, 1.35, -0.06);
+    southDoorRGroup.add(sHandleRIn);
+    this.scene.add(southDoorRGroup);
+
+    // 南側副門迎賓雨遮 (Canopy at Y = 3.4m)
+    const southCanopy = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 2.0), canopyMat);
+    southCanopy.position.set(74, 3.4, maxZ + 0.9);
+    southCanopy.castShadow = true;
+    this.scene.add(southCanopy);
+
+    [-2.8, 2.8].forEach(ox => {
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.4), rodMat);
+      bracket.position.set(74 + ox, 3.24, maxZ + 0.6);
+      bracket.rotation.x = 0.3;
+      this.scene.add(bracket);
+    });
 
     // 3. 挑高演藝廳 (1~3F Grand Auditorium)
     // A. 舞台大平台 (位於東北側 X: 70 ~ 85, Z: 23 ~ 29, 高度 Y = 1.0)
@@ -2538,15 +2781,24 @@ export class CampusWorld {
     sctx.fillText('🎭 演藝大樓 (1-3F演藝廳 / 4F羽球館) 🎭', 256, 64);
     const signTex = new THREE.CanvasTexture(signCanvas);
 
-    // 西側正門招牌
-    const signWest = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.4), new THREE.MeshBasicMaterial({ map: signTex }));
+    // 西側正門招牌 (中心 Y = 5.6m, 高度 2.0m，其底部 4.6m > 雨遮 3.4m > 大門 3.2m，層次分明)
+    const signBackMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.7, roughness: 0.3 });
+    const signWestBack = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.1, 9.2), signBackMat);
+    signWestBack.position.set(minX - 0.33, 5.6, 38);
+    this.scene.add(signWestBack);
+
+    const signWest = new THREE.Mesh(new THREE.PlaneGeometry(9.0, 2.0), new THREE.MeshBasicMaterial({ map: signTex }));
     signWest.rotation.y = -Math.PI / 2;
-    signWest.position.set(minX - 0.35, 5.5, 38);
+    signWest.position.set(minX - 0.38, 5.6, 38);
     this.scene.add(signWest);
 
-    // 南側副門招牌
-    const signSouth = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.4), new THREE.MeshBasicMaterial({ map: signTex }));
-    signSouth.position.set(baseX, 5.5, maxZ + 0.35);
+    // 南側副門招牌 (中心 Y = 5.6m, 高度 2.0m，端正固定於門楣上方)
+    const signSouthBack = new THREE.Mesh(new THREE.BoxGeometry(9.2, 2.1, 0.08), signBackMat);
+    signSouthBack.position.set(baseX, 5.6, maxZ + 0.33);
+    this.scene.add(signSouthBack);
+
+    const signSouth = new THREE.Mesh(new THREE.PlaneGeometry(9.0, 2.0), new THREE.MeshBasicMaterial({ map: signTex }));
+    signSouth.position.set(baseX, 5.6, maxZ + 0.38);
     this.scene.add(signSouth);
   }
 

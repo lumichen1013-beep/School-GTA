@@ -79,7 +79,7 @@ export class HUD {
   private commissaryCloseBtnEl: HTMLElement | null;
   public isCommissaryOpen: boolean = false;
 
-  // 4F 網球挑戰賽對話視窗
+  // 4F 羽球挑戰賽對話視窗
   private tennisModalEl: HTMLElement | null;
   private tennisCloseBtnEl: HTMLElement | null;
   private tennisStartBtnEl: HTMLElement | null;
@@ -591,7 +591,7 @@ export class HUD {
       }
     }
 
-    // 2. 挑戰網球大如老師
+    // 2. 挑戰羽球大如老師
     const peDone = data.peBossDefeated;
     if (peDone) completedCount++;
     if (this.qPeItem) {
@@ -851,7 +851,7 @@ export class HUD {
     this.onTennisStartCallback = onStart;
     if (this.tennisStartBtnEl) {
       const isMobile = this.isMobile();
-      this.tennisStartBtnEl.textContent = isMobile ? '🎾 開始比賽 [動]' : '🎾 開始比賽 (E)';
+      this.tennisStartBtnEl.textContent = isMobile ? '🏸 開始比賽 [動]' : '🏸 開始比賽 (E)';
     }
     if (this.tennisCancelBtnEl) {
       const isMobile = this.isMobile();

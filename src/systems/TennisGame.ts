@@ -101,9 +101,9 @@ export class TennisGame {
     if (scoreboardEl) {
       if (this.tennisState === 'STARTING') {
         const countSec = Math.max(1, Math.ceil(this.countdownTimer));
-        scoreboardEl.textContent = `🎾 比賽倒數: ${countSec} (搶5分勝)`;
+        scoreboardEl.textContent = `🏸 比賽倒數: ${countSec} (搶5分勝)`;
       } else if (this.tennisState === 'PLAYING') {
-        scoreboardEl.textContent = `🎾 網球挑戰賽 | 玩家: ${this.playerScore} - ${this.coachScore} :大如老師 (搶5分勝)`;
+        scoreboardEl.textContent = `🏸 羽球挑戰賽 | 玩家: ${this.playerScore} - ${this.coachScore} :大如老師 (搶5分勝)`;
       }
       scoreboardEl.style.display = (this.tennisState === 'PLAYING' || this.tennisState === 'STARTING') ? 'flex' : 'none';
     }
@@ -120,7 +120,7 @@ export class TennisGame {
     hud: HUD,
     onRewardCash: (amount: number) => void
   ) {
-    // 檢查玩家是否在 4F 網球場內部
+    // 檢查玩家是否在 4F 羽球場內部
     const isPlayerInCourt =
       playerPos.y >= 11.2 && playerPos.y <= 17.0 &&
       playerPos.x >= 63.0 && playerPos.x <= 85.0 &&
@@ -135,7 +135,7 @@ export class TennisGame {
         }
         this.shuttlecocks = [];
         this.updateScoreboard();
-        wantedSystem.showBanner('🎾 已離開 4F 網球場，挑戰賽已終止。', 2500);
+        wantedSystem.showBanner('🏸 已離開 4F 羽球場，挑戰賽已終止。', 2500);
       }
     }
 
@@ -182,7 +182,7 @@ export class TennisGame {
       }
     }
 
-    // 更新飛行中的網球
+    // 更新飛行中的羽球
     for (let i = this.shuttlecocks.length - 1; i >= 0; i--) {
       const sc = this.shuttlecocks[i];
       sc.velocity.y -= 9.8 * delta;
@@ -214,7 +214,7 @@ export class TennisGame {
         continue;
       }
 
-      // 玩家打擊回擊網球判定
+      // 玩家打擊回擊羽球判定
       if (this.tennisState === 'PLAYING' && !sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(playerPos) < 3.0) {
         if (player.isAttacking || input.mouseButtons.left) {
           sc.isReturned = true;
@@ -260,7 +260,7 @@ export class TennisGame {
           soundManager.playPunch();
           soundManager.playWhistle();
           if (isHit) {
-            player.takeDamage(2, '網球衝擊');
+            player.takeDamage(2, '羽球衝擊');
           }
           this.coachScore += 1;
           this.updateScoreboard();

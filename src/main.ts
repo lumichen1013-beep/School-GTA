@@ -133,7 +133,7 @@ class SchoolGTASandbox {
     };
     this.hud = new HUD();
 
-    // 7. 初始化模組化小遊戲系統 (三分球、田徑水上競速、4F 網球比賽)
+    // 7. 初始化模組化小遊戲系統 (三分球、田徑水上競速、4F 羽球比賽)
     this.basketballGame = new BasketballGame(this.engine.scene, this.world.basketballSpawnPos);
     this.racingGame = new RacingGame(this.engine.scene);
     this.tennisGame = new TennisGame();
@@ -292,7 +292,7 @@ class SchoolGTASandbox {
     this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-118, 0, 10), 'BANDIT', [new THREE.Vector3(-118, 0, -40), new THREE.Vector3(-118, 0, 60)]));
     this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(118, 0, 10), 'BANDIT', [new THREE.Vector3(118, 0, -40), new THREE.Vector3(118, 0, 60)]));
 
-    // 9. 演藝大樓 4F 網球場：大如老師
+    // 9. 演藝大樓 4F 羽球場：大如老師
     this.npcs.push(new NPC(
       this.engine.scene,
       new THREE.Vector3(77, 12.0, 31),
@@ -302,7 +302,7 @@ class SchoolGTASandbox {
   }
 
   private setupInteractions() {
-    // E 鍵互動：合作社 / 採菇 / 許願 / 電梯 / 網球對話 / 放籃球 / 賽跑 / 拿籃球 / 上下單車
+    // E 鍵互動：合作社 / 採菇 / 許願 / 電梯 / 羽球對話 / 放籃球 / 賽跑 / 拿籃球 / 上下單車
     this.input.onInteract(() => {
       if (this.player.isDead || this.player.hp <= 0) return;
 
@@ -387,7 +387,7 @@ class SchoolGTASandbox {
           phase: 'CLOSING',
           timer: 0.5,
           targetY: 12.0,
-          banner: '🛗 電梯抵達【4F 演藝廳網球場】，電梯門開啟！'
+          banner: '🛗 電梯抵達【4F 演藝廳羽球場】，電梯門開啟！'
         };
         this.player.position.set(65.5, 0.0, 43.5);
         this.player.mesh.position.set(65.5, 0.0, 43.5);
@@ -408,7 +408,7 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 5. 網球對話 / 挑戰比賽
+      // 5. 羽球對話 / 挑戰比賽
       if (this.hud.isTennisDialogOpen) {
         this.startTennisMatch();
         return;
@@ -650,7 +650,7 @@ class SchoolGTASandbox {
       reward = 150;
     } else if (npc.role === 'PE_TEACHER_BOSS') {
       reward = 180;
-      this.wantedSystem.showBanner('🎾 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', 5000);
+      this.wantedSystem.showBanner('🏸 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', 5000);
       if (this.tennisGame.tennisState !== 'IDLE') {
         this.tennisGame.endMatch(true, this.wantedSystem, this.hud, this.engine.scene, (amt) => {
           this.playerCash += amt;
@@ -1258,7 +1258,7 @@ class SchoolGTASandbox {
       this.world.shootingHotspots
     );
 
-    // 4. 更新 4F 網球比賽
+    // 4. 更新 4F 羽球比賽
     const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
     if (this.hud.isTennisDialogOpen && peCoach) {
       if (targetPosition.distanceTo(peCoach.position) > 4.5) {
@@ -1329,11 +1329,11 @@ class SchoolGTASandbox {
     } else if (this.ecologicalGarden.isNearWishingPond(targetPosition)) {
       this.hud.showPrompt('E', '🪙 向生態池許願投幣 ($30)');
     } else if (this.world.isNear1FElevator(targetPosition)) {
-      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 4F 網球場 (大如老師)');
+      this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 4F 羽球場 (大如老師)');
     } else if (this.world.isNear4FElevator(targetPosition)) {
       this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 1F 演藝廳門廳');
     } else if (peCoach && targetPosition.distanceTo(peCoach.position) < 3.2 && !peCoach.isKnockedDown && this.tennisGame.tennisState === 'IDLE') {
-      this.hud.showPrompt('E', '🎾 與大如老師對話 / 挑戰比賽');
+      this.hud.showPrompt('E', '🏸 與大如老師對話 / 挑戰羽球賽');
     } else {
       let nearBikePatrol = false;
       for (const npc of this.npcs) {
