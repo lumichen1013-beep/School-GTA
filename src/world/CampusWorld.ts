@@ -206,8 +206,6 @@ export class CampusWorld {
     this.buildWalkableSchoolBuilding(38, 0, 18, '敬業樓 (三年級部)', true);
     // 樂群樓 B 棟：Z 從 55 到 89
     this.buildWalkableSchoolBuilding(38, 0, 72, '樂群樓 (一二年級部)', false);
-    // 至善樓 C 棟 (科技與藝術綜合大樓)：西南側，Z 從 59 到 93
-    this.buildWalkableSchoolBuilding(-42, 0, 76, '至善樓 (科技與資訊館)', false);
 
     // 5. 兩棟大樓之間的空中走廊天橋連結 (連接敬業樓與樂群樓 2F & 3F)
     this.buildConnectingSkybridge(38, 0, 45);

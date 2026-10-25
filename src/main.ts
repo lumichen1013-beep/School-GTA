@@ -430,30 +430,7 @@ class SchoolGTASandbox {
       [new THREE.Vector3(118, 0, -40), new THREE.Vector3(118, 0, 60)]
     ));
 
-    // 10. 至善樓 C 棟 (科技與藝術綜合館) 師生
-    // 1F (Y = 0) 走廊巡堂老師
-    this.npcs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-49, 0, 76),
-      'TEACHER',
-      [new THREE.Vector3(-49, 0, 65), new THREE.Vector3(-49, 0, 87)]
-    ));
-    // 2F (Y = 6.0) 走廊學生
-    this.npcs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-49, 6.0, 76),
-      'STUDENT',
-      [new THREE.Vector3(-49, 6.0, 65), new THREE.Vector3(-49, 6.0, 87)]
-    ));
-    // 3F (Y = 12.0) 電腦教室課堂學生
-    this.npcs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-38, 12.0, 70),
-      'STUDENT',
-      [new THREE.Vector3(-38, 12.0, 70), new THREE.Vector3(-44, 12.0, 70)]
-    ));
-
-    // 11. 演藝大樓 4F 羽球館 Boss：熱血體育組長 林教頭 (PE_TEACHER_BOSS)
+    // 10. 演藝大樓 4F 羽球館 Boss：熱血體育組長 林教頭 (PE_TEACHER_BOSS)
     this.npcs.push(new NPC(
       this.engine.scene,
       new THREE.Vector3(74, 12.0, 32),
