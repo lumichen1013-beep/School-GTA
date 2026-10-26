@@ -397,6 +397,11 @@ class SchoolGTASandbox {
       this.ecologicalGarden.group.visible = true;
       this.detentionWorld.group.visible = false;
 
+      // 恢復天天國中專屬三分球籃球實體
+      if (this.basketballGame) {
+        this.basketballGame.basketballMesh.visible = true;
+      }
+
       for (const b of this.bicycles) {
         b.mesh.visible = true;
       }
@@ -422,6 +427,23 @@ class SchoolGTASandbox {
       this.world.group.visible = false;
       this.ecologicalGarden.group.visible = false;
       this.detentionWorld.group.visible = true;
+
+      // 徹底隱藏天天國中特有小遊戲實體 (杜絕籃球、競速光圈、羽球殘留於第二世界)
+      if (this.basketballGame) {
+        if (this.basketballGame.isHolding) {
+          this.basketballGame.drop(this.player, this.hud, this.wantedSystem);
+        }
+        this.basketballGame.basketballMesh.visible = false;
+      }
+      if (this.racingGame) {
+        this.racingGame.checkpointMarker.visible = false;
+        this.racingGame.swimCheckpointMarker.visible = false;
+        this.racingGame.isRacingTrack = false;
+        this.racingGame.isSwimmingRace = false;
+      }
+      if (this.tennisGame) {
+        this.tennisGame.endMatch(false, this.wantedSystem, this.hud, this.engine.scene, () => {});
+      }
 
       for (const b of this.bicycles) {
         b.mesh.visible = false;
@@ -1212,8 +1234,8 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 6. 放下籃球
-      if (this.basketballGame.isHolding) {
+      // 6. 放下籃球 (僅限天天國中)
+      if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding) {
         this.basketballGame.drop(this.player, this.hud, this.wantedSystem);
         return;
       }
@@ -1246,8 +1268,8 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 10. 拿起籃球
-      if (!this.currentRidingBike && this.basketballGame.basketballMesh.position.distanceTo(this.player.position) < 2.5 && !this.basketballGame.isBallInAir) {
+      // 10. 拿起籃球 (僅限天天國中)
+      if (this.currentWorldType === 'CAMPUS' && !this.currentRidingBike && this.basketballGame.basketballMesh.position.distanceTo(this.player.position) < 2.5 && !this.basketballGame.isBallInAir) {
         this.basketballGame.pickup(this.player, this.hud, this.wantedSystem);
         return;
       }
@@ -1303,7 +1325,7 @@ class SchoolGTASandbox {
       if (!this.isGameRunning) return;
       if (this.player.isDead || this.player.hp <= 0) return;
 
-      if (this.basketballGame.isHolding) {
+      if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding) {
         this.basketballGame.startCharging(this.hud);
         return;
       }
@@ -1409,10 +1431,10 @@ class SchoolGTASandbox {
       }
     });
 
-    // 滑鼠左鍵鬆開：投籃出手 (電腦版)
+    // 滑鼠左鍵鬆開：投籃出手 (電腦版，僅天天國中)
     this.input.onAttackRelease(() => {
       if (!this.isGameRunning) return;
-      if (this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
+      if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
         this.basketballGame.releaseShot(
           this.player,
           this.cameraCtrl.camera,
@@ -2000,7 +2022,7 @@ class SchoolGTASandbox {
       this.input.setVirtualAttack(true);
     }, () => {
       this.input.setVirtualAttack(false);
-      if (this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
+      if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
         this.basketballGame.releaseShot(
           this.player,
           this.cameraCtrl.camera,
