@@ -50,6 +50,23 @@ export class ThirdPersonCamera {
     this.updateAspect(this.camera.aspect);
   }
 
+  // 重設相機至目標正後方 (例如過場動畫結束或世界切換)
+  public resetBehind(targetPos: THREE.Vector3, playerRotY: number = 0) {
+    this.yaw = playerRotY;
+    this.pitch = 0.25;
+    this.distance = this.targetDistance;
+    this.target.copy(targetPos);
+    const focusPoint = this.target.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const offset = new THREE.Vector3(
+      Math.sin(this.yaw) * Math.cos(this.pitch) * this.distance,
+      Math.sin(this.pitch) * this.distance,
+      Math.cos(this.yaw) * Math.cos(this.pitch) * this.distance
+    );
+    this.currentPosition.copy(focusPoint).add(offset);
+    this.camera.position.copy(this.currentPosition);
+    this.camera.lookAt(focusPoint);
+  }
+
   public update(targetPos: THREE.Vector3, delta: number, colliders: CollidableBox[] = []) {
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)

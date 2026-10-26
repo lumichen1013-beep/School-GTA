@@ -2131,6 +2131,44 @@
         display: none !important;
       }
 
+      /* 底部導引區在觸控模式靠右排列，避免佔用左側搖桿空間 */
+      .hud-bottom {
+        justify-content: flex-end !important;
+        pointer-events: none !important;
+      }
+
+      /* 身法技能狀態卡移至右側動作按鍵上方，左下角徹底留給蘑菇頭虛擬搖桿 */
+      .skill-hud-card {
+        position: absolute !important;
+        bottom: max(205px, calc(env(safe-area-inset-bottom, 18px) + 190px)) !important;
+        right: max(14px, env(safe-area-inset-right, 14px)) !important;
+        left: auto !important;
+        margin: 0 !important;
+        padding: 5px 10px !important;
+        gap: 8px !important;
+        border-radius: 10px !important;
+        z-index: 45 !important;
+        max-width: 190px !important;
+        pointer-events: auto !important;
+      }
+      .skill-hud-card .skill-icon-wrapper {
+        width: 34px !important;
+        height: 34px !important;
+        border-radius: 8px !important;
+      }
+      .skill-hud-card .skill-icon {
+        font-size: 18px !important;
+      }
+      .skill-hud-card .skill-name-text {
+        font-size: 12px !important;
+      }
+      .skill-hud-card .skill-key-badge {
+        display: none !important; /* 手機觸控無須顯示電腦 Q 鍵標籤 */
+      }
+      .skill-hud-card .skill-desc-text {
+        display: none !important; /* 手機端隱藏冗長說明文字，極致省屏 */
+      }
+
       /* 手機端開始畫面載入進度條與按鈕自適應 */
       #loading-container {
         width: min(88vw, 360px) !important;
@@ -2175,6 +2213,64 @@
         width: auto !important;
         min-width: 140px !important;
         max-width: 260px !important;
+      }
+
+      /* 直屏窄屏優化：左下蘑菇頭與右下按鍵組保持安全間距，身法卡緊湊定位 */
+      #touch-joystick-zone {
+        width: 100px !important;
+        height: 100px !important;
+        bottom: max(14px, env(safe-area-inset-bottom, 14px)) !important;
+        left: max(12px, env(safe-area-inset-left, 12px)) !important;
+      }
+      #touch-joystick-thumb {
+        width: 40px !important;
+        height: 40px !important;
+      }
+      #mobile-action-buttons {
+        width: 185px !important;
+        height: 160px !important;
+        bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
+        right: max(10px, env(safe-area-inset-right, 10px)) !important;
+      }
+      .mobile-btn {
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 20px !important;
+      }
+      #m-btn-attack {
+        width: 54px !important;
+        height: 54px !important;
+        font-size: 22px !important;
+        bottom: 8px !important;
+        right: 8px !important;
+      }
+      #m-btn-jump {
+        bottom: 76px !important;
+        right: 6px !important;
+      }
+      #m-btn-sprint {
+        bottom: 82px !important;
+        right: 58px !important;
+      }
+      #m-btn-interact {
+        bottom: 8px !important;
+        right: 70px !important;
+      }
+      #m-btn-weapon {
+        bottom: 62px !important;
+        right: 112px !important;
+        width: 40px !important;
+        height: 40px !important;
+      }
+      #m-btn-dodge {
+        bottom: 8px !important;
+        right: 124px !important;
+        width: 44px !important;
+        height: 44px !important;
+      }
+      .skill-hud-card {
+        bottom: max(178px, calc(env(safe-area-inset-bottom, 12px) + 166px)) !important;
+        right: max(10px, env(safe-area-inset-right, 10px)) !important;
       }
     }
 
@@ -2280,6 +2376,22 @@
         height: 42px !important;
         font-size: 19px !important;
       }
+      .skill-hud-card {
+        bottom: max(152px, calc(env(safe-area-inset-bottom, 6px) + 146px)) !important;
+        right: max(10px, env(safe-area-inset-right, 10px)) !important;
+        padding: 3px 8px !important;
+        gap: 6px !important;
+      }
+      .skill-hud-card .skill-icon-wrapper {
+        width: 28px !important;
+        height: 28px !important;
+      }
+      .skill-hud-card .skill-icon {
+        font-size: 15px !important;
+      }
+      .skill-hud-card .skill-name-text {
+        font-size: 11px !important;
+      }
       #boss-hud {
         top: calc(36px + env(safe-area-inset-top, 0px)) !important;
         width: 300px !important;
@@ -2344,6 +2456,21 @@
       display: block !important;
     }
     body.touch-mode-active .controls-panel {
+      display: none !important;
+    }
+    body.touch-mode-active .hud-bottom {
+      justify-content: flex-end !important;
+      pointer-events: none !important;
+    }
+    body.touch-mode-active .skill-hud-card {
+      position: absolute !important;
+      bottom: max(205px, calc(env(safe-area-inset-bottom, 18px) + 190px)) !important;
+      right: max(14px, env(safe-area-inset-right, 14px)) !important;
+      left: auto !important;
+      margin: 0 !important;
+    }
+    body.touch-mode-active .skill-hud-card .skill-key-badge,
+    body.touch-mode-active .skill-hud-card .skill-desc-text {
       display: none !important;
     }
   </style>

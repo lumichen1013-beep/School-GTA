@@ -1229,6 +1229,7 @@ class SchoolGTASandbox {
     const btnInteract = document.getElementById('m-btn-interact');
     const btnWeapon = document.getElementById('m-btn-weapon');
     const btnDodge = document.getElementById('m-btn-dodge');
+    const skillHudCard = document.getElementById('skill-hud-card');
 
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (isTouchDevice && container) {
@@ -1401,6 +1402,10 @@ class SchoolGTASandbox {
     });
 
     bindButton(btnDodge, () => {
+      this.triggerDodgeSkill();
+    });
+
+    bindButton(skillHudCard, () => {
       this.triggerDodgeSkill();
     });
   }
