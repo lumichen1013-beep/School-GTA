@@ -137,6 +137,8 @@ export class NPC {
 
   private patrolWaypoints: THREE.Vector3[] = [];
   private currentWaypointIdx: number = 0;
+  private stuckCheckTimer: number = 0;
+  private lastRecordedPos: THREE.Vector3 = new THREE.Vector3();
   private animTimer: number = 0;
   private whistleCooldown: number = 0;
   private attackAnimTimer: number = 0;
@@ -3088,6 +3090,20 @@ export class NPC {
           this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
           targetPos = this.patrolWaypoints[this.currentWaypointIdx];
         }
+      }
+
+      // 防卡死巡邏哨兵看門狗 (Anti-stuck Watchdog Timer)
+      // 若 NPC 在巡邏途中撞牆受阻 1.2 秒無實質位移，自動切換至下一個巡邏檢查點
+      this.stuckCheckTimer += delta;
+      if (this.stuckCheckTimer >= 1.2) {
+        const dxFromLast = this.position.x - this.lastRecordedPos.x;
+        const dzFromLast = this.position.z - this.lastRecordedPos.z;
+        if (dxFromLast * dxFromLast + dzFromLast * dzFromLast < 0.04) {
+          this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+          targetPos = this.patrolWaypoints[this.currentWaypointIdx];
+        }
+        this.lastRecordedPos.copy(this.position);
+        this.stuckCheckTimer = 0;
       }
     }
 

@@ -35,6 +35,10 @@ export class InputManager {
 
   private initListeners() {
     window.addEventListener('keydown', (e) => {
+      // 避免瀏覽器 Ctrl+S (存檔)、Ctrl+D (書籤)、Ctrl+A (全選) 等原生快捷鍵在遊戲時干擾
+      if (e.ctrlKey && (e.code === 'KeyS' || e.code === 'KeyD' || e.code === 'KeyA')) {
+        e.preventDefault();
+      }
       this.keys[e.code] = true;
       if (e.code === 'KeyE') {
         if (this.onInteractCallback) this.onInteractCallback();
@@ -295,6 +299,10 @@ export class InputManager {
 
   public get interact(): boolean {
     return !!this.keys['KeyE'];
+  }
+
+  public get sneak(): boolean {
+    return !!(this.keys['KeyC'] || this.keys['KeyZ'] || this.keys['ControlLeft'] || this.keys['ControlRight']);
   }
 
   public get horn(): boolean {

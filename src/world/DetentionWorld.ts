@@ -24,14 +24,14 @@ export class DetentionWorld {
   public colliders: CollidableBox[] = [];
 
   // 少年院關鍵點位 (改為潛龍諜影潛行迷宮配置)
-  public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -78); // 起點：禁閉牢房區
+  public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 起點：北側牢房後方通風口 (空曠安全區)
   public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
-  public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-12, 0, 10); // 單槓訓練區
-  public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(12, 0, 10); // 臥推訓練區
-  public tireStationPos: THREE.Vector3 = new THREE.Vector3(0, 0, -8); // 巨型輪胎翻滾區
-  public barracksPos: THREE.Vector3 = new THREE.Vector3(-45, 0, -50); // 集訓營舍
-  public hqPos: THREE.Vector3 = new THREE.Vector3(45, 0, 45); // 教官總部
-  public workshopPos: THREE.Vector3 = new THREE.Vector3(-45, 0, 45); // 實習工廠
+  public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
+  public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(-48, 0, -8); // 西側體能區：臥推訓練
+  public tireStationPos: THREE.Vector3 = new THREE.Vector3(-49, 0, 8); // 西側體能區：巨型輪胎翻滾
+  public barracksPos: THREE.Vector3 = new THREE.Vector3(-40, 0, -60); // 監舍主體大樓
+  public hqPos: THREE.Vector3 = new THREE.Vector3(52.5, 0, 50); // 教官總部
+  public workshopPos: THREE.Vector3 = new THREE.Vector3(-52.5, 0, 50); // 實習工廠
   public gatePos: THREE.Vector3 = new THREE.Vector3(0, 0, 95); // 少年院正門 (南側脫逃大門)
 
   // 門禁與機關點位
@@ -40,9 +40,9 @@ export class DetentionWorld {
   public southGateConsolePos: THREE.Vector3 = new THREE.Vector3(-7.5, 0, 93); // 南大門終端控制台
 
   // 鑰匙卡點位
-  public keycardAPos: THREE.Vector3 = new THREE.Vector3(-45, 0.8, -50); // 藍色門禁卡 A (營舍內長桌)
-  public keycardBPos: THREE.Vector3 = new THREE.Vector3(30, 0.8, 5);    // 黃色門禁卡 B (B 區貨櫃死角)
-  public masterKeycardPos: THREE.Vector3 | null = null;                 // 萬能逃脫鑰匙卡 (Boss 擊敗後掉落)
+  public keycardAPos: THREE.Vector3 = new THREE.Vector3(5, 0.8, -60);  // 藍色門禁卡 A (中央空地安全崗亭)
+  public keycardBPos: THREE.Vector3 = new THREE.Vector3(24, 0.8, 14);  // 黃色門禁卡 B (B 區貨櫃迷宮東側掩體)
+  public masterKeycardPos: THREE.Vector3 | null = null;                // 萬能逃脫鑰匙卡 (Boss 擊敗後掉落)
 
   // C 區發電機混凝土防護柱 (供玩家誘使 Boss 衝撞硬直破盾)
   public generatorPillars: THREE.Vector3[] = [
@@ -586,35 +586,35 @@ export class DetentionWorld {
     darkSteelGeos.push(radarDish);
 
     // ==========================================
-    // 8. 中央泥濘體能大操場設施 (單槓、臥推、巨型輪胎組)
+    // 8. 西側重訓體能專區 (單槓、臥推、巨型輪胎組，集中於 X: -56 ~ -44，絕不干擾中央操場與巡邏動線)
     // ==========================================
-    // 8.1 多聯排單槓組 (Pull-Up Bar Rig, X: -16 ~ -8, Z: 6 ~ 14)
-    const barStartX = -16;
+    // 8.1 多聯排單槓組 (Pull-Up Bar Rig, X: -54 ~ -44, Z: 0)
+    const barStartX = -54;
     for (let b = 0; b < 3; b++) {
       const bx = barStartX + b * 4.0;
       const barH = 2.4 + b * 0.3; // 2.4m, 2.7m, 3.0m
 
       // 左立柱與右立柱
       const post1 = new THREE.CylinderGeometry(0.06, 0.06, barH, 8);
-      post1.translate(bx, barH / 2, 8);
+      post1.translate(bx, barH / 2, 0);
       const post2 = new THREE.CylinderGeometry(0.06, 0.06, barH, 8);
-      post2.translate(bx + 3.5, barH / 2, 8);
+      post2.translate(bx + 3.5, barH / 2, 0);
 
       // 橫槓
       const horizBar = new THREE.CylinderGeometry(0.035, 0.035, 3.5, 8);
       horizBar.rotateZ(Math.PI / 2);
-      horizBar.translate(bx + 1.75, barH - 0.05, 8);
+      horizBar.translate(bx + 1.75, barH - 0.05, 0);
 
       darkSteelGeos.push(post1, post2, horizBar);
-      this.addCollider(bx - 0.2, bx + 0.2, 7.8, 8.2, 0, barH);
-      this.addCollider(bx + 3.3, bx + 3.7, 7.8, 8.2, 0, barH);
+      this.addCollider(bx - 0.2, bx + 0.2, -0.2, 0.2, 0, barH);
+      this.addCollider(bx + 3.3, bx + 3.7, -0.2, 0.2, 0, barH);
     }
 
-    // 8.2 臥推架設施 (Bench Press Racks, X: 8 ~ 16, Z: 6 ~ 14)
+    // 8.2 臥推架設施 (Bench Press Racks, X: -52 ~ -46, Z: -8)
     const benchPositions = [
-      { x: 10, z: 8 },
-      { x: 14, z: 8 },
-      { x: 12, z: 12 }
+      { x: -50, z: -8 },
+      { x: -46, z: -8 },
+      { x: -48, z: -4 }
     ];
     for (const bp of benchPositions) {
       // 臥推平椅
@@ -646,13 +646,10 @@ export class DetentionWorld {
       darkSteelGeos.push(barbellBar, plateL1, plateR1);
     }
 
-    // 8.3 巨型拖拉機重訓輪胎組 (Giant Tractor Tires, X: -6 ~ 6, Z: -15 ~ -4)
-    // 躺平放置輪胎 (可供踩跳翻滾)
+    // 8.3 巨型拖拉機重訓輪胎組 (Giant Tractor Tires, X: -52 ~ -46, Z: 8 ~ 14)
     const flatTirePositions = [
-      { x: -3.5, z: -8, r: 1.4, h: 0.7 },
-      { x: 3.5, z: -8, r: 1.4, h: 0.7 },
-      { x: -1.0, z: -13, r: 1.5, h: 0.8 },
-      { x: 4.0, z: -13, r: 1.3, h: 0.65 }
+      { x: -50, z: 8, r: 1.4, h: 0.7 },
+      { x: -46, z: 8, r: 1.4, h: 0.7 }
     ];
     for (const tp of flatTirePositions) {
       const tire = new THREE.CylinderGeometry(tp.r, tp.r, tp.h, 16);
@@ -663,72 +660,66 @@ export class DetentionWorld {
     }
 
     // 半埋入泥土中成排直立輪胎 (障礙跨欄)
-    for (let i = 0; i < 5; i++) {
-      const x = -8 + i * 1.5;
+    for (let i = 0; i < 4; i++) {
+      const x = -52 + i * 1.8;
       const buriedTire = new THREE.TorusGeometry(1.1, 0.35, 8, 16);
       buriedTire.rotateY(Math.PI / 2);
-      buriedTire.translate(x, 0.6, -4);
+      buriedTire.translate(x, 0.6, 14);
       tireRubberGeos.push(buriedTire);
-      this.addCollider(x - 0.3, x + 0.3, -5.2, -2.8, 0, 1.6);
+      this.addCollider(x - 0.3, x + 0.3, 12.8, 15.2, 0, 1.6);
     }
 
-    // 8.4 雙槓訓練架 (Parallel Dip Bars, X: -10 ~ -6, Z: 0)
+    // 8.4 雙槓訓練架 (Parallel Dip Bars, X: -50 ~ -46, Z: 4)
     for (let i = 0; i < 2; i++) {
-      const dx = -9 + i * 2.5;
+      const dx = -50 + i * 3.5;
       const dipBar1 = new THREE.CylinderGeometry(0.035, 0.035, 2.5, 8);
       dipBar1.rotateX(Math.PI / 2);
-      dipBar1.translate(dx - 0.4, 1.2, 0);
+      dipBar1.translate(dx - 0.4, 1.2, 4);
 
       const dipBar2 = new THREE.CylinderGeometry(0.035, 0.035, 2.5, 8);
       dipBar2.rotateX(Math.PI / 2);
-      dipBar2.translate(dx + 0.4, 1.2, 0);
+      dipBar2.translate(dx + 0.4, 1.2, 4);
 
       darkSteelGeos.push(dipBar1, dipBar2);
-      this.addCollider(dx - 0.55, dx + 0.55, -1.3, 1.3, 0, 1.3);
+      this.addCollider(dx - 0.55, dx + 0.55, 2.7, 5.3, 0, 1.3);
     }
 
     // ==========================================
     // 8.5 潛龍諜影三段式戰術立體迷宮體系 (Tactical Stealth Labyrinth)
     // ==========================================
     // --- 【A 區：牢房生活長廊迷宮 (Z: -85 ~ -28)】---
-    // 牆體 1: 北走廊主阻隔牆 (Z = -72, 開口在 X = -35 牢房出口與 X = -5)
-    const mazeA_W1a = new THREE.BoxGeometry(20, 3.8, 0.6);
-    mazeA_W1a.translate(-45, 1.9, -72);
-    const mazeA_W1b = new THREE.BoxGeometry(25, 3.8, 0.6);
-    mazeA_W1b.translate(10, 1.9, -72);
-    concreteGeos.push(mazeA_W1a, mazeA_W1b);
-    this.addCollider(-55, -35, -72.4, -71.6, 0, 3.8);
-    this.addCollider(-2.5, 22.5, -72.4, -71.6, 0, 3.8);
+    // 北走廊檢查哨屏障 (X = -10, Z: -90 ~ -78, 迫使從北側繞道中央庭院)
+    const northCheckWall = new THREE.BoxGeometry(0.6, 3.8, 12);
+    northCheckWall.translate(-10, 1.9, -84);
+    concreteGeos.push(northCheckWall);
+    this.addCollider(-10.4, -9.6, -90, -78, 0, 3.8);
 
-    // 牆體 2: 西側縱向分隔隔板 (X = -20, Z: -85 ~ -60)
-    const mazeA_W2 = new THREE.BoxGeometry(0.6, 3.8, 25);
-    mazeA_W2.translate(-20, 1.9, -72.5);
-    concreteGeos.push(mazeA_W2);
-    this.addCollider(-20.4, -19.6, -85, -60, 0, 3.8);
+    // 中央安全崗亭 (存放藍色門禁卡 A，X = 5, Z = -60)
+    const boothWallW = new THREE.BoxGeometry(0.5, 3.2, 4);
+    boothWallW.translate(2, 1.6, -60);
+    const boothWallE = new THREE.BoxGeometry(0.5, 3.2, 4);
+    boothWallE.translate(8, 1.6, -60);
+    const boothWallN = new THREE.BoxGeometry(6.5, 3.2, 0.5);
+    boothWallN.translate(5, 1.6, -62);
+    concreteGeos.push(boothWallW, boothWallE, boothWallN);
+    this.addCollider(1.7, 2.3, -62, -58, 0, 3.2);
+    this.addCollider(7.7, 8.3, -62, -58, 0, 3.2);
+    this.addCollider(1.7, 8.3, -62.3, -61.7, 0, 3.2);
 
-    // 牆體 3: 東側縱向拐角阻隔 (X = 15, Z: -72 ~ -45)
-    const mazeA_W3 = new THREE.BoxGeometry(0.6, 3.8, 27);
-    mazeA_W3.translate(15, 1.9, -58.5);
-    concreteGeos.push(mazeA_W3);
-    this.addCollider(14.6, 15.4, -72, -45, 0, 3.8);
+    // 東側巡邏盲區阻隔壁 (X = 14, Z: -55 ~ -45)
+    const eastCourtyardWall = new THREE.BoxGeometry(0.6, 3.8, 10);
+    eastCourtyardWall.translate(14, 1.9, -50);
+    concreteGeos.push(eastCourtyardWall);
+    this.addCollider(13.6, 14.4, -55, -45, 0, 3.8);
 
-    // 牆體 4: 中部轉角巡邏盲區牆 (Z = -55, X: -35 ~ 5, 開口在 X = -15)
-    const mazeA_W4a = new THREE.BoxGeometry(16, 3.8, 0.6);
-    mazeA_W4a.translate(-27, 1.9, -55);
-    const mazeA_W4b = new THREE.BoxGeometry(12, 3.8, 0.6);
-    mazeA_W4b.translate(-2, 1.9, -55);
-    concreteGeos.push(mazeA_W4a, mazeA_W4b);
-    this.addCollider(-35, -19, -55.4, -54.6, 0, 3.8);
-    this.addCollider(-8, 4, -55.4, -54.6, 0, 3.8);
-
-    // 牆體 5: 檢查站屏障 (Z = -38, X: -25 ~ 25，開口在 X = 0)
-    const mazeA_W5a = new THREE.BoxGeometry(22, 3.8, 0.6);
-    mazeA_W5a.translate(-14, 1.9, -38);
-    const mazeA_W5b = new THREE.BoxGeometry(22, 3.8, 0.6);
-    mazeA_W5b.translate(14, 1.9, -38);
-    concreteGeos.push(mazeA_W5a, mazeA_W5b);
-    this.addCollider(-25, -3, -38.4, -37.6, 0, 3.8);
-    this.addCollider(3, 25, -38.4, -37.6, 0, 3.8);
+    // 南前庭防暴折返隔板 (Z = -38, X: -25 ~ -6 與 X: 6 ~ 25，留出中央寬闊通路 X: -6 ~ 6 直通閘門 1)
+    const southChicaneW = new THREE.BoxGeometry(19, 3.8, 0.6);
+    southChicaneW.translate(-15.5, 1.9, -38);
+    const southChicaneE = new THREE.BoxGeometry(19, 3.8, 0.6);
+    southChicaneE.translate(15.5, 1.9, -38);
+    concreteGeos.push(southChicaneW, southChicaneE);
+    this.addCollider(-25, -6, -38.4, -37.6, 0, 3.8);
+    this.addCollider(6, 25, -38.4, -37.6, 0, 3.8);
 
     // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院，僅在中央 X: -3.5 ~ 3.5 留出閘口)
     const gateA_WallW = new THREE.BoxGeometry(86.5, 4.5, 0.8);
@@ -761,24 +752,27 @@ export class DetentionWorld {
     this.group.add(terminalA);
 
     // --- 【B 區：操場重裝軍規貨櫃與掩體迷宮 (Z: -28 ~ 35)】---
-    // 16 座高規格海運集裝箱貨櫃 (長 10m, 寬 2.8m, 高 3.2m) 排列成戰術交錯矩陣
+    // 10 座高規格海運集裝箱貨櫃 (長 10m, 寬 2.8m, 高 3.2m) 整齊佈局，提供 7~10m 寬敞巡邏動線
     const containers = [
-      { x: -28, z: -20, isZ: true, color: 0x2b4c7e },
-      { x: -10, z: -18, isZ: false, color: 0x8b3a3a },
-      { x: 12, z: -20, isZ: true, color: 0x2d6a4f },
-      { x: 30, z: -18, isZ: false, color: 0x3d405b },
-      { x: -42, z: -4, isZ: false, color: 0x2b4c7e },
-      { x: -22, z: -4, isZ: true, color: 0x5c677d },
-      { x: 0, z: -7, isZ: false, color: 0x8b3a3a },
-      { x: 22, z: -4, isZ: true, color: 0x2d6a4f },
-      { x: 42, z: -4, isZ: false, color: 0x2b4c7e },
-      { x: -32, z: 12, isZ: true, color: 0x3d405b },
-      { x: -14, z: 10, isZ: false, color: 0x5c677d },
-      { x: 8, z: 10, isZ: false, color: 0x8b3a3a },
-      { x: 28, z: 12, isZ: true, color: 0x2d6a4f },
-      { x: -20, z: 24, isZ: false, color: 0x2b4c7e },
-      { x: 0, z: 22, isZ: true, color: 0x3d405b },
-      { x: 20, z: 24, isZ: false, color: 0x8b3a3a }
+      // 第一排 (Z = -18)
+      { x: -22, z: -18, isZ: false, color: 0x2b4c7e },
+      { x: 22, z: -18, isZ: false, color: 0x8b3a3a },
+
+      // 第二排 (Z = -6)
+      { x: -12, z: -6, isZ: true, color: 0x5c677d },
+      { x: 12, z: -6, isZ: true, color: 0x2d6a4f },
+
+      // 第三排 (Z = 8)
+      { x: -22, z: 8, isZ: false, color: 0x3d405b },
+      { x: 0, z: 8, isZ: false, color: 0x2b4c7e },
+      { x: 22, z: 8, isZ: false, color: 0x8b3a3a },
+
+      // 第四排 (Z = 20)
+      { x: -12, z: 20, isZ: true, color: 0x2d6a4f },
+      { x: 12, z: 20, isZ: true, color: 0x5c677d },
+
+      // 東側藏寶盲區 (Z = 14, 掩護 Keycard B)
+      { x: 30, z: 14, isZ: true, color: 0x3d405b }
     ];
 
     for (const c of containers) {
@@ -791,14 +785,12 @@ export class DetentionWorld {
       this.addCollider(c.x - w / 2, c.x + w / 2, c.z - d / 2, c.z + d / 2, 0, h);
     }
 
-    // 混凝土防暴澤西護欄掩體 (散佈於貨櫃窄道盲區)
+    // 混凝土防暴澤西護欄掩體 (提供戰術半高掩護，絕不擋死過道)
     const jerseyBarriers = [
-      { x: -18, z: -10, isZ: false },
-      { x: 18, z: -10, isZ: false },
-      { x: -8, z: 2, isZ: true },
-      { x: 14, z: 2, isZ: true },
-      { x: -24, z: 18, isZ: false },
-      { x: 14, z: 18, isZ: false }
+      { x: -22, z: -2, isZ: false },
+      { x: 22, z: -2, isZ: false },
+      { x: -6, z: 14, isZ: true },
+      { x: 6, z: 14, isZ: true }
     ];
     for (const jb of jerseyBarriers) {
       const jbW = jb.isZ ? 0.6 : 3.6;

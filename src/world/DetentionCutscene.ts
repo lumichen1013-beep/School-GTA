@@ -479,10 +479,10 @@ export class DetentionCutscene {
     if (this.wardenMesh) this.wardenMesh.visible = false;
     for (const g of this.guardMeshes) g.visible = false;
 
-    // 將主角放置於禁閉牢房起點 (-55, 0, -78)
+    // 將主角放置於禁閉牢房起點 (-55, 0, -84)
     if (this.playerRef) {
       this.playerRef.mesh.visible = true;
-      this.playerRef.position.set(-55, 0, -78);
+      this.playerRef.position.set(-55, 0, -84);
       this.playerRef.velocity.set(0, 0, 0);
       this.playerRef.rotationY = 0;
     }

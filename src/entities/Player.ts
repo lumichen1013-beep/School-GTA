@@ -914,10 +914,15 @@ export class Player {
     this.isMoving = isMoving;
 
     // 潛龍諜影潛行步態 (MGS Sneak Mode)
-    // 鍵盤：按住 Ctrl 鍵為靜音步行；手機：虛擬搖桿推桿半徑小於 0.5 為靜音步行
-    const isCtrlPressed = !!(input.keys['ControlLeft'] || input.keys['ControlRight']);
+    // 鍵盤：支援 C 鍵與 Z 鍵（防 Windows/瀏覽器 Ctrl+W/A/S/D 快捷鍵衝突），亦相容 Ctrl；手機：虛擬搖桿推桿半徑小於 0.5
+    const isSneakKeyPressed = !!(
+      input.keys['KeyC'] ||
+      input.keys['KeyZ'] ||
+      input.keys['ControlLeft'] ||
+      input.keys['ControlRight']
+    );
     const isJoystickSneak = hasVirtualJoystick && input.virtualAxisMagnitude > 0.05 && input.virtualAxisMagnitude < 0.5;
-    const wantsSneak = (isCtrlPressed || isJoystickSneak) && isMoving && !input.sprint;
+    const wantsSneak = (isSneakKeyPressed || isJoystickSneak) && isMoving && !input.sprint;
     this.isSneaking = wantsSneak;
 
     // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)

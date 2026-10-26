@@ -490,7 +490,7 @@ class SchoolGTASandbox {
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住 CTRL 靜音慢步，從背後靠近守衛進行 CQC 擊昏！', 5000);
+        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住 C / Z 鍵靜音慢步，從背後靠近守衛進行 CQC 擊昏！', 5000);
       }
     }
   }
@@ -789,110 +789,110 @@ class SchoolGTASandbox {
     this.detentionNPCs = [];
 
     // ==========================================
-    // A 區：牢房與生活長廊迷宮 (Z: -85 ~ -28)
+    // A 區：牢房生活長廊迷宮 (Z: -90 ~ -28)
     // ==========================================
-    // 1. 北走廊折返巡邏教官 G1 (巡邏區：X -50 ~ -25, Z = -68)
+    // 1. 北走廊折返巡邏教官 G1 (巡邏區：X -35 ~ -12, Z = -84，空曠北走道)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-40, 0, -68),
+      new THREE.Vector3(-20, 0, -84),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-50, 0, -68), new THREE.Vector3(-25, 0, -68)],
+      [new THREE.Vector3(-35, 0, -84), new THREE.Vector3(-12, 0, -84)],
       'CASUAL_WALK'
     ));
 
-    // 2. 中走廊巡查教官 G2 (巡邏區：X -15 ~ 10, Z = -52)
+    // 2. 中央空地東側巡邏教官 G2 (巡邏區：X = 18, Z: -70 ~ -50，避開東側大樓)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-5, 0, -52),
+      new THREE.Vector3(18, 0, -60),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-15, 0, -52), new THREE.Vector3(10, 0, -52)],
+      [new THREE.Vector3(18, 0, -70), new THREE.Vector3(18, 0, -50)],
       'CASUAL_WALK'
     ));
 
-    // 3. 營舍辦公室門禁卡 A 守衛 G3 (駐守營舍，視察門禁卡 A)
+    // 3. 門禁卡 A 崗亭巡視教官 G3 (巡視中央安全崗亭，X = -4, Z: -68 ~ -52)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-38, 0, -50),
+      new THREE.Vector3(-4, 0, -60),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-45, 0, -50), new THREE.Vector3(-35, 0, -50)],
+      [new THREE.Vector3(-4, 0, -68), new THREE.Vector3(-4, 0, -52)],
       'CASUAL_WALK'
     ));
 
-    // 4. 管制閘門 1 哨戒長 G4 (守衛在 Z = -32, 左右往返視察閘口)
+    // 4. 管制閘門 1 哨戒長 G4 (守衛在 Z = -32, X: -5 ~ 5 橫向視察閘口)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
       new THREE.Vector3(0, 0, -32),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-8, 0, -32), new THREE.Vector3(8, 0, -32)],
+      [new THREE.Vector3(-5, 0, -32), new THREE.Vector3(5, 0, -32)],
       'CASUAL_WALK'
     ));
 
     // ==========================================
     // B 區：操場重裝軍規貨櫃迷宮 (Z: -28 ~ 35)
     // ==========================================
-    // 5. 貨櫃西側縱向走道巡邏隊 G5
+    // 5. 貨櫃西側縱向走道巡邏隊 G5 (X = -22, Z: -12 ~ 0，寬敞直道)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-25, 0, -14),
+      new THREE.Vector3(-22, 0, -6),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-25, 0, -22), new THREE.Vector3(-25, 0, -5)],
+      [new THREE.Vector3(-22, 0, -12), new THREE.Vector3(-22, 0, 0)],
       'CASUAL_WALK'
     ));
 
-    // 6. 貨櫃東側縱向走道巡邏隊 G6
+    // 6. 貨櫃東側縱向走道巡邏隊 G6 (X = 22, Z: -12 ~ 0，寬敞直道)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(25, 0, -14),
+      new THREE.Vector3(22, 0, -6),
       'DETENTION_GUARD',
-      [new THREE.Vector3(25, 0, -22), new THREE.Vector3(25, 0, -5)],
+      [new THREE.Vector3(22, 0, -12), new THREE.Vector3(22, 0, 0)],
       'CASUAL_WALK'
     ));
 
-    // 7. 貨櫃中央十字路口巡哨霸榜生 G7
+    // 7. 貨櫃中央十字路口巡哨霸榜生 G7 (Z = 0, X: -6 ~ 6，無障礙十字路口)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 2),
+      new THREE.Vector3(0, 0, 0),
       'DETENTION_HEAVY',
-      [new THREE.Vector3(-12, 0, 2), new THREE.Vector3(12, 0, 2)],
+      [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(6, 0, 0)],
       'CASUAL_WALK'
     ));
 
-    // 8. 貨櫃盲區黃色門禁卡 B 駐守教官 G8
+    // 8. 貨櫃盲區黃色門禁卡 B 駐守教官 G8 (X = 24, Z: 0 ~ 8，東側藏寶走道)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(30, 0, 8),
+      new THREE.Vector3(24, 0, 4),
       'DETENTION_GUARD',
-      [new THREE.Vector3(22, 0, 8), new THREE.Vector3(35, 0, 8)],
+      [new THREE.Vector3(24, 0, 0), new THREE.Vector3(24, 0, 8)],
       'CASUAL_WALK'
     ));
 
-    // 9. 管制閘門 2 哨戒長 G9 (守衛在 Z = 30)
+    // 9. 管制閘門 2 哨戒長 G9 (守衛在 Z = 30, X: -5 ~ 5 橫向視察閘口)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
       new THREE.Vector3(0, 0, 30),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-8, 0, 30), new THREE.Vector3(8, 0, 30)],
+      [new THREE.Vector3(-5, 0, 30), new THREE.Vector3(5, 0, 30)],
       'CASUAL_WALK'
     ));
 
-    // 10. B 區特訓巡邏狼犬 (巡守中央空地，嗅覺靈敏)
+    // 10. B 區特訓巡邏狼犬 (西側寬廣開闊地帶多點巡邏)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-15, 0, 16),
+      new THREE.Vector3(-30, 0, -5),
       'DETENTION_WOLF',
-      [new THREE.Vector3(-25, 0, 16), new THREE.Vector3(5, 0, 16), new THREE.Vector3(5, 0, -2), new THREE.Vector3(-25, 0, -2)],
+      [new THREE.Vector3(-30, 0, -12), new THREE.Vector3(-30, 0, 16), new THREE.Vector3(-18, 0, 16), new THREE.Vector3(-18, 0, -12)],
       'JOGGING'
     ));
 
     // ==========================================
     // C 區：終極哨戒門庭 (Z: 35 ~ 95)
     // ==========================================
-    // 11. 守門小 Boss：【鐵面總教官】(防暴大盾，正面免疫普通打擊，需誘使撞柱硬直破盾)
+    // 11. 守門小 Boss：【鐵面總教官】(防暴大盾，正中開闊競技場巡邏)
     const boss = new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 65),
+      new THREE.Vector3(0, 0, 63),
       'DETENTION_BOSS',
-      [new THREE.Vector3(-14, 0, 65), new THREE.Vector3(14, 0, 65)],
+      [new THREE.Vector3(-10, 0, 63), new THREE.Vector3(10, 0, 63)],
       'OFFICER_PATROL'
     );
     boss.maxHp = 300;
