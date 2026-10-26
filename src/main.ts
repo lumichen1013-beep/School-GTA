@@ -1228,13 +1228,17 @@ class SchoolGTASandbox {
       if (this.currentRidingBike) {
         this.currentRidingBike.ringBell();
       } else {
+        // 若玩家處於攻擊間隔冷卻中，不執行攻擊
+        if (!this.player.canAttack) return;
+
         // 第二世界：若處於守衛身後觸發 CQC 潛入擊昏
         if (this.currentWorldType === 'DETENTION' && this.nearbyCqcTarget && !this.nearbyCqcTarget.isKnockedDown) {
           this.performCqcTakedown();
           return;
         }
 
-        this.player.attack();
+        const attacked = this.player.attack();
+        if (!attacked) return;
 
         const reach = this.player.getWeaponReach();
         const damage = this.player.getWeaponDamage();
@@ -1276,20 +1280,40 @@ class SchoolGTASandbox {
 
         // 2. 檢測是否命中附近的 NPC
         for (const npc of this.npcs) {
-          if (npc.position.distanceTo(this.player.position) < reach + 0.3 && !npc.isKnockedDown) {
+          if (npc.position.distanceTo(this.player.position) < reach + 0.3 && !npc.isKnockedDown && !npc.isPermanentlyKnockedOut) {
+            let actualKnockback = knockback;
+
             if (this.currentWorldType === 'DETENTION') {
               this.detentionSpawnGraceTimer = 0;
               npc.setAlertState('ALERT');
               npc.isChasing = true;
               this.detentionAlertTimer = 15.0;
               this.detentionAlertCount++;
+
               if (npc.role === 'DETENTION_BOSS' && !npc.isBossStunned) {
                 this.wantedSystem.showBanner('🛡️ 總教官正面持盾防禦！正面攻擊無效！需誘使撞柱硬直破盾！', 2500);
                 soundManager.playPunch();
+                this.player.setAttackCooldown(0.5);
                 break;
               }
+
+              // 判定是否為正面攻擊 (玩家處於守衛前方 240 度視角內)
+              const guardFwdX = Math.sin(npc.rotationY);
+              const guardFwdZ = Math.cos(npc.rotationY);
+              const toPlayerX = this.player.position.x - npc.position.x;
+              const toPlayerZ = this.player.position.z - npc.position.z;
+              const dist = Math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
+              const dot = dist > 0.001 ? guardFwdX * (toPlayerX / dist) + guardFwdZ * (toPlayerZ / dist) : 1;
+
+              // 當正面攻擊巡邏守衛時 (dot >= -0.15，非背後盲區)：技能間隔 0.5 秒且擊退效果減半
+              if (dot >= -0.15) {
+                actualKnockback = knockback * 0.5;
+                this.player.setAttackCooldown(0.5);
+                this.wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
+              }
             }
-            const wasKnocked = npc.launchFlying(_scratchPlayerForward, knockback, damage);
+
+            const wasKnocked = npc.launchFlying(_scratchPlayerForward, actualKnockback, damage);
             if (wasKnocked) {
               this.handleNpcDefeated(npc, 'ATTACK');
             } else {

@@ -776,8 +776,8 @@ export class Player {
     }
   }
 
-  public attack() {
-    if (this.isDead || this.isSwimming) return; // 游泳狀態下雙手劃水，不可出拳揮棒
+  public attack(): boolean {
+    if (this.isDead || this.isSwimming) return false; // 游泳狀態下雙手劃水，不可出拳揮棒
     if (this.punchTimer <= 0) {
       if (this.currentWeapon === 'SPECIAL_BAT') {
         this.punchTimer = 0.48;
@@ -792,7 +792,18 @@ export class Player {
         this.isAttacking = true;
         soundManager.playPunch();
       }
+      return true;
     }
+    return false;
+  }
+
+  // 設置玩家攻擊硬直/技能間隔冷卻 (如第二世界正面攻擊巡邏守衛時間隔 0.5 秒)
+  public setAttackCooldown(seconds: number) {
+    this.punchTimer = Math.max(this.punchTimer, seconds);
+  }
+
+  public get canAttack(): boolean {
+    return !this.isDead && !this.isSwimming && this.punchTimer <= 0;
   }
 
   public update(

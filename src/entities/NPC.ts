@@ -1443,8 +1443,8 @@ export class NPC {
 
     // 計算擊飛拋物線：向上拋射 + 合理水平擊飛 (受物理阻擋，絕不飛越圍牆或穿透建物)
     this.isKnockedFlying = true;
-    const horizontalForce = Math.min(Math.max(force * 1.1, 8.0), 16.5);
-    const verticalForce = Math.min(force * 0.6 + 5.0, 10.5);
+    const horizontalForce = Math.min(Math.max(force * 1.1, 3.0), 16.5);
+    const verticalForce = Math.min(Math.max(force * 0.6, 2.0), 10.5);
 
     this.knockVelocity.set(
       impactDir.x * horizontalForce,
