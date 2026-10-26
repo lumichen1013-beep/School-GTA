@@ -1780,41 +1780,36 @@ export class HUD {
     ctx.stroke();
   }
 
-  // 更新 CQC 潛入擊昏提示 與 刺客教條草堆暗殺提示 (HUD 戰術提示與手機攻擊按鈕聯動)
+  // 更新 CQC 暗殺提示 (動態浮動於目標 NPC 頭頂上方，僅顯示「擊暈」)
   public updateCqcPrompt(
     visible: boolean,
-    targetNpcRole: string = '',
-    isHidingAssassination: boolean = false,
-    coverName: string = ''
+    screenX: number = 0,
+    screenY: number = 0
   ) {
     const el = document.getElementById('cqc-prompt-container');
     const textEl = document.getElementById('cqc-btn-text');
     const mobileAttackBtn = document.getElementById('m-btn-attack');
 
     if (el) {
-      el.style.display = visible ? 'flex' : 'none';
-      if (textEl && visible) {
-        if (isHidingAssassination) {
-          if (targetNpcRole === 'DETENTION_BOSS') {
-            textEl.textContent = '🗡️ [左鍵 / F / 攻擊鈕] 刺客教條·草堆突襲總教官！(-100 HP)';
-          } else {
-            textEl.textContent = `🗡️ [左鍵 / F / 攻擊鈕] 刺客教條·${coverName || '草堆'}暗殺！(無聲排除)`;
-          }
-        } else {
-          if (targetNpcRole === 'DETENTION_BOSS') {
-            textEl.textContent = '⚡ [左鍵 / F / 攻擊鈕] 總教官弱點破盾重擊！(-100 HP)';
-          } else {
-            textEl.textContent = '🥷 [左鍵 / F / 攻擊鈕] 絞喉擊昏 (CQC)';
-          }
+      if (visible) {
+        el.style.display = 'flex';
+        el.style.left = `${Math.round(screenX)}px`;
+        el.style.top = `${Math.round(screenY)}px`;
+        el.style.bottom = 'auto';
+        el.style.transform = 'translate(-50%, -100%)';
+        if (textEl) {
+          textEl.textContent = '擊暈';
         }
+      } else {
+        el.style.display = 'none';
       }
     }
 
-    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 🥷 / 🗡️ 暗殺態，不需專屬 CQC 鈕)
+    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 擊暈)
     if (mobileAttackBtn) {
       if (visible) {
         mobileAttackBtn.classList.add('cqc-active');
-        mobileAttackBtn.textContent = isHidingAssassination ? '🗡️' : '🥷';
+        mobileAttackBtn.textContent = '擊暈';
       } else {
         mobileAttackBtn.classList.remove('cqc-active');
         mobileAttackBtn.textContent = '👊';

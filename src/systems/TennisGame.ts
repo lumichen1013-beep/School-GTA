@@ -217,18 +217,18 @@ export class TennisGame {
           let shotArc = 0.8;
 
           if (playerDistFromNet > 6.2 || (rand < 0.28 && playerDistFromNet > 4.5)) {
-            // 1. 網前放小球 (Drop Shot)：玩家退太後時，吊網口急墜！
+            // 1. 網前放小球 (Drop Shot)：玩家退太後時，向上拋過網口急墜！
             targetX = 75.0 + Math.random() * 4.0; // 75.0 ~ 79.0
             targetZ = 40.2 + Math.random() * 1.5; // 40.2 ~ 41.7 (近網前)
-            shotSpeed = 9.8;
-            shotArc = 1.25;
+            shotSpeed = 10.2;
+            shotArc = 2.4; // 充足向上拋物線，高挑越過球網急墜
             wantedSystem.showBanner('🏸 大如老師使出【網前放小球】！快前衝接球！', 1600);
           } else if (playerDistFromNet < 5.0 || (rand >= 0.28 && rand < 0.52)) {
             // 2. 後場高遠球 (Deep Lob)：玩家靠太近時，高拋底線死角！
             targetX = Math.random() < 0.5 ? (73.8 + Math.random() * 1.2) : (79.0 + Math.random() * 1.2);
             targetZ = 46.5 + Math.random() * 1.2; // 46.5 ~ 47.7 (底線深區)
-            shotSpeed = 12.8;
-            shotArc = 1.95; // 高挑彩虹弧線
+            shotSpeed = 12.2;
+            shotArc = 2.8; // 高挑彩虹向上拋物線
             wantedSystem.showBanner('🏸 大如老師打出【後場底線高遠球】！迅速後撤回擊！', 1600);
           } else if (rand >= 0.52 && rand < 0.80) {
             // 3. 大對角斜線抽球 (Cross-Court Drive)：逼迫大跨步側移！
@@ -238,15 +238,15 @@ export class TennisGame {
               targetX = 73.2 + Math.random() * 1.2; // 逼打左側線
             }
             targetZ = 43.5 + Math.random() * 1.8;
-            shotSpeed = 13.8;
-            shotArc = 0.72;
+            shotSpeed = 12.0;
+            shotArc = 2.2; // 向上拋物線越網
             wantedSystem.showBanner('🏸 大如老師大角度【大對角斜線變線】！側步跨救！', 1600);
           } else {
-            // 4. 凌空暴扣殺球 (Thunder Smash)：高速俯衝平壓！
+            // 4. 凌空暴扣殺球 (Thunder Smash)：高點下壓殺球，同樣具備向上起弧越網！
             targetX = THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 2.2, 74.0, 80.0);
-            targetZ = 42.8 + Math.random() * 1.6;
-            shotSpeed = 16.5;
-            shotArc = 0.35; // 銳角下壓
+            targetZ = 43.0 + Math.random() * 1.5;
+            shotSpeed = 13.5;
+            shotArc = 1.9; // 向上拋物線過網後俯衝
             wantedSystem.showBanner('⚡ 大如老師凌空起跳【雷霆暴扣殺球】！看準時機揮拍！', 1600);
           }
 
@@ -313,10 +313,23 @@ export class TennisGame {
           this.playerScore += 1;
           this.updateScoreboard();
           if (peCoach) {
-            _scratchDirToCoach.set(peCoach.position.x, peCoach.position.y + 1.2, peCoach.position.z)
-              .sub(sc.position).normalize();
-            sc.velocity.copy(_scratchDirToCoach.multiplyScalar(22.0));
-            // 抽球反彈時，羽球即刻掉頭朝向對方場區飛行
+            // 玩家擊球回擊：計算向上的彩虹高遠拋物線 (高挑躍過 Y=13.55 球網，徹底杜絕觸網)
+            const targetX = peCoach.position.x + (Math.random() - 0.5) * 1.5;
+            const targetY = 12.0 + 1.35;
+            const targetZ = peCoach.position.z + (Math.random() - 0.5) * 1.5;
+
+            const dx = targetX - sc.position.x;
+            const dz = targetZ - sc.position.z;
+            const flightTime = 1.15; // 1.15 秒高挑回擊飛行時間
+
+            const velX = dx / flightTime;
+            const velZ = dz / flightTime;
+            // 向上拋物線垂直速度：確保在網頂 (Z=38.0) 處高度達到 15.2m 以上，遠高於 13.55m 球網
+            const velY = ((targetY - sc.position.y) / flightTime) + 0.5 * 9.8 * flightTime + 2.2;
+
+            sc.velocity.set(velX, velY, velZ);
+
+            // 抽球反彈時，羽球即刻掉頭朝向初速度飛行方向
             _scratchLookTarget.copy(sc.position).add(sc.velocity);
             sc.mesh.lookAt(_scratchLookTarget);
           }
@@ -332,7 +345,7 @@ export class TennisGame {
 
       // 成功回擊給教練：球飛回教練半場
       if (sc.isReturned && peCoach) {
-        if (sc.position.distanceTo(peCoach.position) < 2.2 || sc.position.z <= 29.5 || sc.position.y <= 12.12) {
+        if (sc.position.distanceTo(peCoach.position) < 2.5 || sc.position.z <= 31.5 || (sc.position.z <= 37.0 && sc.position.y <= 12.2)) {
           soundManager.playBadmintonHit();
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);

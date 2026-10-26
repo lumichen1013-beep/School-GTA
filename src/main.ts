@@ -27,6 +27,7 @@ const _scratchPlayerForward = new THREE.Vector3();
 const _scratchImpactDir = new THREE.Vector3();
 const _scratchCamDir = new THREE.Vector3();
 const _scratchCamForward = new THREE.Vector3();
+const _scratchCqcScreenPos = new THREE.Vector3();
 
 class SchoolGTASandbox {
   private engine!: Engine;
@@ -2790,15 +2791,27 @@ class SchoolGTASandbox {
           }
         }
       }
-      this.hud.updateCqcPrompt(
-        this.nearbyCqcTarget !== null,
-        this.nearbyCqcTarget?.role || '',
-        isHidingAssassination,
-        this.player.currentHidingSpotName
-      );
+      if (this.nearbyCqcTarget && !this.nearbyCqcTarget.isKnockedDown && !this.nearbyCqcTarget.isPermanentlyKnockedOut) {
+        // 暗殺/擊昏提示：出現在 NPC 頭頂上方 (只需顯示「擊暈」)
+        const overheadOffset = (this.nearbyCqcTarget.role === 'DOG' || this.nearbyCqcTarget.role === 'DETENTION_WOLF') ? 1.30 : 2.45;
+        _scratchCqcScreenPos.copy(this.nearbyCqcTarget.position);
+        _scratchCqcScreenPos.y += overheadOffset;
+        _scratchCqcScreenPos.project(this.cameraCtrl.camera);
+
+        if (_scratchCqcScreenPos.z < 1.0) {
+          const screenX = (_scratchCqcScreenPos.x * 0.5 + 0.5) * window.innerWidth;
+          const screenY = (-_scratchCqcScreenPos.y * 0.5 + 0.5) * window.innerHeight;
+          this.hud.updateCqcPrompt(true, screenX, screenY);
+        } else {
+          this.hud.updateCqcPrompt(false);
+        }
+      } else {
+        this.hud.updateCqcPrompt(false);
+      }
     } else {
       this.player.isHidingInCover = false;
       this.hud.updateStealthHiding(false);
+      this.hud.updateCqcPrompt(false);
     }
 
     if (this.broadcastCooldown > 0) {

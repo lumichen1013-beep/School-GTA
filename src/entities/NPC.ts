@@ -1947,18 +1947,18 @@ export class NPC {
     const startPos = new THREE.Vector3(this.position.x, this.position.y + 1.35, this.position.z);
     group.position.copy(startPos);
 
-    // 羽球飛行速度與過網弧線動態運算 (純純量運算，0 暫存 Vector3 分配)
+    // 羽球飛行速度與向上拋物線弧線動態運算 (純純量運算，0 暫存 Vector3 分配)
     const toTargetX = targetPos.x - startPos.x;
-    const toTargetY = (targetPos.y + 0.8) - startPos.y;
+    const toTargetY = (targetPos.y + 0.9) - startPos.y;
     const toTargetZ = targetPos.z - startPos.z;
     const horizDist = Math.max(2.0, Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ));
-    const speed = customSpeed; // 支援變速 (放小球 9.8 vs 殺球 16.5)
+    const speed = customSpeed;
     const flightTime = horizDist / speed;
 
     const velX = toTargetX / flightTime;
     const velZ = toTargetZ / flightTime;
-    // 考慮網高與重力：過網弧線
-    const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + customArc;
+    // 確保羽球初始具有充足向上拋物線弧度，絕對越過 Y=13.55m 球網，杜絕觸網
+    const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + Math.max(1.8, customArc);
 
     const vel = new THREE.Vector3(velX, velY, velZ);
 

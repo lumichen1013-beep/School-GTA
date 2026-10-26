@@ -3267,10 +3267,10 @@
       🚨 ALERT <span id="mgs-alert-timer">99.99</span>
     </div>
 
-    <!-- CQC 背後擊昏動作提示 (純戰術 HUD 提示，手機與電腦均統一透過【攻擊鍵 / F】執行，手機無需額外專屬按鈕) -->
-    <div id="cqc-prompt-container" style="display:none; position:fixed; bottom:130px; left:50%; transform:translateX(-50%); z-index:120; pointer-events:none;">
-      <div style="background:rgba(15, 23, 42, 0.90); border:2px solid #ef4444; color:#ffffff; font-size:16px; font-weight:900; padding:10px 24px; border-radius:30px; box-shadow:0 0 25px rgba(239,68,68,0.75); backdrop-filter:blur(6px); display:flex; align-items:center; gap:8px;">
-        <span id="cqc-btn-text">🥷【左鍵 / F / 攻擊鈕】暗殺 (CQC)</span>
+    <!-- CQC 暗殺/擊昏動作提示 (動態浮動於目標 NPC 頭頂上方，僅精準顯示「擊暈」) -->
+    <div id="cqc-prompt-container" style="display:none; position:fixed; z-index:120; pointer-events:none; will-change:transform, top, left;">
+      <div style="background:rgba(220, 38, 38, 0.92); border:1.5px solid #fecaca; color:#ffffff; font-size:13.5px; font-weight:900; padding:4px 14px; border-radius:18px; box-shadow:0 0 16px rgba(220, 38, 38, 0.85); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; letter-spacing:1px; text-shadow:0 1px 3px rgba(0,0,0,0.85);">
+        <span id="cqc-btn-text">擊暈</span>
       </div>
     </div>
 
