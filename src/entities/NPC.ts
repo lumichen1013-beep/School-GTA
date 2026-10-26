@@ -1290,10 +1290,10 @@ export class NPC {
       return wasKnockedDown;
     }
 
-    // 計算擊飛拋物線：強烈向上拋射 + 水平擊飛
+    // 計算擊飛拋物線：向上拋射 + 合理水平擊飛 (受物理阻擋，絕不飛越圍牆或穿透建物)
     this.isKnockedFlying = true;
-    const horizontalForce = Math.max(force * 1.3, 10.0);
-    const verticalForce = Math.min(force * 0.7 + 6.5, 13.0);
+    const horizontalForce = Math.min(Math.max(force * 1.1, 8.0), 16.5);
+    const verticalForce = Math.min(force * 0.6 + 5.0, 10.5);
 
     this.knockVelocity.set(
       impactDir.x * horizontalForce,
@@ -2603,6 +2603,54 @@ export class NPC {
       this.position.x += this.knockVelocity.x * delta;
       this.position.z += this.knockVelocity.z * delta;
       this.position.y += this.knockVelocity.y * delta;
+
+      // 1. 外圍圍牆與世界邊界阻擋 (絕不飛出圍牆之外，全地圖 X/Z 限制在 ±91.5m 內)
+      const boundLimit = 91.5;
+      if (this.position.x < -boundLimit) {
+        this.position.x = -boundLimit;
+        this.knockVelocity.x = -this.knockVelocity.x * 0.2;
+      } else if (this.position.x > boundLimit) {
+        this.position.x = boundLimit;
+        this.knockVelocity.x = -this.knockVelocity.x * 0.2;
+      }
+      if (this.position.z < -boundLimit) {
+        this.position.z = -boundLimit;
+        this.knockVelocity.z = -this.knockVelocity.z * 0.2;
+      } else if (this.position.z > boundLimit) {
+        this.position.z = boundLimit;
+        this.knockVelocity.z = -this.knockVelocity.z * 0.2;
+      }
+
+      // 2. 建築物與掩體防穿透阻擋 (絕不卡進建築物內部，碰撞後貼牆阻停)
+      const flyRadius = 0.55;
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
+        if (box.isFloorOnly) continue;
+        if (this.position.y + 0.2 < box.max.y && this.position.y + 1.6 > box.min.y) {
+          if (
+            this.position.x + flyRadius > box.min.x &&
+            this.position.x - flyRadius < box.max.x &&
+            this.position.z + flyRadius > box.min.z &&
+            this.position.z - flyRadius < box.max.z
+          ) {
+            const boxCenterX = (box.min.x + box.max.x) * 0.5;
+            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
+            const halfBoxX = (box.max.x - box.min.x) * 0.5;
+            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
+
+            const overlapX = (halfBoxX + flyRadius) - Math.abs(this.position.x - boxCenterX);
+            const overlapZ = (halfBoxZ + flyRadius) - Math.abs(this.position.z - boxCenterZ);
+
+            if (overlapX < overlapZ) {
+              this.position.x = this.position.x >= boxCenterX ? box.max.x + flyRadius + 0.05 : box.min.x - flyRadius - 0.05;
+              this.knockVelocity.x = 0;
+            } else {
+              this.position.z = this.position.z >= boxCenterZ ? box.max.z + flyRadius + 0.05 : box.min.z - flyRadius - 0.05;
+              this.knockVelocity.z = 0;
+            }
+          }
+        }
+      }
 
       // 空中旋轉翻滾
       this.mesh.rotation.x += delta * 12.0;
