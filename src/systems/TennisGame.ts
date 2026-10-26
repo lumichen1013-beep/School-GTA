@@ -60,16 +60,17 @@ export class TennisGame {
       peCoach.shuttlecockCooldown = 0;
     }
 
-    // 自動將玩家傳送至對面接球半場中心 (77.0, 12.0, 44.5)，面朝 -Z 教練發球點，相機置後對準球場
+    // 自動將玩家傳送至對面接球半場中心 (77.0, 12.0, 44.5)，面朝 -Z 教練發球點，相機置後對準球場正對 BOSS
     if (player) {
       player.position.set(77.0, 12.0, 44.5);
       player.mesh.position.copy(player.position);
       player.rotationY = Math.PI;
       player.mesh.rotation.y = Math.PI;
       player.velocity.set(0, 0, 0);
+      player.equipBadmintonRacket(true); // 手上改為拿羽球拍 (造型)
     }
     if (cameraCtrl && player) {
-      cameraCtrl.resetBehind(player.position, Math.PI);
+      cameraCtrl.resetBehind(player.position, 0); // yaw = 0 使攝影機置於玩家正後方 (+Z)，鏡頭朝向 -Z 正面直對教練 BOSS！
     }
 
     hud.hidePrompt();
@@ -82,10 +83,16 @@ export class TennisGame {
     wantedSystem: WantedSystem,
     hud: HUD,
     scene: THREE.Scene,
-    onRewardCash: (amount: number) => void
+    onRewardCash: (amount: number) => void,
+    player?: Player
   ) {
     this.tennisState = 'FINISHED';
     this.finishedTimer = 4.0;
+
+    // 比賽結束立即還原手上球拍造型為原本武器/空手
+    if (player) {
+      player.equipBadmintonRacket(false);
+    }
 
     for (const sc of this.shuttlecocks) {
       NPC.disposeProjectile(sc, scene);
@@ -113,6 +120,20 @@ export class TennisGame {
 
     hud.hidePrompt();
     this.updateScoreboard();
+  }
+
+  // 重設/中止羽球比賽 (例如搭電梯、離場或切換世界時)
+  public resetMatch(scene: THREE.Scene, player?: Player) {
+    this.tennisState = 'IDLE';
+    this.finishedTimer = 0;
+    for (const sc of this.shuttlecocks) {
+      NPC.disposeProjectile(sc, scene);
+    }
+    this.shuttlecocks = [];
+    this.updateScoreboard();
+    if (player) {
+      player.equipBadmintonRacket(false);
+    }
   }
 
   public updateScoreboard() {
@@ -154,6 +175,7 @@ export class TennisGame {
         }
         this.shuttlecocks = [];
         this.updateScoreboard();
+        player.equipBadmintonRacket(false);
         wantedSystem.showBanner('🏸 已離開 4F 羽球場，挑戰賽已終止。', 2500);
       }
     }
@@ -240,6 +262,7 @@ export class TennisGame {
       if (this.finishedTimer <= 0) {
         this.tennisState = 'IDLE';
         this.updateScoreboard();
+        player.equipBadmintonRacket(false);
       }
     }
 
@@ -271,7 +294,7 @@ export class TennisGame {
           this.updateScoreboard();
           soundManager.playWhistle();
           if (this.coachScore >= 5) {
-            this.endMatch(false, wantedSystem, hud, scene, onRewardCash);
+            this.endMatch(false, wantedSystem, hud, scene, onRewardCash, player);
           } else {
             this.serveTimer = 2.0;
           }
@@ -298,7 +321,7 @@ export class TennisGame {
             sc.mesh.lookAt(_scratchLookTarget);
           }
           if (this.playerScore >= 5) {
-            this.endMatch(true, wantedSystem, hud, scene, onRewardCash);
+            this.endMatch(true, wantedSystem, hud, scene, onRewardCash, player);
             continue;
           } else {
             this.serveTimer = 2.0;
@@ -337,7 +360,7 @@ export class TennisGame {
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
           if (this.coachScore >= 5) {
-            this.endMatch(false, wantedSystem, hud, scene, onRewardCash);
+            this.endMatch(false, wantedSystem, hud, scene, onRewardCash, player);
           } else {
             this.serveTimer = 2.0;
           }

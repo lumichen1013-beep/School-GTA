@@ -145,6 +145,7 @@ export class ThirdPersonCamera {
     );
     this.currentPosition.copy(focusPoint).add(offset);
     this.camera.position.copy(this.currentPosition);
+    this.currentLookAt.copy(focusPoint);
     this.camera.lookAt(focusPoint);
   }
 

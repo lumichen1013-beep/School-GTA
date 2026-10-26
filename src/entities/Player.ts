@@ -38,6 +38,11 @@ export class Player {
   private normalBatMesh!: THREE.Group;
   private specialBatMesh!: THREE.Group;
 
+  // 羽球拍造型 (Badminton Racket Model - 4F 羽球挑戰賽專屬造型)
+  public isHoldingRacket: boolean = false;
+  private racketMesh!: THREE.Group;
+  private previousWeaponBeforeRacket: WeaponType = 'FIST';
+
   // Speeds: 行走 5.0 | 跑步 10.0 (與教官、糾察隊在相同狀態下速度完全一致)
   public walkSpeed: number = 5.0;
   public sprintSpeed: number = 10.0;
@@ -228,6 +233,34 @@ export class Player {
     this.specialBatMesh.rotation.x = Math.PI / 3; // 正角度朝前方+Z上仰
     this.specialBatMesh.visible = false;
     this.rightArm.add(this.specialBatMesh);
+
+    // 3. 羽球拍造型 (Badminton Racket Model - 4F 羽球挑戰賽專用造型，比賽結束或搭電梯時自動還原)
+    this.racketMesh = new THREE.Group();
+    const racketGripMat = new THREE.MeshLambertMaterial({ color: 0x3498db }); // 藍色防滑膠帶纏握把
+    const racketShaftMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 }); // 輕量化碳素中桿
+    const racketFrameMat = new THREE.MeshLambertMaterial({ color: 0x2ecc71 }); // 亮青綠流線拍框
+    const racketStringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }); // 網線
+
+    const rGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8), racketGripMat);
+    rGrip.position.y = 0.12;
+    this.racketMesh.add(rGrip);
+
+    const rShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.42, 8), racketShaftMat);
+    rShaft.position.y = 0.45;
+    this.racketMesh.add(rShaft);
+
+    const rFrame = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.016, 8, 16), racketFrameMat);
+    rFrame.position.y = 0.82;
+    this.racketMesh.add(rFrame);
+
+    const rStrings = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), racketStringMat);
+    rStrings.position.y = 0.82;
+    this.racketMesh.add(rStrings);
+
+    this.racketMesh.position.set(0, -0.28, 0.12);
+    this.racketMesh.rotation.x = Math.PI / 3; // 正角度朝前方+Z上仰
+    this.racketMesh.visible = false;
+    this.rightArm.add(this.racketMesh);
 
     // 雙腿 (Legs)
     const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
@@ -638,6 +671,7 @@ export class Player {
     this.isDead = false;
     this.isHoldingUmbrella = false;
     if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
+    this.equipBadmintonRacket(false);
     this.hasShownRainBubble = false;
     this.isInvisible = false;
     this.isDodging = false;
@@ -662,13 +696,41 @@ export class Player {
     }
   }
 
+  // 裝備羽球拍造型 (4F 羽球比賽專用，只改變視覺外觀，比賽結束或搭電梯時還原)
+  public equipBadmintonRacket(equip: boolean) {
+    if (equip) {
+      if (!this.isHoldingRacket) {
+        this.previousWeaponBeforeRacket = this.currentWeapon;
+      }
+      this.isHoldingRacket = true;
+      if (this.racketMesh) this.racketMesh.visible = true;
+      if (this.normalBatMesh) this.normalBatMesh.visible = false;
+      if (this.specialBatMesh) this.specialBatMesh.visible = false;
+    } else {
+      if (this.isHoldingRacket) {
+        this.isHoldingRacket = false;
+        if (this.racketMesh) this.racketMesh.visible = false;
+        // 還原原本的武器外觀
+        if (this.normalBatMesh) this.normalBatMesh.visible = (this.currentWeapon === 'NORMAL_BAT');
+        if (this.specialBatMesh) this.specialBatMesh.visible = (this.currentWeapon === 'SPECIAL_BAT');
+      }
+    }
+  }
+
   public setWeapon(type: WeaponType): boolean {
     if (type === 'NORMAL_BAT' && !this.hasNormalBat) return false;
     if (type === 'SPECIAL_BAT' && !this.hasSpecialBat) return false;
 
     this.currentWeapon = type;
-    if (this.normalBatMesh) this.normalBatMesh.visible = (type === 'NORMAL_BAT');
-    if (this.specialBatMesh) this.specialBatMesh.visible = (type === 'SPECIAL_BAT');
+    if (this.isHoldingRacket) {
+      this.previousWeaponBeforeRacket = type;
+      if (this.racketMesh) this.racketMesh.visible = true;
+      if (this.normalBatMesh) this.normalBatMesh.visible = false;
+      if (this.specialBatMesh) this.specialBatMesh.visible = false;
+    } else {
+      if (this.normalBatMesh) this.normalBatMesh.visible = (type === 'NORMAL_BAT');
+      if (this.specialBatMesh) this.specialBatMesh.visible = (type === 'SPECIAL_BAT');
+    }
     return true;
   }
 
@@ -782,7 +844,11 @@ export class Player {
   public attack(): boolean {
     if (this.isDead || this.isSwimming) return false; // 游泳狀態下雙手劃水，不可出拳揮棒
     if (this.punchTimer <= 0) {
-      if (this.currentWeapon === 'SPECIAL_BAT') {
+      if (this.isHoldingRacket) {
+        this.punchTimer = 0.38;
+        this.isAttacking = true;
+        soundManager.playBadmintonWhoosh();
+      } else if (this.currentWeapon === 'SPECIAL_BAT') {
         this.punchTimer = 0.48;
         this.isAttacking = true;
         soundManager.playSpecialBatHit();
@@ -1401,9 +1467,9 @@ export class Player {
       if (this.isHoldingUmbrella) {
         this.leftArm.rotation.set(-Math.PI * 0.65, -0.12, 0.12);
       }
-      // 揮擊動作 (球棒寬幅橫掃 / 拳頭直擊)
-      if (this.currentWeapon !== 'FIST') {
-        const totalDuration = this.currentWeapon === 'SPECIAL_BAT' ? 0.48 : 0.42;
+      // 揮擊動作 (球棒/羽球拍寬幅橫掃 / 拳頭直擊)
+      if (this.currentWeapon !== 'FIST' || this.isHoldingRacket) {
+        const totalDuration = this.isHoldingRacket ? 0.38 : (this.currentWeapon === 'SPECIAL_BAT' ? 0.48 : 0.42);
         const swingProgress = 1 - Math.max(0, this.punchTimer / totalDuration);
         const swingCurve = Math.sin(swingProgress * Math.PI);
         this.rightArm.rotation.x = -swingCurve * 1.1;

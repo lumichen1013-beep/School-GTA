@@ -388,6 +388,12 @@ class SchoolGTASandbox {
     if (this.weatherSystem) {
       this.weatherSystem.currentWorld = targetWorld;
     }
+    if (this.player) {
+      this.player.equipBadmintonRacket(false);
+    }
+    if (this.tennisGame && this.tennisGame.tennisState !== 'IDLE') {
+      this.tennisGame.resetMatch(this.engine.scene, this.player);
+    }
     const cutsceneOverlay = document.getElementById('cutscene-overlay');
 
     if (targetWorld === 'CAMPUS') {
@@ -1189,9 +1195,13 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 4. 演藝大樓 1F/4F 直達光能電梯搭乘
+      // 4. 演藝大樓 1F/4F 直達光能電梯搭乘 (搭乘電梯時自動還原手持武器)
       if (this.world.isNear1FElevator(this.player.position) && !this.elevatorTransition) {
         soundManager.playElevatorDing();
+        this.player.equipBadmintonRacket(false);
+        if (this.tennisGame.tennisState !== 'IDLE') {
+          this.tennisGame.resetMatch(this.engine.scene, this.player);
+        }
         this.elevatorTransition = {
           phase: 'CLOSING',
           timer: 0.5,
@@ -1205,6 +1215,10 @@ class SchoolGTASandbox {
       }
       if (this.world.isNear4FElevator(this.player.position) && !this.elevatorTransition) {
         soundManager.playElevatorDing();
+        this.player.equipBadmintonRacket(false);
+        if (this.tennisGame.tennisState !== 'IDLE') {
+          this.tennisGame.resetMatch(this.engine.scene, this.player);
+        }
         this.elevatorTransition = {
           phase: 'CLOSING',
           timer: 0.5,
@@ -2361,6 +2375,7 @@ class SchoolGTASandbox {
         this.player.mesh.rotation.y = Math.PI;
         if (et.timer <= 0) {
           this.elevatorTransition = null;
+          this.player.equipBadmintonRacket(false);
         }
       }
     }
