@@ -34,12 +34,12 @@ export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     bannerText: '☀️ 天氣晴朗：陽光明媚，微風拂面校園！',
     skyColor: 0xa0c4e2,
     fogColor: 0xa0c4e2,
-    fogDensity: 0.007,
-    dirIntensity: 1.25,
+    fogDensity: 0.005,
+    dirIntensity: 1.30,
     dirColor: 0xfff5e6,
-    hemiIntensity: 0.75,
+    hemiIntensity: 0.80,
     hemiSkyColor: 0xffffff,
-    hemiGroundColor: 0x444455,
+    hemiGroundColor: 0x555566,
     rainCount: 0,
     rainSpeed: 0,
     rainWindX: 0,
@@ -52,15 +52,15 @@ export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '綿綿細雨',
     badgeText: '🌧️ 小雨',
     bannerText: '🌧️ 天降甘霖：細雨綿綿，校園水氣氤氳！',
-    skyColor: 0x5d6d7e,
-    fogColor: 0x5d6d7e,
-    fogDensity: 0.013,
-    dirIntensity: 0.55,
-    dirColor: 0xc8d6e5,
-    hemiIntensity: 0.45,
-    hemiSkyColor: 0x8395a7,
-    hemiGroundColor: 0x34495e,
-    rainCount: 4000,
+    skyColor: 0x8fa3b5,      // 明亮舒適的雨天淺藍天色，不再暗沉
+    fogColor: 0x9cb0c0,      // 清爽微亮雨霧，不阻擋視線
+    fogDensity: 0.006,       // 霧氣濃度降至 0.006，遠處景物一清二楚
+    dirIntensity: 1.08,      // 大幅提亮直射日光 (原 0.55 -> 1.08)
+    dirColor: 0xdde9f5,      // 柔和微藍白光
+    hemiIntensity: 0.82,     // 大幅提亮環境天光 (原 0.45 -> 0.82)
+    hemiSkyColor: 0xb5c6d6,  // 明亮的天空環境色
+    hemiGroundColor: 0x6e7e8e,// 明朗的地表漫射，讓建築牆面與人物陰影處清晰可辨
+    rainCount: 3800,
     rainSpeed: 28.0,
     rainWindX: -1.8,
     rainWindZ: 1.2,
@@ -71,20 +71,20 @@ export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     type: 'THUNDERSTORM',
     name: '雷陣雨',
     badgeText: '⛈️ 雷雨',
-    bannerText: '⛈️ 狂風驟雨：烏雲蔽日，電閃雷鳴席捲校園！',
-    skyColor: 0x415364,
-    fogColor: 0x415364,
-    fogDensity: 0.013,
-    dirIntensity: 0.58,
-    dirColor: 0x95a5a6,
-    hemiIntensity: 0.50,
-    hemiSkyColor: 0x576574,
-    hemiGroundColor: 0x2c3e50,
-    rainCount: 6000,
+    bannerText: '⛈️ 狂風驟雨：烏雲奔湧，電閃雷鳴席捲校園！',
+    skyColor: 0x768898,      // 大幅提亮暴風雨天色 (原 0x415364 -> 0x768898，銀灰藍質感，視野開朗)
+    fogColor: 0x8294a4,      // 提亮暴風雨霧氣 (原 0x415364 -> 0x8294a4)
+    fogDensity: 0.0065,      // 霧氣濃度從 0.013 減半至 0.0065！徹底避免霧氣暗黑遮蔽視線
+    dirIntensity: 1.00,      // 直射光強度從 0.58 大幅提升至 1.00！保證畫面立體通透
+    dirColor: 0xd0e0ec,      // 耀眼的暴風雨銀藍高光，不再死灰暗淡
+    hemiIntensity: 0.80,     // 環境光強度從 0.50 提升至 0.80！徹底消除死黑陰影
+    hemiSkyColor: 0x9cb0c0,  // 上方天光漫射大幅提亮 (原 0x576574 提升)
+    hemiGroundColor: 0x627382,// 地表漫射光大幅提亮 (原 0x2c3e50 提升)，地板與牆面完全清晰明辨
+    rainCount: 5500,
     rainSpeed: 38.0,
     rainWindX: -6.5,
     rainWindZ: 4.5,
-    rainVolume: 0.70,
+    rainVolume: 0.65,
     hasThunder: true
   },
   FOG: {
@@ -92,14 +92,14 @@ export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '清晨迷霧',
     badgeText: '🌫️ 濃霧',
     bannerText: '🌫️ 迷霧校園：晨霧縹緲，建築若隱若現宛如仙境！',
-    skyColor: 0xcad3df,
-    fogColor: 0xcad3df,
-    fogDensity: 0.030,
-    dirIntensity: 0.65,
-    dirColor: 0xdfe4ea,
-    hemiIntensity: 0.60,
-    hemiSkyColor: 0xf1f2f6,
-    hemiGroundColor: 0xa4b0be,
+    skyColor: 0xd6dfe8,      // 晨霧淺白色
+    fogColor: 0xd6dfe8,
+    fogDensity: 0.012,       // 從 0.030 降至 0.012 (柔和仙氣晨霧，視野清晰不刺眼)
+    dirIntensity: 0.95,      // 從 0.65 提升至 0.95
+    dirColor: 0xe8ecf2,
+    hemiIntensity: 0.82,     // 從 0.60 提升至 0.82
+    hemiSkyColor: 0xf4f6fa,
+    hemiGroundColor: 0x9ca9b8,
     rainCount: 0,
     rainSpeed: 0,
     rainWindX: 0,
@@ -112,14 +112,14 @@ export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '金黃暮霞',
     badgeText: '🌅 暮霞',
     bannerText: '🌅 暮色金黃：夕陽染紅操場，校園沉浸浪漫餘暉！',
-    skyColor: 0xd35400,
-    fogColor: 0xe67e22,
-    fogDensity: 0.008,
-    dirIntensity: 1.10,
-    dirColor: 0xff9f43,
-    hemiIntensity: 0.70,
-    hemiSkyColor: 0xf39c12,
-    hemiGroundColor: 0x574b90,
+    skyColor: 0xd86218,
+    fogColor: 0xea8830,
+    fogDensity: 0.006,
+    dirIntensity: 1.20,
+    dirColor: 0xffa44e,
+    hemiIntensity: 0.78,
+    hemiSkyColor: 0xf5a623,
+    hemiGroundColor: 0x6b588e,
     rainCount: 0,
     rainSpeed: 0,
     rainWindX: 0,
@@ -202,10 +202,10 @@ export class WeatherSystem {
     this.rainGeometry.setDrawRange(0, 0);
 
     this.rainMaterial = new THREE.PointsMaterial({
-      color: 0x95afc0,
-      size: 0.22,
+      color: 0xcfe2f3,
+      size: 0.24,
       transparent: true,
-      opacity: 0.65,
+      opacity: 0.75,
       depthWrite: false
     });
 
