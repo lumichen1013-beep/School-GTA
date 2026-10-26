@@ -1768,8 +1768,13 @@ export class HUD {
     ctx.stroke();
   }
 
-  // 更新 CQC 潛入擊昏提示 (HUD 戰術提示與手機攻擊按鈕聯動)
-  public updateCqcPrompt(visible: boolean, targetNpcRole: string = '') {
+  // 更新 CQC 潛入擊昏提示 與 刺客教條草堆暗殺提示 (HUD 戰術提示與手機攻擊按鈕聯動)
+  public updateCqcPrompt(
+    visible: boolean,
+    targetNpcRole: string = '',
+    isHidingAssassination: boolean = false,
+    coverName: string = ''
+  ) {
     const el = document.getElementById('cqc-prompt-container');
     const textEl = document.getElementById('cqc-btn-text');
     const mobileAttackBtn = document.getElementById('m-btn-attack');
@@ -1777,22 +1782,46 @@ export class HUD {
     if (el) {
       el.style.display = visible ? 'flex' : 'none';
       if (textEl && visible) {
-        if (targetNpcRole === 'DETENTION_BOSS') {
-          textEl.textContent = '⚡ [左鍵 / F / 攻擊鈕] 總教官弱點破盾重擊！';
+        if (isHidingAssassination) {
+          if (targetNpcRole === 'DETENTION_BOSS') {
+            textEl.textContent = '🗡️ [左鍵 / F / 攻擊鈕] 刺客教條·草堆突襲總教官！(-100 HP)';
+          } else {
+            textEl.textContent = `🗡️ [左鍵 / F / 攻擊鈕] 刺客教條·${coverName || '草堆'}暗殺！(無聲排除)`;
+          }
         } else {
-          textEl.textContent = '🥷 [左鍵 / F / 攻擊鈕] 絞喉擊昏 (CQC)';
+          if (targetNpcRole === 'DETENTION_BOSS') {
+            textEl.textContent = '⚡ [左鍵 / F / 攻擊鈕] 總教官弱點破盾重擊！(-100 HP)';
+          } else {
+            textEl.textContent = '🥷 [左鍵 / F / 攻擊鈕] 絞喉擊昏 (CQC)';
+          }
         }
       }
     }
 
-    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 🥷 暗殺態，不需專屬 CQC 鈕)
+    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 🥷 / 🗡️ 暗殺態，不需專屬 CQC 鈕)
     if (mobileAttackBtn) {
       if (visible) {
         mobileAttackBtn.classList.add('cqc-active');
-        mobileAttackBtn.textContent = '🥷';
+        mobileAttackBtn.textContent = isHidingAssassination ? '🗡️' : '🥷';
       } else {
         mobileAttackBtn.classList.remove('cqc-active');
         mobileAttackBtn.textContent = '👊';
+      }
+    }
+  }
+
+  // 刺客教條匿蹤藏匿提示 (身處草堆或隱蔽物中)
+  public updateStealthHiding(isHiding: boolean, spotName: string = '') {
+    const badge = document.getElementById('ac-stealth-badge');
+    const text = document.getElementById('ac-stealth-badge-text');
+    if (badge) {
+      if (isHiding) {
+        badge.style.display = 'flex';
+        if (text) {
+          text.textContent = `🥷 已匿蹤於 ${spotName} 中 (NPC 與探照燈無視)`;
+        }
+      } else {
+        badge.style.display = 'none';
       }
     }
   }

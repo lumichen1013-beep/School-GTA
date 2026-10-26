@@ -1028,12 +1028,87 @@ export class NPC {
       addHumanoidPart(bWhistle);
     }
 
+    // 第二世界特訓院人形角色 (教官、資深學長、霸榜生、總教官)：
+    // 正面配備戰術防彈插板與發光巡邏手電筒 (前向光錐)，背面配備戰術大背包與無線電天線，徹底解決「分不出正面背面」問題
+    const isDetentionHuman = (
+      this.role === 'DETENTION_GUARD' ||
+      this.role === 'DETENTION_SENIOR' ||
+      this.role === 'DETENTION_HEAVY' ||
+      this.role === 'DETENTION_BOSS'
+    );
+
+    if (isDetentionHuman) {
+      // 1. 【正面 +Z 標誌】：戰術防彈胸板與金屬扣鎖
+      const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
+      const vestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.52, 0.06), vestMat);
+      vestPlate.position.set(0, 0.04, 0.185);
+      torso.add(vestPlate);
+
+      const buckleMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
+      const bL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.07), buckleMat);
+      bL.position.set(-0.16, 0.14, 0.19);
+      const bR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.07), buckleMat);
+      bR.position.set(0.16, 0.14, 0.19);
+      torso.add(bL, bR);
+
+      // 2. 【正面 +Z 戰術手電筒與前向光錐】：一眼看清巡邏視線朝向！
+      const torchGroup = new THREE.Group();
+      const torchBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.16, 8),
+        new THREE.MeshLambertMaterial({ color: 0x111111 })
+      );
+      torchBody.rotation.x = Math.PI / 2;
+      torchGroup.add(torchBody);
+
+      const lensMat = new THREE.MeshBasicMaterial({ color: 0xfffae0 });
+      const torchLens = new THREE.Mesh(new THREE.CircleGeometry(0.04, 8), lensMat);
+      torchLens.position.set(0, 0, 0.081);
+      torchGroup.add(torchLens);
+
+      // 前向柔和半透明光錐 (朝向正面 +Z，遠距離或背對時均清晰可見視野朝向)
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xfffae0,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false
+      });
+      const beamGeo = new THREE.ConeGeometry(0.48, 2.8, 8, 1, true);
+      beamGeo.rotateX(-Math.PI / 2);
+      beamGeo.translate(0, 0, 1.4);
+      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+      torchGroup.add(beamMesh);
+
+      torchGroup.position.set(0.20, 0.16, 0.19);
+      torso.add(torchGroup);
+
+      // 3. 【背面 -Z 標誌】：戰術作戰背包與無線電鞭狀天線 (背面絕無視線特徵)
+      const packMat = new THREE.MeshLambertMaterial({ color: 0x151b22 });
+      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.54, 0.16), packMat);
+      pack.position.set(0, 0.02, -0.22);
+      torso.add(pack);
+
+      const antennaMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.60, 6), antennaMat);
+      antenna.position.set(0.20, 0.40, -0.20);
+      antenna.rotation.x = -0.15;
+      torso.add(antenna);
+    }
+
     // 頭部
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), skinMat);
     head.position.y = 1.62;
     head.castShadow = true;
     addHumanoidPart(head);
     this.headMesh = head;
+
+    // 眼睛與五官 (正面 +Z 方向專屬標記)
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), eyeMat);
+    eyeL.position.set(-0.09, 0.03, 0.20);
+    head.add(eyeL);
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), eyeMat);
+    eyeR.position.set(0.09, 0.03, 0.20);
+    head.add(eyeR);
 
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
     hair.position.set(0, 0.16, 0);
@@ -1057,6 +1132,22 @@ export class NPC {
       );
       beret.position.set(0, 0.24, 0);
       head.add(beret);
+
+      // 正面戰術防暴護目鏡 (亮琥珀金夜視感測光條，正面一眼可見)
+      const goggleMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+      const goggles = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.06), goggleMat);
+      goggles.position.set(0, 0.04, 0.20);
+      head.add(goggles);
+      const sensorMat = new THREE.MeshBasicMaterial({ color: 0xf39c12 });
+      const sensor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.07), sensorMat);
+      sensor.position.set(0, 0.04, 0.20);
+      head.add(sensor);
+    } else if (this.role === 'DETENTION_SENIOR') {
+      // 資深學長：正面運動吸汗頭帶
+      const headBandMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const headBand = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.08, 0.40), headBandMat);
+      headBand.position.set(0, 0.14, 0);
+      head.add(headBand);
     } else if (this.role === 'DETENTION_BOSS') {
       // 鐵面總長大盤帽與金徽章、金屬鐵面遮面
       const bCap = new THREE.Mesh(
@@ -2014,8 +2105,15 @@ export class NPC {
   }
 
   // 3D 視錐與障礙物遮擋檢測 (Line of Sight with Obstacle Occlusion, 0-GC 純純量運算)
-  public canSeePlayer(playerPos: THREE.Vector3, colliders: CollidableBox[] = []): boolean {
+  public canSeePlayer(
+    playerPos: THREE.Vector3,
+    colliders: CollidableBox[] = [],
+    isPlayerHiding: boolean = false,
+    isPlayerSneaking: boolean = false
+  ): boolean {
     if (this.isKnockedDown) return false;
+    // 刺客教條草堆掩體匿蹤：NPC 絕對無法察覺身處草堆中的刺客！
+    if (isPlayerHiding) return false;
 
     // 校犬禁止靠近或進入教學大樓，當玩家處於教學樓區域時，校犬無法鎖定與追逐玩家
     if (this.role === 'DOG' && NPC.isInsideTeachingBuilding(playerPos)) {
@@ -2063,7 +2161,8 @@ export class NPC {
       const eyePosY = this.position.y + eyeY;
       const eyePosZ = this.position.z;
       const targetEyeX = playerPos.x;
-      const targetEyeY = playerPos.y + 1.2;
+      // 潛行蹲姿有效降低視線高度至 0.75m，使 1.2m ~ 1.5m 的半高沙包與木箱能徹底阻隔射線！
+      const targetEyeY = playerPos.y + (isPlayerSneaking ? 0.75 : 1.2);
       const targetEyeZ = playerPos.z;
 
       for (let i = 0; i < colliders.length; i++) {
@@ -2112,7 +2211,8 @@ export class NPC {
     isPlayerDead: boolean,
     isSpawnGraceActive: boolean = false,
     isPlayerSneaking: boolean = false,
-    isPlayerSprinting: boolean = false
+    isPlayerSprinting: boolean = false,
+    isPlayerHiding: boolean = false
   ) {
     if (isPlayerDead || this.isPermanentlyKnockedOut) {
       this.resetAggro();
@@ -2161,7 +2261,7 @@ export class NPC {
       }
 
       const distSq = this.position.distanceToSquared(playerPos);
-      const seesPlayer = this.canSeePlayer(playerPos, colliders);
+      const seesPlayer = this.canSeePlayer(playerPos, colliders, isPlayerHiding, isPlayerSneaking);
 
       // 總教官衝鋒衝撞冷卻與觸發
       if (this.role === 'DETENTION_BOSS' && this.isChasing && !this.bossIsCharging && !this.isBossStunned) {
@@ -2192,8 +2292,8 @@ export class NPC {
 
       // 2. 聽覺音效判定 (當未看見玩家時，判定腳步噪音)
       if (!this.isChasing) {
-        if (isPlayerSneaking) {
-          // 靜音潛行 (Ctrl / 搖桿 < 0.5)：0 噪音！守衛不會察覺背後接近
+        if (isPlayerHiding || isPlayerSneaking) {
+          // 刺客草堆匿蹤掩體中 或 靜音潛行 (右鍵/Ctrl/輕推搖桿)：0 噪音！守衛不會察覺背後接近
         } else if (isPlayerSprinting && distSq < 72.25) { // 疾跑 8.5m 內
           this.setAlertState('CAUTION');
           this.cautionTimer = 3.5;
@@ -2213,11 +2313,11 @@ export class NPC {
         }
       }
 
-      // 3. 追逐中的脫離與搜索
+      // 3. 追逐中的脫離與搜索 (刺客教條跳入草堆快速脫逃機制)
       if (this.isChasing) {
         if (!seesPlayer) {
           this.lostSightTimer += delta;
-          const maxLostTime = this.role === 'DETENTION_WOLF' ? 6.5 : 5.0;
+          const maxLostTime = isPlayerHiding ? 1.5 : (this.role === 'DETENTION_WOLF' ? 6.5 : 5.0);
           const maxDistSq = 3600.0; // 60m 警報追捕搜索範圍
           if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
             this.resetAggro();
@@ -2253,7 +2353,7 @@ export class NPC {
     }
 
     // 通用視線與追逐判定 (校犬、教官、巡堂老師、糾察隊、激怒學生)
-    const seesPlayer = this.canSeePlayer(playerPos, colliders);
+    const seesPlayer = this.canSeePlayer(playerPos, colliders, isPlayerHiding, isPlayerSneaking);
 
     // 發現玩家觸發追逐 (通緝中且在視距內)
     const spotDistSq = this.role === 'DOG' ? 400.0 : 324.0; // 20m vs 18m
@@ -2615,7 +2715,8 @@ export class NPC {
     isThunderstorm: boolean = false,
     isSpawnGraceActive: boolean = false,
     isPlayerSneaking: boolean = false,
-    isPlayerSprinting: boolean = false
+    isPlayerSprinting: boolean = false,
+    isPlayerHiding: boolean = false
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
@@ -3006,7 +3107,8 @@ export class NPC {
       isPlayerDead,
       isSpawnGraceActive,
       isPlayerSneaking,
-      isPlayerSprinting
+      isPlayerSprinting,
+      isPlayerHiding
     );
 
     // 3. 移動目標判定與「忽快忽慢」追捕節奏 (Burst Sprinting vs Fatigue Recovery)

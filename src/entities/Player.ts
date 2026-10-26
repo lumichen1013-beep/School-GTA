@@ -50,6 +50,9 @@ export class Player {
   public isMoving: boolean = false;   // 當前是否正在移動推進
   public isSprinting: boolean = false; // 當前是否處於衝刺加速狀態
   public isSneaking: boolean = false;  // 潛龍諜影靜音潛行模式 (無腳步聲，背刺專用)
+  public isHidingInCover: boolean = false; // 刺客教條草堆匿蹤狀態
+  public currentHidingSpotName: string = '';
+  public crouchRatio: number = 0; // 0 = 站立, 1 = 完全蹲下潛行姿態
   public poisonTimer: number = 0;     // 中毒持續時間 (5秒)
   public poisonTickTimer: number = 0; // 中毒跳血計時
   public isInvisible: boolean = false; // 隱形模式 (如三分球投籃瞄準時不遮擋籃框與準心)
@@ -925,22 +928,20 @@ export class Player {
     this.isMoving = isMoving;
 
     // 潛龍諜影潛行步態 (MGS Sneak Mode)
-    // 電腦版：改為按住滑鼠右鍵靜音慢步（取消 C、Z 鍵避免打字/快捷鍵衝突，亦相容 Ctrl）；手機版：虛擬搖桿推桿半徑小於 0.5
+    // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）；手機版：虛擬搖桿推桿半徑小於 0.5。無論靜止或移動皆可下蹲！
     const isSneakTriggered = input.mouseButtons.right || !!(
       input.keys['ControlLeft'] ||
       input.keys['ControlRight']
     );
     const isJoystickSneak = hasVirtualJoystick && input.virtualAxisMagnitude > 0.05 && input.virtualAxisMagnitude < 0.5;
-    const wantsSneak = (isSneakTriggered || isJoystickSneak) && isMoving && !input.sprint;
+    const wantsSneak = (isSneakTriggered && !input.sprint) || (isJoystickSneak && !input.sprint);
     this.isSneaking = wantsSneak;
 
     // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)
     let currentSpeed = this.walkSpeed;
     if (this.isSneaking) {
       currentSpeed = 2.4; // 靜音潛行步速 2.4 m/s (無腳步聲，NPC 無法在背後察覺)
-      this.bodyMesh.position.y = 0.92; // 壓低身形潛行
     } else {
-      this.bodyMesh.position.y = 1.05; // 恢復正常直立身姿
       if (this.isSwimming) {
         currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
         if (input.sprint && isMoving && this.stamina > 5) {
@@ -958,6 +959,32 @@ export class Player {
     }
 
     currentSpeed *= analogSpeedScale;
+
+    // 蹲姿插值平滑過渡 (Smooth Crouch Transition - 潛行與草堆匿蹤均觸發蹲下身姿)
+    const targetCrouch = (this.isSneaking || this.isHidingInCover) ? 1.0 : 0.0;
+    this.crouchRatio = THREE.MathUtils.lerp(this.crouchRatio, targetCrouch, Math.min(delta * 14.0, 1.0));
+
+    // 刺客草堆掩體半透明隱蔽視覺表現
+    if (this.isHidingInCover) {
+      this.mesh.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+          const m = (child as THREE.Mesh).material as THREE.Material;
+          if (m) {
+            m.transparent = true;
+            m.opacity = 0.45;
+          }
+        }
+      });
+    } else if (!this.isDodging && !this.isBearShaking && this.hitCooldown <= 0) {
+      this.mesh.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+          const m = (child as THREE.Mesh).material as THREE.Material;
+          if (m && m.opacity < 0.99) {
+            m.opacity = 1.0;
+          }
+        }
+      });
+    }
 
     // 3. 水平移動速度與擊飛拋物線物理 (Knockback & Launch-Flying)
     if (this.isKnockedFlying) {
@@ -1346,6 +1373,20 @@ export class Player {
       }
     }
 
+    // 潛行蹲姿重心與肢體形變參數 (依 crouchRatio 平滑變換)
+    const crouchY = THREE.MathUtils.lerp(1.05, 0.68, this.crouchRatio);
+    const headCrouchY = THREE.MathUtils.lerp(1.62, 1.15, this.crouchRatio);
+    const forwardTilt = THREE.MathUtils.lerp(0, 0.28, this.crouchRatio);
+    const legY = THREE.MathUtils.lerp(0.35, 0.22, this.crouchRatio);
+    const legScaleY = THREE.MathUtils.lerp(1.0, 0.65, this.crouchRatio);
+
+    this.bodyMesh.rotation.x = forwardTilt;
+    this.headMesh.rotation.x = -forwardTilt * 0.4;
+    this.leftLeg.position.y = legY;
+    this.leftLeg.scale.y = legScaleY;
+    this.rightLeg.position.y = legY;
+    this.rightLeg.scale.y = legScaleY;
+
     if (this.punchTimer > 0) {
       this.punchTimer -= delta;
       // 若下雨天撐傘中，右手揮擊時左手依然穩健撐傘
@@ -1373,47 +1414,78 @@ export class Player {
         this.rightArm.position.z = 0;
       }
     } else if (isMoving) {
-      const animSpeed = isSprinting ? 18 : 12;
-      this.animTimer += delta * animSpeed;
+      if (this.isSneaking) {
+        // 潛行蹲姿移動：小步頻率、低重心潛行擺臂
+        this.animTimer += delta * 6.5;
+        const swing = Math.sin(this.animTimer) * 0.26;
+        if (this.isHoldingUmbrella) {
+          const bob = Math.sin(this.animTimer) * 0.02;
+          this.leftArm.rotation.set(-Math.PI * 0.65 + bob, -0.12, 0.12);
+        } else {
+          this.leftArm.rotation.set(-swing * 0.5 - 0.2, 0, 0.22);
+        }
+        this.rightArm.rotation.set(swing * 0.5 - 0.2, 0, -0.22);
+        this.leftLeg.rotation.x = swing;
+        this.rightLeg.rotation.x = -swing;
 
-      const swing = Math.sin(this.animTimer) * (isSprinting ? 0.75 : 0.45);
-      if (this.isHoldingUmbrella) {
-        // 下雨天撐傘跑步行走：左手維持高舉握傘平穩微晃，右手與雙腿維持自然跑步擺動
-        const bob = Math.sin(this.animTimer) * 0.025;
-        this.leftArm.rotation.set(-Math.PI * 0.65 + bob, -0.12, 0.12);
+        const bob = Math.abs(Math.sin(this.animTimer * 2)) * 0.025;
+        this.bodyMesh.position.y = crouchY + bob;
+        this.headMesh.position.y = headCrouchY + bob;
       } else {
-        this.leftArm.rotation.x = -swing;
-        this.leftArm.rotation.y = 0;
-        this.leftArm.rotation.z = 0;
-      }
-      this.rightArm.rotation.x = swing;
-      this.rightArm.rotation.y = 0;
-      this.rightArm.rotation.z = 0;
-      this.leftLeg.rotation.x = swing;
-      this.rightLeg.rotation.x = -swing;
+        const animSpeed = isSprinting ? 18 : 12;
+        this.animTimer += delta * animSpeed;
 
-      // 跑步上下顛簸
-      this.bodyMesh.position.y = 1.05 + Math.abs(Math.sin(this.animTimer * 2)) * 0.06;
-      this.headMesh.position.y = 1.62 + Math.abs(Math.sin(this.animTimer * 2)) * 0.06;
+        const swing = Math.sin(this.animTimer) * (isSprinting ? 0.75 : 0.45);
+        if (this.isHoldingUmbrella) {
+          // 下雨天撐傘跑步行走：左手維持高舉握傘平穩微晃，右手與雙腿維持自然跑步擺動
+          const bob = Math.sin(this.animTimer) * 0.025;
+          this.leftArm.rotation.set(-Math.PI * 0.65 + bob, -0.12, 0.12);
+        } else {
+          this.leftArm.rotation.x = -swing;
+          this.leftArm.rotation.y = 0;
+          this.leftArm.rotation.z = 0;
+        }
+        this.rightArm.rotation.x = swing;
+        this.rightArm.rotation.y = 0;
+        this.rightArm.rotation.z = 0;
+        this.leftLeg.rotation.x = swing;
+        this.rightLeg.rotation.x = -swing;
+
+        // 跑步上下顛簸
+        this.bodyMesh.position.y = 1.05 + Math.abs(Math.sin(this.animTimer * 2)) * 0.06;
+        this.headMesh.position.y = 1.62 + Math.abs(Math.sin(this.animTimer * 2)) * 0.06;
+      }
     } else {
-      // 閒置回正
-      if (this.isHoldingUmbrella) {
-        // 閒置站立時左手維持穩固握傘高舉姿態
-        this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, -Math.PI * 0.65, delta * 12.0);
-        this.leftArm.rotation.y = THREE.MathUtils.lerp(this.leftArm.rotation.y, -0.12, delta * 12.0);
-        this.leftArm.rotation.z = THREE.MathUtils.lerp(this.leftArm.rotation.z, 0.12, delta * 12.0);
+      // 靜止閒置姿態
+      if (this.crouchRatio > 0.05) {
+        // 蹲下靜止待機 (單膝蹲伏/刺客蹲姿)
+        this.bodyMesh.position.y = crouchY;
+        this.headMesh.position.y = headCrouchY;
+        this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0.15, delta * 10);
+        this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, -0.15, delta * 10);
+        if (!this.isHoldingUmbrella) {
+          this.leftArm.rotation.set(-0.25, 0, 0.2);
+        }
+        this.rightArm.rotation.set(-0.25, 0, -0.2);
       } else {
-        this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, 0, delta * 10);
-        this.leftArm.rotation.y = 0;
-        this.leftArm.rotation.z = 0;
+        if (this.isHoldingUmbrella) {
+          // 閒置站立時左手維持穩固握傘高舉姿態
+          this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, -Math.PI * 0.65, delta * 12.0);
+          this.leftArm.rotation.y = THREE.MathUtils.lerp(this.leftArm.rotation.y, -0.12, delta * 12.0);
+          this.leftArm.rotation.z = THREE.MathUtils.lerp(this.leftArm.rotation.z, 0.12, delta * 12.0);
+        } else {
+          this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, 0, delta * 10);
+          this.leftArm.rotation.y = 0;
+          this.leftArm.rotation.z = 0;
+        }
+        this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, delta * 10);
+        this.rightArm.rotation.y = 0;
+        this.rightArm.rotation.z = 0;
+        this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0, delta * 10);
+        this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, delta * 10);
+        this.bodyMesh.position.y = 1.05;
+        this.headMesh.position.y = 1.62;
       }
-      this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, delta * 10);
-      this.rightArm.rotation.y = 0;
-      this.rightArm.rotation.z = 0;
-      this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0, delta * 10);
-      this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, delta * 10);
-      this.bodyMesh.position.y = 1.05;
-      this.headMesh.position.y = 1.62;
     }
   }
 

@@ -813,12 +813,12 @@ class SchoolGTASandbox {
     // ==========================================
     // A 區：牢房生活長廊迷宮 (Z: -90 ~ -28)
     // ==========================================
-    // 1. 北走廊折返巡邏教官 G1 (巡邏區：X -35 ~ -12, Z = -84，空曠北走道)
+    // 1. 北走廊折返巡邏教官 G1 (巡邏區：X -26 ~ -10, Z = -84，避開開局出生點掩體)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-20, 0, -84),
+      new THREE.Vector3(-16, 0, -84),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-35, 0, -84), new THREE.Vector3(-12, 0, -84)],
+      [new THREE.Vector3(-26, 0, -84), new THREE.Vector3(-10, 0, -84)],
       'OFFICER_PATROL'
     ));
 
@@ -849,12 +849,12 @@ class SchoolGTASandbox {
       'OFFICER_PATROL'
     ));
 
-    // 12. A 區西側監舍外廊巡哨 G12 (X: -72, Z: -75 ~ -45)
+    // 12. A 區西側監舍外廊巡哨 G12 (X: -72, Z: -66 ~ -42，保留出生點外圍充沛安全盲區)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-72, 0, -60),
+      new THREE.Vector3(-72, 0, -54),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-72, 0, -75), new THREE.Vector3(-72, 0, -45)],
+      [new THREE.Vector3(-72, 0, -66), new THREE.Vector3(-72, 0, -42)],
       'OFFICER_PATROL'
     ));
 
@@ -1569,14 +1569,15 @@ class SchoolGTASandbox {
     this.tennisGame.startMatch(this.hud, peCoach, this.engine.scene);
   }
 
-  // 潛龍諜影 CQC 近身潛入擊昏 / 背刺
+  // 潛龍諜影 CQC 近身潛入擊昏 / 刺客教條草堆暗殺
   private performCqcTakedown() {
     if (!this.nearbyCqcTarget || this.nearbyCqcTarget.isKnockedDown || this.player.isDead) return;
     const target = this.nearbyCqcTarget;
+    const isFromHiding = this.player.isHidingInCover;
+    const coverName = this.player.currentHidingSpotName || '草堆';
 
     if (target.role === 'DETENTION_BOSS') {
-      // 總教官背後暗殺 / 破盾致命刺殺：
-      // 背後暗殺造成 100 點巨額破甲傷害，使總長陷入踉蹌硬直 3.0 秒
+      // 總教官背後暗殺 / 刺客草堆伏擊破盾：
       target.hp = Math.max(0, target.hp - 100);
       target.isBossStunned = false;
       target.takeDamage(100);
@@ -1588,14 +1589,24 @@ class SchoolGTASandbox {
         this.isDetentionBossDefeated = true;
         this.detentionTakedownCount++;
         this.detentionWorld.spawnMasterKeycard(target.position);
-        this.wantedSystem.showBanner('🏆 狂賀！無聲暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！', 5000);
+        this.wantedSystem.showBanner(
+          isFromHiding
+            ? `🗡️【刺客教條·致命草車突襲】一擊終結總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
+            : '🏆 狂賀！無聲暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+          5000
+        );
         soundManager.playSchoolBell();
       } else {
         // 暗殺重創後，總教官陷入受創踉蹌硬直 3.0 秒，背後持續露出，給予連續暗殺或拉開距離機會
         target.pauseTimer = 3.0;
         target.isPaused = true;
         target.resetPose();
-        this.wantedSystem.showBanner(`🥷 總教官背部致命重創！造成 100 點重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`, 2500);
+        this.wantedSystem.showBanner(
+          isFromHiding
+            ? `🗡️【刺客教條·掩體突襲】從${coverName}猛撲重創總教官！造成 100 傷害！(剩餘 HP: ${target.hp}/300)`
+            : `🥷 總教官背部致命重創！造成 100 點重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`,
+          2500
+        );
       }
       this.nearbyCqcTarget = null;
       this.hud.updateCqcPrompt(false);
@@ -1605,7 +1616,11 @@ class SchoolGTASandbox {
     target.knockoutSilently();
     this.detentionTakedownCount++;
     soundManager.playPunch();
-    this.wantedSystem.showBanner('🥷 CQC 潛入擊昏！(無聲排除，永久昏迷)', 2000);
+    if (isFromHiding) {
+      this.wantedSystem.showBanner(`🗡️【刺客教條·草堆暗殺】將 ${target.getRoleTitle()} 拖入${coverName}無聲刺殺！無人察覺！`, 2500);
+    } else {
+      this.wantedSystem.showBanner(`🥷 CQC 潛入擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷)`, 2000);
+    }
     this.nearbyCqcTarget = null;
     this.hud.updateCqcPrompt(false);
   }
@@ -1739,7 +1754,7 @@ class SchoolGTASandbox {
       n.resetAggro();
     }
 
-    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : new THREE.Vector3(-35, 0, -25);
+    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : this.detentionWorld.spawnPos.clone();
 
     setTimeout(() => {
       this.player.respawn(respawnPos);
@@ -2557,10 +2572,24 @@ class SchoolGTASandbox {
       }
     }
 
-    // 6.5 少年院動態探照燈掃視與警戒檢測 (被探照燈照到時發佈警報並吸引附近 NPC 追捕)
+    // 6.5 刺客教條草堆匿蹤檢測 與 少年院動態探照燈掃視警戒
     if (this.currentWorldType === 'DETENTION') {
+      let inHidingSpot = false;
+      let hidingSpotName = '';
+      for (let i = 0; i < this.detentionWorld.hidingSpots.length; i++) {
+        const spot = this.detentionWorld.hidingSpots[i];
+        if (targetPosition.distanceTo(spot.position) < spot.radius) {
+          inHidingSpot = true;
+          hidingSpotName = spot.name;
+          break;
+        }
+      }
+      this.player.isHidingInCover = inHidingSpot;
+      this.player.currentHidingSpotName = hidingSpotName;
+      this.hud.updateStealthHiding(inHidingSpot, hidingSpotName);
+
       this.detentionWorld.updateKeycards(delta);
-      const slState = this.detentionWorld.update(delta, targetPosition);
+      const slState = this.detentionWorld.update(delta, targetPosition, inHidingSpot);
       if (slState.isDetectedBySearchlight) {
         this.searchlightAlertTimer += delta;
         if (this.searchlightAlertTimer >= 0.25) {
@@ -2611,32 +2640,48 @@ class SchoolGTASandbox {
       }
       this.hud.updateMgsAlert(this.detentionAlertTimer);
 
-      // CQC 身後近身判定 (潛龍諜影背刺擊昏)
+      // CQC 身後近身判定 與 刺客教條草堆暗殺判定
       this.nearbyCqcTarget = null;
+      let isHidingAssassination = false;
       if (!this.player.isDead) {
         for (const npc of this.detentionNPCs) {
           if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
           const dist = npc.position.distanceTo(targetPosition);
-          if (dist <= 2.3) {
-            // 判斷是否在身後盲區 (背後約 162 度視錐)
-            const guardFwdX = Math.sin(npc.rotationY);
-            const guardFwdZ = Math.cos(npc.rotationY);
-            const toPlayerX = (targetPosition.x - npc.position.x) / dist;
-            const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
-            const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
 
-            // 每個 NPC (包含總教官 Boss) 均可在背後空檔觸發 CQC 暗殺
-            if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
+          if (this.player.isHidingInCover) {
+            // 刺客教條草堆暗殺：只要守衛經過草堆 3.0m 內，任意角度均可直接伏擊拖入刺殺！
+            if (dist <= 3.0) {
               this.nearbyCqcTarget = npc;
+              isHidingAssassination = true;
               break;
+            }
+          } else {
+            // 正常潛行背刺：判定是否在身後盲區 (背後約 162 度視錐)
+            if (dist <= 2.3) {
+              const guardFwdX = Math.sin(npc.rotationY);
+              const guardFwdZ = Math.cos(npc.rotationY);
+              const toPlayerX = (targetPosition.x - npc.position.x) / dist;
+              const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
+              const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
+
+              // 每個 NPC (包含總教官 Boss) 均可在背後空檔觸發 CQC 暗殺
+              if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
+                this.nearbyCqcTarget = npc;
+                break;
+              }
             }
           }
         }
       }
       this.hud.updateCqcPrompt(
         this.nearbyCqcTarget !== null,
-        this.nearbyCqcTarget?.role || ''
+        this.nearbyCqcTarget?.role || '',
+        isHidingAssassination,
+        this.player.currentHidingSpotName
       );
+    } else {
+      this.player.isHidingInCover = false;
+      this.hud.updateStealthHiding(false);
     }
 
     if (this.broadcastCooldown > 0) {
@@ -2695,7 +2740,8 @@ class SchoolGTASandbox {
         isThunderstorm,
         isSpawnGraceActive,
         this.player.isSneaking,
-        this.player.isSprinting
+        this.player.isSprinting,
+        this.player.isHidingInCover
       );
 
       if (!npc.isKnockedDown && !npc.isPermanentlyKnockedOut && npc.isChasing) {

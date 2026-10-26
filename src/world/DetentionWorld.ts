@@ -53,10 +53,21 @@ const SEARCHLIGHT_SWEEP_WAYPOINTS: { x: number; z: number }[] = [
   { x: 0,   z: 10 },  // 中央瞭望塔前庭
 ];
 
+export interface ACHidingSpot {
+  id: string;
+  name: string;
+  position: THREE.Vector3;
+  radius: number;
+  type: 'HAY_CART' | 'HAY_BALE';
+}
+
 export class DetentionWorld {
   public scene: THREE.Scene;
   public group: THREE.Group = new THREE.Group();
   public colliders: CollidableBox[] = [];
+
+  // 刺客教條草堆與掩體藏匿點矩陣 (AC Interactive Hiding Spots)
+  public hidingSpots: ACHidingSpot[] = [];
 
   // 少年院關鍵點位 (改為潛龍諜影潛行迷宮配置)
   public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 起點：北側牢房後方通風口 (空曠安全區)
@@ -170,6 +181,8 @@ export class DetentionWorld {
     const woodPlankGeos: THREE.BufferGeometry[] = [];
     const glassGeos: THREE.BufferGeometry[] = [];
     const tireRubberGeos: THREE.BufferGeometry[] = [];
+    const hayStrawGeos: THREE.BufferGeometry[] = [];
+    const sandbagGeos: THREE.BufferGeometry[] = [];
 
     // ==========================================
     // 1. 地面與泥濘大操場 (200m × 200m)
@@ -899,6 +912,241 @@ export class DetentionWorld {
       darkSteelGeos.push(conduitGeo);
     }
 
+    // ==========================================
+    // 8.6 刺客教條經典藏匿點矩陣 (Assassin's Creed Interactive Hiding Spots - 18 處)
+    // 包含經典雙輪乾草手推車 (HAY_CART) 與壓實草捆堆垛 (HAY_BALE)
+    // 玩家進入半徑內即自動匿蹤隱形，警衛視線與探照燈完全無法發現，並可發動刺客草堆暗殺
+    // ==========================================
+    this.hidingSpots = [
+      // A 區 (Zone A: 牢房生活長廊迷宮 Z: -90 ~ -28)
+      { id: 'spot-1', name: '開局逃生乾草車', position: new THREE.Vector3(-52, 0, -84), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-2', name: '西側監舍後巷草堆', position: new THREE.Vector3(-68, 0, -55), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-3', name: '中央崗亭西側草堆', position: new THREE.Vector3(-10, 0, -60), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-4', name: '東側庭院維修草車', position: new THREE.Vector3(14, 0, -65), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-5', name: '東食堂外廊草堆', position: new THREE.Vector3(78, 0, -60), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-6', name: '管制閘門 1 側翼草車', position: new THREE.Vector3(-8, 0, -32), radius: 1.8, type: 'HAY_CART' },
+
+      // B 區 (Zone B: 操場重裝軍規貨櫃迷宮 Z: -28 ~ 35)
+      { id: 'spot-7', name: 'B 區北貨櫃夾角草堆', position: new THREE.Vector3(-10, 0, -12), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-8', name: '貨櫃西側通廊草車', position: new THREE.Vector3(-18, 0, -6), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-9', name: '貨櫃東側通廊草車', position: new THREE.Vector3(18, 0, -6), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-10', name: '黃色門禁卡 B 藏匿草堆', position: new THREE.Vector3(21, 0, 4), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-11', name: '西側操場訓練架草堆', position: new THREE.Vector3(-25, 0, 10), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-12', name: '東側看台外緣草堆', position: new THREE.Vector3(28, 0, 10), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-13', name: '貨櫃南通道草車', position: new THREE.Vector3(11, 0, 14), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-14', name: '管制閘門 2 側翼草車', position: new THREE.Vector3(-8, 0, 30), radius: 1.8, type: 'HAY_CART' },
+
+      // C 區 (Zone C: 終極哨戒門庭與決戰競技場 Z: 35 ~ 95)
+      { id: 'spot-15', name: '競技場西配電房草堆', position: new THREE.Vector3(-18, 0, 50), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-16', name: '競技場東庫房草堆', position: new THREE.Vector3(18, 0, 50), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-17', name: '決戰競技場中央刺客突襲草車', position: new THREE.Vector3(0, 0, 56), radius: 2.0, type: 'HAY_CART' },
+      { id: 'spot-18', name: '逃脫南大門終端草車', position: new THREE.Vector3(-11, 0, 88), radius: 1.8, type: 'HAY_CART' },
+    ];
+
+    for (let i = 0; i < this.hidingSpots.length; i++) {
+      const spot = this.hidingSpots[i];
+      const sp = spot.position;
+      if (spot.type === 'HAY_CART') {
+        // 車輪 (左右木質車輪 + 黑色鋼圈)
+        const wheelL = new THREE.CylinderGeometry(0.55, 0.55, 0.12, 12);
+        wheelL.rotateZ(Math.PI / 2);
+        wheelL.translate(sp.x - 1.15, 0.55, sp.z);
+        const wheelR = new THREE.CylinderGeometry(0.55, 0.55, 0.12, 12);
+        wheelR.rotateZ(Math.PI / 2);
+        wheelR.translate(sp.x + 1.15, 0.55, sp.z);
+        darkSteelGeos.push(wheelL, wheelR);
+
+        // 車軸
+        const axle = new THREE.CylinderGeometry(0.06, 0.06, 2.3, 8);
+        axle.rotateZ(Math.PI / 2);
+        axle.translate(sp.x, 0.55, sp.z);
+        darkSteelGeos.push(axle);
+
+        // 車底板與護欄木板
+        const bed = new THREE.BoxGeometry(2.0, 0.10, 2.8);
+        bed.translate(sp.x, 0.65, sp.z);
+        const railL = new THREE.BoxGeometry(0.08, 0.55, 2.8);
+        railL.translate(sp.x - 0.96, 0.95, sp.z);
+        const railR = new THREE.BoxGeometry(0.08, 0.55, 2.8);
+        railR.translate(sp.x + 0.96, 0.95, sp.z);
+        const railBack = new THREE.BoxGeometry(2.0, 0.55, 0.08);
+        railBack.translate(sp.x, 0.95, sp.z - 1.36);
+        woodPlankGeos.push(bed, railL, railR, railBack);
+
+        // 蓬鬆金黃乾草堆 (刺客教條經典草堆，多層次體積)
+        const hayMain = new THREE.BoxGeometry(1.85, 1.15, 2.65);
+        hayMain.translate(sp.x, 1.25, sp.z);
+        const hayDome = new THREE.BoxGeometry(1.5, 0.55, 2.2);
+        hayDome.translate(sp.x, 1.85, sp.z);
+        const hayTuft1 = new THREE.BoxGeometry(0.65, 0.35, 0.75);
+        hayTuft1.rotateY(0.4);
+        hayTuft1.translate(sp.x + 0.3, 2.15, sp.z - 0.2);
+        const hayTuft2 = new THREE.BoxGeometry(0.55, 0.3, 0.65);
+        hayTuft2.rotateY(-0.35);
+        hayTuft2.translate(sp.x - 0.35, 2.12, sp.z + 0.3);
+        hayStrawGeos.push(hayMain, hayDome, hayTuft1, hayTuft2);
+
+        // 地面零散草屑
+        for (let j = 0; j < 3; j++) {
+          const ang = j * 2.1;
+          const scX = sp.x + Math.sin(ang) * 1.5;
+          const scZ = sp.z + Math.cos(ang) * 1.5;
+          const scatter = new THREE.BoxGeometry(0.45, 0.03, 0.45);
+          scatter.rotateY(ang);
+          scatter.translate(scX, 0.02, scZ);
+          hayStrawGeos.push(scatter);
+        }
+      } else {
+        // HAY_BALE: 經典方形壓實草捆堆疊成的刺客掩體垛
+        const b1 = new THREE.BoxGeometry(1.4, 0.65, 0.9);
+        b1.translate(sp.x - 0.6, 0.33, sp.z - 0.4);
+        const b2 = new THREE.BoxGeometry(1.4, 0.65, 0.9);
+        b2.translate(sp.x + 0.6, 0.33, sp.z - 0.4);
+        const b3 = new THREE.BoxGeometry(1.4, 0.65, 0.9);
+        b3.translate(sp.x - 0.6, 0.33, sp.z + 0.4);
+        const b4 = new THREE.BoxGeometry(1.4, 0.65, 0.9);
+        b4.translate(sp.x + 0.6, 0.33, sp.z + 0.4);
+
+        const b5 = new THREE.BoxGeometry(1.3, 0.6, 1.5);
+        b5.translate(sp.x - 0.35, 0.95, sp.z);
+        const b6 = new THREE.BoxGeometry(1.3, 0.6, 1.5);
+        b6.translate(sp.x + 0.35, 0.95, sp.z);
+
+        const bTop = new THREE.BoxGeometry(1.6, 0.5, 1.4);
+        bTop.translate(sp.x, 1.45, sp.z);
+
+        hayStrawGeos.push(b1, b2, b3, b4, b5, b6, bTop);
+
+        // 綁繩
+        for (const y of [0.33, 0.95]) {
+          const strap = new THREE.BoxGeometry(2.3, 0.05, 0.05);
+          strap.translate(sp.x, y, sp.z);
+          darkSteelGeos.push(strap);
+        }
+
+        const s1 = new THREE.BoxGeometry(0.5, 0.02, 0.5);
+        s1.translate(sp.x + 1.2, 0.01, sp.z);
+        const s2 = new THREE.BoxGeometry(0.5, 0.02, 0.5);
+        s2.translate(sp.x - 1.2, 0.01, sp.z - 0.3);
+        hayStrawGeos.push(s1, s2);
+      }
+    }
+
+    // ==========================================
+    // 8.7 全區戰術實體掩體矩陣 (Tactical Physical Cover Matrix - 22 處)
+    // 徹底阻斷開局出生點東/西雙向視線，並為每名 NPC 巡邏動線設置半高/高聳戰術掩體
+    // 射線穿透檢測將完全受阻，提供玩家絕佳暗殺伏擊走位
+    // ==========================================
+    const tacticalCovers = [
+      // 1. 開局出生點東向混泥土防爆隔音牆 + 補給木箱 (完全遮斷 G1 視線)
+      { minX: -46.6, maxX: -45.4, minZ: -86.8, maxZ: -81.2, h: 2.8, type: 'CONCRETE_CRATE' },
+      // 2. 開局出生點西向高壓變電箱 + 雙層沙包掩體 (完全遮斷 G12 視線)
+      { minX: -64.4, maxX: -59.6, minZ: -82.6, maxZ: -81.4, h: 2.6, type: 'TRANSFORMER_SANDBAG' },
+      // 3. 開局出生點南向轉角托盤障礙物
+      { minX: -56.8, maxX: -53.2, minZ: -79.8, maxZ: -78.2, h: 1.6, type: 'PALLETS' },
+      // 4. G1 巡邏北走廊軍規彈藥箱堆 (X = -20, Z = -81.5)
+      { minX: -21.5, maxX: -18.5, minZ: -82.1, maxZ: -80.9, h: 1.4, type: 'WOOD_CRATES' },
+      // 5. G12 監舍西外牆水泥支撐柱 (X = -66, Z = -55)
+      { minX: -66.8, maxX: -65.2, minZ: -56.0, maxZ: -54.0, h: 3.5, type: 'CONCRETE_WALL' },
+      // 6. G3 崗亭沙包工事 (X = -1, Z = -60)
+      { minX: -1.6, maxX: -0.4, minZ: -61.8, maxZ: -58.2, h: 1.3, type: 'SANDBAG' },
+      // 7. G2 東庭院托盤木箱堆 (X = 22, Z = -60)
+      { minX: 20.8, maxX: 23.2, minZ: -61.2, maxZ: -58.8, h: 1.5, type: 'PALLETS' },
+      // 8. G13 東食堂金屬垃圾子車 (X = 82, Z = -62)
+      { minX: 80.9, maxX: 83.1, minZ: -63.6, maxZ: -60.4, h: 1.8, type: 'STEEL_DUMPSTER' },
+      // 9. G14 南前庭防暴折角路障 (X = -16, Z = -35)
+      { minX: -17.6, maxX: -14.4, minZ: -35.5, maxZ: -34.5, h: 1.5, type: 'JERSEY_BARRIER' },
+      // 10. G4 閘門 1 側翼沙包掩體 (X = -2, Z = -35)
+      { minX: -3.8, maxX: -0.2, minZ: -35.5, maxZ: -34.5, h: 1.4, type: 'SANDBAG' },
+      // 11. G15 B 區北走道鐵製工具箱 (X = 0, Z = -15)
+      { minX: -1.2, maxX: 1.2, minZ: -15.8, maxZ: -14.2, h: 1.4, type: 'STEEL_DUMPSTER' },
+      // 12. G5 貨櫃西直道軍規貨箱 (X = -25, Z = -6)
+      { minX: -25.8, maxX: -24.2, minZ: -7.8, maxZ: -4.2, h: 2.2, type: 'WOOD_CRATES' },
+      // 13. G6 貨櫃東直道軍規貨箱 (X = 25, Z = -6)
+      { minX: 24.2, maxX: 25.8, minZ: -7.8, maxZ: -4.2, h: 2.2, type: 'WOOD_CRATES' },
+      // 14. G7 中央十字路口沙包掩體 (X = 0, Z = -3.5)
+      { minX: -1.8, maxX: 1.8, minZ: -4.0, maxZ: -3.0, h: 1.4, type: 'SANDBAG' },
+      // 15. G8 盲區高層鐵架 (X = 25, Z = -2)
+      { minX: 24.4, maxX: 25.6, minZ: -3.5, maxZ: -0.5, h: 3.0, type: 'STEEL_DUMPSTER' },
+      // 16. G16 貨櫃南走廊木箱金字塔 (X = -10, Z = 14)
+      { minX: -11.0, maxX: -9.0, minZ: 13.0, maxZ: 15.0, h: 2.0, type: 'WOOD_CRATES' },
+      // 17. G9 閘門 2 澤西防暴水泥墩 (X = -2, Z = 27)
+      { minX: -3.8, maxX: -0.2, minZ: 26.5, maxZ: 27.5, h: 1.5, type: 'JERSEY_BARRIER' },
+      // 18. 狼犬 1 西側訓練重訓輪胎金字塔 (X = -22, Z = 16)
+      { minX: -23.1, maxX: -20.9, minZ: 14.9, maxZ: 17.1, h: 2.2, type: 'TIRE_STACK' },
+      // 19. 狼犬 2 東側看台設備櫃 (X = 22, Z = 16)
+      { minX: 21.0, maxX: 23.0, minZ: 15.0, maxZ: 17.0, h: 2.2, type: 'CONCRETE_WALL' },
+      // 20. G18 競技場西翼防爆牆 (X = -16, Z = 42)
+      { minX: -16.5, maxX: -15.5, minZ: 40.0, maxZ: 44.0, h: 2.8, type: 'CONCRETE_WALL' },
+      // 21. G19 競技場東翼防爆牆 (X = 16, Z = 42)
+      { minX: 15.5, maxX: 16.5, minZ: 40.0, maxZ: 44.0, h: 2.8, type: 'CONCRETE_WALL' },
+      // 22. G20 南大門終端沙包工事 (X = 10, Z = 88)
+      { minX: 9.4, maxX: 10.6, minZ: 86.2, maxZ: 89.8, h: 1.4, type: 'SANDBAG' },
+    ];
+
+    for (let i = 0; i < tacticalCovers.length; i++) {
+      const tc = tacticalCovers[i];
+      const cx = (tc.minX + tc.maxX) / 2;
+      const cz = (tc.minZ + tc.maxZ) / 2;
+      const w = tc.maxX - tc.minX;
+      const d = tc.maxZ - tc.minZ;
+      this.addCollider(tc.minX, tc.maxX, tc.minZ, tc.maxZ, 0, tc.h);
+
+      if (tc.type === 'CONCRETE_CRATE') {
+        const wallG = new THREE.BoxGeometry(w, tc.h, d);
+        wallG.translate(cx, tc.h / 2, cz);
+        concreteGeos.push(wallG);
+        const cr1 = new THREE.BoxGeometry(w * 0.9, 0.8, 1.2);
+        cr1.translate(cx, tc.h + 0.4, cz - 0.5);
+        const cr2 = new THREE.BoxGeometry(w * 0.9, 0.8, 1.2);
+        cr2.translate(cx, tc.h + 0.4, cz + 0.5);
+        woodPlankGeos.push(cr1, cr2);
+      } else if (tc.type === 'TRANSFORMER_SANDBAG') {
+        const tfG = new THREE.BoxGeometry(w, tc.h, d * 0.6);
+        tfG.translate(cx, tc.h / 2, cz - d * 0.2);
+        darkSteelGeos.push(tfG);
+        const sbG = new THREE.BoxGeometry(w, 1.2, d * 0.4);
+        sbG.translate(cx, 0.6, cz + d * 0.3);
+        sandbagGeos.push(sbG);
+      } else if (tc.type === 'WOOD_CRATES') {
+        const box1 = new THREE.BoxGeometry(w, tc.h * 0.55, d);
+        box1.translate(cx, tc.h * 0.275, cz);
+        const box2 = new THREE.BoxGeometry(w * 0.8, tc.h * 0.45, d * 0.8);
+        box2.translate(cx, tc.h * 0.775, cz);
+        woodPlankGeos.push(box1, box2);
+      } else if (tc.type === 'SANDBAG') {
+        const sb1 = new THREE.BoxGeometry(w, tc.h * 0.55, d);
+        sb1.translate(cx, tc.h * 0.275, cz);
+        const sb2 = new THREE.BoxGeometry(w * 0.85, tc.h * 0.45, d * 0.85);
+        sb2.translate(cx, tc.h * 0.775, cz);
+        sandbagGeos.push(sb1, sb2);
+      } else if (tc.type === 'PALLETS') {
+        for (let l = 0; l < 3; l++) {
+          const pg = new THREE.BoxGeometry(w, 0.14, d);
+          pg.translate(cx, 0.07 + l * 0.45, cz);
+          woodPlankGeos.push(pg);
+        }
+      } else if (tc.type === 'STEEL_DUMPSTER') {
+        const dmp = new THREE.BoxGeometry(w, tc.h, d);
+        dmp.translate(cx, tc.h / 2, cz);
+        corrugatedIronGeos.push(dmp);
+      } else if (tc.type === 'JERSEY_BARRIER') {
+        const jb = new THREE.BoxGeometry(w, tc.h, d);
+        jb.translate(cx, tc.h / 2, cz);
+        concreteGeos.push(jb);
+      } else if (tc.type === 'TIRE_STACK') {
+        for (let ty = 0; ty < 3; ty++) {
+          const tr = new THREE.CylinderGeometry(Math.min(w, d) / 2, Math.min(w, d) / 2, 0.65, 12);
+          tr.translate(cx, 0.35 + ty * 0.7, cz);
+          tireRubberGeos.push(tr);
+        }
+      } else {
+        const cg = new THREE.BoxGeometry(w, tc.h, d);
+        cg.translate(cx, tc.h / 2, cz);
+        concreteGeos.push(cg);
+      }
+    }
+
     // 建立 3D 鑰匙卡模型並加入場景
     // 1. 藍色門禁卡 A (放置於 A 區營舍長桌 X = -45, Z = -50)
     this.keycardAMeshGroup = this.createKeycardMesh(0x38bdf8);
@@ -957,6 +1205,12 @@ export class DetentionWorld {
     const tireRubberMat = new THREE.MeshLambertMaterial({
       color: 0x4b5563 // 質感板岩灰啞光重訓輪胎，立體結構清晰分明
     });
+    const hayStrawMat = new THREE.MeshLambertMaterial({
+      color: 0xd4a017 // 經典刺客教條乾草金黃色 (溫潤金黃草垛，辨識度極高)
+    });
+    const sandbagMat = new THREE.MeshLambertMaterial({
+      color: 0xbaa478 // 軍規帆布沙包土黃色
+    });
 
     const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material) => {
       if (geos.length === 0) return;
@@ -980,6 +1234,8 @@ export class DetentionWorld {
     createMergedMesh(woodPlankGeos, woodPlankMat);
     createMergedMesh(glassGeos, glassMat);
     createMergedMesh(tireRubberGeos, tireRubberMat);
+    createMergedMesh(hayStrawGeos, hayStrawMat);
+    createMergedMesh(sandbagGeos, sandbagMat);
   }
 
   // 建立動態旋轉高空探照燈 (安裝在瞭望塔 Y = 13.6m)
@@ -1058,8 +1314,8 @@ export class DetentionWorld {
     });
   }
 
-  // 幀迴圈更新探照燈掃視與警戒檢測 (慢速廣域掃描整個區域，絕不作弊黏著玩家身旁)
-  public update(delta: number, playerPos: THREE.Vector3): { isDetectedBySearchlight: boolean; nearestDist: number } {
+  // 幀迴圈更新探照燈掃視與警戒檢測 (慢速廣域掃描整個區域，絕不作弊黏著玩家身旁；刺客草堆掩體中無法被發現)
+  public update(delta: number, playerPos: THREE.Vector3, isPlayerHiding: boolean = false): { isDetectedBySearchlight: boolean; nearestDist: number } {
     this.updateKeycards(delta);
     let anyDetected = false;
     let minDistance = 999;
@@ -1091,8 +1347,8 @@ export class DetentionWorld {
         minDistance = distToPlayer;
       }
 
-      // 判定是否真正被光束捕捉：在光圈半徑 4.2m 內、身處室外地面 (Y < 3.0)、且無掩體遮擋
-      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isOccludedByCover;
+      // 判定是否真正被光束捕捉：在光圈半徑 4.2m 內、身處室外地面 (Y < 3.0)、且無掩體遮擋、且未身處刺客草堆掩體中
+      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isOccludedByCover && !isPlayerHiding;
 
       if (isPlayerCaught) {
         sl.isDetecting = true;
