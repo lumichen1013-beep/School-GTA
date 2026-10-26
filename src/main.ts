@@ -1579,28 +1579,30 @@ class SchoolGTASandbox {
     const target = this.nearbyCqcTarget;
 
     if (target.role === 'DETENTION_BOSS') {
-      if (!target.isBossStunned) {
-        this.wantedSystem.showBanner('🛡️ 總教官正面持盾防禦！常態無法直接背刺！請引誘其衝撞發電機柱破盾硬直！', 2500);
-        soundManager.playPunch();
-        target.setAlertState('ALERT');
-        target.isChasing = true;
-        this.detentionAlertTimer = 15.0;
-        this.detentionAlertCount++;
-        return;
-      }
+      // 總教官背後暗殺 / 破盾致命刺殺：
+      // 背後暗殺造成 100 點巨額破甲傷害，使總長陷入踉蹌硬直 3.0 秒
       target.hp = Math.max(0, target.hp - 100);
       target.isBossStunned = false;
+      target.takeDamage(100);
       soundManager.playPunch();
+      soundManager.playBatHit();
+
       if (target.hp <= 0) {
         target.knockoutSilently();
         this.isDetentionBossDefeated = true;
         this.detentionTakedownCount++;
         this.detentionWorld.spawnMasterKeycard(target.position);
-        this.wantedSystem.showBanner('🏆 狂賀！擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！', 5000);
+        this.wantedSystem.showBanner('🏆 狂賀！無聲暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！', 5000);
         soundManager.playSchoolBell();
       } else {
-        this.wantedSystem.showBanner(`💥 破盾弱點重擊！總教官護甲撕裂！(剩餘 HP: ${target.hp}/300)`, 2500);
+        // 暗殺重創後，總教官陷入受創踉蹌硬直 3.0 秒，背後持續露出，給予連續暗殺或拉開距離機會
+        target.pauseTimer = 3.0;
+        target.isPaused = true;
+        target.resetPose();
+        this.wantedSystem.showBanner(`🥷 總教官背部致命重創！造成 100 點重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`, 2500);
       }
+      this.nearbyCqcTarget = null;
+      this.hud.updateCqcPrompt(false);
       return;
     }
 
@@ -2619,20 +2621,16 @@ class SchoolGTASandbox {
         for (const npc of this.detentionNPCs) {
           if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
           const dist = npc.position.distanceTo(targetPosition);
-          if (dist <= 2.2) {
-            // 判斷是否在身後
+          if (dist <= 2.3) {
+            // 判斷是否在身後盲區 (背後約 162 度視錐)
             const guardFwdX = Math.sin(npc.rotationY);
             const guardFwdZ = Math.cos(npc.rotationY);
             const toPlayerX = (targetPosition.x - npc.position.x) / dist;
             const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
             const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
 
-            if (npc.role === 'DETENTION_BOSS') {
-              if (npc.isBossStunned) {
-                this.nearbyCqcTarget = npc;
-                break;
-              }
-            } else if (dot < -0.15) {
+            // 每個 NPC (包含總教官 Boss) 均可在背後空檔觸發 CQC 暗殺
+            if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
               this.nearbyCqcTarget = npc;
               break;
             }
@@ -2641,7 +2639,7 @@ class SchoolGTASandbox {
       }
       this.hud.updateCqcPrompt(
         this.nearbyCqcTarget !== null,
-        this.nearbyCqcTarget?.role === 'DETENTION_BOSS' ? '⚡ [F / 攻擊] 破盾背刺弱點！' : '🥷 [F / 攻擊] 絞喉擊昏 (CQC)'
+        this.nearbyCqcTarget?.role === 'DETENTION_BOSS' ? '🥷 [F / 點擊] 總長弱點暗殺破防！' : '🥷 [F / 點擊] 暗殺 (CQC)'
       );
     }
 

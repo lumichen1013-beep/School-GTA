@@ -1716,9 +1716,9 @@ export class NPC {
 
     if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
       if (this.role === 'DETENTION_WOLF') {
-        // 特訓狼犬：定點警戒嗅聞 3.5 秒
+        // 特訓狼犬：定點警戒嗅聞 4.5 秒 (充足靜止暗殺空檔)
         this.currentIdleBehavior = 'DOG_SNIFF';
-        this.pauseTimer = 3.5;
+        this.pauseTimer = 4.5;
       } else {
         this.currentIdleBehavior = Math.random() < 0.6 ? 'DOG_SNIFF' : 'DOG_SIT';
         this.pauseTimer = this.currentIdleBehavior === 'DOG_SNIFF'
@@ -1726,9 +1726,9 @@ export class NPC {
           : (4.0 + Math.random() * 3.0);
       }
     } else if (this.role.startsWith('DETENTION_')) {
-      // 特訓院哨兵守衛：100% 固定立正環顧警戒，固定 3.5 秒 (Boss 4.0 秒)，背後暴露便於潛行 CQC
+      // 特訓院哨兵守衛：100% 固定立正環顧警戒，固定 4.5 秒 (Boss 5.0 秒)，背後暴露充足靜止暗殺空檔
       this.currentIdleBehavior = 'LOOK_AROUND';
-      this.pauseTimer = this.role === 'DETENTION_BOSS' ? 4.0 : 3.5;
+      this.pauseTimer = this.role === 'DETENTION_BOSS' ? 5.0 : 4.5;
     } else if (this.role === 'BIKE_PATROL') {
       this.currentIdleBehavior = 'LOOK_AROUND';
       this.pauseTimer = 2.0 + Math.random() * 2.0;

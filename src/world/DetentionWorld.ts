@@ -16,7 +16,42 @@ export interface SearchlightItem {
   centerX: number;
   centerZ: number;
   isDetecting: boolean;
+  waypointIndex?: number;
+  dwellTimer?: number;
+  alertLostTimer?: number;
 }
+
+// 探照燈慢速廣域巡查路徑點 (全面均勻涵蓋 A區牢房、B區貨櫃迷宮、C區競技場與南大門，絕不作弊黏著玩家)
+const SEARCHLIGHT_SWEEP_WAYPOINTS: { x: number; z: number }[] = [
+  // A 區 (牢房生活長廊區)
+  { x: -28, z: -76 },
+  { x: 0,   z: -72 },
+  { x: 28,  z: -68 },
+  { x: -4,  z: -56 },
+  { x: -28, z: -44 },
+  { x: 26,  z: -44 },
+  { x: 0,   z: -32 }, // 管制閘門 1 哨戒口
+
+  // B 區 (操場重裝貨櫃迷宮區)
+  { x: -22, z: -10 },
+  { x: 0,   z: -8 },
+  { x: 24,  z: -4 },
+  { x: 24,  z: 6 },   // 門禁卡 B 藏寶走廊
+  { x: 0,   z: 2 },   // 貨櫃中央十字路口
+  { x: -26, z: 12 },
+  { x: 0,   z: 16 },
+  { x: 24,  z: 18 },
+  { x: 0,   z: 30 },  // 管制閘門 2 哨戒口
+
+  // C 區 (終極決鬥競技場與南大門)
+  { x: -16, z: 48 },
+  { x: 0,   z: 62 },  // 總教官中央決鬥競技場
+  { x: 16,  z: 48 },
+  { x: -12, z: 75 },
+  { x: 12,  z: 75 },
+  { x: 0,   z: 88 },  // 逃脫南大門
+  { x: 0,   z: 10 },  // 中央瞭望塔前庭
+];
 
 export class DetentionWorld {
   public scene: THREE.Scene;
@@ -1002,25 +1037,28 @@ export class DetentionWorld {
     groundSpot.position.set(0, 0.06, 0);
     this.group.add(groundSpot);
 
-    // 單座中央高空探照燈巡視參數
+    // 單座中央高空探照燈巡視參數 (初始照射 A 區生活廣場)
     this.searchlights.push({
       id: index,
       towerPos: towerPos.clone(),
       housing,
       coneMesh,
       groundSpot,
-      currentGroundPos: groundSpot.position.clone(),
+      currentGroundPos: new THREE.Vector3(0, 0.06, -72),
       angle: 0,
       speed: 0.45,
       radiusX: 36,
       radiusZ: 32,
       centerX: 0,
       centerZ: 0,
-      isDetecting: false
+      isDetecting: false,
+      waypointIndex: 0,
+      dwellTimer: 0,
+      alertLostTimer: 0
     });
   }
 
-  // 幀迴圈更新探照燈掃視與警戒檢測 (動態追蹤玩家 + 移動速度合理平滑化，告別瞬間爆衝)
+  // 幀迴圈更新探照燈掃視與警戒檢測 (慢速廣域掃描整個區域，絕不作弊黏著玩家身旁)
   public update(delta: number, playerPos: THREE.Vector3): { isDetectedBySearchlight: boolean; nearestDist: number } {
     this.updateKeycards(delta);
     let anyDetected = false;
@@ -1029,41 +1067,102 @@ export class DetentionWorld {
     const _scratchLook = new THREE.Vector3();
     const isPlayerOutdoors = playerPos.y < 3.0;
 
-    // 合理平滑速度：
-    // 玩家正常步行 5.0 m/s，疾跑 10.0 m/s
-    // 探照燈平時追蹤速度設為 4.8 m/s：給予緊湊的追逐壓迫感，且玩家疾跑或滑步/閃身步能及時擺脫甩開
-    const trackingSpeed = 4.8;
-    const sweepSpeed = 2.8;
+    // 沉穩緩慢速度設計：
+    // 平時廣域巡邏速度設為 1.8 m/s (慢速大氣感巡視，玩家可觀察光斑軌跡預判躲避)
+    // 警報追蹤速度設為 3.6 m/s (逃跑有壓迫感，但玩家正常跑步 5.0m/s 或疾跑 10.0m/s 可及時逃入掩體)
+    const sweepSpeed = 1.8;
+    const alertTrackingSpeed = 3.6;
 
     for (const sl of this.searchlights) {
-      sl.angle += delta * 0.75; // 穩定平順的探查掃描週期
+      sl.angle += delta * 0.65;
+      if (sl.waypointIndex === undefined) sl.waypointIndex = 0;
+      if (sl.dwellTimer === undefined) sl.dwellTimer = 0;
+      if (sl.alertLostTimer === undefined) sl.alertLostTimer = 0;
+
+      // 檢查光線路徑是否遭到任何掩體或建築實體碰撞箱遮擋
+      const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
+
+      // 計算與玩家平面距離
+      const pDx = playerPos.x - sl.currentGroundPos.x;
+      const pDz = playerPos.z - sl.currentGroundPos.z;
+      const distToPlayer = Math.hypot(pDx, pDz);
+
+      if (distToPlayer < minDistance) {
+        minDistance = distToPlayer;
+      }
+
+      // 判定是否真正被光束捕捉：在光圈半徑 4.2m 內、身處室外地面 (Y < 3.0)、且無掩體遮擋
+      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isOccludedByCover;
+
+      if (isPlayerCaught) {
+        sl.isDetecting = true;
+        sl.alertLostTimer = 0;
+        anyDetected = true;
+      } else if (sl.isDetecting) {
+        // 逃入掩體後，探照燈在最後失蹤位置搜索 2.0 秒，隨後解除鎖定恢復全區巡視
+        sl.alertLostTimer += delta;
+        if (sl.alertLostTimer >= 2.0) {
+          sl.isDetecting = false;
+          sl.alertLostTimer = 0;
+        } else {
+          anyDetected = true; // 警戒倒數持續中
+        }
+      }
 
       let targetX = 0;
       let targetZ = 0;
-      let moveSpeed = trackingSpeed;
+      let moveSpeed = sweepSpeed;
 
-      if (isPlayerOutdoors) {
-        // 儘量追蹤玩家：四角哨塔探照燈動態轉向並追蹤玩家所在方位
-        // 附加 ±3.6m 模擬哨兵微幅晃動巡查扇面，四座塔各有不同相位，不會疊成單一點
-        const phaseOffset = sl.id * 1.5708; // 每座塔相差 90 度
-        const sweepOffsetX = Math.cos(sl.angle + phaseOffset) * 3.6;
-        const sweepOffsetZ = Math.sin(sl.angle * 1.25 + phaseOffset) * 3.6;
+      if (sl.isDetecting) {
+        // 警報狀態：哨塔守衛將光斑鎖定玩家方位追蹤
+        targetX = playerPos.x;
+        targetZ = playerPos.z;
+        moveSpeed = alertTrackingSpeed;
 
-        targetX = playerPos.x + sweepOffsetX;
-        targetZ = playerPos.z + sweepOffsetZ;
-        moveSpeed = trackingSpeed;
+        // 探照燈光圈與光錐切換為高警戒亮紅色！
+        (sl.groundSpot.material as THREE.MeshBasicMaterial).color.setHex(0xff2222);
+        (sl.groundSpot.material as THREE.MeshBasicMaterial).opacity = 0.75;
+        (sl.coneMesh.material as THREE.MeshBasicMaterial).color.setHex(0xff3333);
+        (sl.coneMesh.material as THREE.MeshBasicMaterial).opacity = 0.35;
       } else {
-        // 進入建築掩體時失去追蹤目標，回到各區域外圍穩定巡邏
-        targetX = sl.centerX + Math.cos(sl.angle * 0.4) * (sl.radiusX * 0.6);
-        targetZ = sl.centerZ + Math.sin(sl.angle * 0.5) * (sl.radiusZ * 0.6);
-        moveSpeed = sweepSpeed;
+        // 平時正常狀態：依照廣域巡邏點慢速掃描整個特訓院，完全不跟隨玩家！
+        const currentWp = SEARCHLIGHT_SWEEP_WAYPOINTS[sl.waypointIndex];
+        const distToWp = Math.hypot(currentWp.x - sl.currentGroundPos.x, currentWp.z - sl.currentGroundPos.z);
+
+        if (distToWp < 2.5) {
+          // 到達指定巡查區，在周邊慢速微幅扇形掃描 (dwellTimer 3.5s)
+          sl.dwellTimer += delta;
+          targetX = currentWp.x + Math.sin(sl.angle * 1.3) * 3.8;
+          targetZ = currentWp.z + Math.cos(sl.angle * 0.9) * 2.8;
+          moveSpeed = 1.2; // 慢速扇形擺動
+
+          if (sl.dwellTimer >= 3.5) {
+            sl.dwellTimer = 0;
+            // 隨機跳轉或依序推進至下一個巡檢點 (營造自然警戒氛圍)
+            let nextIdx = (sl.waypointIndex + 1) % SEARCHLIGHT_SWEEP_WAYPOINTS.length;
+            if (Math.random() < 0.35) {
+              nextIdx = Math.floor(Math.random() * SEARCHLIGHT_SWEEP_WAYPOINTS.length);
+            }
+            sl.waypointIndex = nextIdx;
+          }
+        } else {
+          targetX = currentWp.x;
+          targetZ = currentWp.z;
+          moveSpeed = sweepSpeed; // 1.8 m/s 慢速滑行
+        }
+
+        // 恢復平時柔和亮白/淡黃巡視光束
+        (sl.groundSpot.material as THREE.MeshBasicMaterial).color.setHex(0xfff5cc);
+        (sl.groundSpot.material as THREE.MeshBasicMaterial).opacity = 0.45;
+        (sl.coneMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfffae0);
+        (sl.coneMesh.material as THREE.MeshBasicMaterial).opacity = 0.16;
       }
 
       // 限制光斑在特訓校場圍牆範圍內
       targetX = THREE.MathUtils.clamp(targetX, -82, 82);
       targetZ = THREE.MathUtils.clamp(targetZ, -82, 82);
 
-      // 以合理物理角動量與平滑線速度步進，消除過快爆衝問題
+      // 平滑線速度位移
       const dx = targetX - sl.currentGroundPos.x;
       const dz = targetZ - sl.currentGroundPos.z;
       const distToTarget = Math.hypot(dx, dz);
@@ -1079,38 +1178,6 @@ export class DetentionWorld {
       // 燈頭與光錐精準朝向地面光斑
       _scratchLook.set(sl.currentGroundPos.x, 0.06, sl.currentGroundPos.z);
       sl.housing.lookAt(_scratchLook);
-
-      // 計算與玩家平面距離
-      const pDx = playerPos.x - sl.currentGroundPos.x;
-      const pDz = playerPos.z - sl.currentGroundPos.z;
-      const dist = Math.hypot(pDx, pDz);
-
-      if (dist < minDistance) {
-        minDistance = dist;
-      }
-
-      // 探照燈不可以穿過掩體：光線從塔頂 (sl.towerPos) 投向玩家 (playerPos, Y=1.2)
-      // 若射線路徑遭到任何掩體或建築實體碰撞箱遮擋，則判定掩體完全遮蔽！
-      const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
-
-      // 當玩家在光圈半徑 4.2m 內，且身處室外操場 (Y < 3.0) 且未被掩體遮擋
-      if (dist < 4.2 && isPlayerOutdoors && !isOccludedByCover) {
-        sl.isDetecting = true;
-        anyDetected = true;
-
-        // 探照燈光圈與光錐切換為高警戒亮紅色！
-        (sl.groundSpot.material as THREE.MeshBasicMaterial).color.setHex(0xff2222);
-        (sl.groundSpot.material as THREE.MeshBasicMaterial).opacity = 0.75;
-        (sl.coneMesh.material as THREE.MeshBasicMaterial).color.setHex(0xff3333);
-        (sl.coneMesh.material as THREE.MeshBasicMaterial).opacity = 0.35;
-      } else {
-        sl.isDetecting = false;
-        // 恢復平時亮白/淡黃巡視光束
-        (sl.groundSpot.material as THREE.MeshBasicMaterial).color.setHex(0xfff5cc);
-        (sl.groundSpot.material as THREE.MeshBasicMaterial).opacity = 0.45;
-        (sl.coneMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfffae0);
-        (sl.coneMesh.material as THREE.MeshBasicMaterial).opacity = 0.16;
-      }
     }
 
     return {
