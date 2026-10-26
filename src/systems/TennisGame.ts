@@ -21,6 +21,13 @@ export class TennisGame {
   public coachDefeated: boolean = false;
   public shuttlecocks: ShuttlecockProjectile[] = [];
 
+  // 大如老師 (羽球 BOSS) 動態步法與跑位 AI 系統
+  public peCoachRef?: NPC;
+  public coachTargetPos: THREE.Vector3 = new THREE.Vector3(77.0, 12.0, 31.0);
+  public coachMoveSpeed: number = 6.5;
+  public coachFootworkTimer: number = 0;
+  public coachCurrentAction: 'READY' | 'POSITIONING_SERVE' | 'SERVING' | 'RECOVERING' | 'CHASING' = 'READY';
+
   public openDialog(hud: HUD, onStart: () => void) {
     if (document.pointerLockElement) {
       document.exitPointerLock();
@@ -41,8 +48,11 @@ export class TennisGame {
     this.coachScore = 0;
     this.countdownTimer = 3.0;
     this.lastCountdownSec = 3;
-    this.serveTimer = 0.5;
+    this.serveTimer = 1.0;
     this.finishedTimer = 0;
+    this.peCoachRef = peCoach;
+    this.coachFootworkTimer = 0;
+    this.coachCurrentAction = 'READY';
 
     // 清空場上既有球體並處置資源
     for (const sc of this.shuttlecocks) {
@@ -52,12 +62,14 @@ export class TennisGame {
 
     // 定位教練至對面半場發球點 (77.0, 12.0, 31.0)，面朝 +Z 玩家半場
     if (peCoach) {
+      peCoach.isInBadmintonMatch = true;
       peCoach.position.set(77.0, 12.0, 31.0);
       peCoach.mesh.position.copy(peCoach.position);
       peCoach.rotationY = 0;
       peCoach.mesh.rotation.y = 0;
       peCoach.isChasing = false;
       peCoach.shuttlecockCooldown = 0;
+      this.coachTargetPos.set(77.0, 12.0, 31.0);
     }
 
     // 自動將玩家傳送至對面接球半場中心 (77.0, 12.0, 44.5)，面朝 -Z 教練發球點，相機置後對準球場正對 BOSS
@@ -84,7 +96,8 @@ export class TennisGame {
     hud: HUD,
     scene: THREE.Scene,
     onRewardCash: (amount: number) => void,
-    player?: Player
+    player?: Player,
+    peCoach?: NPC
   ) {
     this.tennisState = 'FINISHED';
     this.finishedTimer = 4.0;
@@ -92,6 +105,12 @@ export class TennisGame {
     // 比賽結束立即還原手上球拍造型為原本武器/空手
     if (player) {
       player.equipBadmintonRacket(false);
+    }
+
+    const coach = peCoach || this.peCoachRef;
+    if (coach) {
+      coach.isInBadmintonMatch = false;
+      coach.resetPose();
     }
 
     for (const sc of this.shuttlecocks) {
@@ -123,7 +142,7 @@ export class TennisGame {
   }
 
   // 重設/中止羽球比賽 (例如搭電梯、離場或切換世界時)
-  public resetMatch(scene: THREE.Scene, player?: Player) {
+  public resetMatch(scene: THREE.Scene, player?: Player, peCoach?: NPC) {
     this.tennisState = 'IDLE';
     this.finishedTimer = 0;
     for (const sc of this.shuttlecocks) {
@@ -133,6 +152,11 @@ export class TennisGame {
     this.updateScoreboard();
     if (player) {
       player.equipBadmintonRacket(false);
+    }
+    const coach = peCoach || this.peCoachRef;
+    if (coach) {
+      coach.isInBadmintonMatch = false;
+      coach.resetPose();
     }
   }
 
@@ -176,6 +200,10 @@ export class TennisGame {
         this.shuttlecocks = [];
         this.updateScoreboard();
         player.equipBadmintonRacket(false);
+        if (peCoach) {
+          peCoach.isInBadmintonMatch = false;
+          peCoach.resetPose();
+        }
         wantedSystem.showBanner('🏸 已離開 4F 羽球場，挑戰賽已終止。', 2500);
       }
     }
@@ -188,73 +216,171 @@ export class TennisGame {
         soundManager.playBroadcastChime();
         this.updateScoreboard();
       }
+      if (peCoach) {
+        peCoach.rotationY = 0;
+        peCoach.mesh.rotation.y = 0;
+        peCoach.animateBadmintonAction(delta, 0, false, false);
+      }
       if (this.countdownTimer <= 0) {
         this.tennisState = 'PLAYING';
-        this.serveTimer = 0.8;
+        this.serveTimer = 1.0;
         soundManager.playWhistle();
         this.updateScoreboard();
       }
     } else if (this.tennisState === 'PLAYING') {
       if (peCoach) {
-        peCoach.position.set(77.0, 12.0, 31.0);
-        peCoach.mesh.position.copy(peCoach.position);
-        peCoach.rotationY = 0;
-        peCoach.mesh.rotation.y = 0;
+        peCoach.isInBadmintonMatch = true;
         peCoach.isChasing = false;
+        this.coachFootworkTimer += delta;
 
-        this.serveTimer -= delta;
-        if (this.shuttlecocks.length === 0 && this.serveTimer <= 0) {
-          this.serveTimer = 2.4;
-          peCoach.shuttlecockCooldown = 0;
+        // 判斷當前羽球狀態：是否有球在場上？
+        const activeShuttle = this.shuttlecocks.length > 0 ? this.shuttlecocks[0] : null;
 
-          // 體育老師智慧球路多樣性系統 (4 大變速變線球路，動態判斷玩家站位，拒絕單一餵球)
-          const playerDistFromNet = playerPos.z - 37.0; // 網子在 Z=37.0
-          const rand = Math.random();
+        if (activeShuttle && activeShuttle.isReturned) {
+          // ==========================================
+          // 狀態 A：玩家已擊球回擊，教練全力飛奔迎球撲救 (CHASING)
+          // ==========================================
+          this.coachCurrentAction = 'CHASING';
+          this.coachMoveSpeed = 8.8; // 撲救高速衝刺步法
 
-          let targetX = 77.0;
-          let targetZ = 44.0;
-          let shotSpeed = 11.5;
-          let shotArc = 0.8;
+          // 預測羽球落點或攔截點：羽球朝 -Z 方向飛向教練半場
+          let predX = activeShuttle.position.x;
+          let predZ = activeShuttle.position.z;
+          if (activeShuttle.velocity.z < -0.1) {
+            // 估算羽球到達 Z ≈ 31.5 (攔截深度) 的時間
+            const t = Math.max(0, (31.5 - activeShuttle.position.z) / activeShuttle.velocity.z);
+            predX = activeShuttle.position.x + activeShuttle.velocity.x * t;
+            predZ = 31.5;
+          }
+          // 嚴格夾持在教練守備半場內 (X: 72.8 ~ 81.2, Z: 27.5 ~ 35.5)
+          this.coachTargetPos.x = THREE.MathUtils.clamp(predX, 72.8, 81.2);
+          this.coachTargetPos.z = THREE.MathUtils.clamp(predZ, 27.5, 35.5);
+          this.coachTargetPos.y = 12.0;
 
-          if (playerDistFromNet > 6.2 || (rand < 0.28 && playerDistFromNet > 4.5)) {
-            // 1. 網前放小球 (Drop Shot)：玩家退太後時，向上拋過網口急墜！
-            targetX = 75.0 + Math.random() * 4.0; // 75.0 ~ 79.0
-            targetZ = 40.2 + Math.random() * 1.5; // 40.2 ~ 41.7 (近網前)
-            shotSpeed = 10.2;
-            shotArc = 2.4; // 充足向上拋物線，高挑越過球網急墜
-            wantedSystem.showBanner('🏸 大如老師使出【網前放小球】！快前衝接球！', 1600);
-          } else if (playerDistFromNet < 5.0 || (rand >= 0.28 && rand < 0.52)) {
-            // 2. 後場高遠球 (Deep Lob)：玩家靠太近時，高拋底線死角！
-            targetX = Math.random() < 0.5 ? (73.8 + Math.random() * 1.2) : (79.0 + Math.random() * 1.2);
-            targetZ = 46.5 + Math.random() * 1.2; // 46.5 ~ 47.7 (底線深區)
-            shotSpeed = 12.2;
-            shotArc = 2.8; // 高挑彩虹向上拋物線
-            wantedSystem.showBanner('🏸 大如老師打出【後場底線高遠球】！迅速後撤回擊！', 1600);
-          } else if (rand >= 0.52 && rand < 0.80) {
-            // 3. 大對角斜線抽球 (Cross-Court Drive)：逼迫大跨步側移！
-            if (playerPos.x < 77.0) {
-              targetX = 79.6 + Math.random() * 1.2; // 逼打右側線
+        } else if (activeShuttle && !activeShuttle.isReturned) {
+          // ==========================================
+          // 狀態 B：球正飛向玩家半場，教練發球後迅速回防中場 T 點 (RECOVERING)
+          // ==========================================
+          this.coachCurrentAction = 'RECOVERING';
+          this.coachMoveSpeed = 6.2;
+          // 回防中場 T 點 (77.0, 12.0, 31.0)，並帶有微幅戰術側移墊步
+          const tacticalSway = Math.sin(this.coachFootworkTimer * 2.5) * 0.7;
+          this.coachTargetPos.set(77.0 + tacticalSway, 12.0, 31.0);
+
+        } else {
+          // ==========================================
+          // 狀態 C：場上無球，教練走位至發球區準備發球 (POSITIONING_SERVE)
+          // ==========================================
+          this.coachCurrentAction = 'POSITIONING_SERVE';
+          this.coachMoveSpeed = 5.5;
+
+          // 根據局分輪流站位：雙數分右發球區 (X≈79.2)，單數分左發球區 (X≈74.8)
+          const totalPoints = this.playerScore + this.coachScore;
+          const serveX = (totalPoints % 2 === 0) ? 79.2 : 74.8;
+          const serveZ = 32.5;
+          this.coachTargetPos.set(serveX, 12.0, serveZ);
+
+          // 發球倒數計時
+          this.serveTimer -= delta;
+          if (this.serveTimer <= 0) {
+            this.serveTimer = 2.4;
+            peCoach.shuttlecockCooldown = 0;
+
+            // 體育老師智慧球路多樣性系統 (4 大變速變線球路，動態判斷玩家站位，拒絕單一餵球)
+            const playerDistFromNet = playerPos.z - 37.0; // 網子在 Z=37.0
+            const rand = Math.random();
+
+            let targetX = 77.0;
+            let targetZ = 44.0;
+            let shotSpeed = 11.5;
+            let shotArc = 0.8;
+
+            if (playerDistFromNet > 6.2 || (rand < 0.28 && playerDistFromNet > 4.5)) {
+              // 1. 網前放小球 (Drop Shot)：玩家退太後時，向上拋過網口急墜！
+              targetX = 75.0 + Math.random() * 4.0; // 75.0 ~ 79.0
+              targetZ = 40.2 + Math.random() * 1.5; // 40.2 ~ 41.7 (近網前)
+              shotSpeed = 10.2;
+              shotArc = 2.4; // 充足向上拋物線，高挑越過球網急墜
+              wantedSystem.showBanner('🏸 大如老師使出【網前放小球】！快前衝接球！', 1600);
+            } else if (playerDistFromNet < 5.0 || (rand >= 0.28 && rand < 0.52)) {
+              // 2. 後場高遠球 (Deep Lob)：玩家靠太近時，高拋底線死角！
+              targetX = Math.random() < 0.5 ? (73.8 + Math.random() * 1.2) : (79.0 + Math.random() * 1.2);
+              targetZ = 46.5 + Math.random() * 1.2; // 46.5 ~ 47.7 (底線深區)
+              shotSpeed = 12.2;
+              shotArc = 2.8; // 高挑彩虹向上拋物線
+              wantedSystem.showBanner('🏸 大如老師打出【後場底線高遠球】！迅速後撤回擊！', 1600);
+            } else if (rand >= 0.52 && rand < 0.80) {
+              // 3. 大對角斜線抽球 (Cross-Court Drive)：逼迫大跨步側移！
+              if (playerPos.x < 77.0) {
+                targetX = 79.6 + Math.random() * 1.2; // 逼打右側線
+              } else {
+                targetX = 73.2 + Math.random() * 1.2; // 逼打左側線
+              }
+              targetZ = 43.5 + Math.random() * 1.8;
+              shotSpeed = 12.0;
+              shotArc = 2.2; // 向上拋物線越網
+              wantedSystem.showBanner('🏸 大如老師大角度【大對角斜線變線】！側步跨救！', 1600);
             } else {
-              targetX = 73.2 + Math.random() * 1.2; // 逼打左側線
+              // 4. 凌空暴扣殺球 (Thunder Smash)：高點下壓殺球，同樣具備向上起弧越網！
+              targetX = THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 2.2, 74.0, 80.0);
+              targetZ = 43.0 + Math.random() * 1.5;
+              shotSpeed = 13.5;
+              shotArc = 1.9; // 向上拋物線過網後俯衝
+              wantedSystem.showBanner('⚡ 大如老師凌空起跳【雷霆暴扣殺球】！看準時機揮拍！', 1600);
             }
-            targetZ = 43.5 + Math.random() * 1.8;
-            shotSpeed = 12.0;
-            shotArc = 2.2; // 向上拋物線越網
-            wantedSystem.showBanner('🏸 大如老師大角度【大對角斜線變線】！側步跨救！', 1600);
-          } else {
-            // 4. 凌空暴扣殺球 (Thunder Smash)：高點下壓殺球，同樣具備向上起弧越網！
-            targetX = THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 2.2, 74.0, 80.0);
-            targetZ = 43.0 + Math.random() * 1.5;
-            shotSpeed = 13.5;
-            shotArc = 1.9; // 向上拋物線過網後俯衝
-            wantedSystem.showBanner('⚡ 大如老師凌空起跳【雷霆暴扣殺球】！看準時機揮拍！', 1600);
-          }
 
-          _scratchServeTarget.set(targetX, 12.0, targetZ);
-          const proj = peCoach.tryShootShuttlecock(_scratchServeTarget, scene, 2.2, shotSpeed, shotArc);
-          if (proj) {
-            this.shuttlecocks.push(proj);
+            _scratchServeTarget.set(targetX, 12.0, targetZ);
+            const proj = peCoach.tryShootShuttlecock(_scratchServeTarget, scene, 2.2, shotSpeed, shotArc);
+            if (proj) {
+              this.shuttlecocks.push(proj);
+            }
           }
+        }
+
+        // ==========================================
+        // 實施教練步法平滑移動與方向插值 (0-GC 物理運動與動畫更新)
+        // ==========================================
+        const toTargetX = this.coachTargetPos.x - peCoach.position.x;
+        const toTargetZ = this.coachTargetPos.z - peCoach.position.z;
+        const distToTarget = Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ);
+
+        if (distToTarget > 0.08) {
+          const step = Math.min(distToTarget, this.coachMoveSpeed * delta);
+          peCoach.position.x += (toTargetX / distToTarget) * step;
+          peCoach.position.z += (toTargetZ / distToTarget) * step;
+          peCoach.position.y = 12.0;
+
+          // 嚴格夾持在 4F 羽球場北半場
+          peCoach.position.x = THREE.MathUtils.clamp(peCoach.position.x, 72.8, 81.2);
+          peCoach.position.z = THREE.MathUtils.clamp(peCoach.position.z, 27.2, 35.8);
+          peCoach.mesh.position.copy(peCoach.position);
+
+          // 跑位時面向：撲救時面向目標落點，回防與發球時面向玩家 (+Z)
+          let targetAngle = 0;
+          if (this.coachCurrentAction === 'CHASING') {
+            targetAngle = Math.atan2(toTargetX, toTargetZ);
+          }
+          let diff = targetAngle - peCoach.rotationY;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          peCoach.rotationY += diff * Math.min(delta * 9.0, 1.0);
+          peCoach.mesh.rotation.y = peCoach.rotationY;
+
+          peCoach.animateBadmintonAction(delta, this.coachMoveSpeed, true);
+        } else {
+          // 到達目標定點：教練保持面朝玩家，執行羽球防守準備墊步姿態 (Ready Bounce)
+          peCoach.position.x = this.coachTargetPos.x;
+          peCoach.position.z = this.coachTargetPos.z;
+          peCoach.position.y = 12.0;
+          peCoach.mesh.position.copy(peCoach.position);
+
+          let diff = 0 - peCoach.rotationY;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          peCoach.rotationY += diff * Math.min(delta * 8.0, 1.0);
+          peCoach.mesh.rotation.y = peCoach.rotationY;
+
+          peCoach.animateBadmintonAction(delta, 0, false);
         }
       }
     } else if (this.tennisState === 'FINISHED') {
@@ -313,14 +439,37 @@ export class TennisGame {
           this.playerScore += 1;
           this.updateScoreboard();
           if (peCoach) {
-            // 玩家擊球回擊：計算向上的彩虹高遠拋物線 (高挑躍過 Y=13.55 球網，徹底杜絕觸網)
-            const targetX = peCoach.position.x + (Math.random() - 0.5) * 1.5;
+            // 玩家擊球回擊：計算向上的彩虹高遠拋物線，巧妙打向教練半場的不同戰術落點 (左右大角、前場小球或底線)
+            let returnX = 77.0;
+            let returnZ = 31.0;
+            const rand = Math.random();
+
+            if (peCoach.position.x >= 77.0) {
+              // 教練偏右，玩家反抽左側大角度！
+              returnX = 73.8 + Math.random() * 1.6;
+            } else {
+              // 教練偏左，玩家抽向右側大角度！
+              returnX = 78.6 + Math.random() * 1.6;
+            }
+
+            if (rand < 0.35) {
+              // 前場吊球
+              returnZ = 34.2 + Math.random() * 1.2;
+            } else if (rand < 0.70) {
+              // 底線深遠球
+              returnZ = 28.2 + Math.random() * 1.5;
+            } else {
+              // 中場平抽
+              returnZ = 31.0 + Math.random() * 1.5;
+            }
+
+            const targetX = returnX;
             const targetY = 12.0 + 1.35;
-            const targetZ = peCoach.position.z + (Math.random() - 0.5) * 1.5;
+            const targetZ = returnZ;
 
             const dx = targetX - sc.position.x;
             const dz = targetZ - sc.position.z;
-            const flightTime = 1.15; // 1.15 秒高挑回擊飛行時間
+            const flightTime = 1.18; // 1.18 秒高挑回擊飛行時間
 
             const velX = dx / flightTime;
             const velZ = dz / flightTime;
@@ -345,11 +494,19 @@ export class TennisGame {
 
       // 成功回擊給教練：球飛回教練半場
       if (sc.isReturned && peCoach) {
-        if (sc.position.distanceTo(peCoach.position) < 2.5 || sc.position.z <= 31.5 || (sc.position.z <= 37.0 && sc.position.y <= 12.2)) {
+        const distToCoach = sc.position.distanceTo(peCoach.position);
+        const isLanded = sc.position.y <= 12.18 && sc.position.z <= 37.0;
+        if (distToCoach < 2.5 || sc.position.z <= 27.2 || isLanded) {
           soundManager.playBadmintonHit();
+          peCoach.triggerAttackAnimation();
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
           this.serveTimer = 2.0;
+          if (distToCoach < 2.5) {
+            wantedSystem.showBanner('🏸 大如老師飛身撲救截擊！精采來回！', 1600);
+          } else {
+            wantedSystem.showBanner('🏸 大如老師救球不及！玩家漂亮得分！', 1600);
+          }
           continue;
         }
       }

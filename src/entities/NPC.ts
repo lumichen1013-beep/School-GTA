@@ -93,6 +93,7 @@ export class NPC {
   public attackPower: number = 12;
   public attackRange: number = 1.6;
   public shuttlecockCooldown: number = 0; // 羽球發射遠程冷卻
+  public isInBadmintonMatch: boolean = false; // 是否正處於 4F 羽球挑戰賽中 (由 TennisGame 控制專業跑位步法)
 
   // HP 系統與倒地復活機制
   public hp: number;
@@ -2074,9 +2075,57 @@ export class NPC {
     if (this.mesh) {
       this.mesh.rotation.x = 0;
       this.mesh.rotation.z = 0;
-      if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
-        this.mesh.position.y = this.baseFloorY;
+      this.mesh.position.y = this.baseFloorY;
+    }
+  }
+
+  // 羽球專屬跑位、擊球與準備步態動畫 (0-GC，專業羽球米字步法與架拍防守姿態)
+  public animateBadmintonAction(
+    delta: number,
+    currentSpeed: number,
+    isMoving: boolean,
+    isSwinging: boolean = false
+  ) {
+    if (this.role !== 'PE_TEACHER_BOSS') return;
+
+    if (isSwinging || this.attackAnimTimer > 0) {
+      // 揮拍暴扣/抽球動作：右手大幅向前下壓揮動球拍，左手平衡輔助
+      if (this.rightArm) {
+        this.rightArm.rotation.set(-Math.PI * 0.55 + Math.sin(this.attackAnimTimer * 12.0) * 0.45, 0, 0);
       }
+      if (this.leftArm) {
+        this.leftArm.rotation.set(0.35, 0.2, -0.2);
+      }
+    } else if (isMoving && currentSpeed > 0.2) {
+      // 跑位步法 (米字步法衝刺/跨步跑動)：手臂與雙腿動態快速擺動
+      this.animTimer += delta * Math.min(18.0, Math.max(8.0, currentSpeed * 2.2));
+      const swingMag = Math.min(0.75, 0.35 + (currentSpeed / 8.0) * 0.4);
+      const legSwing = Math.sin(this.animTimer) * swingMag;
+
+      if (this.leftLeg) this.leftLeg.rotation.set(legSwing, 0, 0);
+      if (this.rightLeg) this.rightLeg.rotation.set(-legSwing, 0, 0);
+      if (this.leftArm) this.leftArm.rotation.set(-legSwing * 0.8, 0, -0.15);
+      if (this.rightArm) {
+        // 右手持拍半舉向前，隨跑動節奏自然微幅擺動
+        this.rightArm.rotation.set(-0.55 + legSwing * 0.5, 0.15, 0.15);
+      }
+      // 衝刺時身體微幅前傾與起伏
+      this.mesh.rotation.x = Math.min(0.12, currentSpeed * 0.015);
+      this.mesh.position.y = this.baseFloorY + Math.abs(Math.sin(this.animTimer * 2.0)) * 0.04;
+    } else {
+      // 待機/防守準備姿態 (Badminton Ready Bounce / 雙腳微屈彈跳墊步、提拍準備迎球)
+      this.animTimer += delta * 4.5;
+      const bounce = Math.abs(Math.sin(this.animTimer)) * 0.035;
+      this.mesh.position.y = this.baseFloorY + bounce;
+      this.mesh.rotation.x = 0.04; // 身體微前傾備戰
+
+      // 膝蓋微曲預備姿態
+      if (this.leftLeg) this.leftLeg.rotation.set(0.10, 0, -0.06);
+      if (this.rightLeg) this.rightLeg.rotation.set(0.10, 0, 0.06);
+
+      // 雙手在胸前架拍準備姿態 (經典羽球防守架拍)
+      if (this.rightArm) this.rightArm.rotation.set(-0.75, 0.20, 0.20);
+      if (this.leftArm) this.leftArm.rotation.set(-0.45, -0.20, -0.20);
     }
   }
 
@@ -3372,6 +3421,12 @@ export class NPC {
     if (this.attackAnimTimer > 0) this.attackAnimTimer -= delta;
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
+
+    // 4F 羽球比賽中：交由 TennisGame 全權精準控制大如老師的跑位、步法與接發球動作
+    if (this.role === 'PE_TEACHER_BOSS' && this.isInBadmintonMatch) {
+      this.updateHpBar();
+      return;
+    }
 
     // 2. 仇恨判定 (AI 狀態機)
     this.updateAggroState(
