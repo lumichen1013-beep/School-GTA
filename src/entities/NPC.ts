@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { soundManager } from '../audio/SoundEffects';
 
-export type NPCRole = 'STUDENT' | 'INSPECTOR' | 'TEACHER' | 'INSTRUCTOR' | 'DOG' | 'BIKE_PATROL' | 'BANDIT' | 'PE_TEACHER_BOSS';
+export type NPCRole = 'STUDENT' | 'INSPECTOR' | 'TEACHER' | 'INSTRUCTOR' | 'DOG' | 'BIKE_PATROL' | 'BANDIT' | 'PE_TEACHER_BOSS' | 'DODGE_TEACHER';
+
+export type NPCIdleBehavior = 'LOOK_AROUND' | 'PHONE' | 'STRETCH' | 'HANDS_BEHIND_BACK' | 'CHAT' | 'DOG_SNIFF' | 'DOG_SIT';
+export type NPCMovementStyle = 'CASUAL_WALK' | 'HURRIED_WALK' | 'JOGGING' | 'OFFICER_PATROL';
 
 export interface ShuttlecockProjectile {
   mesh: THREE.Group;
@@ -13,6 +16,13 @@ export interface ShuttlecockProjectile {
   isReturned?: boolean;
 }
 
+export interface NPCAfterimageItem {
+  group: THREE.Group;
+  materials: THREE.MeshBasicMaterial[];
+  life: number;
+  maxLife: number;
+}
+
 // 模組頂層靜態共享 Scratch Vectors (0-GC 避免每幀垃圾回收引發微卡頓)
 const _npcMoveDir = new THREE.Vector3();
 const _npcToPlayer = new THREE.Vector3();
@@ -20,6 +30,7 @@ const _npcForward = new THREE.Vector3();
 const _npcEyePos = new THREE.Vector3();
 const _npcTargetEye = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
+const _npcSafeTeleportResult = new THREE.Vector3();
 
 // 3D 羽球靜態共享幾何體與材質 (0-GC 全域快取複用，杜絕頻繁發球引發 GC 微卡頓或 GPU 洩漏)
 // 1. 軟木塞球頭 (Cork Head)：半徑約 0.075m 橢圓小球，位於飛行方向最前端 (+Z)
@@ -89,6 +100,15 @@ export class NPC {
   public lostSightTimer: number = 0; // 失去玩家視線計時器
   public lastKnownPos: THREE.Vector3 = new THREE.Vector3(); // 玩家最後被目擊位置
 
+  // NPC 多樣性行為與移動風格系統
+  public movementStyle: NPCMovementStyle = 'CASUAL_WALK';
+  public currentIdleBehavior: NPCIdleBehavior = 'LOOK_AROUND';
+  public isPaused: boolean = false;
+  public pauseTimer: number = 0;
+  public pauseAnimTimer: number = 0;
+  public pauseChance: number = 0.55;
+  public headMesh?: THREE.Mesh;
+
   private patrolWaypoints: THREE.Vector3[] = [];
   private currentWaypointIdx: number = 0;
   private animTimer: number = 0;
@@ -125,66 +145,163 @@ export class NPC {
   private koBadgeTexture: THREE.CanvasTexture;
   private lastKoBadgeSec: number = -1;
 
-  constructor(scene: THREE.Scene, startPos: THREE.Vector3, role: NPCRole, waypoints: THREE.Vector3[] = []) {
+  // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法系統
+  private sceneRef?: THREE.Scene;
+  private lastColliders: CollidableBox[] = [];
+  public isConversing: boolean = false;
+  private isDodging: boolean = false;
+  private dodgeTimer: number = 0;
+  private dodgeDuration: number = 0.24;
+  private dodgeSpeed: number = 8.0;
+  private dodgeSideSign: number = 1;
+  private dodgeDir: THREE.Vector3 = new THREE.Vector3();
+  private afterimageSpawnTimer: number = 0;
+
+  // 狗熊哆嗦毛 (連續瞬移 3 次，間隔 0.5s)
+  private isBearShaking: boolean = false;
+  private bearBlinkCount: number = 0;
+  private bearBlinkTimer: number = 0;
+  private bearOriginCenter: THREE.Vector3 = new THREE.Vector3();
+
+  // 自主演練身法計時器 (每 8~14 秒演練一次)
+  private dodgeTeacherPracticeTimer: number = 0;
+  private dodgeTeacherNextPracticeTime: number = 10.0;
+
+  // 0-GC 殘影物件池
+  private afterimages: NPCAfterimageItem[] = [];
+  private afterimageIndex: number = 0;
+
+  // 下雨天撐傘與避雨行為
+  public hasUmbrella: boolean = false;
+  private umbrellaMesh?: THREE.Group;
+  private rainChatTimer: number = 0;
+  private rainChatNextTime: number = 6.0;
+  private isDogSheltering: boolean = false;
+  private originalDogWaypoints: THREE.Vector3[] = [];
+  public static readonly DOG_SHELTER_POS = new THREE.Vector3(24.0, 0, 15.0);
+
+  // 頭頂技能名稱對話氣泡 (3D Billboard Sprite)
+  private skillBubbleSprite?: THREE.Sprite;
+  private skillBubbleCanvas?: HTMLCanvasElement;
+  private skillBubbleContext?: CanvasRenderingContext2D;
+  private skillBubbleTexture?: THREE.CanvasTexture;
+  private skillBubbleTimer: number = 0;
+  private skillBubbleDuration: number = 1.35;
+  private skillBubbleBaseY: number = 2.45;
+
+  constructor(
+    scene: THREE.Scene,
+    startPos: THREE.Vector3,
+    role: NPCRole,
+    waypoints: THREE.Vector3[] = [],
+    movementStyle?: NPCMovementStyle
+  ) {
     this.position = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
     this.role = role;
+    this.sceneRef = scene;
     this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), new THREE.Vector3(startPos.x + 8, startPos.y, startPos.z)];
 
-    // 初始化各角色數值：行走 5.0 | 跑步 10.0 | 騎車 15.0
-    if (role === 'PE_TEACHER_BOSS') {
+    // 隨機速度自然微擾動 (+/- 0.25 m/s)，破除千篇一律的僵硬同速
+    const speedJitter = (Math.random() - 0.5) * 0.5;
+
+    // 初始化各角色數值與多樣性風格
+    if (role === 'DODGE_TEACHER') {
+      // 閃身步老師 (教學大樓身法宗師)：血量 9999，行走 4.5，跑步 9.0
+      this.maxHp = 9999;
+      this.speed = 4.5;
+      this.chaseSpeed = 9.0;
+      this.attackPower = 0;
+      this.attackRange = 2.0;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.50;
+    } else if (role === 'PE_TEACHER_BOSS') {
       // 大如老師 (4F 羽球教練)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
       this.maxHp = 950;
       this.speed = 4.2;
       this.chaseSpeed = 8.5;
       this.attackPower = 28;
       this.attackRange = 2.4;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.40;
     } else if (role === 'TEACHER' || role === 'INSTRUCTOR') {
-      // 生教組長 / 教官：血量 315，行走 5.0，跑步 10.0
+      // 生教組長 / 教官：血量 315，威嚴步巡
       this.maxHp = 315;
-      this.speed = 5.0;
+      this.speed = 4.8 + speedJitter;
       this.chaseSpeed = 10.0;
       this.attackPower = 36;
       this.attackRange = 1.8;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.55;
     } else if (role === 'BANDIT') {
-      // 校外強盜：走路 8.5 (比單車巡邏快)，跑步 16.5 (超越單車極速 15.0)，攻擊力提高為兩倍 44
+      // 校外強盜：手持砍刀在圍牆外徘徊
       this.maxHp = 180;
-      this.speed = 8.5;
+      this.speed = 8.5 + speedJitter * 0.6;
       this.chaseSpeed = 16.5;
       this.attackPower = 44;
       this.attackRange = 1.9;
+      this.movementStyle = movementStyle || 'CASUAL_WALK';
+      this.pauseChance = 0.40;
     } else if (role === 'DOG') {
-      // 校犬柴柴：敏捷四足犬，巡邏步態 3.8，追捕奔馳 11.5，極速狂飆 13.8
+      // 校犬柴柴：敏捷四足犬，草皮漫步嗅聞與端坐休養
       this.maxHp = 630;
-      this.speed = 3.8;
+      this.speed = 3.8 + speedJitter * 0.4;
       this.chaseSpeed = 11.5;
       this.attackPower = 30;
       this.attackRange = 2.0;
+      this.movementStyle = 'CASUAL_WALK';
+      this.pauseChance = 0.65;
     } else if (role === 'BIKE_PATROL') {
-      // 火柴人自行車騎士：巡邏與追捕速度統一為 15.0 (與玩家騎乘火柴人自行車極速完全一致)
+      // 火柴人自行車騎士：巡邏與追捕速度統一為 15.0
       this.maxHp = 225;
       this.speed = 15.0;
       this.chaseSpeed = 15.0;
       this.attackPower = 26;
       this.attackRange = 2.4;
+      this.movementStyle = 'CASUAL_WALK';
+      this.pauseChance = 0.30;
     } else if (role === 'INSPECTOR') {
-      // 風紀糾察 (步巡)：血量 158，行走 5.0，跑步 10.0
+      // 風紀糾察 (步巡)：雙手負後巡查校園
       this.maxHp = 158;
-      this.speed = 5.0;
+      this.speed = 4.9 + speedJitter;
       this.chaseSpeed = 10.0;
       this.attackPower = 18;
       this.attackRange = 1.8;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.55;
     } else {
-      // 平民學生：血量 112，行走 5.0，跑步 10.0
+      // 平民學生 (多樣風格：散步、疾走、慢跑等)
       this.maxHp = 112;
-      this.speed = 5.0;
-      this.chaseSpeed = 10.0;
+      this.movementStyle = movementStyle || (Math.random() < 0.25 ? 'HURRIED_WALK' : 'CASUAL_WALK');
+      if (this.movementStyle === 'JOGGING') {
+        this.speed = 7.6 + speedJitter * 0.8; // 7.2 ~ 8.0 m/s
+        this.chaseSpeed = 10.8;
+        this.pauseChance = 0.25;
+      } else if (this.movementStyle === 'HURRIED_WALK') {
+        this.speed = 5.9 + speedJitter * 0.6; // 5.6 ~ 6.2 m/s
+        this.chaseSpeed = 10.0;
+        this.pauseChance = 0.45;
+      } else if (this.movementStyle === 'OFFICER_PATROL') {
+        this.speed = 4.8 + speedJitter;
+        this.chaseSpeed = 10.0;
+        this.pauseChance = 0.55;
+      } else {
+        // CASUAL_WALK 輕鬆散步學生
+        this.speed = 4.4 + speedJitter * 0.6; // 4.1 ~ 4.7 m/s
+        this.chaseSpeed = 9.8;
+        this.pauseChance = 0.60;
+      }
       this.attackPower = 12;
       this.attackRange = 1.6;
     }
     this.hp = this.maxHp;
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
     this.dynamicSpeed = this.speed;
+
+    // 下雨天隨身攜帶雨傘機率 (平民學生與師長約 75% 攜傘，25% 無傘)
+    if (role !== 'DOG' && role !== 'BIKE_PATROL' && role !== 'BANDIT' && role !== 'PE_TEACHER_BOSS') {
+      this.hasUmbrella = Math.random() < 0.75;
+    }
 
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ';
@@ -238,6 +355,62 @@ export class NPC {
     this.mesh.add(this.hpBarGroup);
 
     scene.add(this.mesh);
+
+    // 閃身步老師 (DODGE_TEACHER) 專屬技能對話氣泡與 0-GC 殘影物件池
+    if (this.role === 'DODGE_TEACHER') {
+      this.initSkillBubble();
+
+      // 初始化 8 組常駐殘影物件池 (0-GC，常駐場景)
+      const afterimageTorsoGeo = new THREE.BoxGeometry(0.65, 0.75, 0.35);
+      const afterimageHeadGeo = new THREE.BoxGeometry(0.38, 0.4, 0.38);
+      const afterimageArmGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
+      const afterimageLegGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
+
+      for (let i = 0; i < 8; i++) {
+        const g = new THREE.Group();
+        g.rotation.order = 'YXZ';
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false
+        });
+
+        const bMesh = new THREE.Mesh(afterimageTorsoGeo, mat);
+        bMesh.position.y = 1.05;
+        g.add(bMesh);
+
+        const hMesh = new THREE.Mesh(afterimageHeadGeo, mat);
+        hMesh.position.y = 1.62;
+        g.add(hMesh);
+
+        const lArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
+        lArmMesh.position.set(-0.45, 1.05, 0);
+        g.add(lArmMesh);
+
+        const rArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
+        rArmMesh.position.set(0.45, 1.05, 0);
+        g.add(rArmMesh);
+
+        const lLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
+        lLegMesh.position.set(-0.18, 0.35, 0);
+        g.add(lLegMesh);
+
+        const rLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
+        rLegMesh.position.set(0.18, 0.35, 0);
+        g.add(rLegMesh);
+
+        g.visible = false;
+        scene.add(g);
+
+        this.afterimages.push({
+          group: g,
+          materials: [mat],
+          life: 0,
+          maxLife: 0.3
+        });
+      }
+    }
   }
 
   // 更新昏迷休養倒數秒數告示牌 (加入 lastKoBadgeSec 快取節流，僅在秒數變更時重繪)
@@ -483,6 +656,7 @@ export class NPC {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.36, 0.35), skinMat);
     head.position.set(0, 1.62, 0.0);
     this.mesh.add(head);
+    this.headMesh = head;
 
     // 帽子 (糾察隊白便帽)
     const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.44), shirtMat);
@@ -537,6 +711,10 @@ export class NPC {
       // 大如老師：熱血深紅運動夾克與黑色運動長褲
       shirtColor = 0xc0392b;
       pantsColor = 0x2c3e50;
+    } else if (this.role === 'DODGE_TEACHER') {
+      // 閃身步老師：神秘深紫武術長袍配墨黑勁裝
+      shirtColor = 0x582c87;
+      pantsColor = 0x1e272e;
     }
 
     const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });
@@ -576,6 +754,17 @@ export class NPC {
       const whistle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.08), whistleMat);
       whistle.position.set(0, 1.22, 0.2);
       addHumanoidPart(whistle);
+    } else if (this.role === 'DODGE_TEACHER') {
+      // 閃身步老師：金色太極武術腰帶與身法束髮帶
+      const sashMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
+      const sash = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 0.38), sashMat);
+      sash.position.y = 0.72;
+      addHumanoidPart(sash);
+
+      const headBandMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa });
+      const headBand = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), headBandMat);
+      headBand.position.y = 1.76;
+      addHumanoidPart(headBand);
     }
 
     // 頭部
@@ -583,6 +772,7 @@ export class NPC {
     head.position.y = 1.62;
     head.castShadow = true;
     addHumanoidPart(head);
+    this.headMesh = head;
 
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
     hair.position.set(0, 0.16, 0);
@@ -645,6 +835,14 @@ export class NPC {
       this.rightArm.add(racketGroup);
     }
 
+    // 下雨天 3D Low-Poly 雨傘裝備 (Attached to right arm)
+    if (this.hasUmbrella) {
+      this.umbrellaMesh = this.buildUmbrellaModel();
+      this.umbrellaMesh.position.set(0, -0.28, 0.10);
+      this.umbrellaMesh.rotation.set(Math.PI * 0.65, -0.12, 0.12);
+      this.rightArm.add(this.umbrellaMesh);
+    }
+
     const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
     this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
     this.leftLeg.position.set(-0.18, 0.35, 0);
@@ -653,6 +851,66 @@ export class NPC {
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
     addHumanoidPart(this.rightLeg);
+  }
+
+  // 建造 3D Low-Poly 雨傘模型 (傘中棒、握把、10 角多邊傘面、頂端金屬針)
+  private buildUmbrellaModel(): THREE.Group {
+    const umbrella = new THREE.Group();
+    umbrella.name = 'umbrella';
+
+    // 隨機豐富傘面顏色 (8 款經典色調：黑、海軍藍、黃、紅、綠、紫、珊瑚粉、雅灰)
+    const umbrellaColors = [
+      0x1e272e, // 紳士墨黑
+      0x1e3799, // 皇家海軍藍
+      0xf6b93b, // 活力亮黃
+      0xe55039, // 熱情朱紅
+      0x079992, // 森林翡翠綠
+      0x6a0dad, // 優雅薰衣紫
+      0xff6b6b, // 珊瑚粉橘
+      0x7f8c8d  // 簡約雅灰
+    ];
+    const canopyColor = umbrellaColors[Math.floor(Math.random() * umbrellaColors.length)];
+
+    const shaftMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.6, roughness: 0.3 });
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+    const canopyMat = new THREE.MeshLambertMaterial({
+      color: canopyColor,
+      side: THREE.DoubleSide
+    });
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.8, roughness: 0.2 });
+
+    // 內部微調容器 (使傘面中心精確位於頭頂中央上方)
+    const rig = new THREE.Group();
+    rig.position.set(-0.16, 0, -0.06);
+
+    // 1. 傘中棒 (Shaft) - 向上延伸 1.15m
+    const shaftGeo = new THREE.CylinderGeometry(0.014, 0.014, 1.15, 8);
+    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+    shaft.position.y = 0.50;
+    rig.add(shaft);
+
+    // 2. 傘柄握把 (Grip)
+    const handleGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.14, 8);
+    const handle = new THREE.Mesh(handleGeo, handleMat);
+    handle.position.y = -0.05;
+    rig.add(handle);
+
+    // 3. 傘帽圓錐 (Canopy) - 10 角傘骨造型
+    const canopyGeo = new THREE.ConeGeometry(0.68, 0.34, 10, 1, true);
+    const canopy = new THREE.Mesh(canopyGeo, canopyMat);
+    canopy.position.y = 0.96;
+    canopy.castShadow = true;
+    rig.add(canopy);
+
+    // 4. 傘頂金屬尖端 (Ferrule Tip)
+    const tipGeo = new THREE.CylinderGeometry(0.01, 0.02, 0.10, 8);
+    const tip = new THREE.Mesh(tipGeo, tipMat);
+    tip.position.y = 1.16;
+    rig.add(tip);
+
+    umbrella.add(rig);
+    umbrella.visible = false;
+    return umbrella;
   }
 
   // 建造校外強盜 3D 外觀 (蒙面黑衣、手持鋼刀/砍刀)
@@ -677,6 +935,7 @@ export class NPC {
     head.position.y = 1.62;
     head.castShadow = true;
     this.mesh.add(head);
+    this.headMesh = head;
 
     // 黑色蒙面布 (覆蓋口鼻)
     const mask = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.22, 0.39), maskMat);
@@ -727,6 +986,7 @@ export class NPC {
 
   public getRoleTitle(): string {
     switch (this.role) {
+      case 'DODGE_TEACHER': return '閃身步老師';
       case 'PE_TEACHER_BOSS': return '大如老師';
       case 'BANDIT': return '校外強盜';
       case 'TEACHER': return '巡堂老師';
@@ -741,6 +1001,17 @@ export class NPC {
   // 受到傷害
   public takeDamage(amount: number): boolean {
     if (this.isKnockedDown) return false;
+    if (this.isPaused) this.cancelPause();
+    if (this.role === 'DODGE_TEACHER') {
+      if (this.isDodging || this.isBearShaking) return false;
+      // 閃身步老師受擊防衛：50% 機率隨機施展「閃身步」或「狗熊哆嗦毛」
+      if (Math.random() < 0.5) {
+        this.performFlashStep(this.lastColliders);
+      } else {
+        this.performBearShake(this.lastColliders);
+      }
+      return false;
+    }
 
     this.hp = Math.max(0, this.hp - amount);
     soundManager.playPunch();
@@ -759,6 +1030,7 @@ export class NPC {
     // 血量歸零：倒地倒下，碰撞箱全面失效，10 秒後滿血復活
     if (this.hp <= 0) {
       this.isKnockedDown = true;
+      if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
       this.isChasing = false;
       this.isBurstSprinting = false;
       this.dynamicSpeed = this.speed;
@@ -793,6 +1065,16 @@ export class NPC {
   // 單車衝撞與武器擊飛效果
   public launchFlying(impactDir: THREE.Vector3, force: number, damage: number): boolean {
     if (this.isKnockedDown) return false;
+    if (this.role === 'DODGE_TEACHER') {
+      if (this.isDodging || this.isBearShaking) return false;
+      // 閃身步老師衝撞防衛：50% 機率隨機施展「閃身步」或「狗熊哆嗦毛」
+      if (Math.random() < 0.5) {
+        this.performFlashStep(this.lastColliders);
+      } else {
+        this.performBearShake(this.lastColliders);
+      }
+      return false;
+    }
     if (this.hitCooldown > 0) return false;
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
@@ -836,6 +1118,8 @@ export class NPC {
   // 獲取各角色攻擊傷害與擊飛衝量規格
   public getAttackSpecs(): { damage: number; hForce: number; vForce: number } {
     switch (this.role) {
+      case 'DODGE_TEACHER':
+        return { damage: 0, hForce: 5.0, vForce: 2.0 };
       case 'PE_TEACHER_BOSS':
         // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
@@ -863,6 +1147,7 @@ export class NPC {
 
   // 失去自行車 (遭到玩家搶奪，妥善卸除並釋放單車零件與幾何體)
   public loseBike() {
+    if (this.isPaused) this.cancelPause();
     for (let i = 0; i < this.bikeParts.length; i++) {
       const part = this.bikeParts[i];
       part.visible = false;
@@ -889,6 +1174,9 @@ export class NPC {
     this.role = 'STUDENT';
     // 重建站立步行人形模型，並還原姿態
     this.buildHumanoidModel();
+    this.position.y = this.baseFloorY;
+    this.isKnockedFlying = false;
+    this.knockVelocity.set(0, 0, 0);
     this.mesh.rotation.set(0, this.rotationY, 0);
     this.mesh.position.set(this.position.x, this.baseFloorY, this.position.z);
     this.dynamicSpeed = 5.0;
@@ -1050,6 +1338,210 @@ export class NPC {
     };
   }
 
+  // 進入待機/發呆模式 (0-GC，隨機選取符合角色設定的多樣化行為)
+  public enterPauseState() {
+    this.isPaused = true;
+    this.pauseAnimTimer = 0;
+
+    if (this.role === 'DOG') {
+      this.currentIdleBehavior = Math.random() < 0.6 ? 'DOG_SNIFF' : 'DOG_SIT';
+      this.pauseTimer = this.currentIdleBehavior === 'DOG_SNIFF'
+        ? (3.0 + Math.random() * 2.5)
+        : (4.0 + Math.random() * 3.0);
+    } else if (this.role === 'BIKE_PATROL') {
+      this.currentIdleBehavior = 'LOOK_AROUND';
+      this.pauseTimer = 2.0 + Math.random() * 2.0;
+    } else if (this.role === 'BANDIT') {
+      this.currentIdleBehavior = Math.random() < 0.7 ? 'LOOK_AROUND' : 'PHONE';
+      this.pauseTimer = 2.5 + Math.random() * 2.5;
+    } else if (
+      this.role === 'TEACHER' ||
+      this.role === 'INSTRUCTOR' ||
+      this.role === 'INSPECTOR' ||
+      this.role === 'DODGE_TEACHER' ||
+      this.role === 'PE_TEACHER_BOSS'
+    ) {
+      const roll = Math.random();
+      if (roll < 0.55) {
+        this.currentIdleBehavior = 'HANDS_BEHIND_BACK';
+        this.pauseTimer = 3.5 + Math.random() * 2.5;
+      } else if (roll < 0.85) {
+        this.currentIdleBehavior = 'LOOK_AROUND';
+        this.pauseTimer = 3.0 + Math.random() * 2.0;
+      } else {
+        this.currentIdleBehavior = 'STRETCH';
+        this.pauseTimer = 2.5 + Math.random() * 1.5;
+      }
+    } else {
+      // 普通學生 STUDENT
+      if (this.movementStyle === 'JOGGING') {
+        this.currentIdleBehavior = Math.random() < 0.6 ? 'STRETCH' : 'LOOK_AROUND';
+        this.pauseTimer = 2.5 + Math.random() * 2.0;
+      } else {
+        const roll = Math.random();
+        if (roll < 0.40) {
+          this.currentIdleBehavior = 'PHONE';
+          this.pauseTimer = 3.5 + Math.random() * 2.5;
+        } else if (roll < 0.65) {
+          this.currentIdleBehavior = 'LOOK_AROUND';
+          this.pauseTimer = 2.5 + Math.random() * 2.0;
+        } else if (roll < 0.85) {
+          this.currentIdleBehavior = 'CHAT';
+          this.pauseTimer = 3.5 + Math.random() * 3.0;
+        } else {
+          this.currentIdleBehavior = 'STRETCH';
+          this.pauseTimer = 2.5 + Math.random() * 1.5;
+        }
+      }
+    }
+  }
+
+  // 中斷發呆狀態並還原姿態 (受擊、被通緝發現、廣播定格等即時響應)
+  public cancelPause() {
+    this.isPaused = false;
+    this.pauseTimer = 0;
+    this.resetPose();
+  }
+
+  // 重置 NPC 所有關節姿態至自然站立基準 (0-GC)
+  public resetPose() {
+    if (this.headMesh) {
+      this.headMesh.rotation.set(0, 0, 0);
+    }
+    if (this.dogHead) {
+      this.dogHead.rotation.set(0, 0, 0);
+      this.dogHead.position.set(0, 0.65, 0.48);
+    }
+    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
+    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
+    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+    if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.set(0, 0, 0);
+    if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.set(0, 0, 0);
+    if (this.dogBackLeftLeg) this.dogBackLeftLeg.rotation.set(0, 0, 0);
+    if (this.dogBackRightLeg) this.dogBackRightLeg.rotation.set(0, 0, 0);
+    if (this.dogTail) this.dogTail.rotation.set(0, 0, 0);
+    if (this.mesh) {
+      this.mesh.rotation.x = 0;
+      this.mesh.rotation.z = 0;
+      if (this.role === 'DOG') {
+        this.mesh.position.y = this.baseFloorY;
+      }
+    }
+  }
+
+  // 待機/發呆行為多樣性程序化動作 (0-GC 純量運算)
+  private applyIdleAnimation(delta: number) {
+    if (this.role === 'DOG') {
+      if (this.currentIdleBehavior === 'DOG_SNIFF') {
+        // 低頭嗅聞青草，尾巴歡快輕搖
+        if (this.dogHead) {
+          this.dogHead.rotation.x = 0.42 + Math.sin(this.pauseAnimTimer * 3.5) * 0.05;
+          this.dogHead.position.set(0, 0.42, 0.58);
+        }
+        if (this.dogTail) {
+          this.dogTail.rotation.y = Math.sin(this.pauseAnimTimer * 5.0) * 0.42;
+        }
+        if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.x = 0;
+        if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.x = 0;
+        if (this.dogBackLeftLeg) this.dogBackLeftLeg.rotation.x = 0;
+        if (this.dogBackRightLeg) this.dogBackRightLeg.rotation.x = 0;
+      } else {
+        // DOG_SIT 乖巧端坐，警覺環顧
+        this.mesh.rotation.x = -0.32;
+        this.mesh.position.y = this.baseFloorY + 0.08;
+        if (this.dogHead) {
+          this.dogHead.rotation.x = 0.32;
+          this.dogHead.rotation.y = Math.sin(this.pauseAnimTimer * 1.2) * 0.38;
+          this.dogHead.position.set(0, 0.65, 0.48);
+        }
+        if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.x = 0.32;
+        if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.x = 0.32;
+        if (this.dogBackLeftLeg) this.dogBackLeftLeg.rotation.x = -0.7;
+        if (this.dogBackRightLeg) this.dogBackRightLeg.rotation.x = -0.7;
+        if (this.dogTail) this.dogTail.rotation.y = Math.sin(this.pauseAnimTimer * 1.5) * 0.15;
+      }
+      return;
+    }
+
+    if (this.role === 'BIKE_PATROL') {
+      // 單車巡邏暫停：轉頭巡視路口
+      if (this.headMesh) {
+        this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 1.5) * 0.5;
+      }
+      return;
+    }
+
+    // 人型角色肢體動作
+    switch (this.currentIdleBehavior) {
+      case 'PHONE': {
+        // 低頭滑手機 (頭部前傾約 20 度，雙手曲肘於胸前捧著手機操作)
+        if (this.headMesh) {
+          this.headMesh.rotation.x = 0.36 + Math.sin(this.pauseAnimTimer * 2.0) * 0.02;
+          this.headMesh.rotation.y = 0;
+        }
+        if (this.leftArm) this.leftArm.rotation.set(-0.95 + Math.sin(this.pauseAnimTimer * 2.0) * 0.03, 0.35, -0.15);
+        if (this.rightArm) this.rightArm.rotation.set(-1.00 + Math.sin(this.pauseAnimTimer * 2.0) * 0.03, -0.35, 0.15);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'STRETCH': {
+        // 伸懶腰、深呼吸擴胸、上身微仰、手臂大張伸展
+        if (this.headMesh) this.headMesh.rotation.x = -0.22;
+        this.mesh.rotation.x = -0.08;
+        const stretchBob = Math.sin(this.pauseAnimTimer * 2.5) * 0.12;
+        if (this.leftArm) this.leftArm.rotation.set(-2.45 + stretchBob, 0, -0.45);
+        if (this.rightArm) this.rightArm.rotation.set(-2.45 + stretchBob, 0, 0.45);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'LOOK_AROUND': {
+        // 站立環顧四周、頭部平滑向左向右巡視
+        if (this.headMesh) {
+          this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 1.4) * 0.65;
+          this.headMesh.rotation.x = Math.sin(this.pauseAnimTimer * 0.7) * 0.08;
+        }
+        if (this.leftArm) this.leftArm.rotation.set(0, 0, -0.05);
+        if (this.rightArm) this.rightArm.rotation.set(0, 0, 0.05);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'HANDS_BEHIND_BACK': {
+        // 威嚴負手 (老師/教官/糾察專屬，雙手背身後，姿態挺拔)
+        if (this.headMesh) {
+          this.headMesh.rotation.x = 0;
+          this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 0.9) * 0.18;
+        }
+        if (this.leftArm) this.leftArm.rotation.set(0.38, 0.25, -0.15);
+        if (this.rightArm) this.rightArm.rotation.set(0.38, -0.25, 0.15);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'CHAT': {
+        // 學生交談互動、點頭回應、手勢比劃
+        if (this.headMesh) {
+          this.headMesh.rotation.x = 0.06 + Math.sin(this.pauseAnimTimer * 3.5) * 0.07;
+          this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 1.5) * 0.22;
+        }
+        const g = Math.sin(this.pauseAnimTimer * 2.8);
+        if (this.rightArm) this.rightArm.rotation.set(-0.75 + g * 0.25, -0.2, 0.2);
+        if (this.leftArm) this.leftArm.rotation.set(-0.25 + Math.sin(this.pauseAnimTimer * 1.8) * 0.1, 0.1, -0.1);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+    }
+
+    // 若下雨天正撐著傘，右手始終穩固高舉雨傘於頭頂上方
+    if (this.umbrellaMesh?.visible && this.rightArm) {
+      this.rightArm.rotation.set(-Math.PI * 0.65, 0.12, -0.12);
+    }
+  }
+
   // 清除仇恨與追擊狀態
   public resetAggro() {
     this.isChasing = false;
@@ -1062,6 +1554,7 @@ export class NPC {
 
   // 觸發全校廣播立正定格發呆
   public freeze(duration: number = 4.0) {
+    if (this.isPaused) this.cancelPause();
     this.freezeTimer = duration;
     this.isChasing = false;
     this.isBurstSprinting = false;
@@ -1142,8 +1635,8 @@ export class NPC {
       return false;
     }
 
-    // 大如老師：處於和平教學與挑戰模式，不主動鎖定或追捕玩家
-    if (this.role === 'PE_TEACHER_BOSS') {
+    // 大如老師 / 閃身步老師：處於和平教學與身法傳授模式，不主動鎖定或追捕玩家
+    if (this.role === 'PE_TEACHER_BOSS' || this.role === 'DODGE_TEACHER') {
       return false;
     }
 
@@ -1239,6 +1732,7 @@ export class NPC {
       const isPlayerOutside = playerPos.z >= 105.5 || Math.abs(playerPos.x) >= 105.5 || playerPos.z <= -105.5;
       const distSq = this.position.distanceToSquared(playerPos);
       if (isPlayerOutside && distSq < 2025.0) { // 45.0m
+        if (this.isPaused) this.cancelPause();
         this.isChasing = true;
         this.lostSightTimer = 0;
         this.lastKnownPos.copy(playerPos);
@@ -1268,6 +1762,7 @@ export class NPC {
     // 發現玩家觸發追逐 (通緝中且在視距內)
     const spotDistSq = this.role === 'DOG' ? 400.0 : 324.0; // 20m vs 18m
     if (wantedLevel > 0 && seesPlayer && distSq < spotDistSq && this.role !== 'STUDENT') {
+      if (this.isPaused) this.cancelPause();
       this.isChasing = true;
       this.lostSightTimer = 0;
       this.lastKnownPos.copy(playerPos);
@@ -1325,6 +1820,293 @@ export class NPC {
     return this.speed;
   }
 
+  // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
+  public performFlashStep(colliders: CollidableBox[] = []) {
+    if (this.isKnockedDown) return;
+
+    this.isDodging = true;
+    this.dodgeDuration = 0.24;
+    this.dodgeTimer = this.dodgeDuration;
+    this.dodgeSpeed = 8.0; // 8.0 m/s * 0.24s = 1.92m (恰好 2 個身位寬度)
+    this.afterimageSpawnTimer = 0;
+
+    // 隨機 50% 機率朝左或朝右橫向閃身
+    this.dodgeSideSign = Math.random() < 0.5 ? -1 : 1;
+    this.dodgeDir.set(
+      Math.cos(this.rotationY) * this.dodgeSideSign,
+      0,
+      -Math.sin(this.rotationY) * this.dodgeSideSign
+    ).normalize();
+
+    // 頭頂彈出「💨 閃身步」對話氣泡
+    this.showSkillBubble('💨 閃身步', false);
+
+    // 疾風破空音效
+    soundManager.playDodge(false);
+
+    // 初始位置產生第 1 道破空殘影 (青色微光)
+    this.spawnAfterimage(0x38bdf8, 0.28);
+  }
+
+  // 施展技能：狗熊哆嗦毛 (4 個身位半徑內連續瞬移 3 次，間隔 0.5s，紫色暗芒殘影，100% 障礙物安全)
+  public performBearShake(colliders: CollidableBox[] = []) {
+    if (this.isKnockedDown) return;
+
+    this.isBearShaking = true;
+    this.isDodging = true;
+    this.bearBlinkCount = 0;
+    this.bearBlinkTimer = 0;
+    this.bearOriginCenter.copy(this.position);
+
+    // 頭頂彈出「🐻 狗熊哆嗦毛」對話氣泡
+    this.showSkillBubble('🐻 狗熊哆嗦毛', true);
+
+    // 立即觸發第 1 次瞬移 (0.0s)
+    this.executeBearBlink(colliders);
+  }
+
+  // 執行狗熊哆嗦毛單次瞬移
+  private executeBearBlink(colliders: CollidableBox[]) {
+    const purpleColors = [0xa855f7, 0x9333ea, 0xc084fc];
+    const color = purpleColors[this.bearBlinkCount % purpleColors.length];
+    this.spawnAfterimage(color, 0.7);
+
+    const safePos = this.findSafeTeleportPos(
+      this.bearOriginCenter.x,
+      this.bearOriginCenter.z,
+      this.bearOriginCenter.y,
+      colliders.length > 0 ? colliders : this.lastColliders
+    );
+
+    this.position.copy(safePos);
+    this.mesh.position.copy(safePos);
+
+    this.rotationY = Math.random() * Math.PI * 2;
+    this.mesh.rotation.y = this.rotationY;
+
+    soundManager.playDodge(true);
+    this.bearBlinkCount++;
+  }
+
+  // 尋找瞬移安全目標點 (0-GC，檢測障礙物碰撞與地面高度，絕不穿出走廊外牆)
+  private findSafeTeleportPos(centerX: number, centerZ: number, currentY: number, colliders: CollidableBox[]): THREE.Vector3 {
+    const halfWidth = 0.45;
+    const height = 1.8;
+    const minRadius = 1.8;
+    const maxRadius = 4.2;
+
+    for (let attempt = 0; attempt < 14; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = minRadius + Math.random() * (maxRadius - minRadius);
+      const candX = centerX + Math.cos(angle) * dist;
+      const candZ = centerZ + Math.sin(angle) * dist;
+
+      let blocked = false;
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
+        if (box.isFloorOnly) continue;
+        if (
+          candX + halfWidth > box.min.x &&
+          candX - halfWidth < box.max.x &&
+          candZ + halfWidth > box.min.z &&
+          candZ - halfWidth < box.max.z &&
+          currentY + height > box.min.y &&
+          currentY + 0.3 < box.max.y
+        ) {
+          blocked = true;
+          break;
+        }
+      }
+
+      if (!blocked) {
+        let groundY = this.baseFloorY;
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
+          if (
+            candX + halfWidth > box.min.x &&
+            candX - halfWidth < box.max.x &&
+            candZ + halfWidth > box.min.z &&
+            candZ - halfWidth < box.max.z
+          ) {
+            if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
+              const t = THREE.MathUtils.clamp((candZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
+              const rampY = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
+              if (rampY <= currentY + 0.85 && rampY > groundY) {
+                groundY = rampY;
+              }
+            } else {
+              if (box.max.y <= currentY + 0.85 && box.max.y > groundY) {
+                groundY = box.max.y;
+              }
+            }
+          }
+        }
+        _npcSafeTeleportResult.set(candX, groundY, candZ);
+        return _npcSafeTeleportResult;
+      }
+    }
+
+    _npcSafeTeleportResult.set(centerX, currentY, centerZ);
+    return _npcSafeTeleportResult;
+  }
+
+  // 產生 0-GC 角色殘影
+  private spawnAfterimage(colorHex: number, duration: number) {
+    if (this.afterimages.length === 0) return;
+    const item = this.afterimages[this.afterimageIndex];
+    this.afterimageIndex = (this.afterimageIndex + 1) % this.afterimages.length;
+
+    item.materials[0].color.setHex(colorHex);
+    item.materials[0].opacity = 0.75;
+    item.life = duration;
+    item.maxLife = duration;
+
+    item.group.position.copy(this.position);
+    item.group.rotation.copy(this.mesh.rotation);
+
+    const children = item.group.children;
+    if (this.headMesh && children[1]) children[1].rotation.copy(this.headMesh.rotation);
+    if (this.leftArm && children[2]) children[2].rotation.copy(this.leftArm.rotation);
+    if (this.rightArm && children[3]) children[3].rotation.copy(this.rightArm.rotation);
+    if (this.leftLeg && children[4]) children[4].rotation.copy(this.leftLeg.rotation);
+    if (this.rightLeg && children[5]) children[5].rotation.copy(this.rightLeg.rotation);
+
+    item.group.visible = true;
+  }
+
+  // 每幀更新殘影透明度與生命週期
+  public updateAfterimages(delta: number) {
+    for (let i = 0; i < this.afterimages.length; i++) {
+      const item = this.afterimages[i];
+      if (item.life > 0) {
+        item.life -= delta;
+        if (item.life <= 0) {
+          item.life = 0;
+          item.group.visible = false;
+        } else {
+          const ratio = item.life / item.maxLife;
+          item.materials[0].opacity = 0.75 * Math.sin(ratio * Math.PI * 0.5);
+        }
+      }
+    }
+  }
+
+  // 延遲初始化對話氣泡 Sprite (0-GC，按需建立畫布與紋理)
+  private initSkillBubble() {
+    if (this.skillBubbleSprite) return;
+
+    this.skillBubbleCanvas = document.createElement('canvas');
+    this.skillBubbleCanvas.width = 380;
+    this.skillBubbleCanvas.height = 110;
+    this.skillBubbleContext = this.skillBubbleCanvas.getContext('2d')!;
+    this.skillBubbleTexture = new THREE.CanvasTexture(this.skillBubbleCanvas);
+    this.skillBubbleTexture.minFilter = THREE.LinearFilter;
+
+    const bubbleMat = new THREE.SpriteMaterial({
+      map: this.skillBubbleTexture,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false
+    });
+    this.skillBubbleSprite = new THREE.Sprite(bubbleMat);
+    this.skillBubbleSprite.scale.set(2.2, 0.64, 1.0);
+    this.skillBubbleSprite.position.set(0, this.skillBubbleBaseY, 0);
+    this.skillBubbleSprite.visible = false;
+    this.mesh.add(this.skillBubbleSprite);
+  }
+
+  // 繪製頭頂技能名稱對話方框 (CanvasTexture 0-GC)
+  private drawSkillBubble(text: string, isAdvanced: boolean) {
+    this.initSkillBubble();
+    if (!this.skillBubbleContext || !this.skillBubbleCanvas) return;
+    const ctx = this.skillBubbleContext;
+    const w = this.skillBubbleCanvas.width;
+    const h = this.skillBubbleCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const bubbleW = w - 24;
+    const bubbleH = h - 28;
+    const x = 12;
+    const y = 8;
+    const r = 22;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + bubbleW - r, y);
+    ctx.quadraticCurveTo(x + bubbleW, y, x + bubbleW, y + r);
+    ctx.lineTo(x + bubbleW, y + bubbleH - r);
+    ctx.quadraticCurveTo(x + bubbleW, y + bubbleH, x + bubbleW - r, y + bubbleH);
+    ctx.lineTo(w / 2 + 12, y + bubbleH);
+    ctx.lineTo(w / 2, y + bubbleH + 16);
+    ctx.lineTo(w / 2 - 12, y + bubbleH);
+    ctx.lineTo(x + r, y + bubbleH);
+    ctx.quadraticCurveTo(x, y + bubbleH, x, y + bubbleH - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.fill();
+
+    ctx.strokeStyle = isAdvanced ? 'rgba(168, 85, 247, 0.85)' : 'rgba(56, 189, 248, 0.85)';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    const fontSize = text.length > 9 ? 24 : (text.length > 6 ? 28 : 34);
+    ctx.font = `bold ${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f8fafc';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.fillText(text, w / 2, y + bubbleH / 2 - 1);
+
+    ctx.restore();
+    if (this.skillBubbleTexture) this.skillBubbleTexture.needsUpdate = true;
+  }
+
+  // 通用頭頂氣泡對話彈出方法 (可自訂顯示時間)
+  public showSpeechBubble(text: string, isSpecial: boolean = false, duration: number = 2.4) {
+    this.initSkillBubble();
+    this.skillBubbleDuration = duration;
+    this.drawSkillBubble(text, isSpecial);
+    this.skillBubbleTimer = this.skillBubbleDuration;
+    if (this.skillBubbleSprite) {
+      this.skillBubbleSprite.position.y = this.skillBubbleBaseY;
+      (this.skillBubbleSprite.material as THREE.SpriteMaterial).opacity = 0.95;
+      this.skillBubbleSprite.visible = true;
+    }
+  }
+
+  // 相容閃身步技能氣泡
+  public showSkillBubble(text: string, isAdvanced: boolean) {
+    this.showSpeechBubble(text, isAdvanced, 1.35);
+  }
+
+  public updateSkillBubble(delta: number) {
+    if (this.skillBubbleTimer > 0 && this.skillBubbleSprite) {
+      this.skillBubbleTimer -= delta;
+      const progress = 1.0 - (this.skillBubbleTimer / this.skillBubbleDuration);
+      this.skillBubbleSprite.position.y = this.skillBubbleBaseY + progress * 0.25;
+
+      const mat = this.skillBubbleSprite.material as THREE.SpriteMaterial;
+      if (progress < 0.60) {
+        mat.opacity = 0.95;
+      } else {
+        mat.opacity = 0.95 * (1.0 - (progress - 0.60) / 0.40);
+      }
+
+      if (this.skillBubbleTimer <= 0) {
+        this.skillBubbleSprite.visible = false;
+        mat.opacity = 0;
+      }
+    }
+  }
+
   public update(
     delta: number,
     playerPos: THREE.Vector3,
@@ -1332,9 +2114,171 @@ export class NPC {
     colliders: CollidableBox[],
     onSpotPlayer: () => void,
     isPlayerRidingBike: boolean = false,
-    isPlayerDead: boolean = false
+    isPlayerDead: boolean = false,
+    isRaining: boolean = false,
+    isThunderstorm: boolean = false
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
+    this.lastColliders = colliders;
+
+    const isOutdoor = this.baseFloorY < 1.0;
+    const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
+
+    // 傘的顯示與收納狀態更新 (室內、倒地、追捕或雨停時自動收傘)
+    if (this.umbrellaMesh) {
+      if (isRaining && isOutdoorHumanoid && this.hasUmbrella && !this.isKnockedDown && !this.isChasing) {
+        this.umbrellaMesh.visible = true;
+      } else {
+        this.umbrellaMesh.visible = false;
+      }
+    }
+
+    // 校犬柴柴避雨邏輯：下雨時主動前往避雨走廊端坐，雨停後解除並恢復原校園巡邏路徑
+    if (this.role === 'DOG') {
+      if (isRaining && !this.isChasing && !this.isKnockedDown) {
+        if (!this.isDogSheltering) {
+          this.isDogSheltering = true;
+          this.originalDogWaypoints = [...this.patrolWaypoints];
+          this.patrolWaypoints = [NPC.DOG_SHELTER_POS.clone()];
+          this.currentWaypointIdx = 0;
+          this.showSpeechBubble('🐾 汪！(跑去走廊躲雨)', false, 2.2);
+        }
+        if (this.position.distanceTo(NPC.DOG_SHELTER_POS) < 1.4) {
+          if (!this.isPaused || this.currentIdleBehavior !== 'DOG_SIT') {
+            this.isPaused = true;
+            this.currentIdleBehavior = 'DOG_SIT';
+            this.pauseTimer = 999999;
+            this.mesh.rotation.y = -Math.PI * 0.5; // 面朝西側草坪雨景
+          }
+        }
+      } else if (!isRaining && this.isDogSheltering) {
+        this.isDogSheltering = false;
+        if (this.originalDogWaypoints.length > 0) {
+          this.patrolWaypoints = this.originalDogWaypoints;
+        }
+        if (this.isPaused && this.currentIdleBehavior === 'DOG_SIT') {
+          this.cancelPause();
+          this.resetPose();
+        }
+      }
+    }
+
+    // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法邏輯更新
+    if (this.role === 'DODGE_TEACHER') {
+      // 演武計時器 (若未倒地、未處於對話中、未在施展身法中，每 8~14 秒自主展示身法絕學)
+      if (!this.isKnockedDown && !this.isConversing && !this.isDodging && !this.isBearShaking) {
+        this.dodgeTeacherPracticeTimer += delta;
+        if (this.dodgeTeacherPracticeTimer >= this.dodgeTeacherNextPracticeTime) {
+          this.dodgeTeacherPracticeTimer = 0;
+          this.dodgeTeacherNextPracticeTime = 8.0 + Math.random() * 6.0;
+          if (Math.random() < 0.5) {
+            this.performFlashStep(colliders);
+          } else {
+            this.performBearShake(colliders);
+          }
+        }
+      }
+
+      // 狗熊哆嗦毛連續瞬移中 (連續瞬移 3 次，間隔 0.5s)
+      if (this.isBearShaking) {
+        this.bearBlinkTimer += delta;
+
+        if (this.bearBlinkCount === 1 && this.bearBlinkTimer >= 0.5) {
+          this.executeBearBlink(colliders);
+        } else if (this.bearBlinkCount === 2 && this.bearBlinkTimer >= 1.0) {
+          this.executeBearBlink(colliders);
+        } else if (this.bearBlinkTimer >= 1.5) {
+          this.isBearShaking = false;
+          this.isDodging = false;
+          this.mesh.rotation.z = 0;
+        }
+
+        if (this.isBearShaking) {
+          const shakePhase = this.bearBlinkTimer * 45.0;
+          this.mesh.rotation.z = Math.sin(shakePhase) * 0.16;
+          if (this.leftArm) this.leftArm.rotation.z = 0.35 + Math.cos(shakePhase) * 0.28;
+          if (this.rightArm) this.rightArm.rotation.z = -0.35 - Math.cos(shakePhase) * 0.28;
+          if (this.headMesh) this.headMesh.rotation.y = Math.sin(shakePhase * 0.9) * 0.25;
+
+          this.mesh.position.copy(this.position);
+          this.updateSkillBubble(delta);
+          this.updateAfterimages(delta);
+          return;
+        }
+      }
+
+      // 閃身步橫向破空衝刺中 (位移 2 個身位 ~1.92m，沿障礙物滑動不穿牆)
+      if (this.isDodging) {
+        this.dodgeTimer -= delta;
+        if (this.dodgeTimer <= 0) {
+          this.isDodging = false;
+          this.mesh.rotation.z = 0;
+        } else {
+          const moveStepX = this.dodgeDir.x * this.dodgeSpeed * delta;
+          const moveStepZ = this.dodgeDir.z * this.dodgeSpeed * delta;
+          const radius = 0.45;
+
+          // X 軸防穿牆檢測
+          const nextX = this.position.x + moveStepX;
+          let hitX = false;
+          for (let i = 0; i < colliders.length; i++) {
+            const box = colliders[i];
+            if (box.isFloorOnly) continue;
+            if (
+              nextX + radius > box.min.x &&
+              nextX - radius < box.max.x &&
+              this.position.z + radius > box.min.z &&
+              this.position.z - radius < box.max.z &&
+              this.position.y + 0.3 < box.max.y &&
+              this.position.y + 1.6 > box.min.y
+            ) {
+              hitX = true;
+              break;
+            }
+          }
+          if (!hitX) this.position.x = nextX;
+
+          // Z 軸防穿牆檢測
+          const nextZ = this.position.z + moveStepZ;
+          let hitZ = false;
+          for (let i = 0; i < colliders.length; i++) {
+            const box = colliders[i];
+            if (box.isFloorOnly) continue;
+            if (
+              this.position.x + radius > box.min.x &&
+              this.position.x - radius < box.max.x &&
+              nextZ + radius > box.min.z &&
+              nextZ - radius < box.max.z &&
+              this.position.y + 0.3 < box.max.y &&
+              this.position.y + 1.6 > box.min.y
+            ) {
+              hitZ = true;
+              break;
+            }
+          }
+          if (!hitZ) this.position.z = nextZ;
+
+          // 定期產生青色破空殘影
+          this.afterimageSpawnTimer -= delta;
+          if (this.afterimageSpawnTimer <= 0) {
+            this.afterimageSpawnTimer = 0.05;
+            this.spawnAfterimage(0x38bdf8, 0.28);
+          }
+
+          // 側向傾斜
+          const progress = 1.0 - (this.dodgeTimer / this.dodgeDuration);
+          this.mesh.rotation.z = -this.dodgeSideSign * 0.22 * Math.sin(progress * Math.PI);
+
+          this.mesh.position.copy(this.position);
+          this.updateSkillBubble(delta);
+          this.updateAfterimages(delta);
+          return;
+        }
+      }
+
+      this.updateSkillBubble(delta);
+      this.updateAfterimages(delta);
+    }
 
     // 全校廣播定格發呆 (聽廣播立正站好，中斷一切追擊與攻擊動作)
     if (this.freezeTimer > 0) {
@@ -1517,13 +2461,57 @@ export class NPC {
       currentSpeed = this.dynamicSpeed;
     } else {
       this.isBurstSprinting = false;
-      this.dynamicSpeed = this.speed;
-      currentSpeed = this.speed;
+
+      // 下雨天沒帶傘的 NPC：1.45 倍速度前傾快步避雨
+      if (isRaining && isOutdoorHumanoid && !this.hasUmbrella) {
+        if (this.isPaused) this.cancelPause();
+        currentSpeed = this.speed * 1.45;
+        this.dynamicSpeed = currentSpeed;
+      } else {
+        this.dynamicSpeed = this.speed;
+        currentSpeed = this.speed;
+      }
+
+      // 若處於發呆/待機中，執行待機行為動畫，暫停前進
+      if (this.isPaused) {
+        this.pauseTimer -= delta;
+        this.pauseAnimTimer += delta;
+        this.applyIdleAnimation(delta);
+
+        if (this.pauseTimer <= 0) {
+          this.isPaused = false;
+          this.resetPose();
+          this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+        }
+
+        // 頭頂 3D 浮動血條永遠面朝視角/玩家
+        const dx = playerPos.x - this.position.x;
+        const dz = playerPos.z - this.position.z;
+        if (dx * dx + dz * dz > 0.01) {
+          const ang = Math.atan2(dx, dz);
+          this.hpBarGroup.rotation.y = ang - this.rotationY;
+        }
+        return;
+      }
 
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
-      const wpDistSq = this.role === 'BIKE_PATROL' ? 12.25 : 3.24; // 火柴人自行車 15m/s 適度擴大檢查半徑 (3.5m) 避免高速繞圈
+      const wpDistSq = this.role === 'BIKE_PATROL' ? 12.25 : (this.movementStyle === 'JOGGING' ? 4.84 : 3.24); // 火柴人自行車 15m/s 適度擴大檢查半徑 (3.5m) 避免高速繞圈
       if (this.position.distanceToSquared(targetPos) < wpDistSq) {
-        this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+        // 下雨天沒帶傘時絕不停留發呆，持續快步尋找遮蔽處
+        const canPause = (!isRaining || !isOutdoorHumanoid || this.hasUmbrella) && Math.random() < this.pauseChance;
+        if (canPause) {
+          this.enterPauseState();
+          const dx = playerPos.x - this.position.x;
+          const dz = playerPos.z - this.position.z;
+          if (dx * dx + dz * dz > 0.01) {
+            const ang = Math.atan2(dx, dz);
+            this.hpBarGroup.rotation.y = ang - this.rotationY;
+          }
+          return;
+        } else {
+          this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+          targetPos = this.patrolWaypoints[this.currentWaypointIdx];
+        }
       }
     }
 
@@ -1673,7 +2661,9 @@ export class NPC {
       // 動態步頻：步態頻率與實際位移速度嚴格成比例！
       const animRate = this.role === 'DOG'
         ? Math.max(8.0, currentSpeed * 2.2 + 2.0)
-        : (this.isChasing ? (this.isBurstSprinting ? 16.0 : 9.5) : 8.0);
+        : (this.isChasing
+          ? (this.isBurstSprinting ? 16.0 : 9.5)
+          : (this.movementStyle === 'JOGGING' ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5)));
       this.animTimer += delta * animRate;
 
       if (this.role === 'DOG') {
@@ -1702,19 +2692,83 @@ export class NPC {
         if (this.bikeFrontWheel) this.bikeFrontWheel.rotation.x += spin;
         if (this.bikeRearWheel) this.bikeRearWheel.rotation.x += spin;
       } else {
-        // 人型 NPC 擺手走路與攻擊動作
-        const swingMag = this.isChasing ? (this.isBurstSprinting ? 0.70 : 0.38) : 0.35;
-        const swing = Math.sin(this.animTimer) * swingMag;
-        if (this.leftArm) this.leftArm.rotation.x = -swing;
-        if (this.rightArm) {
-          if (this.attackAnimTimer > 0) {
-            this.rightArm.rotation.x = -Math.PI / 2; // 出拳揮打
+        // 人型 NPC 動作 (追捕揮拳 vs 各類步行風格)
+        if (this.isChasing) {
+          const swingMag = this.isBurstSprinting ? 0.70 : 0.38;
+          const swing = Math.sin(this.animTimer) * swingMag;
+          if (this.leftArm) this.leftArm.rotation.set(-swing, 0, 0);
+          if (this.rightArm) {
+            if (this.attackAnimTimer > 0) {
+              this.rightArm.rotation.set(-Math.PI / 2, 0, 0); // 出拳揮打
+            } else {
+              this.rightArm.rotation.set(swing, 0, 0);
+            }
+          }
+          if (this.leftLeg) this.leftLeg.rotation.set(swing, 0, 0);
+          if (this.rightLeg) this.rightLeg.rotation.set(-swing, 0, 0);
+        } else {
+          if (this.umbrellaMesh?.visible) {
+            // 下雨天撐傘步行動作：右手高舉撐傘於頭頂上方，左手輕快單側擺動，步態悠閒穩定
+            if (this.rightArm) this.rightArm.rotation.set(-Math.PI * 0.65, 0.12, -0.12);
+            const swing = Math.sin(this.animTimer) * 0.32;
+            if (this.leftArm) this.leftArm.rotation.set(-swing, 0, 0);
+            if (this.leftLeg) this.leftLeg.rotation.set(swing, 0, 0);
+            if (this.rightLeg) this.rightLeg.rotation.set(-swing, 0, 0);
+            this.mesh.rotation.x = 0;
+            if (this.headMesh) this.headMesh.rotation.x = 0;
+          } else if (isRaining && isOutdoorHumanoid && !this.hasUmbrella) {
+            // 下雨天沒帶傘快步避雨動作：低頭縮頸、上身前傾 12 度、雙臂急促擺動小跑步尋找掩蔽
+            const swing = Math.sin(this.animTimer * 1.35) * 0.54;
+            if (this.leftArm) this.leftArm.rotation.set(-swing - 0.25, 0, -0.1);
+            if (this.rightArm) this.rightArm.rotation.set(swing - 0.25, 0, 0.1);
+            if (this.leftLeg) this.leftLeg.rotation.set(swing * 0.95, 0, 0);
+            if (this.rightLeg) this.rightLeg.rotation.set(-swing * 0.95, 0, 0);
+            this.mesh.rotation.x = 0.14; // 上身前傾衝刺
+            if (this.headMesh) this.headMesh.rotation.x = 0.30; // 低頭縮頸避雨
+            this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2.0)) * 0.04;
           } else {
-            this.rightArm.rotation.x = swing;
+            // 晴天或非雨天：重置低頭與前傾
+            if (this.headMesh && Math.abs(this.headMesh.rotation.x) > 0.01) {
+              this.headMesh.rotation.x = 0;
+            }
+            if (this.mesh && Math.abs(this.mesh.rotation.x) > 0.01 && this.movementStyle !== 'HURRIED_WALK') {
+              this.mesh.rotation.x = 0;
+            }
+
+            // 非追擊時根據 movementStyle 呈現豐富步行風格
+            if (this.movementStyle === 'JOGGING') {
+              // 操場跑者慢跑：雙臂 90 度屈肘前後大幅度擺動，步伐輕快且帶有垂直律動
+              const swing = Math.sin(this.animTimer) * 0.52;
+              if (this.leftArm) this.leftArm.rotation.set(-0.75 - swing, 0, -0.15);
+              if (this.rightArm) this.rightArm.rotation.set(-0.75 + swing, 0, 0.15);
+              if (this.leftLeg) this.leftLeg.rotation.set(swing * 0.9, 0, 0);
+              if (this.rightLeg) this.rightLeg.rotation.set(-swing * 0.9, 0, 0);
+              this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * 0.04;
+            } else if (this.movementStyle === 'OFFICER_PATROL') {
+              // 師長/糾察威嚴步巡：雙手背在身後，步伐沉穩有力
+              if (this.leftArm) this.leftArm.rotation.set(0.38, 0.25, -0.15);
+              if (this.rightArm) this.rightArm.rotation.set(0.38, -0.25, 0.15);
+              const swing = Math.sin(this.animTimer) * 0.30;
+              if (this.leftLeg) this.leftLeg.rotation.set(swing, 0, 0);
+              if (this.rightLeg) this.rightLeg.rotation.set(-swing, 0, 0);
+            } else if (this.movementStyle === 'HURRIED_WALK') {
+              // 趕課疾走：手臂擺動大且身軀微微前傾
+              const swing = Math.sin(this.animTimer) * 0.46;
+              if (this.leftArm) this.leftArm.rotation.set(-swing, 0, 0);
+              if (this.rightArm) this.rightArm.rotation.set(swing, 0, 0);
+              if (this.leftLeg) this.leftLeg.rotation.set(swing, 0, 0);
+              if (this.rightLeg) this.rightLeg.rotation.set(-swing, 0, 0);
+              this.mesh.rotation.x = 0.06;
+            } else {
+              // CASUAL_WALK 輕鬆散步
+              const swing = Math.sin(this.animTimer) * 0.32;
+              if (this.leftArm) this.leftArm.rotation.set(-swing, 0, 0);
+              if (this.rightArm) this.rightArm.rotation.set(swing, 0, 0);
+              if (this.leftLeg) this.leftLeg.rotation.set(swing, 0, 0);
+              if (this.rightLeg) this.rightLeg.rotation.set(-swing, 0, 0);
+            }
           }
         }
-        if (this.leftLeg) this.leftLeg.rotation.x = swing;
-        if (this.rightLeg) this.rightLeg.rotation.x = -swing;
       }
     }
 
@@ -1731,6 +2785,45 @@ export class NPC {
       const ang = Math.atan2(dx, dz);
       this.hpBarGroup.rotation.y = ang - this.rotationY;
     }
+
+    // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC)
+    if (isRaining && isOutdoorHumanoid && !this.isKnockedDown && !this.isChasing) {
+      const distToPlayerSq = this.position.distanceToSquared(playerPos);
+      if (distToPlayerSq < 625.0) { // < 25m
+        this.rainChatTimer += delta;
+        if (this.rainChatTimer >= this.rainChatNextTime) {
+          this.rainChatTimer = 0;
+          this.rainChatNextTime = 8.0 + Math.random() * 12.0;
+
+          if (isThunderstorm && Math.random() < 0.40) {
+            this.showSpeechBubble('⚡ 哇！這雷好嚇人！', true, 2.6);
+          } else if (this.hasUmbrella) {
+            const umbrellaLines = [
+              '☔ 還好有帶傘',
+              '☔ 幸好今天有帶傘！',
+              '🌧️ 這雨下得真大...',
+              '☔ 撐好傘慢慢走～'
+            ];
+            this.showSpeechBubble(umbrellaLines[Math.floor(Math.random() * umbrellaLines.length)], false, 2.5);
+          } else {
+            const noUmbrellaLines = [
+              '🌧️ 雨好大！沒帶傘慘了！',
+              '🏃 完蛋了沒帶傘！快跑！',
+              '💦 衣服都要淋濕了！',
+              '🏃 趕快找地方避雨！'
+            ];
+            this.showSpeechBubble(noUmbrellaLines[Math.floor(Math.random() * noUmbrellaLines.length)], true, 2.5);
+          }
+        }
+      }
+    } else {
+      this.rainChatTimer = 0;
+    }
+
+    // 更新頭頂對話氣泡 (任何角色若有對話氣泡皆能正常更新淡出)
+    if (this.skillBubbleTimer > 0) {
+      this.updateSkillBubble(delta);
+    }
   }
 
   // 完整釋放 NPC 佔用的幾何體、材質、畫布與 GPU 紋理 (Resource Disposal)
@@ -1740,6 +2833,19 @@ export class NPC {
     }
     if (this.koBadgeSprite?.material) {
       this.koBadgeSprite.material.dispose();
+    }
+    if (this.skillBubbleTexture) {
+      this.skillBubbleTexture.dispose();
+    }
+    if (this.skillBubbleSprite?.material) {
+      (this.skillBubbleSprite.material as THREE.Material).dispose();
+    }
+    for (const item of this.afterimages) {
+      if (scene) scene.remove(item.group);
+      else if (item.group.parent) item.group.parent.remove(item.group);
+      for (const m of item.materials) {
+        m.dispose();
+      }
     }
     this.mesh.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export interface CollidableBox {
   min: THREE.Vector3;
@@ -241,6 +242,9 @@ export class CampusWorld {
 
     // 10. 校園外圍圍牆與四面環繞環校馬路
     this.buildBoundaryWalls();
+
+    // 10.5 都會摩天大樓天際線與世界實體物理邊界 (幾何體合併 0 效能負擔)
+    this.buildCitySkyline();
 
     // 11. 方案 D 趣味設施：學務處廣播台、操場 200m 起跑/終點拱門 (東主直道北端 Z: 14)
     this.buildBroadcastStation(30, 0, 18);
@@ -1913,6 +1917,143 @@ export class CampusWorld {
     ey2.rotation.x = -Math.PI / 2;
     ey2.position.set(118.15, 0.03, 0);
     this.scene.add(ey2);
+  }
+
+  // 建立外圍摩天大都會天際線與世界實體邊界 (0 效能負擔：幾何體合併為 2~3 個 Draw Call，無陰影計算，自然大氣霧融景)
+  private buildCitySkyline() {
+    const mainBuildingGeos: THREE.BufferGeometry[] = [];
+    const windowBandGeos: THREE.BufferGeometry[] = [];
+    const roofDetailGeos: THREE.BufferGeometry[] = [];
+
+    // 偽隨機確定性種子，確保天際線建築每次高度造型一致穩定
+    let seed = 12345;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
+    // 建立單棟摩天大樓幾何體
+    const addSkyscraper = (cx: number, cz: number, w: number, d: number) => {
+      const height = 36 + seededRandom() * 42; // 36m ~ 78m 摩天高樓
+      const bGeo = new THREE.BoxGeometry(w, height, d);
+      bGeo.translate(cx, height / 2, cz);
+      mainBuildingGeos.push(bGeo);
+
+      // 現代都會窗格橫條 / 玻璃帷幕條帶 (每隔 4.2m 一層窗帶)
+      const floorCount = Math.floor(height / 4.2);
+      for (let f = 1; f < floorCount; f++) {
+        const floorY = f * 4.2;
+        const winGeo = new THREE.BoxGeometry(w + 0.15, 1.8, d + 0.15);
+        winGeo.translate(cx, floorY, cz);
+        windowBandGeos.push(winGeo);
+      }
+
+      // 頂部造型 (女兒牆退縮 / 頂部機房 / 通訊天線)
+      const roofStyle = seededRandom();
+      if (roofStyle < 0.45) {
+        // 階梯退縮層 (Stepped Setback)
+        const stepH = 6.0 + seededRandom() * 5.0;
+        const stepGeo = new THREE.BoxGeometry(w * 0.65, stepH, d * 0.65);
+        stepGeo.translate(cx, height + stepH / 2, cz);
+        roofDetailGeos.push(stepGeo);
+
+        // 頂部通訊天線 (Antenna)
+        const antGeo = new THREE.CylinderGeometry(0.2, 0.4, 9.0, 6);
+        antGeo.translate(cx, height + stepH + 4.5, cz);
+        roofDetailGeos.push(antGeo);
+      } else if (roofStyle < 0.8) {
+        // 直升機停機坪或中央機房盒 (Helipad / Equipment Penthouse)
+        const pentH = 4.0;
+        const pentGeo = new THREE.BoxGeometry(w * 0.75, pentH, d * 0.75);
+        pentGeo.translate(cx, height + pentH / 2, cz);
+        roofDetailGeos.push(pentGeo);
+      } else {
+        // 斜切頂部金字塔天頂
+        const topH = 8.0;
+        const topGeo = new THREE.ConeGeometry(w * 0.4, topH, 4);
+        topGeo.rotateY(Math.PI / 4);
+        topGeo.translate(cx, height + topH / 2, cz);
+        roofDetailGeos.push(topGeo);
+      }
+    };
+
+    // 1. 北側摩天大樓群 (Z: -146，X: -155 ~ 155)
+    for (let x = -150; x <= 150; x += 22) {
+      const w = 18 + seededRandom() * 5;
+      const d = 18 + seededRandom() * 4;
+      addSkyscraper(x, -146, w, d);
+    }
+
+    // 2. 南側摩天大樓群 (Z: 146，X: -155 ~ 155)
+    for (let x = -150; x <= 150; x += 22) {
+      const w = 18 + seededRandom() * 5;
+      const d = 18 + seededRandom() * 4;
+      addSkyscraper(x, 146, w, d);
+    }
+
+    // 3. 西側摩天大樓群 (X: -146，Z: -128 ~ 128)
+    for (let z = -128; z <= 128; z += 22) {
+      const w = 18 + seededRandom() * 4;
+      const d = 18 + seededRandom() * 5;
+      addSkyscraper(-146, z, w, d);
+    }
+
+    // 4. 東側摩天大樓群 (X: 146，Z: -128 ~ 128)
+    for (let z = -128; z <= 128; z += 22) {
+      const w = 18 + seededRandom() * 4;
+      const d = 18 + seededRandom() * 5;
+      addSkyscraper(146, z, w, d);
+    }
+
+    // 合併幾何體 (Merge Geometries) -> 徹底壓到僅 2~3 個 Draw Calls!
+    const mergedMain = mergeGeometries(mainBuildingGeos);
+    const mergedWindows = mergeGeometries(windowBandGeos);
+    const mergedRoofs = mergeGeometries(roofDetailGeos);
+
+    const mainBuildingMat = new THREE.MeshLambertMaterial({
+      color: 0x243342, // 深冷灰黑岩石花崗岩色調
+    });
+
+    const windowGlassMat = new THREE.MeshLambertMaterial({
+      color: 0x4a69bd, // 都會冷藍玻璃帷幕
+      emissive: 0x1b2838,
+      emissiveIntensity: 0.25
+    });
+
+    const roofMat = new THREE.MeshLambertMaterial({
+      color: 0x1e272e, // 深灰水泥/金屬頂樓造型
+    });
+
+    if (mergedMain) {
+      const mainMesh = new THREE.Mesh(mergedMain, mainBuildingMat);
+      mainMesh.castShadow = false; // 嚴格關閉陰影計算
+      mainMesh.receiveShadow = true;
+      this.scene.add(mainMesh);
+    }
+
+    if (mergedWindows) {
+      const winMesh = new THREE.Mesh(mergedWindows, windowGlassMat);
+      winMesh.castShadow = false;
+      winMesh.receiveShadow = true;
+      this.scene.add(winMesh);
+    }
+
+    if (mergedRoofs) {
+      const roofMesh = new THREE.Mesh(mergedRoofs, roofMat);
+      roofMesh.castShadow = false;
+      roofMesh.receiveShadow = true;
+      this.scene.add(roofMesh);
+    }
+
+    // 5. 新增四面堅不可摧的世界物理邊界碰撞盒 (CollidableBox)，防止玩家或單車衝入地圖外虛空
+    // 北邊界 (Z: -156 ~ -136)
+    this.addCollider(-165, 165, -156, -136, 0, 90);
+    // 南邊界 (Z: 136 ~ 156)
+    this.addCollider(-165, 165, 136, 156, 0, 90);
+    // 西邊界 (X: -156 ~ -136)
+    this.addCollider(-156, -136, -165, 165, 0, 90);
+    // 東邊界 (X: 136 ~ 156)
+    this.addCollider(136, 156, -165, 165, 0, 90);
   }
 
   // 13. 演藝大樓 (1~3F 打通挑高國際演藝大禮堂，4F 為專業室內羽球館)

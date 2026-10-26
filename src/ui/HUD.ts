@@ -39,6 +39,7 @@ export interface MissionTrackerData {
   hasEscapedDog: boolean;
   hasWishedPond: boolean;
   hasTastedHotFood: boolean;
+  dodgeSkillLevel: number;
 }
 
 export class HUD {
@@ -61,6 +62,9 @@ export class HUD {
   private crosshairEl: HTMLElement | null;
   private cashTextEl: HTMLElement | null;
   private poisonVignetteEl: HTMLElement | null;
+  private weatherBadgeEl: HTMLElement | null;
+  private weatherTextEl: HTMLElement | null;
+  public onWeatherToggle?: () => void;
 
   // Boss HUD
   private bossHudEl: HTMLElement | null;
@@ -87,6 +91,29 @@ export class HUD {
   public isTennisDialogOpen: boolean = false;
   private onTennisStartCallback?: () => void;
 
+  // 教學大樓 閃身步老師對話視窗
+  private dodgeTeacherModalEl: HTMLElement | null;
+  private dodgeCloseBtnEl: HTMLElement | null;
+  private dodgeLearnBtnEl: HTMLButtonElement | null;
+  private dodgeCancelBtnEl: HTMLElement | null;
+  private dodgeDialogTextEl: HTMLElement | null;
+  private dodgeCashValEl: HTMLElement | null;
+  public isDodgeDialogOpen: boolean = false;
+  private onDodgeLearnCallback?: (targetLevel: number) => void;
+
+  // 技能 HUD 展示槽
+  private skillHudCardEl: HTMLElement | null;
+  private skillIconEl: HTMLElement | null;
+  private skillNameEl: HTMLElement | null;
+  private skillDescEl: HTMLElement | null;
+  private skillCdNumberEl: HTMLElement | null;
+  private skillCooldownOverlayEl: HTMLElement | null;
+
+  // 任務看板身法項目
+  private qDodgeItem: HTMLElement | null;
+  private qDodgeDesc: HTMLElement | null;
+  private qDodgeStatus: HTMLElement | null;
+
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
@@ -107,6 +134,15 @@ export class HUD {
     this.crosshairEl = document.getElementById('crosshair');
     this.cashTextEl = document.getElementById('cash-text');
     this.poisonVignetteEl = document.getElementById('poison-vignette');
+    this.weatherBadgeEl = document.getElementById('weather-badge');
+    this.weatherTextEl = document.getElementById('weather-text');
+
+    if (this.weatherBadgeEl) {
+      this.weatherBadgeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.onWeatherToggle) this.onWeatherToggle();
+      });
+    }
 
     this.bossHudEl = document.getElementById('boss-hud');
     this.bossHpTextEl = document.getElementById('boss-hp-text');
@@ -149,6 +185,33 @@ export class HUD {
         }
       });
     }
+
+    // 教學大樓 閃身步老師對話元素
+    this.dodgeTeacherModalEl = document.getElementById('dodge-teacher-modal');
+    this.dodgeCloseBtnEl = document.getElementById('dodge-dialog-close-btn');
+    this.dodgeLearnBtnEl = document.getElementById('dodge-btn-learn') as HTMLButtonElement | null;
+    this.dodgeCancelBtnEl = document.getElementById('dodge-btn-cancel');
+    this.dodgeDialogTextEl = document.getElementById('dodge-dialog-text');
+    this.dodgeCashValEl = document.getElementById('dodge-dialog-cash-val');
+
+    if (this.dodgeCloseBtnEl) {
+      this.dodgeCloseBtnEl.addEventListener('click', () => {
+        this.closeDodgeDialog();
+      });
+    }
+    if (this.dodgeCancelBtnEl) {
+      this.dodgeCancelBtnEl.addEventListener('click', () => {
+        this.closeDodgeDialog();
+      });
+    }
+
+    // 技能 HUD 卡片元素
+    this.skillHudCardEl = document.getElementById('skill-hud-card');
+    this.skillIconEl = document.getElementById('skill-icon');
+    this.skillNameEl = document.getElementById('skill-name');
+    this.skillDescEl = document.getElementById('skill-desc-text');
+    this.skillCdNumberEl = document.getElementById('skill-cd-number');
+    this.skillCooldownOverlayEl = document.getElementById('skill-cooldown-overlay');
 
     this.shotMeterEl = document.getElementById('shot-meter');
     this.shotSweetspotEl = document.getElementById('shot-sweetspot');
@@ -208,6 +271,10 @@ export class HUD {
 
     this.qHotfoodItem = document.getElementById('q-hotfood-item');
     this.qHotfoodStatus = document.getElementById('q-hotfood-status');
+
+    this.qDodgeItem = document.getElementById('q-dodge-item');
+    this.qDodgeDesc = document.getElementById('q-dodge-desc');
+    this.qDodgeStatus = document.getElementById('q-dodge-status');
 
     if (this.questTrackerToggleBtn) {
       this.questTrackerToggleBtn.addEventListener('click', () => {
@@ -407,6 +474,12 @@ export class HUD {
       this.bgmIconEl.textContent = '🎵';
       this.bgmTextEl.textContent = 'BGM: 校園漫步';
       this.bgmToggleBtnEl.textContent = '[開]';
+    }
+  }
+
+  public updateWeatherHUD(badgeText: string) {
+    if (this.weatherTextEl && this.weatherTextEl.textContent !== badgeText) {
+      this.weatherTextEl.textContent = badgeText;
     }
   }
 
@@ -774,9 +847,39 @@ export class HUD {
       }
     }
 
+    // 12. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛)
+    const dodgeLvl = data.dodgeSkillLevel || 0;
+    const dodgeDone = dodgeLvl >= 1;
+    if (dodgeDone) completedCount++;
+    if (this.qDodgeItem) {
+      if (dodgeDone) this.qDodgeItem.classList.add('completed');
+      else this.qDodgeItem.classList.remove('completed');
+    }
+    if (this.qDodgeDesc) {
+      if (dodgeLvl === 0) this.qDodgeDesc.textContent = '尋訪教學大樓「閃身步老師」學習技能【閃身步】 (0/2)';
+      else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻5s)，可進階狗熊哆嗦毛 (1/2)';
+      else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻2s，完全精通) (2/2)';
+    }
+    if (this.qDodgeStatus) {
+      if (dodgeLvl === 0) {
+        this.qDodgeStatus.textContent = '未習得';
+        this.qDodgeStatus.className = 'q-status';
+      } else if (dodgeLvl === 1) {
+        this.qDodgeStatus.textContent = '閃身步 ✅';
+        this.qDodgeStatus.className = 'q-status done';
+      } else {
+        this.qDodgeStatus.textContent = '大成 🌟';
+        this.qDodgeStatus.className = 'q-status done';
+      }
+    }
+
     // 更新總進度與進度條
     if (this.qTotalProgress) {
-      this.qTotalProgress.textContent = `${completedCount}/12`;
+      this.qTotalProgress.textContent = `${completedCount}/13`;
+    }
+    if (this.qTotalBar) {
+      const totalPct = Math.round((completedCount / 13) * 100);
+      this.qTotalBar.style.width = `${totalPct}%`;
     }
     if (this.qTotalBar) {
       const pct = Math.min(100, Math.round((completedCount / 12) * 100));
@@ -865,6 +968,122 @@ export class HUD {
       this.tennisModalEl.style.display = 'none';
       this.isTennisDialogOpen = false;
       this.onTennisStartCallback = undefined;
+    }
+  }
+
+  // 閃身步老師 (教學大樓身法教練) 對話視窗控制
+  public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void) {
+    if (!this.dodgeTeacherModalEl) return;
+    this.isDodgeDialogOpen = true;
+    this.onDodgeLearnCallback = onLearn;
+
+    if (this.dodgeCashValEl) {
+      this.dodgeCashValEl.textContent = `NT$ ${cash}`;
+    }
+
+    const isMobile = this.isMobile();
+    if (this.dodgeCancelBtnEl) {
+      this.dodgeCancelBtnEl.textContent = isMobile ? '稍後再來' : '稍後再來 (Esc)';
+    }
+
+    if (!this.dodgeLearnBtnEl || !this.dodgeDialogTextEl) return;
+
+    if (skillLevel === 0) {
+      // 學習閃身步 (1000 元)
+      this.dodgeDialogTextEl.textContent =
+        '閃身步老師：「同學，看你腳步浮躁，在校園裡橫衝直撞很容易吃虧！老夫傳授你入門絕技『閃身步』，施展時身輕如燕、規避敵人一切攻擊！（冷卻時間 5 秒，學費 NT$ 1000）」';
+      if (cash >= 1000) {
+        this.dodgeLearnBtnEl.disabled = false;
+        this.dodgeLearnBtnEl.textContent = isMobile ? '🥋 學習【閃身步】($1000) [動]' : '🥋 學習【閃身步】(NT$ 1000) (E)';
+        this.dodgeLearnBtnEl.onclick = () => {
+          this.closeDodgeDialog();
+          onLearn(1);
+        };
+      } else {
+        this.dodgeLearnBtnEl.disabled = true;
+        this.dodgeLearnBtnEl.textContent = `學費不足 (需 NT$ 1000，目前 NT$ ${cash})`;
+        this.dodgeLearnBtnEl.onclick = null;
+      }
+    } else if (skillLevel === 1) {
+      // 學習狗熊哆嗦毛 (2000 元，前置條件：已學會閃身步)
+      this.dodgeDialogTextEl.textContent =
+        '閃身步老師：「好徒兒！你已精通基礎『閃身步』。老夫這裡還有更精妙的至高真傳——進階版『狗熊哆嗦毛』！施展時如靈熊抖擻毫毛，無影無形，冷卻時間大幅縮短至 2 秒！（學費 NT$ 2000）」';
+      if (cash >= 2000) {
+        this.dodgeLearnBtnEl.disabled = false;
+        this.dodgeLearnBtnEl.textContent = isMobile ? '🐻 領悟進階【狗熊哆嗦毛】($2000) [動]' : '🐻 領悟進階【狗熊哆嗦毛】(NT$ 2000) (E)';
+        this.dodgeLearnBtnEl.onclick = () => {
+          this.closeDodgeDialog();
+          onLearn(2);
+        };
+      } else {
+        this.dodgeLearnBtnEl.disabled = true;
+        this.dodgeLearnBtnEl.textContent = `學費不足 (需 NT$ 2000，目前 NT$ ${cash})`;
+        this.dodgeLearnBtnEl.onclick = null;
+      }
+    } else {
+      // 已完全精通
+      this.dodgeDialogTextEl.textContent =
+        '閃身步老師：「哈哈哈哈！你已將『狗熊哆嗦毛』融會貫通，技能已登峰造極！全校已經無人能碰到你的衣角了！」';
+      this.dodgeLearnBtnEl.disabled = true;
+      this.dodgeLearnBtnEl.textContent = '✨ 技能已臻化境 (已完全精通)';
+      this.dodgeLearnBtnEl.onclick = null;
+    }
+
+    this.dodgeTeacherModalEl.style.display = 'flex';
+  }
+
+  public confirmDodgeLearn() {
+    if (this.dodgeLearnBtnEl && !this.dodgeLearnBtnEl.disabled && this.dodgeLearnBtnEl.onclick) {
+      (this.dodgeLearnBtnEl.onclick as any)();
+    }
+  }
+
+  public closeDodgeDialog() {
+    if (this.dodgeTeacherModalEl) {
+      this.dodgeTeacherModalEl.style.display = 'none';
+      this.isDodgeDialogOpen = false;
+      this.onDodgeLearnCallback = undefined;
+    }
+  }
+
+  // 即時更新技能 HUD 狀態 (技能圖示、名稱、冷卻倒數與扇形遮罩)
+  public updateSkillHUD(skillLevel: number, cdRemaining: number, maxCd: number) {
+    if (!this.skillHudCardEl || !this.skillIconEl || !this.skillNameEl || !this.skillDescEl || !this.skillCdNumberEl || !this.skillCooldownOverlayEl) {
+      return;
+    }
+
+    if (skillLevel === 0) {
+      this.skillIconEl.textContent = '🔒';
+      this.skillNameEl.textContent = '閃身步 (未習得)';
+      this.skillDescEl.textContent = '教學大樓尋找閃身步老師';
+      this.skillCdNumberEl.style.display = 'none';
+      this.skillCooldownOverlayEl.style.height = '0%';
+      this.skillHudCardEl.classList.add('locked');
+      this.skillHudCardEl.classList.remove('on-cooldown');
+      return;
+    }
+
+    this.skillHudCardEl.classList.remove('locked');
+    if (skillLevel === 1) {
+      this.skillIconEl.textContent = '🥋';
+      this.skillNameEl.textContent = '閃身步';
+      this.skillDescEl.textContent = '規避敵人攻擊 (冷卻 5s)';
+    } else {
+      this.skillIconEl.textContent = '🐻';
+      this.skillNameEl.textContent = '狗熊哆嗦毛';
+      this.skillDescEl.textContent = '極速閃避攻擊 (冷卻 2s)';
+    }
+
+    if (cdRemaining > 0) {
+      this.skillCdNumberEl.style.display = 'block';
+      this.skillCdNumberEl.textContent = cdRemaining.toFixed(1) + 's';
+      const pct = Math.max(0, Math.min(100, (cdRemaining / Math.max(0.1, maxCd)) * 100));
+      this.skillCooldownOverlayEl.style.height = `${pct}%`;
+      this.skillHudCardEl.classList.add('on-cooldown');
+    } else {
+      this.skillCdNumberEl.style.display = 'none';
+      this.skillCooldownOverlayEl.style.height = '0%';
+      this.skillHudCardEl.classList.remove('on-cooldown');
     }
   }
 

@@ -15,6 +15,8 @@ export class Bicycle {
   public deceleration: number = 11.0;
   public turnSpeed: number = 2.1;
   public isMounted: boolean = false;
+  public verticalVelocity: number = 0;
+  public isGrounded: boolean = true;
 
   // Visual sub-components
   private frontWheel: THREE.Mesh;
@@ -174,20 +176,58 @@ export class Bicycle {
     scene.add(this.mesh);
   }
 
-  // 上車：直接將唯一的玩家模型移上火柴人車架
-  public mount(player: Player) {
+  // 檢測指定 (X, Z) 位置下方的真實支撐面 (最高樓板、坡道或地面 Y = 0)
+  public static getFloorHeightAt(posX: number, posY: number, posZ: number, colliders: CollidableBox[]): number {
+    let supportFloorY = 0;
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (box.isFloorOnly || box.isRamp) {
+        if (
+          posX >= box.min.x && posX <= box.max.x &&
+          posZ >= box.min.z && posZ <= box.max.z
+        ) {
+          let floorTop = box.max.y;
+          if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
+            const t = THREE.MathUtils.clamp((posZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
+            floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
+          }
+          if (floorTop <= posY + 0.85 && floorTop > supportFloorY) {
+            supportFloorY = floorTop;
+          }
+        }
+      }
+    }
+    return supportFloorY;
+  }
+
+  // 上車：校正 Y 軸座標並將玩家模型移上火柴人車架 (杜絕浮空)
+  public mount(player: Player, forcedGroundY?: number) {
     this.isMounted = true;
+    if (forcedGroundY !== undefined) {
+      this.position.y = forcedGroundY;
+    }
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
+    this.mesh.position.copy(this.position);
+
     this.mesh.add(player.mesh);
     player.mesh.position.set(0, 0.42, -0.15);
     player.mesh.rotation.set(0.3, 0, 0);
     player.mesh.visible = true;
+
+    player.position.copy(this.position);
+    player.velocity.set(0, 0, 0);
+    player.isGrounded = true;
+
     soundManager.playBicycleBell();
   }
 
-  // 下車：將玩家模型放回場景中
+  // 下車：將玩家模型放回場景中並重置重力與著地狀態
   public dismount(player: Player, scene: THREE.Scene): THREE.Vector3 {
     this.isMounted = false;
     this.speed = 0;
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
 
     const sideVec = new THREE.Vector3(-1.2, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotationY);
     const exitPos = this.position.clone().add(sideVec);
@@ -197,6 +237,8 @@ export class Bicycle {
     player.mesh.position.copy(exitPos);
     player.mesh.rotation.set(0, this.rotationY, 0);
     player.mesh.visible = true;
+    player.velocity.set(0, 0, 0);
+    player.isGrounded = true;
 
     return exitPos;
   }
@@ -334,6 +376,28 @@ export class Bicycle {
           this.position.z = box.max.z + radius + 0.03;
         }
       }
+    }
+
+    // 6. 重力與地面吸附檢測 (Ground Snapping & Gravity - 杜絕浮空)
+    const groundY = Bicycle.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);
+
+    if (this.position.y > groundY + 0.05) {
+      // 空中自由落體墜落
+      this.verticalVelocity -= 26.0 * delta;
+      const nextY = this.position.y + this.verticalVelocity * delta;
+      if (nextY <= groundY) {
+        this.position.y = groundY;
+        this.verticalVelocity = 0;
+        this.isGrounded = true;
+      } else {
+        this.position.y = nextY;
+        this.isGrounded = false;
+      }
+    } else {
+      // 貼地平滑吸附 (適應坡道與微小台階)
+      this.position.y = THREE.MathUtils.lerp(this.position.y, groundY, Math.min(delta * 22.0, 1.0));
+      this.verticalVelocity = 0;
+      this.isGrounded = true;
     }
 
     this.mesh.position.copy(this.position);

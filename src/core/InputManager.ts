@@ -18,6 +18,7 @@ export class InputManager {
 
   private canvas: HTMLCanvasElement;
   private onInteractCallback: (() => void) | null = null;
+  private onSkillCallback: (() => void) | null = null;
   private onAttackCallback: (() => void) | null = null;
   private onAttackReleaseCallback: (() => void) | null = null;
   private onToggleBGMCallback: (() => void) | null = null;
@@ -36,6 +37,9 @@ export class InputManager {
       this.keys[e.code] = true;
       if (e.code === 'KeyE') {
         if (this.onInteractCallback) this.onInteractCallback();
+      }
+      if (e.code === 'KeyQ') {
+        if (this.onSkillCallback) this.onSkillCallback();
       }
       if (e.code === 'KeyM') {
         if (this.onToggleBGMCallback) this.onToggleBGMCallback();
@@ -218,6 +222,14 @@ export class InputManager {
 
   public triggerVirtualInteract() {
     if (this.onInteractCallback) this.onInteractCallback();
+  }
+
+  public triggerVirtualSkill() {
+    if (this.onSkillCallback) this.onSkillCallback();
+  }
+
+  public onSkill(callback: () => void) {
+    this.onSkillCallback = callback;
   }
 
   public onInteract(callback: () => void) {

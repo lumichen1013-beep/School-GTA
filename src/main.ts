@@ -15,6 +15,7 @@ import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
+import { WeatherSystem } from './systems/WeatherSystem';
 
 // 模組頂層共用 Scratch Vectors (0-GC 避免幀迴圈記憶體堆積觸發微卡頓)
 const _scratchBikeForward = new THREE.Vector3();
@@ -37,14 +38,15 @@ class SchoolGTASandbox {
   private npcs: NPC[] = [];
   private wantedSystem!: WantedSystem;
   private hud!: HUD;
+  private weatherSystem!: WeatherSystem;
 
   // 模組化小遊戲系統
   private basketballGame!: BasketballGame;
   private racingGame!: RacingGame;
   private tennisGame!: TennisGame;
 
-  // 經濟與任務解鎖統計系統
-  private playerCash: number = 100;
+  // 經濟與任務解鎖統計系統 (初始 3000 元，足以學滿「閃身步」與「狗熊哆嗦毛」)
+  private playerCash: number = 3000;
   private studentDefeatedCount: number = 0;
   private teacherDefeatedCount: number = 0;
   private dogDefeatedCount: number = 0;
@@ -54,6 +56,9 @@ class SchoolGTASandbox {
   private hasEscapedDog: boolean = false;
   private hasWishedPond: boolean = false;
   private hasTastedHotFood: boolean = false;
+  // 身法技能系統 (閃身步 5s CD / 狗熊哆嗦毛 2s CD)
+  private dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
+  private dodgeCooldownTimer: number = 0;
 
   private currentRidingBike: Bicycle | null = null;
   private isGameLoaded: boolean = false;
@@ -155,6 +160,19 @@ class SchoolGTASandbox {
     this.basketballGame = new BasketballGame(this.engine.scene, this.world.basketballSpawnPos);
     this.racingGame = new RacingGame(this.engine.scene);
     this.tennisGame = new TennisGame();
+
+    // 初始化校園動態天氣系統 (五大天氣、平滑過渡、雨滴粒子與程序化聲光)
+    this.weatherSystem = new WeatherSystem(this.engine);
+    this.weatherSystem.onWeatherChange = (preset, isManual) => {
+      this.hud.updateWeatherHUD(preset.badgeText);
+      if (isManual) {
+        this.wantedSystem.showBanner(`${preset.bannerText} (按 [P] 鍵切換)`, 2500);
+      }
+    };
+    this.hud.onWeatherToggle = () => {
+      this.weatherSystem.cycleWeather(true);
+    };
+    this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
     // 綁定按鍵互動與操作
     this.setupInteractions();
@@ -261,129 +279,292 @@ class SchoolGTASandbox {
   }
 
   private spawnCampusNPCs() {
-    // 1. 生教組長
+    // 1. 生教組長 (中庭綠帶與走廊威嚴步巡，巡邏路徑延伸至 95m+)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(15, 0, 25),
+      new THREE.Vector3(15, 0, 15),
       'TEACHER',
-      [new THREE.Vector3(15, 0, 25), new THREE.Vector3(15, 0, 55), new THREE.Vector3(5, 0, 40)]
+      [
+        new THREE.Vector3(15, 0, 15),
+        new THREE.Vector3(15, 0, 50),
+        new THREE.Vector3(2, 0, 58),
+        new THREE.Vector3(-5, 0, 30),
+        new THREE.Vector3(5, 0, 12)
+      ],
+      'OFFICER_PATROL'
     ));
 
-    // 2. 主任教官
+    // 2. 主任教官 (校門口廣場與中央大道大型巡邏圈，巡邏路徑延伸至 85m+)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 75),
+      new THREE.Vector3(0, 0, 92),
       'INSTRUCTOR',
-      [new THREE.Vector3(-10, 0, 75), new THREE.Vector3(10, 0, 75), new THREE.Vector3(0, 0, 95)]
+      [
+        new THREE.Vector3(0, 0, 92),
+        new THREE.Vector3(-18, 0, 85),
+        new THREE.Vector3(-12, 0, 58),
+        new THREE.Vector3(12, 0, 58),
+        new THREE.Vector3(18, 0, 85)
+      ],
+      'OFFICER_PATROL'
     ));
 
-    // 3. 校犬柴柴
+    // 3. 校犬柴柴 (遼闊草皮大範圍自由巡遊，嗅聞青草與原地端坐休養，巡查範圍 150m+)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-50, 0, -10),
+      new THREE.Vector3(-45, 0, -15),
       'DOG',
       [
-        new THREE.Vector3(-50, 0, -10),
-        new THREE.Vector3(-25, 0, 15),
-        new THREE.Vector3(-25, 0, 50),
-        new THREE.Vector3(-75, 0, 45),
-        new THREE.Vector3(-75, 0, 10)
+        new THREE.Vector3(-45, 0, -15),
+        new THREE.Vector3(-25, 0, 5),
+        new THREE.Vector3(-22, 0, 42),
+        new THREE.Vector3(-48, 0, 58),
+        new THREE.Vector3(-72, 0, 32),
+        new THREE.Vector3(-65, 0, -8)
       ]
     ));
 
-    // 4. 單車巡邏糾察隊 (共 4 名)
+    // 4. 單車巡邏糾察隊 (共 4 名，覆蓋全校各大主幹道與運動場外環，每圈 130m~175m)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-22, 0, 45),
+      new THREE.Vector3(-22, 0, 55),
       'BIKE_PATROL',
-      [new THREE.Vector3(-22, 0, 45), new THREE.Vector3(-22, 0, -5), new THREE.Vector3(5, 0, -25), new THREE.Vector3(5, 0, 55)]
+      [new THREE.Vector3(-22, 0, 55), new THREE.Vector3(-22, 0, -15), new THREE.Vector3(8, 0, -35), new THREE.Vector3(8, 0, 65)]
     ));
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-45, 0, -45),
+      new THREE.Vector3(-45, 0, -55),
       'BIKE_PATROL',
-      [new THREE.Vector3(-45, 0, -45), new THREE.Vector3(-15, 0, -50), new THREE.Vector3(-5, 0, -25), new THREE.Vector3(-35, 0, -30)]
+      [new THREE.Vector3(-45, 0, -55), new THREE.Vector3(-12, 0, -50), new THREE.Vector3(-5, 0, -18), new THREE.Vector3(-38, 0, -22)]
     ));
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(12, 0, 40),
+      new THREE.Vector3(12, 0, 8),
       'BIKE_PATROL',
-      [new THREE.Vector3(12, 0, 10), new THREE.Vector3(12, 0, 75), new THREE.Vector3(2, 0, 60), new THREE.Vector3(2, 0, 20)]
+      [new THREE.Vector3(12, 0, 8), new THREE.Vector3(12, 0, 82), new THREE.Vector3(-6, 0, 78), new THREE.Vector3(-6, 0, 12)]
     ));
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-75, 0, 30),
+      new THREE.Vector3(-82, 0, -6),
       'BIKE_PATROL',
-      [new THREE.Vector3(-75, 0, 0), new THREE.Vector3(-75, 0, 60), new THREE.Vector3(-60, 0, 70), new THREE.Vector3(-60, 0, -10)]
+      [new THREE.Vector3(-82, 0, -6), new THREE.Vector3(-82, 0, 64), new THREE.Vector3(-48, 0, 70), new THREE.Vector3(-48, 0, -12)]
     ));
 
-    // 5. 風紀糾察隊 (步巡)
+    // 5. 風紀糾察隊 (步巡 2 名，雙手負後巡查，路線 80m+)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(15, 0, -25),
+      new THREE.Vector3(15, 0, -18),
       'INSPECTOR',
-      [new THREE.Vector3(15, 0, -25), new THREE.Vector3(5, 0, -45), new THREE.Vector3(-5, 0, -30)]
+      [new THREE.Vector3(15, 0, -18), new THREE.Vector3(5, 0, -42), new THREE.Vector3(-14, 0, -40), new THREE.Vector3(-8, 0, -15)],
+      'OFFICER_PATROL'
     ));
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 90),
+      new THREE.Vector3(0, 0, 92),
       'INSPECTOR',
-      [new THREE.Vector3(-12, 0, 90), new THREE.Vector3(12, 0, 90)]
+      [new THREE.Vector3(0, 0, 92), new THREE.Vector3(-16, 0, 82), new THREE.Vector3(-10, 0, 65), new THREE.Vector3(12, 0, 65), new THREE.Vector3(16, 0, 82)],
+      'OFFICER_PATROL'
     ));
 
-    // 6. 普通學生 (12 隻)
-    const studentCoords = [
-      new THREE.Vector3(-12, 0, -45),
-      new THREE.Vector3(22, 0, -35),
-      new THREE.Vector3(18, 0, 8),
-      new THREE.Vector3(18, 0, 68),
-      new THREE.Vector3(0, 0, 25),
-      new THREE.Vector3(-15, 0, 0),
-      new THREE.Vector3(8, 0, -50),
-      new THREE.Vector3(24, 0, -55),
-      new THREE.Vector3(20, 0, 25),
-      new THREE.Vector3(20, 0, 65),
-      new THREE.Vector3(-45, 0, 20),
-      new THREE.Vector3(-55, 0, -68)
-    ];
-
-    studentCoords.forEach((coord, i) => {
-      const offsetX = coord.x >= 18 ? -4 : (i % 2 === 0 ? 4 : -4);
-      this.npcs.push(new NPC(
-        this.engine.scene,
-        coord,
-        'STUDENT',
-        [coord.clone(), coord.clone().add(new THREE.Vector3(offsetX, 0, 5))]
-      ));
-    });
-
-    // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F)
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(31, 6.0, 18), 'TEACHER', [new THREE.Vector3(31, 6.0, 6), new THREE.Vector3(31, 6.0, 30)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 6.0, 10), 'STUDENT', [new THREE.Vector3(38, 6.0, 10), new THREE.Vector3(34, 6.0, 10)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 6.0, 26), 'STUDENT', [new THREE.Vector3(38, 6.0, 26), new THREE.Vector3(34, 6.0, 26)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(31, 12.0, 18), 'TEACHER', [new THREE.Vector3(31, 12.0, 6), new THREE.Vector3(31, 12.0, 30)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 12.0, 10), 'STUDENT', [new THREE.Vector3(38, 12.0, 10), new THREE.Vector3(34, 12.0, 10)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 12.0, 26), 'STUDENT', [new THREE.Vector3(38, 12.0, 26), new THREE.Vector3(34, 12.0, 26)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(31, 6.0, 72), 'TEACHER', [new THREE.Vector3(31, 6.0, 60), new THREE.Vector3(31, 6.0, 84)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 6.0, 64), 'STUDENT', [new THREE.Vector3(38, 6.0, 64), new THREE.Vector3(34, 6.0, 64)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 6.0, 80), 'STUDENT', [new THREE.Vector3(38, 6.0, 80), new THREE.Vector3(34, 6.0, 80)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(31, 12.0, 60), 'TEACHER', [new THREE.Vector3(31, 12.0, 60), new THREE.Vector3(31, 12.0, 84)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 12.0, 64), 'STUDENT', [new THREE.Vector3(38, 12.0, 64), new THREE.Vector3(34, 12.0, 64)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(38, 12.0, 80), 'STUDENT', [new THREE.Vector3(38, 12.0, 80), new THREE.Vector3(34, 12.0, 80)]));
-
-    // 8. 校外強盜
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-15, 0, 118), 'BANDIT', [new THREE.Vector3(-25, 0, 118), new THREE.Vector3(5, 0, 118)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(15, 0, 122), 'BANDIT', [new THREE.Vector3(5, 0, 122), new THREE.Vector3(25, 0, 122)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(0, 0, 128), 'BANDIT', [new THREE.Vector3(-18, 0, 128), new THREE.Vector3(18, 0, 128)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-118, 0, 10), 'BANDIT', [new THREE.Vector3(-118, 0, -40), new THREE.Vector3(-118, 0, 60)]));
-    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(118, 0, 10), 'BANDIT', [new THREE.Vector3(118, 0, -40), new THREE.Vector3(118, 0, 60)]));
-
-    // 9. 演藝大樓 4F 羽球場：大如老師
+    // 6. 普通學生 (12 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
+    // 6.1 田徑跑者 1 號 (PU 跑道標準逆時針慢跑 200m 全圈，雙臂屈肘泵動，中途拉筋伸展)
     this.npcs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(77, 12.0, 31),
+      new THREE.Vector3(-30, 0, 14),
+      'STUDENT',
+      [
+        new THREE.Vector3(-30, 0, 14),
+        new THREE.Vector3(-55, 0, -10),
+        new THREE.Vector3(-80, 0, 20),
+        new THREE.Vector3(-80, 0, 45),
+        new THREE.Vector3(-55, 0, 70),
+        new THREE.Vector3(-30, 0, 45)
+      ],
+      'JOGGING'
+    ));
+
+    // 6.2 田徑跑者 2 號 (錯開半圈起跑的慢跑同學)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-80, 0, 30),
+      'STUDENT',
+      [
+        new THREE.Vector3(-80, 0, 30),
+        new THREE.Vector3(-80, 0, 50),
+        new THREE.Vector3(-55, 0, 70),
+        new THREE.Vector3(-30, 0, 40),
+        new THREE.Vector3(-30, 0, 14),
+        new THREE.Vector3(-55, 0, -10)
+      ],
+      'JOGGING'
+    ));
+
+    // 6.3 趕課疾走同學 (從林蔭大道大步快走奔向教學樓 A 棟，75m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, 72),
+      'STUDENT',
+      [
+        new THREE.Vector3(0, 0, 72),
+        new THREE.Vector3(12, 0, 52),
+        new THREE.Vector3(18, 0, 22),
+        new THREE.Vector3(22, 0, 8),
+        new THREE.Vector3(16, 0, 32)
+      ],
+      'HURRIED_WALK'
+    ));
+
+    // 6.4 趕買早餐同學 (大步快走前往合作社，70m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(12, 0, 12),
+      'STUDENT',
+      [
+        new THREE.Vector3(12, 0, 12),
+        new THREE.Vector3(2, 0, -12),
+        new THREE.Vector3(-10, 0, -32),
+        new THREE.Vector3(-15, 0, -46),
+        new THREE.Vector3(-4, 0, -28)
+      ],
+      'HURRIED_WALK'
+    ));
+
+    // 6.5 & 6.6 合作社戶外桌交談結伴同學 (CASUAL_WALK 結伴散步與原地熱烈手勢交談)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-14, 0, -42),
+      'STUDENT',
+      [new THREE.Vector3(-14, 0, -42), new THREE.Vector3(-24, 0, -46), new THREE.Vector3(-32, 0, -52), new THREE.Vector3(-22, 0, -38)],
+      'CASUAL_WALK'
+    ));
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-12, 0, -40),
+      'STUDENT',
+      [new THREE.Vector3(-12, 0, -40), new THREE.Vector3(-22, 0, -44), new THREE.Vector3(-30, 0, -50), new THREE.Vector3(-20, 0, -36)],
+      'CASUAL_WALK'
+    ));
+
+    // 6.7 低頭滑手機同學 (沿中央林蔭大道散步，高頻率停步低頭看手機 55m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(2, 0, 18),
+      'STUDENT',
+      [new THREE.Vector3(2, 0, 18), new THREE.Vector3(2, 0, 42), new THREE.Vector3(2, 0, 70), new THREE.Vector3(2, 0, 36)],
+      'CASUAL_WALK'
+    ));
+
+    // 6.8 中庭花園漫步同學 (環形巡遊噴泉綠樹廣場 55m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(8, 0, 22),
+      'STUDENT',
+      [new THREE.Vector3(8, 0, 22), new THREE.Vector3(14, 0, 42), new THREE.Vector3(6, 0, 56), new THREE.Vector3(-2, 0, 38)],
+      'CASUAL_WALK'
+    ));
+
+    // 6.9 & 6.10 樹下聊天雙人組 (結伴在中庭林蔭大道旁談笑 50m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-8, 0, 16),
+      'STUDENT',
+      [new THREE.Vector3(-8, 0, 16), new THREE.Vector3(-14, 0, 32), new THREE.Vector3(-8, 0, 44), new THREE.Vector3(-2, 0, 28)],
+      'CASUAL_WALK'
+    ));
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-6, 0, 18),
+      'STUDENT',
+      [new THREE.Vector3(-6, 0, 18), new THREE.Vector3(-12, 0, 34), new THREE.Vector3(-6, 0, 46), new THREE.Vector3(0, 0, 30)],
+      'CASUAL_WALK'
+    ));
+
+    // 6.11 生態池許願小憩同學 (漫步生態園水池與石橋 40m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-46, 0, -74),
+      'STUDENT',
+      [new THREE.Vector3(-46, 0, -74), new THREE.Vector3(-55, 0, -80), new THREE.Vector3(-64, 0, -78), new THREE.Vector3(-52, 0, -70)],
+      'CASUAL_WALK'
+    ));
+
+    // 6.12 校門口迎賓大道散步同學 (45m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-16, 0, 84),
+      'STUDENT',
+      [new THREE.Vector3(-16, 0, 84), new THREE.Vector3(0, 0, 88), new THREE.Vector3(16, 0, 84), new THREE.Vector3(0, 0, 80)],
+      'CASUAL_WALK'
+    ));
+
+    // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋長程巡邏路線)
+    // 2F 巡堂老師：橫跨 A 棟走廊、空中走廊天橋至 B 棟走廊 (全長 70m+)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(31, 6.0, 10),
+      'TEACHER',
+      [new THREE.Vector3(31, 6.0, 10), new THREE.Vector3(31, 6.0, 32), new THREE.Vector3(31, 6.0, 52), new THREE.Vector3(31, 6.0, 78)],
+      'OFFICER_PATROL'
+    ));
+    // 2F 跨棟散步學生：從 B 棟經天橋走往 A 棟 (全長 65m+)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(31, 6.0, 76),
+      'STUDENT',
+      [new THREE.Vector3(31, 6.0, 76), new THREE.Vector3(31, 6.0, 50), new THREE.Vector3(31, 6.0, 30), new THREE.Vector3(31, 6.0, 14)],
+      'CASUAL_WALK'
+    ));
+    // 2F 教室內學生 (完整巡遊教室空間，24m~26m)
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 8), 'STUDENT', [new THREE.Vector3(36, 6.0, 8), new THREE.Vector3(44, 6.0, 8), new THREE.Vector3(44, 6.0, 16), new THREE.Vector3(36, 6.0, 16)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 22), 'STUDENT', [new THREE.Vector3(36, 6.0, 22), new THREE.Vector3(44, 6.0, 22), new THREE.Vector3(44, 6.0, 30), new THREE.Vector3(36, 6.0, 30)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 60), 'STUDENT', [new THREE.Vector3(36, 6.0, 60), new THREE.Vector3(44, 6.0, 60), new THREE.Vector3(44, 6.0, 68), new THREE.Vector3(36, 6.0, 68)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 74), 'STUDENT', [new THREE.Vector3(36, 6.0, 74), new THREE.Vector3(44, 6.0, 74), new THREE.Vector3(44, 6.0, 84), new THREE.Vector3(36, 6.0, 84)]));
+
+    // 3F 巡堂老師：橫跨 A 棟走廊、空中走廊天橋至 B 棟走廊 (全長 70m+)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(31, 12.0, 12),
+      'TEACHER',
+      [new THREE.Vector3(31, 12.0, 12), new THREE.Vector3(31, 12.0, 32), new THREE.Vector3(31, 12.0, 52), new THREE.Vector3(31, 12.0, 78)],
+      'OFFICER_PATROL'
+    ));
+    // 3F 跨棟散步學生：從 B 棟經天橋走往 A 棟 (全長 65m+)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(31, 12.0, 76),
+      'STUDENT',
+      [new THREE.Vector3(31, 12.0, 76), new THREE.Vector3(31, 12.0, 50), new THREE.Vector3(31, 12.0, 30), new THREE.Vector3(31, 12.0, 14)],
+      'CASUAL_WALK'
+    ));
+    // 3F 教室內學生 (完整巡遊教室空間，24m~26m)
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 8), 'STUDENT', [new THREE.Vector3(36, 12.0, 8), new THREE.Vector3(44, 12.0, 8), new THREE.Vector3(44, 12.0, 16), new THREE.Vector3(36, 12.0, 16)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 22), 'STUDENT', [new THREE.Vector3(36, 12.0, 22), new THREE.Vector3(44, 12.0, 22), new THREE.Vector3(44, 12.0, 30), new THREE.Vector3(36, 12.0, 30)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 60), 'STUDENT', [new THREE.Vector3(36, 12.0, 60), new THREE.Vector3(44, 12.0, 60), new THREE.Vector3(44, 12.0, 68), new THREE.Vector3(36, 12.0, 68)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 74), 'STUDENT', [new THREE.Vector3(36, 12.0, 74), new THREE.Vector3(44, 12.0, 74), new THREE.Vector3(44, 12.0, 84), new THREE.Vector3(36, 12.0, 84)]));
+
+    // 8. 校外強盜 (圍牆外長程巡邏，65m~110m)
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-35, 0, 118), 'BANDIT', [new THREE.Vector3(-35, 0, 118), new THREE.Vector3(0, 0, 118), new THREE.Vector3(35, 0, 118), new THREE.Vector3(0, 0, 122)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(15, 0, 124), 'BANDIT', [new THREE.Vector3(15, 0, 124), new THREE.Vector3(48, 0, 124), new THREE.Vector3(32, 0, 128), new THREE.Vector3(15, 0, 128)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-15, 0, 126), 'BANDIT', [new THREE.Vector3(-15, 0, 126), new THREE.Vector3(-48, 0, 126), new THREE.Vector3(-32, 0, 130), new THREE.Vector3(-15, 0, 130)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(-118, 0, -45), 'BANDIT', [new THREE.Vector3(-118, 0, -45), new THREE.Vector3(-118, 0, 10), new THREE.Vector3(-118, 0, 65), new THREE.Vector3(-118, 0, 15)]));
+    this.npcs.push(new NPC(this.engine.scene, new THREE.Vector3(118, 0, -45), 'BANDIT', [new THREE.Vector3(118, 0, -45), new THREE.Vector3(118, 0, 10), new THREE.Vector3(118, 0, 65), new THREE.Vector3(118, 0, 15)]));
+
+    // 9. 演藝大樓 4F 羽球場：大如老師 (北半場步法跑動 drill)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(76, 12.0, 31),
       'PE_TEACHER_BOSS',
-      [new THREE.Vector3(74, 12.0, 31), new THREE.Vector3(80, 12.0, 31)]
+      [new THREE.Vector3(72, 12.0, 31), new THREE.Vector3(80, 12.0, 31), new THREE.Vector3(76, 12.0, 27), new THREE.Vector3(76, 12.0, 34)],
+      'OFFICER_PATROL'
+    ));
+
+    // 10. 教學大樓 1F 走廊：閃身步老師 (身法宗師，傳授閃身步與狗熊哆嗦毛，長廊身法巡走 20m)
+    this.npcs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(32, 0.0, 18),
+      'DODGE_TEACHER',
+      [new THREE.Vector3(32, 0.0, 8), new THREE.Vector3(32, 0.0, 18), new THREE.Vector3(32, 0.0, 28), new THREE.Vector3(32, 0.0, 18)],
+      'OFFICER_PATROL'
     ));
   }
 
@@ -499,9 +680,22 @@ class SchoolGTASandbox {
         this.startTennisMatch();
         return;
       }
+      if (this.hud.isDodgeDialogOpen) {
+        this.hud.confirmDodgeLearn();
+        return;
+      }
       const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
       if (peCoach && this.player.position.distanceTo(peCoach.position) < 3.2 && !peCoach.isKnockedDown && this.tennisGame.tennisState === 'IDLE') {
         this.tennisGame.openDialog(this.hud, () => this.startTennisMatch());
+        return;
+      }
+
+      // 5.5 教學大樓 閃身步老師對話 / 身法傳授
+      const dodgeTeacher = this.npcs.find(n => n.role === 'DODGE_TEACHER');
+      if (dodgeTeacher && this.player.position.distanceTo(dodgeTeacher.position) < 3.2) {
+        this.hud.openDodgeDialog(this.playerCash, this.dodgeSkillLevel, (targetLvl) => {
+          this.learnDodgeSkill(targetLvl);
+        });
         return;
       }
 
@@ -554,13 +748,19 @@ class SchoolGTASandbox {
       } else {
         let hijackedBike = false;
         for (const npc of this.npcs) {
-          if (npc.role === 'BIKE_PATROL' && !npc.isKnockedDown && npc.position.distanceTo(this.player.position) < 3.2) {
+          // 支援常態騎乘中、被擊飛中 (isKnockedFlying)、或被擊倒在地 (isKnockedDown) 時搶奪其自行車
+          if (npc.role === 'BIKE_PATROL' && npc.position.distanceTo(this.player.position) < 3.5) {
             hijackedBike = true;
             soundManager.playBikeHijack();
             npc.loseBike();
-            const stolenBike = new Bicycle(this.engine.scene, npc.position, 0x3498db);
+
+            // 獲取地面真實支撐高度，杜絕浮空
+            const groundY = Bicycle.getFloorHeightAt(npc.position.x, npc.position.y, npc.position.z, this.world.colliders);
+            const spawnPos = new THREE.Vector3(npc.position.x, groundY, npc.position.z);
+
+            const stolenBike = new Bicycle(this.engine.scene, spawnPos, 0x3498db);
             this.bicycles.push(stolenBike);
-            stolenBike.mount(this.player);
+            stolenBike.mount(this.player, groundY);
             this.currentRidingBike = stolenBike;
             this.player.isRidingVehicle = true;
             this.cameraCtrl.setMode(true);
@@ -573,7 +773,8 @@ class SchoolGTASandbox {
         if (!hijackedBike) {
           for (const bike of this.bicycles) {
             if (bike.position.distanceTo(this.player.position) < 3.0) {
-              bike.mount(this.player);
+              const groundY = Bicycle.getFloorHeightAt(bike.position.x, bike.position.y, bike.position.z, this.world.colliders);
+              bike.mount(this.player, groundY);
               this.currentRidingBike = bike;
               this.player.isRidingVehicle = true;
               this.cameraCtrl.setMode(true);
@@ -685,6 +886,8 @@ class SchoolGTASandbox {
         }
       } else if (e.code === 'KeyJ') {
         this.hud.toggleQuestTracker();
+      } else if (e.code === 'KeyP') {
+        this.weatherSystem.cycleWeather(true);
       } else if (e.code === 'Escape') {
         if (this.hud.isCommissaryOpen) {
           this.hud.closeCommissary();
@@ -692,9 +895,15 @@ class SchoolGTASandbox {
         if (this.hud.isTennisDialogOpen) {
           this.hud.closeTennisDialog();
         }
+        if (this.hud.isDodgeDialogOpen) {
+          this.hud.closeDodgeDialog();
+        }
       } else if (e.code === 'Enter') {
         if (this.hud.isTennisDialogOpen) {
           this.startTennisMatch();
+        }
+        if (this.hud.isDodgeDialogOpen) {
+          this.hud.confirmDodgeLearn();
         }
       } else if (e.code === 'KeyR') {
         if (!this.basketballGame.isHolding && !this.basketballGame.isBallInAir) {
@@ -704,6 +913,72 @@ class SchoolGTASandbox {
         }
       }
     });
+
+    // Q 鍵身法技能監聽
+    this.input.onSkill(() => {
+      this.triggerDodgeSkill();
+    });
+  }
+
+  // 學習身法絕學 (閃身步 / 狗熊哆嗦毛)
+  private learnDodgeSkill(targetLevel: number) {
+    if (targetLevel === 1) {
+      if (this.playerCash < 1000) {
+        this.wantedSystem.showBanner('❌ 錢包餘額不足！學習【閃身步】需要 NT$ 1000！', 2500);
+        return;
+      }
+      this.playerCash -= 1000;
+      this.dodgeSkillLevel = 1;
+      this.hud.setCash(this.playerCash);
+      soundManager.playCashRegister();
+      this.wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 5 秒，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
+    } else if (targetLevel === 2) {
+      if (this.dodgeSkillLevel < 1) {
+        this.wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
+        return;
+      }
+      if (this.playerCash < 2000) {
+        this.wantedSystem.showBanner('❌ 錢包餘額不足！領悟【狗熊哆嗦毛】需要 NT$ 2000！', 2500);
+        return;
+      }
+      this.playerCash -= 2000;
+      this.dodgeSkillLevel = 2;
+      this.hud.setCash(this.playerCash);
+      soundManager.playCashRegister();
+      this.wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！技能如神，冷卻縮短至 2 秒！按 [Q] 鍵神速規避！', 5000);
+    }
+  }
+
+  // 施展技能 (閃身步 / 狗熊哆嗦毛)
+  private triggerDodgeSkill() {
+    if (this.player.isDead || this.player.hp <= 0) return;
+    if (this.currentRidingBike) {
+      this.wantedSystem.showBanner('🚲 騎乘自行車時無法施展技能！請先按 [E] 下車', 2000);
+      return;
+    }
+    if (this.dodgeSkillLevel === 0) {
+      this.wantedSystem.showBanner('🥋 尚未習得技能！請至教學大樓尋訪「閃身步老師」學習【閃身步】！', 2500);
+      return;
+    }
+    if (this.dodgeCooldownTimer > 0) {
+      this.wantedSystem.showBanner(`⌛ 技能冷卻中 (${this.dodgeCooldownTimer.toFixed(1)}s)`, 1000);
+      return;
+    }
+
+    const isAdvanced = this.dodgeSkillLevel === 2;
+    const maxCd = isAdvanced ? 2.0 : 5.0;
+    this.dodgeCooldownTimer = maxCd;
+
+    if (isAdvanced) {
+      this.player.performBearShake(this.world.colliders);
+    } else {
+      this.player.performFlashStep(this.world.colliders);
+    }
+
+    this.wantedSystem.showBanner(
+      isAdvanced ? '🐻 施展【狗熊哆嗦毛】！連續瞬移神速規避攻擊！(CD 2s)' : '💨 施展【閃身步】！左右破空閃身規避！(CD 5s)',
+      1600
+    );
   }
 
   private startTennisMatch() {
@@ -953,6 +1228,7 @@ class SchoolGTASandbox {
     const btnSprint = document.getElementById('m-btn-sprint');
     const btnInteract = document.getElementById('m-btn-interact');
     const btnWeapon = document.getElementById('m-btn-weapon');
+    const btnDodge = document.getElementById('m-btn-dodge');
 
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (isTouchDevice && container) {
@@ -1123,6 +1399,10 @@ class SchoolGTASandbox {
     bindButton(btnWeapon, () => {
       this.cycleWeapon();
     });
+
+    bindButton(btnDodge, () => {
+      this.triggerDodgeSkill();
+    });
   }
 
   public cycleWeapon() {
@@ -1266,6 +1546,9 @@ class SchoolGTASandbox {
     let targetPosition: THREE.Vector3;
     let playerRotY: number;
 
+    const isRaining = this.weatherSystem.currentWeather === 'RAIN' || this.weatherSystem.currentWeather === 'THUNDERSTORM';
+    const isThunderstorm = this.weatherSystem.currentWeather === 'THUNDERSTORM';
+
     // 2. 玩家或載具狀態更新
     if (this.currentRidingBike) {
       this.hasRiddenBike = true;
@@ -1273,6 +1556,16 @@ class SchoolGTASandbox {
       targetPosition = this.currentRidingBike.position;
       playerRotY = this.currentRidingBike.rotationY;
       this.player.position.copy(targetPosition);
+      this.player.updateSkillBubble(delta);
+      this.player.updateUmbrella(isRaining, true);
+
+      // 更新非騎乘中之所有單車 (套用重力與貼地，防止懸空)
+      for (let i = 0; i < this.bicycles.length; i++) {
+        const bike = this.bicycles[i];
+        if (bike !== this.currentRidingBike) {
+          bike.update(delta, this.input, this.world.colliders);
+        }
+      }
 
       // 火柴人自行車衝撞 NPC
       if (Math.abs(this.currentRidingBike.speed) > 4.0) {
@@ -1301,6 +1594,11 @@ class SchoolGTASandbox {
         }
       }
     } else {
+      // 玩家步行時，更新場景中所有閒置單車 (套用重力與貼地，防止懸空)
+      for (let i = 0; i < this.bicycles.length; i++) {
+        this.bicycles[i].update(delta, this.input, this.world.colliders);
+      }
+
       if (this.elevatorTransition) {
         targetPosition = this.player.position;
         playerRotY = this.player.rotationY;
@@ -1308,7 +1606,7 @@ class SchoolGTASandbox {
         const inPool = this.world.isInsideSwimmingPool(this.player.position) || this.ecologicalGarden.isInsideWishingPond(this.player.position);
         this.player.isSwimming = inPool;
 
-        this.player.update(delta, this.input, forwardVec, rightVec, this.world.colliders);
+        this.player.update(delta, this.input, forwardVec, rightVec, this.world.colliders, isRaining, false);
         targetPosition = this.player.position;
         playerRotY = this.player.rotationY;
       }
@@ -1362,6 +1660,20 @@ class SchoolGTASandbox {
     if (this.hud.isTennisDialogOpen && peCoach) {
       if (targetPosition.distanceTo(peCoach.position) > 4.5) {
         this.hud.closeTennisDialog();
+      }
+    }
+
+    // 4.5 更新閃身步老師對話距離檢測與對話狀態
+    const dodgeTeacher = this.npcs.find(n => n.role === 'DODGE_TEACHER');
+    if (dodgeTeacher) {
+      if (this.hud.isDodgeDialogOpen) {
+        dodgeTeacher.isConversing = true;
+        if (targetPosition.distanceTo(dodgeTeacher.position) > 4.5) {
+          this.hud.closeDodgeDialog();
+          dodgeTeacher.isConversing = false;
+        }
+      } else {
+        dodgeTeacher.isConversing = false;
       }
     }
     this.tennisGame.update(
@@ -1433,10 +1745,18 @@ class SchoolGTASandbox {
       this.hud.showPrompt('E', '🛗 搭乘直達電梯 ➜ 1F 演藝廳門廳');
     } else if (peCoach && targetPosition.distanceTo(peCoach.position) < 3.2 && !peCoach.isKnockedDown && this.tennisGame.tennisState === 'IDLE') {
       this.hud.showPrompt('E', '🏸 與大如老師對話 / 挑戰羽球賽');
+    } else if (dodgeTeacher && targetPosition.distanceTo(dodgeTeacher.position) < 3.2) {
+      if (this.dodgeSkillLevel === 0) {
+        this.hud.showPrompt('E', '🥋 與閃身步老師對話 / 學習【閃身步】($1000)');
+      } else if (this.dodgeSkillLevel === 1) {
+        this.hud.showPrompt('E', '🐻 與閃身步老師對話 / 領悟【狗熊哆嗦毛】($2000)');
+      } else {
+        this.hud.showPrompt('E', '🥋 與閃身步老師對話 (技能已大成)');
+      }
     } else {
       let nearBikePatrol = false;
       for (const npc of this.npcs) {
-        if (npc.role === 'BIKE_PATROL' && !npc.isKnockedDown && targetPosition.distanceTo(npc.position) < 3.2) {
+        if (npc.role === 'BIKE_PATROL' && targetPosition.distanceTo(npc.position) < 3.5) {
           nearBikePatrol = true;
           break;
         }
@@ -1513,7 +1833,9 @@ class SchoolGTASandbox {
           this.wantedSystem.markSpotted();
         },
         isPlayerRidingBike,
-        this.player.isDead
+        this.player.isDead,
+        isRaining,
+        isThunderstorm
       );
 
       if (!npc.isKnockedDown && npc.isChasing) {
@@ -1546,6 +1868,13 @@ class SchoolGTASandbox {
     for (const npc of this.npcs) {
       const inAttackRange = !npc.isKnockedDown && npc.isChasing && npc.position.distanceTo(targetPosition) < npc.attackRange;
       if (inAttackRange && !this.player.isDead && npc.attackCooldown <= 0) {
+        if (this.player.isDodging) {
+          npc.attackCooldown = 0.85;
+          npc.triggerAttackAnimation(delta);
+          this.wantedSystem.showBanner(this.dodgeSkillLevel === 2 ? '🐻 狗熊哆嗦毛！神速規避攻擊！' : '💨 閃身步！成功規避攻擊！', 1500);
+          soundManager.playDodge(this.dodgeSkillLevel === 2);
+          continue;
+        }
         npc.attackCooldown = 0.85;
         npc.triggerAttackAnimation(delta);
 
@@ -1630,6 +1959,14 @@ class SchoolGTASandbox {
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.playerCash);
+
+    // 身法技能冷卻計時與 HUD 更新
+    if (this.dodgeCooldownTimer > 0) {
+      this.dodgeCooldownTimer = Math.max(0, this.dodgeCooldownTimer - delta);
+    }
+    const maxSkillCd = this.dodgeSkillLevel === 2 ? 2.0 : 5.0;
+    this.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd);
+
     this.hud.updateWeaponHUD(
       this.player.currentWeapon,
       this.player.hasNormalBat,
@@ -1657,7 +1994,8 @@ class SchoolGTASandbox {
       hasRiddenBike: this.hasRiddenBike,
       hasEscapedDog: this.hasEscapedDog,
       hasWishedPond: this.hasWishedPond,
-      hasTastedHotFood: this.hasTastedHotFood
+      hasTastedHotFood: this.hasTastedHotFood,
+      dodgeSkillLevel: this.dodgeSkillLevel
     });
 
     this.hud.update(
@@ -1670,6 +2008,9 @@ class SchoolGTASandbox {
       isBeingChased,
       dangerAlert
     );
+
+    // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
+    this.weatherSystem.update(delta, targetPosition);
 
     // 16. 渲染畫面
     this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);

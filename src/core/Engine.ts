@@ -4,6 +4,8 @@ export class Engine {
   public scene: THREE.Scene;
   public renderer: THREE.WebGLRenderer;
   public canvas: HTMLCanvasElement;
+  public hemiLight!: THREE.HemisphereLight;
+  public dirLight!: THREE.DirectionalLight;
   private clock: THREE.Clock;
 
   constructor() {
@@ -52,31 +54,31 @@ export class Engine {
 
   private setupLighting() {
     // 柔和天光與地表反射光
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.75);
-    hemiLight.position.set(0, 50, 0);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.75);
+    this.hemiLight.position.set(0, 50, 0);
+    this.scene.add(this.hemiLight);
 
     // 主陽光 (Sunlight with Cast Shadow)
-    const dirLight = new THREE.DirectionalLight(0xfff5e6, 1.25);
-    dirLight.position.set(45, 70, 30);
-    dirLight.castShadow = true;
+    this.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.25);
+    this.dirLight.position.set(45, 70, 30);
+    this.dirLight.castShadow = true;
 
     // 陰影覆蓋範圍 (行動端降檔至 1024x1024 顯著降低 GPU 頻寬與發熱，PC 維持 2048x2048)
     const isMobile = Engine.isMobileDevice();
     const shadowRes = isMobile ? 1024 : 2048;
-    dirLight.shadow.mapSize.width = shadowRes;
-    dirLight.shadow.mapSize.height = shadowRes;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 180;
+    this.dirLight.shadow.mapSize.width = shadowRes;
+    this.dirLight.shadow.mapSize.height = shadowRes;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 180;
 
     const shadowDistance = 90;
-    dirLight.shadow.camera.left = -shadowDistance;
-    dirLight.shadow.camera.right = shadowDistance;
-    dirLight.shadow.camera.top = shadowDistance;
-    dirLight.shadow.camera.bottom = -shadowDistance;
-    dirLight.shadow.bias = -0.0005;
+    this.dirLight.shadow.camera.left = -shadowDistance;
+    this.dirLight.shadow.camera.right = shadowDistance;
+    this.dirLight.shadow.camera.top = shadowDistance;
+    this.dirLight.shadow.camera.bottom = -shadowDistance;
+    this.dirLight.shadow.bias = -0.0005;
 
-    this.scene.add(dirLight);
+    this.scene.add(this.dirLight);
   }
 
   public onResizeCallback?: (width: number, height: number, aspect: number) => void;

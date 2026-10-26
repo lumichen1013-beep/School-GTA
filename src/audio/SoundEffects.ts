@@ -686,6 +686,29 @@ export class SoundEffects {
     osc.stop(now + 0.19);
   }
 
+  // 閃身步 / 狗熊哆嗦毛身法疾風破空聲 (Martial Dodge Wind Whoosh)
+  public playDodge(isAdvanced: boolean = false) {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = isAdvanced ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(isAdvanced ? 950 : 720, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.22);
+
+    gain.gain.setValueAtTime(0.42, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.26);
+  }
+
   // 許願池投幣清脆金幣落水聲 (Coin Toss Into Pond)
   public playCoinToss() {
     this.initCtx();
@@ -801,6 +824,108 @@ export class SoundEffects {
 
     osc.start(now);
     osc.stop(now + 0.9);
+  }
+
+  // 天氣系統：程序化自然雨聲循環與水氣動態濾波 (White Noise Loop + Biquad Filter)
+  private rainSource: AudioBufferSourceNode | null = null;
+  private rainGain: GainNode | null = null;
+  private rainFilter: BiquadFilterNode | null = null;
+  private currentRainIntensity: number = 0;
+
+  public setRainIntensity(intensity: number, rampTime: number = 2.0) {
+    this.initCtx();
+    if (!this.ctx) return;
+
+    this.currentRainIntensity = intensity;
+
+    if (!this.rainSource && this.ctx) {
+      // 建立 2 秒白噪音循環緩衝區
+      const bufferSize = this.ctx.sampleRate * 2;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      this.rainSource = this.ctx.createBufferSource();
+      this.rainSource.buffer = buffer;
+      this.rainSource.loop = true;
+
+      this.rainFilter = this.ctx.createBiquadFilter();
+      this.rainFilter.type = 'lowpass';
+      this.rainFilter.frequency.setValueAtTime(900, this.ctx.currentTime);
+
+      this.rainGain = this.ctx.createGain();
+      this.rainGain.gain.setValueAtTime(0, this.ctx.currentTime);
+
+      this.rainSource.connect(this.rainFilter);
+      this.rainFilter.connect(this.rainGain);
+      this.rainGain.connect(this.ctx.destination);
+      this.rainSource.start(0);
+    }
+
+    if (this.rainGain && this.rainFilter) {
+      const now = this.ctx.currentTime;
+      const targetVol = this.isMuted ? 0 : Math.max(0, Math.min(0.42, intensity * 0.42));
+      this.rainGain.gain.cancelScheduledValues(now);
+      this.rainGain.gain.linearRampToValueAtTime(targetVol, now + rampTime);
+
+      // 雨勢越強，濾波器截止頻率越高，聲音越澎湃急促
+      const targetFreq = 700 + intensity * 1100; // 700Hz (小雨) ~ 1800Hz (雷雨)
+      this.rainFilter.frequency.cancelScheduledValues(now);
+      this.rainFilter.frequency.linearRampToValueAtTime(targetFreq, now + rampTime);
+    }
+  }
+
+  // 天氣系統：程序化低沉震撼雷鳴滾滾 (Rolling Thunder Synthesis)
+  public playThunder() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. 低頻超低音轟鳴震盪 (Sub-bass rumble 75Hz -> 28Hz)
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(75, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 3.2);
+
+    oscGain.gain.setValueAtTime(0, now);
+    oscGain.gain.linearRampToValueAtTime(0.55, now + 0.08);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 3.4);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 3.5);
+
+    // 2. 帶通濾波衝擊裂帛雜音 (Crackle & rolling rumble)
+    const noiseDuration = 2.8;
+    const bufferSize = Math.floor(this.ctx.sampleRate * noiseDuration);
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const noiseSource = this.ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const noiseFilter = this.ctx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.setValueAtTime(280, now);
+    noiseFilter.frequency.exponentialRampToValueAtTime(80, now + noiseDuration);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.48, now + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration);
+
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this.ctx.destination);
+    noiseSource.start(now);
   }
 }
 

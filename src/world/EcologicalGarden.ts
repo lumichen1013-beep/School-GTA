@@ -274,48 +274,87 @@ export class EcologicalGarden {
     const px = this.pondPos.x;
     const pz = this.pondPos.z;
 
-    // 池塘天然鵝卵石石圈基座 (半徑 4.5m)
-    const stoneRingMat = new THREE.MeshLambertMaterial({ color: 0x7f8c8d });
-    const stoneRing = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.2, 0.45, 24), stoneRingMat);
-    stoneRing.position.set(px, 0.22, pz);
-    stoneRing.receiveShadow = true;
-    this.group.add(stoneRing);
+    // A. 池塘外圍沉入地面的土石基座 (高程 Y = 0.08，頂部 Y = 0.16，深入泥土)
+    const foundationMat = new THREE.MeshLambertMaterial({ color: 0x576574 });
+    const foundation = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.4, 0.16, 28), foundationMat);
+    foundation.position.set(px, 0.08, pz);
+    foundation.receiveShadow = true;
+    this.group.add(foundation);
 
-    // 清澈湛藍寶石湖水面 (Crystal Azure Wishing Pond Water)
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x0984e3, // 清澈湛藍的湖水藍色 (寶石藍 / 湛藍湖水)
-      transparent: true,
-      opacity: 0.80, // 清透透明度 (0.75~0.85)
-      roughness: 0.15, // 具備清透高光反光
-      metalness: 0.20
+    // B. 環繞池畔的自然造景石圈 (Natural Cobblestone Embankment: 28 顆高低錯落的天然岩石，頂部達 Y = 0.45~0.58m，明顯高於水面)
+    const stoneRockMat = new THREE.MeshStandardMaterial({ color: 0x8395a7, roughness: 0.8, metalness: 0.1 });
+    const stoneCount = 28;
+    for (let i = 0; i < stoneCount; i++) {
+      const angle = (i / stoneCount) * Math.PI * 2;
+      const r = 4.55 + Math.sin(i * 3.7) * 0.18; // 自然凹凸曲折
+      const sx = px + Math.cos(angle) * r;
+      const sz = pz + Math.sin(angle) * r;
+      const rockScale = 0.35 + Math.abs(Math.sin(i * 5.3)) * 0.22;
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(rockScale, 1),
+        stoneRockMat
+      );
+      rock.position.set(sx, 0.22 + rockScale * 0.45, sz);
+      rock.rotation.set(angle * 1.2, i * 0.7, angle * 0.5);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      this.group.add(rock);
+    }
+
+    // C. 許願池深藍澄澈池底 (高程 Y = 0.14，頂部 Y = 0.16，與水面高程明確錯開)
+    const pondBottomMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7, // 澄澈純藍池底色
+      roughness: 0.35,
+      metalness: 0.15,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2
     });
-    const water = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 0.1, 24), waterMat);
-    water.position.set(px, 0.32, pz);
+    const pondBottom = new THREE.Mesh(new THREE.CylinderGeometry(4.35, 4.35, 0.04, 28), pondBottomMat);
+    pondBottom.position.set(px, 0.14, pz);
+    pondBottom.receiveShadow = true;
+    this.group.add(pondBottom);
+
+    // D. 清澈湛藍寶石湖水面 (頂部高程精確對齊 Y = 0.32，高於池底、低於岸石，徹底解決 Z-fighting)
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x00a8ff, // 清澈湛藍的湖水藍色 (純藍水體)
+      transparent: true,
+      opacity: 0.75, // 清透透光
+      roughness: 0.12, // 具備清透高光反光
+      metalness: 0.18,
+      depthWrite: false, // 透明材質不覆寫深度緩衝，徹底根除與池底及岸石閃爍爭搶
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2
+    });
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(4.34, 4.34, 0.10, 28), waterMat);
+    water.position.set(px, 0.27, pz); // 頂表面 Y = 0.27 + 0.05 = 0.32
+    water.renderOrder = 2; // 後繪製透明水體
     this.group.add(water);
 
-    // 水面漂浮蓮葉 (荷葉)
+    // E. 水面漂浮蓮葉 (荷葉浮於水面 Y = 0.33)
     const lilyMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
     const flowerMat = new THREE.MeshLambertMaterial({ color: 0xf472b6 });
     const lilyCoords = [
       [-1.8, -1.2], [1.5, 1.4], [-1.2, 2.0], [2.1, -1.5], [-0.5, -2.4]
     ];
     lilyCoords.forEach(([lx, lz], i) => {
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.04, 12), lilyMat);
-      pad.position.set(px + lx, 0.38, pz + lz);
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.03, 12), lilyMat);
+      pad.position.set(px + lx, 0.33, pz + lz);
       this.group.add(pad);
 
       if (i % 2 === 0) {
         // 粉紅睡蓮花朵
-        const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), flowerMat);
-        flower.position.set(px + lx, 0.48, pz + lz);
+        const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), flowerMat);
+        flower.position.set(px + lx, 0.42, pz + lz);
         this.group.add(flower);
       }
     });
 
-    // 木質觀景小橋棧道
+    // F. 木質觀景小橋棧道
     const woodMat = new THREE.MeshLambertMaterial({ color: 0x6d4c41 });
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.25, 4.5), woodMat);
-    bridge.position.set(px + 4.2, 0.45, pz);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.22, 4.5), woodMat);
+    bridge.position.set(px + 4.2, 0.42, pz);
     bridge.castShadow = true;
     this.group.add(bridge);
 
