@@ -2201,8 +2201,8 @@ export class NPC {
       if (this.isChasing) {
         if (!seesPlayer) {
           this.lostSightTimer += delta;
-          const maxLostTime = this.role === 'DETENTION_WOLF' ? 4.5 : 3.5;
-          const maxDistSq = 576.0; // 24m
+          const maxLostTime = this.role === 'DETENTION_WOLF' ? 6.5 : 5.0;
+          const maxDistSq = 3600.0; // 60m 警報追捕搜索範圍
           if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
             this.resetAggro();
             this.setAlertState('NORMAL');

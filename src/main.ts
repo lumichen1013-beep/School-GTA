@@ -827,6 +827,33 @@ class SchoolGTASandbox {
       'CASUAL_WALK'
     ));
 
+    // 12. A 區西側監舍外廊巡哨 G12 (X: -72, Z: -75 ~ -45)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-72, 0, -60),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-72, 0, -75), new THREE.Vector3(-72, 0, -45)],
+      'CASUAL_WALK'
+    ));
+
+    // 13. A 區東側食堂側廊巡哨 G13 (X: 82, Z: -75 ~ -45)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(82, 0, -60),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(82, 0, -75), new THREE.Vector3(82, 0, -45)],
+      'CASUAL_WALK'
+    ));
+
+    // 14. A 區南前庭西折角守衛 G14 (Z = -32, X: -22 ~ -10)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-15, 0, -32),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-22, 0, -32), new THREE.Vector3(-10, 0, -32)],
+      'CASUAL_WALK'
+    ));
+
     // ==========================================
     // B 區：操場重裝軍規貨櫃迷宮 (Z: -28 ~ 35)
     // ==========================================
@@ -875,7 +902,7 @@ class SchoolGTASandbox {
       'CASUAL_WALK'
     ));
 
-    // 10. B 區特訓巡邏狼犬 (西側寬廣開闊地帶多點巡邏)
+    // 10. B 區特訓巡邏狼犬 1 (西側寬廣開闊地帶多點巡邏)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
       new THREE.Vector3(-30, 0, -5),
@@ -884,9 +911,63 @@ class SchoolGTASandbox {
       'JOGGING'
     ));
 
+    // 15. B 區北走道巡邏資深學長 G15 (Z = -12, X: -6 ~ 6)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, -12),
+      'DETENTION_SENIOR',
+      [new THREE.Vector3(-6, 0, -12), new THREE.Vector3(6, 0, -12)],
+      'CASUAL_WALK'
+    ));
+
+    // 16. B 區南走道巡查資深教官 G16 (Z = 14, X: -8 ~ 8)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, 14),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-8, 0, 14), new THREE.Vector3(8, 0, 14)],
+      'CASUAL_WALK'
+    ));
+
+    // 17. B 區東側外圍巡邏狼犬 2 (東側開闊地帶四點巡邏)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(32, 0, -5),
+      'DETENTION_WOLF',
+      [new THREE.Vector3(32, 0, -12), new THREE.Vector3(32, 0, 16), new THREE.Vector3(20, 0, 16), new THREE.Vector3(20, 0, -12)],
+      'JOGGING'
+    ));
+
     // ==========================================
     // C 區：終極哨戒門庭 (Z: 35 ~ 95)
     // ==========================================
+    // 18. C 區競技場西翼護衛長 G18 (X = -14, Z: 42 ~ 58)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-14, 0, 50),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-14, 0, 42), new THREE.Vector3(-14, 0, 58)],
+      'CASUAL_WALK'
+    ));
+
+    // 19. C 區競技場東翼護衛長 G19 (X = 14, Z: 42 ~ 58)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(14, 0, 50),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(14, 0, 42), new THREE.Vector3(14, 0, 58)],
+      'CASUAL_WALK'
+    ));
+
+    // 20. C 區南大門哨戒長 G20 (守衛在 Z = 88, X: -8 ~ 8)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, 88),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-8, 0, 88), new THREE.Vector3(8, 0, 88)],
+      'CASUAL_WALK'
+    ));
+
     // 11. 守門小 Boss：【鐵面總教官】(防暴大盾，正中開闊競技場巡邏)
     const boss = new NPC(
       this.engine.scene,
@@ -908,6 +989,7 @@ class SchoolGTASandbox {
   private setupInteractions() {
     // E 鍵互動：少年院門禁與鑰匙卡 / 合作社 / 採菇 / 許願 / 電梯 / 羽球對話 / 放籃球 / 賽跑 / 拿籃球 / 上下單車
     this.input.onInteract(() => {
+      if (!this.isGameRunning) return;
       if (this.player.isDead || this.player.hp <= 0) return;
 
       // 潛龍諜影特訓院越獄專屬互動點 (撿門禁卡、解鎖管制門、解鎖南大門、小賣部)
@@ -1218,6 +1300,7 @@ class SchoolGTASandbox {
 
     // 滑鼠左鍵：投籃蓄力 / 單車鳴鈴 / 揮動武器攻擊
     this.input.onAttack(() => {
+      if (!this.isGameRunning) return;
       if (this.player.isDead || this.player.hp <= 0) return;
 
       if (this.basketballGame.isHolding) {
@@ -1328,6 +1411,7 @@ class SchoolGTASandbox {
 
     // 滑鼠左鍵鬆開：投籃出手 (電腦版)
     this.input.onAttackRelease(() => {
+      if (!this.isGameRunning) return;
       if (this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
         this.basketballGame.releaseShot(
           this.player,
@@ -1340,6 +1424,7 @@ class SchoolGTASandbox {
 
     // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、R 鍵重置發球、J 鍵任務、ESC 關閉彈窗
     window.addEventListener('keydown', (e) => {
+      if (!this.isGameRunning) return;
       if (e.code === 'Digit1') {
         this.player.setWeapon('FIST');
         this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
@@ -2067,6 +2152,13 @@ class SchoolGTASandbox {
       }
     }
 
+    // -0.5 主畫面/世界選單狀態：尚未進入遊戲時僅渲染背景天氣，嚴禁背景運算與操控天天國中
+    if (!this.isGameRunning) {
+      this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
+      this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+      return;
+    }
+
     // 0. 電梯過場動畫與自動走出 (僅限天天國中)
     if (this.currentWorldType === 'CAMPUS' && this.elevatorTransition) {
       const et = this.elevatorTransition;
@@ -2403,31 +2495,30 @@ class SchoolGTASandbox {
       }
     }
 
-    // 6.5 少年院動態探照燈掃視與警戒檢測 (被探照燈照到時全體 NPC 聚集並主動攻擊)
+    // 6.5 少年院動態探照燈掃視與警戒檢測 (被探照燈照到時發佈警報並吸引附近 NPC 追捕)
     if (this.currentWorldType === 'DETENTION') {
       this.detentionWorld.updateKeycards(delta);
       const slState = this.detentionWorld.update(delta, targetPosition);
       if (slState.isDetectedBySearchlight) {
         this.searchlightAlertTimer += delta;
-        if (this.searchlightAlertTimer < 1.0) {
-          this.wantedSystem.showBanner('⚠️ 探照燈高空鎖定中！守衛部隊正迅速朝光斑聚集，立即逃往掩體！', 500);
-        } else if (this.searchlightAlertTimer >= 1.0) {
-          this.searchlightAlertTimer = 0.5; // 維持警報觸發與圍剿態勢
+        if (this.searchlightAlertTimer >= 0.25) {
           if (this.detentionAlertTimer <= 0) {
             this.detentionAlertCount++;
-          }
-          this.detentionAlertTimer = 15.0; // 觸發 15 秒 MGS 警戒倒數
-          if (this.wantedSystem.stars < 2) {
-            this.wantedSystem.reportCrime(2, '探照燈高空鎖定！觸發特訓防暴圍剿警報！');
             soundManager.playAlert();
             soundManager.playWhistle();
           }
-          // 核心機制：被探照燈照到時，全體 NPC 聚集並主動攻擊！
-          // 半徑 60m 內所有少年院 NPC（教官、狼犬、學長、霸榜生、總長）全力往玩家位置衝刺聚集
+          this.detentionAlertTimer = 18.0; // 觸發 18 秒 MGS 警戒倒數
+          if (this.wantedSystem.stars < 2) {
+            this.wantedSystem.reportCrime(2, '探照燈高空鎖定！發布緊急圍剿警報！');
+          }
+          this.wantedSystem.showBanner('🚨 探照燈高空鎖定！已發布全場警報，守衛部隊全面包夾追捕！', 1000);
+
+          // 核心機制：被探照燈照到時，吸引附近 NPC 聚集並主動攻擊！
+          // 半徑 65m 內所有少年院 NPC（教官、狼犬、學長、霸榜生、總長）全力往玩家位置衝刺聚集追捕
           for (const n of this.detentionNPCs) {
             if (!n.isKnockedDown && !n.isPermanentlyKnockedOut) {
               const d = n.position.distanceTo(targetPosition);
-              if (d < 60.0) {
+              if (d < 65.0) {
                 if (n.isPaused) n.cancelPause();
                 n.setAlertState('ALERT');
                 n.isChasing = true;
@@ -2439,7 +2530,7 @@ class SchoolGTASandbox {
           }
         }
       } else {
-        this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 1.5);
+        this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 2.0);
       }
 
       // MGS 警戒倒數計時器

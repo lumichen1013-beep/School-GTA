@@ -1421,31 +1421,104 @@ export class HUD {
       const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
       drawTacticalBox(0, 95, 20.4, 1.5, southGateColor);
 
-      // 鑰匙卡光點標記
+      // 鑰匙卡高亮顯眼標記 (帶動態擴散脈衝光環與直立文字標籤)
       if (detentionData) {
+        const pulse = 1.0 + 0.3 * Math.sin(now * 0.008);
+
+        // 1. 藍色門禁卡 A
         if (!detentionData.hasKeycardA) {
           const kx = (detentionData.keycardAPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardAPos.z - playerPos.z) * mapScale;
+
+          // 動態擴散外圈
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // 核心光點
           ctx.fillStyle = '#38bdf8';
           ctx.beginPath();
-          ctx.arc(kx, kz, 4.5, 0, Math.PI * 2);
+          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
           ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          // 直立文字標籤
+          ctx.save();
+          ctx.translate(kx, kz);
+          ctx.rotate(-playerRotY);
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillText('🔑KEY A', 0, -8);
+          ctx.restore();
         }
+
+        // 2. 黃色門禁卡 B
         if (!detentionData.hasKeycardB) {
           const kx = (detentionData.keycardBPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardBPos.z - playerPos.z) * mapScale;
+
+          // 動態擴散外圈
+          ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // 核心光點
           ctx.fillStyle = '#facc15';
           ctx.beginPath();
-          ctx.arc(kx, kz, 4.5, 0, Math.PI * 2);
+          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
           ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          // 直立文字標籤
+          ctx.save();
+          ctx.translate(kx, kz);
+          ctx.rotate(-playerRotY);
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#facc15';
+          ctx.fillText('🔑KEY B', 0, -8);
+          ctx.restore();
         }
+
+        // 3. 萬能逃脫鑰匙卡 (金黃色傳奇標記)
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
           const kx = (detentionData.masterKeycardPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.masterKeycardPos.z - playerPos.z) * mapScale;
+
+          // 金色耀眼動態光環
+          ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.arc(kx, kz, 8.0 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // 核心金鑽
           ctx.fillStyle = '#ffd700';
           ctx.beginPath();
-          ctx.arc(kx, kz, 5.5, 0, Math.PI * 2);
+          ctx.arc(kx, kz, 5.0, 0, Math.PI * 2);
           ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // 直立文字標籤
+          ctx.save();
+          ctx.translate(kx, kz);
+          ctx.rotate(-playerRotY);
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ffd700';
+          ctx.fillText('★MASTER KEY', 0, -10);
+          ctx.restore();
         }
       }
 
@@ -1504,6 +1577,18 @@ export class HUD {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.stroke();
+
+        // 若 Boss 存活且尚未掉落萬能鑰匙卡，在雷達上直立標示 ★BOSS [KEY]
+        if (isBoss && detentionData && !detentionData.hasMasterKeycard && !detentionData.masterKeycardPos) {
+          ctx.save();
+          ctx.translate(nx, nz);
+          ctx.rotate(-playerRotY);
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ff4444';
+          ctx.fillText('★BOSS [KEY]', 0, -10);
+          ctx.restore();
+        }
       }
 
       ctx.restore();

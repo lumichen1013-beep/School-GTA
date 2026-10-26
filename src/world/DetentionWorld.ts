@@ -177,14 +177,14 @@ export class DetentionWorld {
     // 2. 外圍高大鐵絲網鋼網與大鐵門 (高 7.5m)
     // ==========================================
     const fenceBounds = [
-      { startX: -95, endX: 95, z: -95, isZ: false }, // 北牆
-      { startX: -95, endX: -10, z: 95, isZ: false }, // 南牆西側
-      { startX: 10, endX: 95, z: 95, isZ: false },  // 南牆東側
-      { startZ: -95, endZ: 95, x: -95, isZ: true },  // 西牆
-      { startZ: -95, endZ: 95, x: 95, isZ: true }   // 東牆
+      { startX: -96.5, endX: 96.5, z: -95, isZ: false }, // 北牆
+      { startX: -96.5, endX: -10, z: 95, isZ: false }, // 南牆西側
+      { startX: 10, endX: 96.5, z: 95, isZ: false },  // 南牆東側
+      { startZ: -96.5, endZ: 96.5, x: -95, isZ: true },  // 西牆
+      { startZ: -96.5, endZ: 96.5, x: 95, isZ: true }   // 東牆
     ];
 
-    // 圍牆混凝土矮基座 (厚 0.6m, 高 0.9m)
+    // 圍牆混凝土矮基座 (厚 0.6m, 高 0.9m) 與高規格 10m 防暴碰撞體
     for (const f of fenceBounds) {
       if (!f.isZ) {
         const len = f.endX! - f.startX!;
@@ -192,7 +192,7 @@ export class DetentionWorld {
         const curb = new THREE.BoxGeometry(len, 0.9, 0.6);
         curb.translate(cx, 0.45, f.z!);
         concreteGeos.push(curb);
-        this.addCollider(f.startX!, f.endX!, f.z! - 0.3, f.z! + 0.3, 0, 8.0);
+        this.addCollider(f.startX!, f.endX!, f.z! - 0.4, f.z! + 0.4, 0, 10.0);
 
         // 鐵絲網面 (高 6.6m)
         const mesh = new THREE.BoxGeometry(len, 6.6, 0.08);
@@ -216,7 +216,7 @@ export class DetentionWorld {
         const curb = new THREE.BoxGeometry(0.6, 0.9, len);
         curb.translate(f.x!, 0.45, cz);
         concreteGeos.push(curb);
-        this.addCollider(f.x! - 0.3, f.x! + 0.3, f.startZ!, f.endZ!, 0, 8.0);
+        this.addCollider(f.x! - 0.4, f.x! + 0.4, f.startZ!, f.endZ!, 0, 10.0);
 
         const mesh = new THREE.BoxGeometry(0.08, 6.6, len);
         mesh.translate(f.x!, 4.2, cz);
@@ -233,6 +233,12 @@ export class DetentionWorld {
         }
       }
     }
+
+    // 四角嚴密封閉加固碰撞體 (徹底杜絕斜角穿透漏洞)
+    this.addCollider(-96.5, -93.5, -96.5, -93.5, 0, 10.0);
+    this.addCollider(93.5, 96.5, -96.5, -93.5, 0, 10.0);
+    this.addCollider(-96.5, -93.5, 93.5, 96.5, 0, 10.0);
+    this.addCollider(93.5, 96.5, 93.5, 96.5, 0, 10.0);
 
     // 南大門入口 (Z = 95, X: -10 ~ 10)：警衛哨所與重型鋼門柱
     const gatePostL = new THREE.BoxGeometry(1.4, 7.5, 1.4);
@@ -365,10 +371,17 @@ export class DetentionWorld {
       const roof = new THREE.BoxGeometry(7.0, 0.25, 7.0);
       roof.translate(tc.x, 16.0, tc.z);
       corrugatedIronGeos.push(roof);
-
-      // 建立動態探照燈 (置於瞭望塔前沿 Y = 13.5m)
-      this.createSearchlight(i, new THREE.Vector3(tc.x, 13.6, tc.z));
     }
+
+    // 建立全場唯一動態探照燈：中央高空立體監視燈塔 (Y = 18.0m，俯視掃描整個特訓院大操場)
+    const slMast = new THREE.CylinderGeometry(0.35, 0.5, 18.0, 8);
+    slMast.translate(0, 9.0, 10.0);
+    darkSteelGeos.push(slMast);
+    const slPlatform = new THREE.BoxGeometry(3.2, 0.35, 3.2);
+    slPlatform.translate(0, 17.8, 10.0);
+    darkSteelGeos.push(slPlatform);
+    this.addCollider(-0.6, 0.6, 9.4, 10.6, 0, 18.0);
+    this.createSearchlight(0, new THREE.Vector3(0, 18.0, 10.0));
 
     // ==========================================
     // 4. 集訓營舍大樓 (2層鋼構大樓，X: -65 ~ -15, Z: -75 ~ -45)
@@ -721,14 +734,14 @@ export class DetentionWorld {
     this.addCollider(-25, -6, -38.4, -37.6, 0, 3.8);
     this.addCollider(6, 25, -38.4, -37.6, 0, 3.8);
 
-    // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院，僅在中央 X: -3.5 ~ 3.5 留出閘口)
-    const gateA_WallW = new THREE.BoxGeometry(86.5, 4.5, 0.8);
-    gateA_WallW.translate(-46.75, 2.25, -28);
-    const gateA_WallE = new THREE.BoxGeometry(86.5, 4.5, 0.8);
-    gateA_WallE.translate(46.75, 2.25, -28);
+    // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
+    const gateA_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
+    gateA_WallW.translate(-50.0, 2.75, -28);
+    const gateA_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
+    gateA_WallE.translate(50.0, 2.75, -28);
     concreteGeos.push(gateA_WallW, gateA_WallE);
-    this.addCollider(-90, -3.5, -28.5, -27.5, 0, 4.5);
-    this.addCollider(3.5, 90, -28.5, -27.5, 0, 4.5);
+    this.addCollider(-96.5, -3.5, -28.6, -27.4, 0, 8.0);
+    this.addCollider(3.5, 96.5, -28.6, -27.4, 0, 8.0);
 
     // 動態管制閘門 1 (需藍色門禁卡 A 開啟)
     this.gateAMeshGroup = new THREE.Group();
@@ -801,14 +814,14 @@ export class DetentionWorld {
       this.addCollider(jb.x - jbW / 2, jb.x + jbW / 2, jb.z - jbD / 2, jb.z + jbD / 2, 0, 1.5);
     }
 
-    // 管制閘門 2 隔斷牆 (Z = 35, 橫跨全院，僅在中央 X: -3.5 ~ 3.5 留出閘口)
-    const gateB_WallW = new THREE.BoxGeometry(86.5, 4.5, 0.8);
-    gateB_WallW.translate(-46.75, 2.25, 35);
-    const gateB_WallE = new THREE.BoxGeometry(86.5, 4.5, 0.8);
-    gateB_WallE.translate(46.75, 2.25, 35);
+    // 管制閘門 2 隔斷牆 (Z = 35, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
+    const gateB_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
+    gateB_WallW.translate(-50.0, 2.75, 35);
+    const gateB_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
+    gateB_WallE.translate(50.0, 2.75, 35);
     concreteGeos.push(gateB_WallW, gateB_WallE);
-    this.addCollider(-90, -3.5, 34.5, 35.5, 0, 4.5);
-    this.addCollider(3.5, 90, 34.5, 35.5, 0, 4.5);
+    this.addCollider(-96.5, -3.5, 34.4, 35.6, 0, 8.0);
+    this.addCollider(3.5, 96.5, 34.4, 35.6, 0, 8.0);
 
     // 動態管制閘門 2 (需黃色門禁卡 B 開啟)
     this.gateBMeshGroup = new THREE.Group();
@@ -956,17 +969,17 @@ export class DetentionWorld {
 
     this.group.add(housing);
 
-    // 3D 半透明光錐 (ConeGeometry, 頂部在塔頂，底部位於地面)
-    const coneHeight = 15.0;
-    const coneRadius = 3.6;
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 16, 1, true);
+    // 3D 半透明光錐 (ConeGeometry, 頂部在塔頂 Y = 18m，底部位於地面)
+    const coneHeight = 28.0;
+    const coneRadius = 4.2;
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 20, 1, true);
     coneGeo.translate(0, -coneHeight / 2, 0); // 頂點錨點置於 (0, 0, 0)
     coneGeo.rotateX(-Math.PI / 2); // 朝向前方
 
     const coneMat = new THREE.MeshBasicMaterial({
       color: 0xfffae0,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.18,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide
@@ -974,8 +987,8 @@ export class DetentionWorld {
     const coneMesh = new THREE.Mesh(coneGeo, coneMat);
     housing.add(coneMesh);
 
-    // 地面投射光斑 (圓盤光圈，貼地 Y = 0.06)
-    const spotGeo = new THREE.RingGeometry(0.1, 3.6, 24);
+    // 地面投射光斑 (圓盤光圈，貼地 Y = 0.06，半徑 4.2m)
+    const spotGeo = new THREE.RingGeometry(0.1, 4.2, 28);
     spotGeo.rotateX(-Math.PI / 2);
     const spotMat = new THREE.MeshBasicMaterial({
       color: 0xfff5cc,
@@ -986,17 +999,10 @@ export class DetentionWorld {
       side: THREE.DoubleSide
     });
     const groundSpot = new THREE.Mesh(spotGeo, spotMat);
-    groundSpot.position.set(towerPos.x * 0.45, 0.06, towerPos.z * 0.45);
+    groundSpot.position.set(0, 0.06, 0);
     this.group.add(groundSpot);
 
-    // 探照燈巡邏運動參數 (不同相位與旋轉頻率，使光錐覆蓋整個操場與建築周邊)
-    const phases = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
-    const speeds = [0.45, 0.38, 0.52, 0.42];
-    const radiusesX = [26, 32, 28, 30];
-    const radiusesZ = [24, 28, 32, 26];
-    const centerXs = [-20, 20, -25, 25];
-    const centerZs = [-15, -15, 15, 15];
-
+    // 單座中央高空探照燈巡視參數
     this.searchlights.push({
       id: index,
       towerPos: towerPos.clone(),
@@ -1004,12 +1010,12 @@ export class DetentionWorld {
       coneMesh,
       groundSpot,
       currentGroundPos: groundSpot.position.clone(),
-      angle: phases[index % 4],
-      speed: speeds[index % 4],
-      radiusX: radiusesX[index % 4],
-      radiusZ: radiusesZ[index % 4],
-      centerX: centerXs[index % 4],
-      centerZ: centerZs[index % 4],
+      angle: 0,
+      speed: 0.45,
+      radiusX: 36,
+      radiusZ: 32,
+      centerX: 0,
+      centerZ: 0,
       isDetecting: false
     });
   }
@@ -1087,8 +1093,8 @@ export class DetentionWorld {
       // 若射線路徑遭到任何掩體或建築實體碰撞箱遮擋，則判定掩體完全遮蔽！
       const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
 
-      // 當玩家在光圈半徑 3.6m 內，且身處室外操場 (Y < 3.0) 且未被掩體遮擋
-      if (dist < 3.6 && isPlayerOutdoors && !isOccludedByCover) {
+      // 當玩家在光圈半徑 4.2m 內，且身處室外操場 (Y < 3.0) 且未被掩體遮擋
+      if (dist < 4.2 && isPlayerOutdoors && !isOccludedByCover) {
         sl.isDetecting = true;
         anyDetected = true;
 

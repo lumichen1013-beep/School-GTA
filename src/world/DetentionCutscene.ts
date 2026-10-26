@@ -240,9 +240,9 @@ export class DetentionCutscene {
     this.timer = 0;
     this.cutsceneGroup.visible = true;
 
-    // 專車起始點：位於南大門外 (0, 0, 95)，車頭朝向操場北邊
+    // 專車起始點：位於南大門外 (0, 0, 95)，車頭朝向操場北邊 (-Z 方向)
     this.vanGroup.position.set(0, 0, 95);
-    this.vanGroup.rotation.y = Math.PI; // 朝向 -Z
+    this.vanGroup.rotation.y = 0; // 車頭正向朝向 -Z 前進
 
     if (this.vanDoor) {
       this.vanDoor.position.set(1.42, 1.4, 0.8); // 關閉狀態
@@ -251,23 +251,23 @@ export class DetentionCutscene {
     // 隱藏玩家本體 (待第 3 幕踏出車廂)
     if (this.playerRef) {
       this.playerRef.mesh.visible = false;
-      this.playerRef.position.set(2.4, 0, 10);
+      this.playerRef.position.set(3.0, 0, 16.8);
       this.playerRef.rotationY = 0;
     }
 
-    // 鐵面總長與隨行教官位置初始化在操場北側暗處 (Z: 2)
+    // 鐵面總長與隨行教官位置初始化在操場北側暗處 (Z: 0 ~ 2)
     if (this.wardenMesh) {
-      this.wardenMesh.position.set(2.4, 0, -2);
+      this.wardenMesh.position.set(3.0, 0, 0);
       this.wardenMesh.rotation.y = Math.PI; // 面向南方主角
       this.wardenMesh.visible = false;
     }
     if (this.guardMeshes[0]) {
-      this.guardMeshes[0].position.set(0.6, 0, -3);
+      this.guardMeshes[0].position.set(1.4, 0, -1.2);
       this.guardMeshes[0].rotation.y = Math.PI;
       this.guardMeshes[0].visible = false;
     }
     if (this.guardMeshes[1]) {
-      this.guardMeshes[1].position.set(4.2, 0, -3);
+      this.guardMeshes[1].position.set(4.6, 0, -1.2);
       this.guardMeshes[1].rotation.y = Math.PI;
       this.guardMeshes[1].visible = false;
     }
@@ -311,13 +311,13 @@ export class DetentionCutscene {
     // ========================================================
     if (time < 4.2) {
       const t = time / 4.2;
-      // 專車由 Z: 95 行駛至 Z: 50
-      const currentZ = THREE.MathUtils.lerp(95, 48, t);
+      // 專車由 Z: 95 行駛至 Z: 55
+      const currentZ = THREE.MathUtils.lerp(95, 55, t);
       this.vanGroup.position.set(0, 0, currentZ);
 
-      // 車輪隨前進旋轉
+      // 車輪隨前進向前滾動
       for (const w of this.vanWheels) {
-        w.rotation.x += 14.0 * (1.0 - t * 0.3) * 0.016;
+        w.rotation.x -= 14.0 * (1.0 - t * 0.3) * 0.016;
       }
 
       // 鏡頭：門外低角度仰角固定監視鏡頭，仰望專車霸氣駛入
@@ -331,17 +331,17 @@ export class DetentionCutscene {
       }
     }
     // ========================================================
-    // 分鏡 2 (4.2s ~ 8.2s)：專車在操場中央急煞停下，四座瞭望塔探照燈掃向車身
+    // 分鏡 2 (4.2s ~ 8.2s)：專車在操場中央急煞停下，瞭望塔探照燈掃向車身
     // ========================================================
     else if (time < 8.2) {
       const t = (time - 4.2) / 4.0;
-      // 專車從 Z: 48 減速急煞停至 Z: 10
-      const currentZ = THREE.MathUtils.lerp(48, 10, Math.sin(t * Math.PI / 2));
+      // 專車從 Z: 55 減速急煞停至 Z: 16 (預留充足安全間距，絕不碰撞前哨守衛)
+      const currentZ = THREE.MathUtils.lerp(55, 16, Math.sin(t * Math.PI / 2));
       this.vanGroup.position.set(0, 0, currentZ);
 
-      // 車輪緩慢停轉
+      // 車輪緩慢向前滾動並平穩停轉
       for (const w of this.vanWheels) {
-        w.rotation.x += 10.0 * (1.0 - t) * 0.016;
+        w.rotation.x -= 10.0 * (1.0 - t) * 0.016;
       }
 
       // 急煞音效 (在剛煞停時觸發一次)
@@ -352,8 +352,8 @@ export class DetentionCutscene {
       // 相機環繞跟隨專車弧線平滑拍攝
       const angle = 0.5 + t * 1.5;
       const radius = 11.0;
-      this._camPos.set(Math.cos(angle) * radius, 3.2 - t * 0.8, 10 + Math.sin(angle) * radius);
-      this._camTarget.set(0, 1.6, 10);
+      this._camPos.set(Math.cos(angle) * radius, 3.2 - t * 0.8, 16 + Math.sin(angle) * radius);
+      this._camTarget.set(0, 1.6, 16);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -366,7 +366,7 @@ export class DetentionCutscene {
     // ========================================================
     else if (time < 12.0) {
       const t = (time - 8.2) / 3.8;
-      this.vanGroup.position.set(0, 0, 10);
+      this.vanGroup.position.set(0, 0, 16);
 
       // 車側門平滑向後滑開
       if (this.vanDoor) {
@@ -374,18 +374,18 @@ export class DetentionCutscene {
         this.vanDoor.position.z = doorZ;
       }
 
-      // 主角現身並走下車階
+      // 主角現身並走下車階 (位於 X: 3.0, Z: 16.8)
       if (this.playerRef) {
         this.playerRef.mesh.visible = true;
-        const playerX = THREE.MathUtils.lerp(1.4, 2.6, Math.min(1.0, t * 1.5));
-        this.playerRef.position.set(playerX, 0, 10);
+        const playerX = THREE.MathUtils.lerp(1.8, 3.0, Math.min(1.0, t * 1.5));
+        this.playerRef.position.set(playerX, 0, 16.8);
         this.playerRef.rotationY = Math.PI; // 堅毅挺立面對前方
       }
 
       // 鏡頭近身特寫：由地面主角腳步緩緩上推至面部與挺拔身影
       const camY = THREE.MathUtils.lerp(0.6, 1.8, t);
-      this._camPos.set(4.8 - t * 0.5, camY, 10 - t * 1.2);
-      this._camTarget.set(2.4, 1.4, 10);
+      this._camPos.set(5.5 - t * 0.5, camY, 16.8 - t * 1.2);
+      this._camTarget.set(3.0, 1.4, 16.8);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -398,18 +398,18 @@ export class DetentionCutscene {
     // ========================================================
     else if (time < 15.8) {
       const t = (time - 12.0) / 3.8;
-      this.vanGroup.position.set(0, 0, 10);
+      this.vanGroup.position.set(0, 0, 16);
 
-      // 總長與教官大步走上前
+      // 總長與教官大步走上前 (停於 Z = 10.5 左右開闊處，與專車車頭保持 5m 安全距離，絕不碰撞)
       if (this.wardenMesh && this.guardMeshes[0] && this.guardMeshes[1]) {
         this.wardenMesh.visible = true;
         this.guardMeshes[0].visible = true;
         this.guardMeshes[1].visible = true;
 
-        const wardenZ = THREE.MathUtils.lerp(-1.0, 5.8, Math.min(1.0, t * 1.4));
-        this.wardenMesh.position.set(2.4, 0, wardenZ);
-        this.guardMeshes[0].position.set(0.6, 0, wardenZ - 1.2);
-        this.guardMeshes[1].position.set(4.2, 0, wardenZ - 1.2);
+        const wardenZ = THREE.MathUtils.lerp(2.0, 10.5, Math.min(1.0, t * 1.4));
+        this.wardenMesh.position.set(3.0, 0, wardenZ);
+        this.guardMeshes[0].position.set(1.4, 0, wardenZ - 1.2);
+        this.guardMeshes[1].position.set(4.6, 0, wardenZ - 1.2);
 
         // 總長舉手吹哨動作
         if (t > 0.45 && this.wardenArm) {
@@ -423,8 +423,8 @@ export class DetentionCutscene {
       }
 
       // 鏡頭過肩視角：由主角背後望向氣勢威嚴的鐵面總長
-      this._camPos.set(2.6, 1.85, 11.8);
-      this._camTarget.set(2.4, 1.5, 6.0);
+      this._camPos.set(3.2, 1.85, 18.2);
+      this._camTarget.set(3.0, 1.5, 10.5);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -437,19 +437,19 @@ export class DetentionCutscene {
     // ========================================================
     else {
       const t = (time - 15.8) / 2.7;
-      this.vanGroup.position.set(0, 0, 10);
+      this.vanGroup.position.set(0, 0, 16);
 
-      // 相機由特寫位置平滑拉回玩家身後 5.5m，Y: 2.5m 的標準第三人稱跟隨視角
-      const targetCamX = 2.4;
+      // 相機由特寫位置平滑拉回玩家身後 5.2m，Y: 2.4m 的標準第三人稱跟隨視角
+      const targetCamX = 3.0;
       const targetCamY = 2.4;
-      const targetCamZ = 15.5;
+      const targetCamZ = 22.0;
 
       this._camPos.set(
-        THREE.MathUtils.lerp(2.6, targetCamX, t),
+        THREE.MathUtils.lerp(3.2, targetCamX, t),
         THREE.MathUtils.lerp(1.85, targetCamY, t),
-        THREE.MathUtils.lerp(11.8, targetCamZ, t)
+        THREE.MathUtils.lerp(18.2, targetCamZ, t)
       );
-      this._camTarget.set(2.4, 1.2, 10);
+      this._camTarget.set(3.0, 1.2, 16.8);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
