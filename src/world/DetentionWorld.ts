@@ -221,14 +221,30 @@ export class DetentionWorld {
     sentryWin.translate(-13, 2.0, 93.15);
     glassGeos.push(sentryWin);
 
-    // 雙扇重型鋼柵門 (微敞開狀態，供特訓車開入)
-    const leftDoor = new THREE.BoxGeometry(8.5, 5.0, 0.2);
-    leftDoor.rotateY(0.45); // 旋轉敞開
-    leftDoor.translate(-6.0, 2.5, 94.0);
-    const rightDoor = new THREE.BoxGeometry(8.5, 5.0, 0.2);
-    rightDoor.rotateY(-0.45);
-    rightDoor.translate(6.0, 2.5, 94.0);
+    // 雙扇重型鋼柵防暴大門 (永遠關閉封鎖狀態，加裝粗壯橫跨鎖樑與重型鎖鍊警示板)
+    const leftDoor = new THREE.BoxGeometry(10.2, 6.6, 0.25);
+    leftDoor.translate(-5.0, 3.3, 95.0);
+    const rightDoor = new THREE.BoxGeometry(10.2, 6.6, 0.25);
+    rightDoor.translate(5.0, 3.3, 95.0);
     darkSteelGeos.push(leftDoor, rightDoor);
+
+    // 重型橫跨鎖樑 (長 20.4m, 貫穿鎖死大門)
+    const lockBeam = new THREE.BoxGeometry(20.4, 0.45, 0.45);
+    lockBeam.translate(0, 3.3, 95.25);
+    darkSteelGeos.push(lockBeam);
+
+    // 鎖死門牌警示告示板「第七特訓院 · 嚴禁出入 · 鐵門常閉」
+    const gateLockedSign = new THREE.BoxGeometry(10.0, 1.1, 0.3);
+    gateLockedSign.translate(0, 4.8, 95.25);
+    yellowHazardGeos.push(gateLockedSign);
+
+    // 中央巨型鎖具固定鋼箱
+    const gateLockBox = new THREE.BoxGeometry(1.6, 1.8, 0.5);
+    gateLockBox.translate(0, 3.3, 95.3);
+    rustedMetalGeos.push(gateLockBox);
+
+    // 大門永久實體阻擋碰撞體 (X: -10.5 ~ 10.5, Z: 94.2 ~ 95.8, 高度 8.0m 全面封閉)
+    this.addCollider(-10.5, 10.5, 94.2, 95.8, 0, 8.0);
 
     // ==========================================
     // 3. 四座高聳瞭望塔 (四角 Watchtowers)

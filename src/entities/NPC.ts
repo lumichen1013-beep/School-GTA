@@ -1942,7 +1942,8 @@ export class NPC {
     wantedLevel: number,
     colliders: CollidableBox[],
     onSpotPlayer: () => void,
-    isPlayerDead: boolean
+    isPlayerDead: boolean,
+    isSpawnGraceActive: boolean = false
   ) {
     if (isPlayerDead) {
       this.resetAggro();
@@ -1965,25 +1966,74 @@ export class NPC {
       return;
     }
 
-    // 特訓資深學長主動切磋 (警戒半徑調緊湊至 8.5m，出生點安全半徑調小，玩家稍往前走即展開切磋對抗)
-    if (this.role === 'DETENTION_SENIOR') {
-      const seniorDistSq = this.position.distanceToSquared(playerPos);
-      if (seniorDistSq < 72.25) { // 8.5m 內主動發起切磋
-        if (this.isPaused) this.cancelPause();
-        this.isChasing = true;
-        this.lostSightTimer = 0;
-        this.lastKnownPos.copy(playerPos);
-        onSpotPlayer();
-        return;
-      }
-    }
-
     const isDetentionRole =
       this.role === 'DETENTION_GUARD' ||
       this.role === 'DETENTION_SENIOR' ||
       this.role === 'DETENTION_HEAVY' ||
       this.role === 'DETENTION_WOLF' ||
       this.role === 'DETENTION_BOSS';
+
+    // 第二世界專屬主動攻擊與出生 5 秒保護期邏輯
+    if (isDetentionRole) {
+      // 出生後 5 秒內 NPC 絕對不會主動攻擊玩家
+      if (isSpawnGraceActive) {
+        if (this.isChasing) this.resetAggro();
+        return;
+      }
+
+      const distSq = this.position.distanceToSquared(playerPos);
+      const seesPlayer = this.canSeePlayer(playerPos, colliders);
+
+      // 5 秒保護期過後，少年院 NPC 主動攻擊！
+      let activeSpotDistSq = 256.0; // 預設 16m
+      if (this.role === 'DETENTION_WOLF') {
+        activeSpotDistSq = 400.0; // 狼犬嗅覺靈敏，20m 發現主動撲擊
+      } else if (this.role === 'DETENTION_GUARD') {
+        activeSpotDistSq = 256.0; // 教官防暴巡視，16m 發現主動上前壓制
+      } else if (this.role === 'DETENTION_BOSS') {
+        activeSpotDistSq = 324.0; // 總長威嚴巡查，18m 發現主動迎擊
+      } else if (this.role === 'DETENTION_SENIOR') {
+        activeSpotDistSq = 144.0; // 資深學長切磋，12m 發現主動挑戰
+      } else if (this.role === 'DETENTION_HEAVY') {
+        activeSpotDistSq = 100.0; // 霸榜生力量領域，10m 靠近主動重拳
+      }
+
+      if (seesPlayer && distSq < activeSpotDistSq) {
+        if (this.isPaused) this.cancelPause();
+        this.isChasing = true;
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        if (this.whistleCooldown <= 0) {
+          if (this.role === 'DETENTION_WOLF') soundManager.playDogBark();
+          else if (this.role === 'DETENTION_GUARD' || this.role === 'DETENTION_BOSS') soundManager.playWhistle();
+          this.whistleCooldown = 8.0;
+        }
+        onSpotPlayer();
+        return;
+      }
+
+      // 如果正在追逐中，判定視線遮擋與脫離
+      if (this.isChasing) {
+        if (!seesPlayer) {
+          this.lostSightTimer += delta;
+          const maxLostTime = this.role === 'DETENTION_WOLF' ? 4.0 : 3.0;
+          const maxDistSq = 576.0; // 24m
+          if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
+            this.resetAggro();
+          }
+        } else {
+          this.lostSightTimer = 0;
+          this.lastKnownPos.copy(playerPos);
+          onSpotPlayer();
+        }
+        return;
+      }
+
+      // 非追逐且未受通緝時，保持各自巡邏與鍛鍊
+      if (wantedLevel === 0) {
+        return;
+      }
+    }
 
     const distSq = this.position.distanceToSquared(playerPos);
 
@@ -2361,7 +2411,8 @@ export class NPC {
     isPlayerRidingBike: boolean = false,
     isPlayerDead: boolean = false,
     isRaining: boolean = false,
-    isThunderstorm: boolean = false
+    isThunderstorm: boolean = false,
+    isSpawnGraceActive: boolean = false
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
@@ -2658,7 +2709,7 @@ export class NPC {
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
 
     // 2. 仇恨判定 (AI 狀態機)
-    this.updateAggroState(delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerDead);
+    this.updateAggroState(delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerDead, isSpawnGraceActive);
 
     // 3. 移動目標判定與「忽快忽慢」追捕節奏 (Burst Sprinting vs Fatigue Recovery)
     let targetPos: THREE.Vector3;

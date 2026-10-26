@@ -44,6 +44,7 @@ class SchoolGTASandbox {
   private campusNPCs: NPC[] = [];
   private detentionNPCs: NPC[] = [];
   private searchlightAlertTimer: number = 0;
+  private detentionSpawnGraceTimer: number = 0;
 
   public get activeColliders(): CollidableBox[] {
     return this.currentWorldType === 'CAMPUS' ? this.world.colliders : this.detentionWorld.colliders;
@@ -145,7 +146,8 @@ class SchoolGTASandbox {
         this.player.maxHp = 150;
         this.player.hp = 150;
       }
-      this.wantedSystem.showBanner('⛓️【第一天特訓開始！】晴空萬里，只有規矩與汗水！已配備特訓防暴棒，體力提升至 150 HP！', 3500);
+      this.detentionSpawnGraceTimer = 5.0;
+      this.wantedSystem.showBanner('🛡️【第一天特訓開始】5 秒內教官與學長暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
     };
     await new Promise(r => requestAnimationFrame(r));
 
@@ -439,7 +441,8 @@ class SchoolGTASandbox {
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('⛓️ 已進入【第七少年特訓院】！配備特訓防暴棒，體能提升至 150 HP！', 3500);
+        this.detentionSpawnGraceTimer = 5.0;
+        this.wantedSystem.showBanner('🛡️ 已進入【第七少年特訓院】！獲得 5 秒休整保護，配備特訓防暴棒 (150 HP)！', 4500);
       }
     }
   }
@@ -1240,6 +1243,7 @@ class SchoolGTASandbox {
         // 2. 檢測是否命中附近的 NPC
         for (const npc of this.npcs) {
           if (npc.position.distanceTo(this.player.position) < reach + 0.3 && !npc.isKnockedDown) {
+            if (this.currentWorldType === 'DETENTION') this.detentionSpawnGraceTimer = 0;
             const wasKnocked = npc.launchFlying(_scratchPlayerForward, knockback, damage);
             if (wasKnocked) {
               this.handleNpcDefeated(npc, 'ATTACK');
@@ -1527,14 +1531,17 @@ class SchoolGTASandbox {
         this.player.hp = 150;
         this.player.hasNormalBat = true;
         this.player.setWeapon('NORMAL_BAT');
+        this.detentionSpawnGraceTimer = 5.0;
       }
       this.wantedSystem.clearWanted();
       for (const n of this.npcs) {
         n.resetAggro();
       }
       this.isHandlingDeath = false;
-      const recoverMsg = this.currentWorldType === 'CAMPUS' ? '已在保健室休養恢復，全校警報全面解除' : '已在特訓營舍醫務所恢復，特訓警戒全面重新整理！';
-      this.wantedSystem.showBanner(recoverMsg, 3500);
+      const recoverMsg = this.currentWorldType === 'CAMPUS'
+        ? '已在保健室休養恢復，全校警報全面解除'
+        : '🛡️ 已在特訓營舍醫務所復甦！獲得 5 秒休整保護，教官與學長暫不發動攻擊！';
+      this.wantedSystem.showBanner(recoverMsg, 4000);
     }, 3000);
   }
 
@@ -2321,6 +2328,17 @@ class SchoolGTASandbox {
       this.hud.setPoisonActive(false);
     }
 
+    // 7.8 少年院出生 5 秒保護計時
+    let isSpawnGraceActive = false;
+    if (this.currentWorldType === 'DETENTION' && this.detentionSpawnGraceTimer > 0) {
+      this.detentionSpawnGraceTimer -= delta;
+      isSpawnGraceActive = true;
+      if (this.detentionSpawnGraceTimer <= 0) {
+        this.detentionSpawnGraceTimer = 0;
+        this.wantedSystem.showBanner('⚡ 5 秒休整時間結束！特訓教官與學長已開始主動搜尋目標！', 3000);
+      }
+    }
+
     // 8. NPC AI 更新
     let isAnyChasing = false;
     let isHighDanger = false;
@@ -2337,7 +2355,8 @@ class SchoolGTASandbox {
         isPlayerRidingBike,
         this.player.isDead,
         isRaining,
-        isThunderstorm
+        isThunderstorm,
+        isSpawnGraceActive
       );
 
       if (!npc.isKnockedDown && npc.isChasing) {
