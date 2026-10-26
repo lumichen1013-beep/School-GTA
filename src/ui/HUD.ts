@@ -44,6 +44,20 @@ export interface MissionTrackerData {
   dodgeSkillLevel: number;
 }
 
+export interface DetentionRadarData {
+  isGateAOpen: boolean;
+  isGateBOpen: boolean;
+  isSouthGateOpen: boolean;
+  hasKeycardA: boolean;
+  hasKeycardB: boolean;
+  hasMasterKeycard: boolean;
+  keycardAPos: THREE.Vector3;
+  keycardBPos: THREE.Vector3;
+  masterKeycardPos: THREE.Vector3 | null;
+  alertLevel: 'NORMAL' | 'CAUTION' | 'ALERT';
+  alertTimer: number;
+}
+
 export class HUD {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -638,6 +652,13 @@ export class HUD {
 
   // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄與探索，含髒檢查 Dirty check)
   public updateMissionTracker(data: MissionTrackerData) {
+    const campusWrapper = document.getElementById('campus-quest-wrapper');
+    const detentionWrapper = document.getElementById('detention-quest-wrapper');
+    if (campusWrapper && detentionWrapper && campusWrapper.style.display === 'none') {
+      campusWrapper.style.display = 'block';
+      detentionWrapper.style.display = 'none';
+    }
+
     const last = this.lastMissionData;
     if (
       last &&
@@ -1185,7 +1206,9 @@ export class HUD {
     bicycles: Bicycle[],
     isBeingChased: boolean = false,
     isHighDanger: boolean = false,
-    delta?: number
+    delta?: number,
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
+    detentionData?: DetentionRadarData
   ) {
     // 1. 生命值與體力數值 (髒檢查：數值變化時才更新 DOM，避免幀重繪 layout thrashing)
     const roundedHp = Math.round(Math.max(0, Math.min(100, hp)));
@@ -1203,10 +1226,10 @@ export class HUD {
     }
 
     // 2. 地點分區偵測 (髒檢查)
-    this.updateLocationZone(playerPos);
+    this.updateLocationZone(playerPos, currentWorld);
 
-    // 3. 繪製 3D 雷達小地圖 (Minimap，25fps 節流控制)
-    this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta);
+    // 3. 繪製 3D 雷達小地圖 (Minimap / MGS Soliton Radar，25fps 節流控制)
+    this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta, currentWorld, detentionData);
 
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
     if (this.pursuitVignetteEl) {
@@ -1239,32 +1262,44 @@ export class HUD {
     }
   }
 
-  private updateLocationZone(pos: THREE.Vector3) {
+  private updateLocationZone(pos: THREE.Vector3, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS') {
     if (!this.locationEl) return;
 
     let zone = '教學中庭廣場';
-    if (pos.z > 105.0 || pos.z < -105.0 || Math.abs(pos.x) > 105.0) {
-      zone = '🏙️ 校外大街 (強盜出沒警戒區)';
-    } else if (pos.x >= 63 && pos.x <= 87 && pos.z >= -55 && pos.z <= -15) {
-      zone = '🏊 天天國中 25m 標準游泳館';
-    } else if (pos.x >= -95 && pos.x <= -45 && pos.z >= -104 && pos.z <= -77) {
-      zone = '🌿 自然生態探索園區 (秘境霸主)';
-    } else if (pos.y > 8.0) {
-      zone = '教學大樓 A 棟 · 天台高空';
-    } else if (pos.x > 20 && pos.z < 0) {
-      zone = '教學大樓 A 棟 (高三部走廊)';
-    } else if (pos.x > 20 && pos.z > 20) {
-      zone = '教學大樓 B 棟 (活動中心)';
-    } else if (pos.x < -20 && pos.z > 10) {
-      zone = '操場 PU 跑道 & 足球場';
-    } else if (pos.x < -30 && pos.z < 5 && pos.z > -20) {
-      zone = '全校升旗司令台';
-    } else if (pos.x < 5 && pos.x > -25 && pos.z < -40) {
-      zone = '🏪 天天合作社 (熱食補血部)';
-    } else if (pos.x < -35 && pos.z < -40) {
-      zone = '火柴人自行車棚';
-    } else if (pos.z > 80) {
-      zone = '校門口 & 警衛守衛室';
+    if (currentWorld === 'DETENTION') {
+      if (pos.z < -28) {
+        zone = '⛓️ A 區：牢房走廊迷宮 (獲取門禁卡 A)';
+      } else if (pos.z >= -28 && pos.z <= 35) {
+        zone = '📦 B 區：操場貨櫃掩體迷宮 (獲取門禁卡 B)';
+      } else if (pos.z > 35 && pos.z <= 95) {
+        zone = '⚡ C 區：終極哨戒門庭 (小 Boss 決戰)';
+      } else {
+        zone = '🚪 絕境安全脫逃通道 (任務完成)';
+      }
+    } else {
+      if (pos.z > 105.0 || pos.z < -105.0 || Math.abs(pos.x) > 105.0) {
+        zone = '🏙️ 校外大街 (強盜出沒警戒區)';
+      } else if (pos.x >= 63 && pos.x <= 87 && pos.z >= -55 && pos.z <= -15) {
+        zone = '🏊 天天國中 25m 標準游泳館';
+      } else if (pos.x >= -95 && pos.x <= -45 && pos.z >= -104 && pos.z <= -77) {
+        zone = '🌿 自然生態探索園區 (秘境霸主)';
+      } else if (pos.y > 8.0) {
+        zone = '教學大樓 A 棟 · 天台高空';
+      } else if (pos.x > 20 && pos.z < 0) {
+        zone = '教學大樓 A 棟 (高三部走廊)';
+      } else if (pos.x > 20 && pos.z > 20) {
+        zone = '教學大樓 B 棟 (活動中心)';
+      } else if (pos.x < -20 && pos.z > 10) {
+        zone = '操場 PU 跑道 & 足球場';
+      } else if (pos.x < -30 && pos.z < 5 && pos.z > -20) {
+        zone = '全校升旗司令台';
+      } else if (pos.x < 5 && pos.x > -25 && pos.z < -40) {
+        zone = '🏪 天天合作社 (熱食補血部)';
+      } else if (pos.x < -35 && pos.z < -40) {
+        zone = '火柴人自行車棚';
+      } else if (pos.z > 80) {
+        zone = '校門口 & 警衛守衛室';
+      }
     }
 
     if (this.lastLocationZone !== zone) {
@@ -1273,7 +1308,15 @@ export class HUD {
     }
   }
 
-  private renderMinimap(playerPos: THREE.Vector3, playerRotY: number, npcs: NPC[], bicycles: Bicycle[], delta?: number) {
+  private renderMinimap(
+    playerPos: THREE.Vector3,
+    playerRotY: number,
+    npcs: NPC[],
+    bicycles: Bicycle[],
+    delta?: number,
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
+    detentionData?: DetentionRadarData
+  ) {
     const now = performance.now();
     const dt = delta !== undefined ? delta : (this.lastMinimapTime > 0 ? (now - this.lastMinimapTime) / 1000 : 0.04);
     this.lastMinimapTime = now;
@@ -1294,6 +1337,214 @@ export class HUD {
 
     ctx.clearRect(0, 0, w, h);
 
+    if (currentWorld === 'DETENTION') {
+      // ========================================================
+      // 潛龍諜影戰術諜報雷達 (MGS Soliton Radar)
+      // ========================================================
+      ctx.fillStyle = '#021811';
+      ctx.fillRect(0, 0, w, h);
+
+      // 戰術綠同心圓網格與十字準星
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, w * 0.22, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, w * 0.42, 0, Math.PI * 2);
+      ctx.moveTo(centerX, 0);
+      ctx.lineTo(centerX, h);
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(w, centerY);
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(playerRotY);
+
+      // 繪製戰術迷宮矩形
+      const drawTacticalBox = (bx: number, bz: number, bw: number, bd: number, color: string = '#10b981') => {
+        const x = (bx - playerPos.x - bw / 2) * mapScale;
+        const z = (bz - playerPos.z - bd / 2) * mapScale;
+        ctx.fillStyle = 'rgba(6, 78, 59, 0.55)';
+        ctx.fillRect(x, z, bw * mapScale, bd * mapScale);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(x, z, bw * mapScale, bd * mapScale);
+      };
+
+      // 外圍圍牆
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect((-95 - playerPos.x) * mapScale, (-95 - playerPos.z) * mapScale, 190 * mapScale, 190 * mapScale);
+
+      // A 區建築：營舍與食堂
+      drawTacticalBox(-40, -60, 50, 30, '#10b981');
+      drawTacticalBox(50, -60, 50, 30, '#10b981');
+
+      // A 區走廊迷宮隔牆
+      drawTacticalBox(-17.5, -72, 65, 1.2, '#34d399');
+      drawTacticalBox(-20, -72.5, 1.2, 25, '#34d399');
+      drawTacticalBox(15, -58.5, 1.2, 27, '#34d399');
+      drawTacticalBox(-16, -55, 36, 1.2, '#34d399');
+      drawTacticalBox(0, -38, 48, 1.2, '#34d399');
+
+      // 管制閘門 1 (Z = -28)
+      const gate1Color = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
+      drawTacticalBox(-46.75, -28, 86.5, 1.5, '#34d399');
+      drawTacticalBox(46.75, -28, 86.5, 1.5, '#34d399');
+      drawTacticalBox(0, -28, 7.2, 1.2, gate1Color);
+
+      // B 區貨櫃迷宮群
+      const conts = [
+        [-28, -20, 2.8, 10], [-10, -18, 10, 2.8], [12, -20, 2.8, 10], [30, -18, 10, 2.8],
+        [-42, -4, 10, 2.8], [-22, -4, 2.8, 10], [0, -7, 10, 2.8], [22, -4, 2.8, 10], [42, -4, 10, 2.8],
+        [-32, 12, 2.8, 10], [-14, 10, 10, 2.8], [8, 10, 10, 2.8], [28, 12, 2.8, 10],
+        [-20, 24, 10, 2.8], [0, 22, 2.8, 10], [20, 24, 10, 2.8]
+      ];
+      for (const [cx, cz, cw, cd] of conts) {
+        drawTacticalBox(cx, cz, cw, cd, '#059669');
+      }
+
+      // 管制閘門 2 (Z = 35)
+      const gate2Color = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
+      drawTacticalBox(-46.75, 35, 86.5, 1.5, '#34d399');
+      drawTacticalBox(46.75, 35, 86.5, 1.5, '#34d399');
+      drawTacticalBox(0, 35, 7.2, 1.2, gate2Color);
+
+      // C 區：4 座發電機掩體柱
+      drawTacticalBox(-16, 52, 3.4, 3.4, '#eab308');
+      drawTacticalBox(16, 52, 3.4, 3.4, '#eab308');
+      drawTacticalBox(-16, 74, 3.4, 3.4, '#eab308');
+      drawTacticalBox(16, 74, 3.4, 3.4, '#eab308');
+
+      // 南側脫逃大門 (Z = 95)
+      const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
+      drawTacticalBox(0, 95, 20.4, 1.5, southGateColor);
+
+      // 鑰匙卡光點標記
+      if (detentionData) {
+        if (!detentionData.hasKeycardA) {
+          const kx = (detentionData.keycardAPos.x - playerPos.x) * mapScale;
+          const kz = (detentionData.keycardAPos.z - playerPos.z) * mapScale;
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(kx, kz, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (!detentionData.hasKeycardB) {
+          const kx = (detentionData.keycardBPos.x - playerPos.x) * mapScale;
+          const kz = (detentionData.keycardBPos.z - playerPos.z) * mapScale;
+          ctx.fillStyle = '#facc15';
+          ctx.beginPath();
+          ctx.arc(kx, kz, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
+          const kx = (detentionData.masterKeycardPos.x - playerPos.x) * mapScale;
+          const kz = (detentionData.masterKeycardPos.z - playerPos.z) * mapScale;
+          ctx.fillStyle = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(kx, kz, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 繪製敵方 NPC 及其 90° 視野錐 (MGS Soliton Radar)
+      for (const npc of npcs) {
+        const nx = (npc.position.x - playerPos.x) * mapScale;
+        const nz = (npc.position.z - playerPos.z) * mapScale;
+
+        if (npc.isPermanentlyKnockedOut || (npc.hp <= 0 && npc.isKnockedDown)) {
+          // 被擊昏守衛：淡灰 X 符號，無視野錐
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(nx - 3, nz - 3);
+          ctx.lineTo(nx + 3, nz + 3);
+          ctx.moveTo(nx + 3, nz - 3);
+          ctx.lineTo(nx - 3, nz + 3);
+          ctx.stroke();
+          continue;
+        }
+
+        // 存活守衛
+        const isBoss = npc.role === 'DETENTION_BOSS';
+        const alertState = npc.alertState || 'NORMAL';
+
+        let dotColor = '#22c55e';
+        let coneColor = 'rgba(34, 197, 94, 0.24)';
+        if (alertState === 'ALERT' || npc.isChasing) {
+          dotColor = '#ef4444';
+          coneColor = 'rgba(239, 68, 68, 0.38)';
+        } else if (alertState === 'CAUTION') {
+          dotColor = '#f59e0b';
+          coneColor = 'rgba(245, 158, 11, 0.32)';
+        } else if (isBoss) {
+          dotColor = '#ff2222';
+          coneColor = 'rgba(255, 34, 34, 0.28)';
+        }
+
+        const ang = npc.rotationY;
+        const coneDist = (isBoss ? 24 : 18) * mapScale;
+        const fovHalf = Math.PI / 4; // 45度半角 = 90度視野錐
+
+        // 繪製視野錐扇形
+        ctx.fillStyle = coneColor;
+        ctx.beginPath();
+        ctx.moveTo(nx, nz);
+        ctx.arc(nx, nz, coneDist, ang - fovHalf + Math.PI / 2, ang + fovHalf + Math.PI / 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // 繪製守衛圓點
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(nx, nz, isBoss ? 6.5 : 4.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+
+      // 玩家中央圖示
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(5, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-5, 6);
+      ctx.closePath();
+      ctx.fill();
+
+      // 潛行模式指示 (外圍柔和虛線圈)
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // 警戒閃爍外框
+      if (detentionData && (detentionData.alertTimer > 0 || detentionData.alertLevel === 'ALERT')) {
+        const pulse = Math.sin(now * 0.015) > 0;
+        ctx.strokeStyle = pulse ? '#ef4444' : 'rgba(239, 68, 68, 0.4)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+      } else {
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+      }
+      return;
+    }
+
+    // ========================================================
+    // 天天國中校園常規小地圖 (Campus World)
+    // ========================================================
     // 背景底色
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
@@ -1429,5 +1680,148 @@ export class HUD {
     ctx.beginPath();
     ctx.arc(centerX, centerY, w / 2 - 2, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  // 更新 CQC 潛入擊昏提示按鈕
+  public updateCqcPrompt(visible: boolean, targetNpcRole: string = '') {
+    const el = document.getElementById('cqc-prompt-container');
+    const textEl = document.getElementById('cqc-btn-text');
+    if (el) {
+      el.style.display = visible ? 'flex' : 'none';
+      if (textEl && visible) {
+        if (targetNpcRole === 'DETENTION_BOSS') {
+          textEl.textContent = '[F / 攻擊] ⚡ 總教官弱點破盾重擊！';
+        } else {
+          textEl.textContent = '[F / 攻擊] 🥷 絞喉擊昏 (CQC)';
+        }
+      }
+    }
+  }
+
+  // 更新 MGS 警戒倒數計時器
+  public updateMgsAlert(timer: number) {
+    const banner = document.getElementById('mgs-alert-banner');
+    const val = document.getElementById('mgs-alert-timer');
+    if (banner && val) {
+      if (timer > 0) {
+        banner.style.display = 'flex';
+        val.textContent = timer.toFixed(2);
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+  }
+
+  // 顯示特訓院絕境越獄通關結算對話框
+  public showDetentionVictory(
+    escapeTimeSec: number,
+    takedowns: number,
+    alerts: number,
+    onReplay: () => void,
+    onReturnCampus: () => void
+  ) {
+    const modal = document.getElementById('detention-victory-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const min = Math.floor(escapeTimeSec / 60).toString().padStart(2, '0');
+    const sec = Math.floor(escapeTimeSec % 60).toString().padStart(2, '0');
+    const timeEl = document.getElementById('stat-escape-time');
+    const takedownsEl = document.getElementById('stat-escape-takedowns');
+    const alertsEl = document.getElementById('stat-escape-alerts');
+    const badgeEl = document.getElementById('escape-rank-badge');
+    const titleEl = document.getElementById('escape-rank-title');
+
+    if (timeEl) timeEl.textContent = `${min}:${sec}`;
+    if (takedownsEl) takedownsEl.textContent = `${takedowns} 人`;
+    if (alertsEl) alertsEl.textContent = `${alerts} 次`;
+
+    // 評級計算
+    let rank = 'S';
+    let title = '傳奇特務 (BIG BOSS)';
+    let color = '#fbbf24';
+    if (alerts > 3 || escapeTimeSec > 300) {
+      rank = 'B';
+      title = '逃獄狂徒 (RENEGADE)';
+      color = '#f87171';
+    } else if (alerts > 0 || escapeTimeSec > 180) {
+      rank = 'A';
+      title = '潛入專家 (INFILTRATOR)';
+      color = '#38bdf8';
+    }
+
+    if (badgeEl) {
+      badgeEl.textContent = rank;
+      badgeEl.style.color = color;
+    }
+    if (titleEl) {
+      titleEl.textContent = title;
+      titleEl.style.color = color;
+    }
+
+    const replayBtn = document.getElementById('btn-replay-detention');
+    const campusBtn = document.getElementById('btn-return-campus');
+    if (replayBtn) {
+      replayBtn.onclick = () => {
+        modal.style.display = 'none';
+        onReplay();
+      };
+    }
+    if (campusBtn) {
+      campusBtn.onclick = () => {
+        modal.style.display = 'none';
+        onReturnCampus();
+      };
+    }
+  }
+
+  // 更新特訓院越獄任務面板
+  public updateWorld2EscapeTracker(
+    takedowns: number,
+    gateAOpen: boolean,
+    gateBOpen: boolean,
+    bossHp: number,
+    bossMaxHp: number,
+    isBossDefeated: boolean,
+    isEscapeComplete: boolean
+  ) {
+    const campusWrapper = document.getElementById('campus-quest-wrapper');
+    const detentionWrapper = document.getElementById('detention-quest-wrapper');
+    if (campusWrapper && detentionWrapper) {
+      campusWrapper.style.display = 'none';
+      detentionWrapper.style.display = 'block';
+    }
+
+    const koCountEl = document.getElementById('det-ko-count');
+    const koStatusEl = document.getElementById('det-ko-status');
+    if (koCountEl) koCountEl.textContent = `${takedowns}`;
+    if (koStatusEl) {
+      koStatusEl.textContent = takedowns > 0 ? `已排除 ${takedowns}` : '進行中';
+      koStatusEl.className = 'q-status completed';
+    }
+
+    const g1El = document.getElementById('det-gate1-status');
+    if (g1El) {
+      g1El.textContent = gateAOpen ? '已開啟' : '未解鎖';
+      g1El.className = gateAOpen ? 'q-status completed' : 'q-status';
+    }
+
+    const g2El = document.getElementById('det-gate2-status');
+    if (g2El) {
+      g2El.textContent = gateBOpen ? '已開啟' : '未解鎖';
+      g2El.className = gateBOpen ? 'q-status completed' : 'q-status';
+    }
+
+    const bossEl = document.getElementById('det-boss-status');
+    if (bossEl) {
+      bossEl.textContent = isBossDefeated ? '已擊破' : `${bossHp}/${bossMaxHp}`;
+      bossEl.className = isBossDefeated ? 'q-status completed' : 'q-status';
+    }
+
+    const escEl = document.getElementById('det-escape-status');
+    if (escEl) {
+      escEl.textContent = isEscapeComplete ? '已逃脫' : '未完成';
+      escEl.className = isEscapeComplete ? 'q-status completed' : 'q-status';
+    }
   }
 }

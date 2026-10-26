@@ -98,7 +98,18 @@ export class NPC {
   public hp: number;
   public maxHp: number;
   public isKnockedDown: boolean = false;
+  public isPermanentlyKnockedOut: boolean = false; // 潛龍諜影擊昏永久不重生
+  public alertState: 'NORMAL' | 'CAUTION' | 'ALERT' = 'NORMAL'; // 警戒狀態 (綠/黃/紅)
+  public cautionTimer: number = 0;
   public reviveTimer: number = 0;
+
+  // 小 Boss【鐵面總教官】專屬破盾與衝撞硬直機制
+  public isBossStunned: boolean = false;
+  public bossStunTimer: number = 0;
+  public bossChargeCooldown: number = 5.0;
+  public bossIsCharging: boolean = false;
+  public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
+  public bossShieldCharges: number = 3;
 
   // 單車衝撞擊飛與無敵幀 (避免持續性傷害)
   public isKnockedFlying: boolean = false;
@@ -485,6 +496,29 @@ export class NPC {
 
   // 更新昏迷休養倒數秒數告示牌 (加入 lastKoBadgeSec 快取節流，僅在秒數變更時重繪)
   private updateKOBadge(secondsLeft: number) {
+    if (this.isPermanentlyKnockedOut) {
+      if (this.lastKoBadgeSec === -999) return;
+      this.lastKoBadgeSec = -999;
+      const ctx = this.koBadgeCanvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.92)';
+      ctx.beginPath();
+      ctx.roundRect(8, 4, 240, 56, 12);
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 26px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💫 永久擊昏', 128, 32);
+      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeSprite.visible = true;
+      return;
+    }
+
     const sec = Math.ceil(Math.max(0, secondsLeft));
     if (sec === this.lastKoBadgeSec) return;
     this.lastKoBadgeSec = sec;
@@ -510,6 +544,114 @@ export class NPC {
     ctx.fillText(`💫 昏迷中 (${sec}s)`, 128, 32);
 
     this.koBadgeTexture.needsUpdate = true;
+  }
+
+  // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)
+  public setAlertState(state: 'NORMAL' | 'CAUTION' | 'ALERT') {
+    if (this.isKnockedDown || this.isPermanentlyKnockedOut) return;
+    this.alertState = state;
+    const ctx = this.koBadgeCanvas.getContext('2d');
+    if (!ctx) return;
+
+    if (state === 'NORMAL') {
+      this.koBadgeSprite.visible = false;
+      this.lastKoBadgeSec = -1;
+    } else if (state === 'CAUTION') {
+      this.lastKoBadgeSec = -101;
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.92)';
+      ctx.beginPath();
+      ctx.roundRect(50, 4, 156, 56, 14);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('❓', 128, 32);
+      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeSprite.visible = true;
+    } else if (state === 'ALERT') {
+      this.lastKoBadgeSec = -102;
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+      ctx.beginPath();
+      ctx.roundRect(50, 4, 156, 56, 14);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('❗', 128, 32);
+      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeSprite.visible = true;
+    }
+  }
+
+  // 潛龍諜影無聲 CQC 擊昏 (從 NPC 背後 1.8m 內發動，永久癱瘓不重生)
+  public knockoutSilently() {
+    this.hp = 0;
+    this.isKnockedDown = true;
+    this.isPermanentlyKnockedOut = true;
+    this.reviveTimer = 999999;
+    this.isChasing = false;
+    this.isBurstSprinting = false;
+    this.alertState = 'NORMAL';
+
+    if (this.hpBarBgMesh) this.hpBarBgMesh.visible = false;
+    if (this.hpBarMesh) this.hpBarMesh.visible = false;
+    if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
+
+    this.updateKOBadge(999999);
+
+    // 肢體鬆開平貼地面
+    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
+    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
+    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+
+    if (this.role === 'DETENTION_WOLF' || this.role === 'DOG') {
+      this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
+      this.mesh.position.y = this.baseFloorY + 0.2;
+    } else {
+      this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
+      this.mesh.position.y = this.baseFloorY + 0.25;
+    }
+  }
+
+  // 總教官撞柱硬直機制 (Stunned)
+  public stunBoss(duration: number = 3.5) {
+    if (this.role !== 'DETENTION_BOSS' || this.isKnockedDown) return;
+    this.isBossStunned = true;
+    this.bossStunTimer = duration;
+    this.bossIsCharging = false;
+    this.isChasing = false;
+
+    // 顯示硬直星星
+    const ctx = this.koBadgeCanvas.getContext('2d');
+    if (ctx) {
+      this.lastKoBadgeSec = -103;
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.fillStyle = 'rgba(234, 179, 8, 0.95)';
+      ctx.beginPath();
+      ctx.roundRect(8, 4, 240, 56, 12);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚡ 破盾硬直！快繞背！', 128, 32);
+      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeSprite.visible = true;
+    }
   }
 
   // 1. 建造校犬柴柴 / 特訓狼犬 3D 模型
@@ -1180,7 +1322,7 @@ export class NPC {
 
   // 受到傷害
   public takeDamage(amount: number): boolean {
-    if (this.isKnockedDown) return false;
+    if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.isPaused) this.cancelPause();
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1226,19 +1368,26 @@ export class NPC {
       (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
     }
 
-    // 血量歸零：倒地倒下，碰撞箱全面失效，10 秒後滿血復活
+    // 血量歸零：倒地倒下，碰撞箱全面失效 (第二世界永久擊昏不重生)
     if (this.hp <= 0) {
       this.isKnockedDown = true;
       if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
       this.isChasing = false;
       this.isBurstSprinting = false;
       this.dynamicSpeed = this.speed;
-      this.reviveTimer = 10.0;
+
+      const isDetention = this.role.startsWith('DETENTION');
+      if (isDetention) {
+        this.isPermanentlyKnockedOut = true;
+        this.reviveTimer = 999999;
+        this.updateKOBadge(999999);
+      } else {
+        this.reviveTimer = 10.0;
+        this.lastKoBadgeSec = -1;
+        this.updateKOBadge(10.0);
+      }
       this.hpBarBgMesh.visible = false;
       this.hpBarMesh.visible = false;
-
-      this.lastKoBadgeSec = -1;
-      this.updateKOBadge(10.0);
       this.koBadgeSprite.visible = true;
 
       // 肢體鬆開平貼地面
@@ -1263,7 +1412,7 @@ export class NPC {
 
   // 單車衝撞與武器擊飛效果
   public launchFlying(impactDir: THREE.Vector3, force: number, damage: number): boolean {
-    if (this.isKnockedDown) return false;
+    if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
       // 閃身步老師衝撞防衛：50% 機率隨機施展「閃身步」或「狗熊哆嗦毛」
@@ -1943,10 +2092,23 @@ export class NPC {
     colliders: CollidableBox[],
     onSpotPlayer: () => void,
     isPlayerDead: boolean,
-    isSpawnGraceActive: boolean = false
+    isSpawnGraceActive: boolean = false,
+    isPlayerSneaking: boolean = false,
+    isPlayerSprinting: boolean = false
   ) {
-    if (isPlayerDead) {
+    if (isPlayerDead || this.isPermanentlyKnockedOut) {
       this.resetAggro();
+      return;
+    }
+
+    // 小 Boss 硬直狀態：無法行動與追逐
+    if (this.isBossStunned) {
+      this.bossStunTimer -= delta;
+      if (this.bossStunTimer <= 0) {
+        this.isBossStunned = false;
+        this.setAlertState('ALERT');
+        this.isChasing = true;
+      }
       return;
     }
 
@@ -1973,9 +2135,8 @@ export class NPC {
       this.role === 'DETENTION_WOLF' ||
       this.role === 'DETENTION_BOSS';
 
-    // 第二世界專屬主動攻擊與出生 5 秒保護期邏輯
+    // 第二世界專屬 MGS 潛入與警戒 AI
     if (isDetentionRole) {
-      // 出生後 5 秒內 NPC 絕對不會主動攻擊玩家
       if (isSpawnGraceActive) {
         if (this.isChasing) this.resetAggro();
         return;
@@ -1984,35 +2145,24 @@ export class NPC {
       const distSq = this.position.distanceToSquared(playerPos);
       const seesPlayer = this.canSeePlayer(playerPos, colliders);
 
-      // 5 秒保護期過後，少年院 NPC 主動攻擊！
-      let activeSpotDistSq = 256.0; // 預設 16m
-      if (this.role === 'DETENTION_WOLF') {
-        activeSpotDistSq = 400.0; // 狼犬嗅覺靈敏，20m 發現主動撲擊
-      } else if (this.role === 'DETENTION_GUARD') {
-        activeSpotDistSq = 256.0; // 教官防暴巡視，16m 發現主動上前壓制
-      } else if (this.role === 'DETENTION_BOSS') {
-        activeSpotDistSq = 324.0; // 總長威嚴巡查，18m 發現主動迎擊
-      } else if (this.role === 'DETENTION_SENIOR') {
-        activeSpotDistSq = 144.0; // 資深學長切磋，12m 發現主動挑戰
-      } else if (this.role === 'DETENTION_HEAVY') {
-        activeSpotDistSq = 100.0; // 霸榜生力量領域，10m 靠近主動重拳
+      // 總教官衝鋒衝撞冷卻與觸發
+      if (this.role === 'DETENTION_BOSS' && this.isChasing && !this.bossIsCharging && !this.isBossStunned) {
+        this.bossChargeCooldown -= delta;
+        if (this.bossChargeCooldown <= 0 && distSq > 36.0 && distSq < 400.0) {
+          this.bossIsCharging = true;
+          this.bossChargeCooldown = 6.5;
+          this.bossChargeDir.subVectors(playerPos, this.position).setY(0).normalize();
+        }
       }
 
-      // 核心機制：NPC 距離玩家 2m (distSq <= 4.0) 內立即主動鎖定並主動攻擊！
-      if (distSq <= 4.0) {
+      // 1. 視覺發現判定 (正面 90 度視線錐 + 射線無障礙)
+      if (seesPlayer) {
         if (this.isPaused) this.cancelPause();
+        this.setAlertState('ALERT');
         this.isChasing = true;
         this.lostSightTimer = 0;
         this.lastKnownPos.copy(playerPos);
-        onSpotPlayer();
-        return;
-      }
 
-      if (seesPlayer && distSq < activeSpotDistSq) {
-        if (this.isPaused) this.cancelPause();
-        this.isChasing = true;
-        this.lostSightTimer = 0;
-        this.lastKnownPos.copy(playerPos);
         if (this.whistleCooldown <= 0) {
           if (this.role === 'DETENTION_WOLF') soundManager.playDogBark();
           else if (this.role === 'DETENTION_GUARD' || this.role === 'DETENTION_BOSS') soundManager.playWhistle();
@@ -2022,14 +2172,38 @@ export class NPC {
         return;
       }
 
-      // 如果正在追逐中，判定視線遮擋與脫離
+      // 2. 聽覺音效判定 (當未看見玩家時，判定腳步噪音)
+      if (!this.isChasing) {
+        if (isPlayerSneaking) {
+          // 靜音潛行 (Ctrl / 搖桿 < 0.5)：0 噪音！守衛不會察覺背後接近
+        } else if (isPlayerSprinting && distSq < 72.25) { // 疾跑 8.5m 內
+          this.setAlertState('CAUTION');
+          this.cautionTimer = 3.5;
+          // 轉身看向聲響方位
+          this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+        } else if (!isPlayerSneaking && distSq < 12.25) { // 正常走動 3.5m 內
+          this.setAlertState('CAUTION');
+          this.cautionTimer = 2.5;
+          this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+        }
+
+        if (this.alertState === 'CAUTION') {
+          this.cautionTimer -= delta;
+          if (this.cautionTimer <= 0) {
+            this.setAlertState('NORMAL');
+          }
+        }
+      }
+
+      // 3. 追逐中的脫離與搜索
       if (this.isChasing) {
         if (!seesPlayer) {
           this.lostSightTimer += delta;
-          const maxLostTime = this.role === 'DETENTION_WOLF' ? 4.0 : 3.0;
+          const maxLostTime = this.role === 'DETENTION_WOLF' ? 4.5 : 3.5;
           const maxDistSq = 576.0; // 24m
           if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
             this.resetAggro();
+            this.setAlertState('NORMAL');
           }
         } else {
           this.lostSightTimer = 0;
@@ -2039,7 +2213,6 @@ export class NPC {
         return;
       }
 
-      // 非追逐且未受通緝時，保持各自巡邏與鍛鍊
       if (wantedLevel === 0) {
         return;
       }
@@ -2422,7 +2595,9 @@ export class NPC {
     isPlayerDead: boolean = false,
     isRaining: boolean = false,
     isThunderstorm: boolean = false,
-    isSpawnGraceActive: boolean = false
+    isSpawnGraceActive: boolean = false,
+    isPlayerSneaking: boolean = false,
+    isPlayerSprinting: boolean = false
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
@@ -2674,15 +2849,23 @@ export class NPC {
         }
 
         if (this.hp <= 0) {
-          // 血量歸零：倒地倒下，10 秒後滿血復活
+          // 血量歸零：倒地倒下 (第二世界永久擊昏不重生)
           this.isKnockedDown = true;
           this.isChasing = false;
           this.isBurstSprinting = false;
-          this.reviveTimer = 10.0;
+
+          const isDetention = this.role.startsWith('DETENTION');
+          if (isDetention) {
+            this.isPermanentlyKnockedOut = true;
+            this.reviveTimer = 999999;
+            this.updateKOBadge(999999);
+          } else {
+            this.reviveTimer = 10.0;
+            this.lastKoBadgeSec = -1;
+            this.updateKOBadge(10.0);
+          }
           this.hpBarBgMesh.visible = false;
           this.hpBarMesh.visible = false;
-          this.lastKoBadgeSec = -1;
-          this.updateKOBadge(10.0);
           this.koBadgeSprite.visible = true;
 
           if (this.role === 'DOG' || this.role === 'BIKE_PATROL') {
@@ -2703,8 +2886,12 @@ export class NPC {
       return;
     }
 
-    // 1. 倒地狀態處理：倒下 10 秒後滿血復活，期間碰撞箱完全無效
+    // 1. 倒地狀態處理 (永久擊昏絕不重生)
     if (this.isKnockedDown) {
+      if (this.isPermanentlyKnockedOut) {
+        // 永久擊昏，絕不再站立或重設倒數
+        return;
+      }
       this.reviveTimer -= delta;
       this.updateKOBadge(this.reviveTimer);
 
@@ -2761,13 +2948,48 @@ export class NPC {
       return;
     }
 
+    // 總教官衝鋒撞柱判定
+    if (this.bossIsCharging && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
+      this.position.x += this.bossChargeDir.x * 12.0 * delta;
+      this.position.z += this.bossChargeDir.z * 12.0 * delta;
+      this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
+
+      // 檢測是否撞上水泥加固柱或障礙盒
+      for (const box of colliders) {
+        if (box.isFloorOnly) continue;
+        if (
+          this.position.x + 0.6 > box.min.x &&
+          this.position.x - 0.6 < box.max.x &&
+          this.position.z + 0.6 > box.min.z &&
+          this.position.z - 0.6 < box.max.z
+        ) {
+          // 猛烈撞擊！陷入 3.5 秒眩暈硬直！
+          this.stunBoss(3.5);
+          soundManager.playPunch();
+          break;
+        }
+      }
+      this.mesh.position.copy(this.position);
+      return;
+    }
+
     if (this.whistleCooldown > 0) this.whistleCooldown -= delta;
     if (this.attackAnimTimer > 0) this.attackAnimTimer -= delta;
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
 
     // 2. 仇恨判定 (AI 狀態機)
-    this.updateAggroState(delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerDead, isSpawnGraceActive);
+    this.updateAggroState(
+      delta,
+      playerPos,
+      wantedLevel,
+      colliders,
+      onSpotPlayer,
+      isPlayerDead,
+      isSpawnGraceActive,
+      isPlayerSneaking,
+      isPlayerSprinting
+    );
 
     // 3. 移動目標判定與「忽快忽慢」追捕節奏 (Burst Sprinting vs Fatigue Recovery)
     let targetPos: THREE.Vector3;

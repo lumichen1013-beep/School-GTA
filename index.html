@@ -2910,6 +2910,7 @@
 
       <!-- 任務列表容器 -->
       <div class="quest-list-container" id="quest-list-content">
+        <div id="campus-quest-wrapper">
         <!-- 分類 1: 戰鬥歷練 -->
         <div class="quest-category-group" data-category="combat">
           <div class="quest-category-title">⚔️ 戰鬥歷練</div>
@@ -3054,6 +3055,54 @@
             <span class="q-status" id="q-hotfood-status">進行中</span>
           </div>
         </div>
+        </div><!-- /#campus-quest-wrapper -->
+
+        <!-- 第二世界：特訓院專屬潛入逃脫任務 (PROJECT: ESCAPE) -->
+        <div id="detention-quest-wrapper" style="display:none;">
+          <div class="quest-category-group" data-category="combat">
+            <div class="quest-category-title">⛓️ 絕境潛入逃脫任務 (PROJECT: ESCAPE)</div>
+            <div class="quest-item" id="q-det-takedown-item">
+              <span class="q-icon">🥷</span>
+              <div class="q-info">
+                <span class="q-name">【無聲潛入】背後擊昏守衛</span>
+                <span class="q-desc">悄悄繞後點擊攻擊擊昏 (<span id="det-ko-count">0</span> 人昏迷)</span>
+              </div>
+              <span class="q-status" id="det-ko-status">進行中</span>
+            </div>
+            <div class="quest-item" id="q-det-gate1-item">
+              <span class="q-icon">💳</span>
+              <div class="q-info">
+                <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
+                <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
+              </div>
+              <span class="q-status" id="det-gate1-status">未解鎖</span>
+            </div>
+            <div class="quest-item" id="q-det-gate2-item">
+              <span class="q-icon">📦</span>
+              <div class="q-info">
+                <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
+                <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
+              </div>
+              <span class="q-status" id="det-gate2-status">未解鎖</span>
+            </div>
+            <div class="quest-item" id="q-det-boss-item">
+              <span class="q-icon">⚡</span>
+              <div class="q-info">
+                <span class="q-name">【破盾對決】擊破小 Boss【鐵面總教官】</span>
+                <span class="q-desc">引誘 Boss 撞擊發電機柱硬直，繞背破盾 3 次</span>
+              </div>
+              <span class="q-status" id="det-boss-status">未擊敗</span>
+            </div>
+            <div class="quest-item" id="q-det-escape-item">
+              <span class="q-icon">🚪</span>
+              <div class="q-info">
+                <span class="q-name">【絕境逃脫】解鎖南大門撤離</span>
+                <span class="q-desc">拾取萬能鑰匙卡解鎖南大門逃出特訓院！</span>
+              </div>
+              <span class="q-status" id="det-escape-status">未完成</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3090,6 +3139,37 @@
     <!-- Alert / Incident Banner -->
     <div id="hud-banner">生教組長發動走廊巡查！</div>
 
+    <!-- MGS 潛龍諜影警戒倒數橫幅 (Alert Phase Countdown) -->
+    <div id="mgs-alert-banner" style="display:none; position:fixed; top:75px; left:50%; transform:translateX(-50%); z-index:90; background:rgba(220, 38, 38, 0.92); border:2px solid #fca5a5; border-radius:8px; padding:6px 20px; color:#fff; font-family:'Courier New', monospace; font-size:22px; font-weight:bold; letter-spacing:2px; box-shadow:0 0 25px rgba(239,68,68,0.85); pointer-events:none;">
+      🚨 ALERT <span id="mgs-alert-timer">99.99</span>
+    </div>
+
+    <!-- CQC 背後擊昏動作提示與快捷按鈕 -->
+    <div id="cqc-prompt-container" style="display:none; position:fixed; bottom:130px; left:50%; transform:translateX(-50%); z-index:120; pointer-events:auto;">
+      <button id="btn-cqc-action" style="background:linear-gradient(135deg, #ef4444, #b91c1c); border:2px solid #fecaca; color:#ffffff; font-size:17px; font-weight:900; padding:12px 24px; border-radius:30px; box-shadow:0 0 20px rgba(239,68,68,0.8); cursor:pointer; display:flex; align-items:center; gap:8px;">
+        🥷 <span id="cqc-btn-text">[F / 攻擊] 絞喉擊昏 (CQC)</span>
+      </button>
+    </div>
+
+    <!-- 絕境越獄通關結算對話框 (Tactical Escape Victory Modal) -->
+    <div id="detention-victory-modal" style="display:none; position:fixed; inset:0; background:rgba(2, 6, 23, 0.88); z-index:99999; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
+      <div style="background:#0f172a; border:2px solid #22c55e; border-radius:18px; padding:32px; max-width:460px; width:92%; color:#fff; text-align:center; box-shadow:0 0 45px rgba(34,197,94,0.6);">
+        <div style="font-size:26px; font-weight:900; color:#22c55e; margin-bottom:8px;">🏆 成功逃離特訓院！</div>
+        <div style="font-size:13px; color:#94a3b8; letter-spacing:1px; margin-bottom:18px;">MISSION ACCOMPLISHED · ESCAPE COMPLETE</div>
+        <div id="escape-rank-badge" style="font-size:56px; font-weight:900; color:#fbbf24; text-shadow:0 0 25px rgba(251,191,36,0.8); margin:6px 0;">S</div>
+        <div id="escape-rank-title" style="font-size:18px; color:#38bdf8; font-weight:bold; margin-bottom:22px;">傳奇特務 (BIG BOSS)</div>
+        <div style="background:#1e293b; border-radius:12px; padding:16px 20px; text-align:left; font-size:15px; margin-bottom:22px; line-height:2.0; border:1px solid rgba(255,255,255,0.08);">
+          <div>⏱️ 逃脫耗時：<b id="stat-escape-time" style="color:#f8fafc; float:right;">00:00</b></div>
+          <div>🥷 潛行擊昏守衛：<b id="stat-escape-takedowns" style="color:#4ade80; float:right;">0 人</b></div>
+          <div>🚨 觸發警報次數：<b id="stat-escape-alerts" style="color:#f87171; float:right;">0 次</b></div>
+        </div>
+        <div style="display:flex; gap:12px; justify-content:center;">
+          <button id="btn-replay-detention" style="flex:1; padding:12px; background:#22c55e; color:#0f172a; font-weight:900; font-size:15px; border-radius:10px; border:none; cursor:pointer;">🔄 重新挑戰</button>
+          <button id="btn-return-campus" style="flex:1; padding:12px; background:#334155; color:#f8fafc; font-weight:900; font-size:15px; border-radius:10px; border:none; cursor:pointer;">🏫 返回天天國中</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 4F 羽球挑戰賽比分橫幅 (Tennis Match Scoreboard) -->
     <div id="tennis-scoreboard">🏸 羽球挑戰賽 | 玩家: 0 - 0 :大如老師 (搶5分勝)</div>
 
@@ -3101,11 +3181,13 @@
       <div class="controls-panel">
         <div class="controls-panel-title">🎮 鍵盤快捷鍵指南</div>
         <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
+        <div><span class="key-badge">CTRL</span> 靜音潛行慢步 (背刺暗殺)</div>
         <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
         <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
         <div><span class="key-badge">1</span><span class="key-badge">2</span><span class="key-badge">3</span> 切換武器 (拳/球棒)</div>
+        <div><span class="key-badge">F</span> 絞喉無聲擊昏 (CQC 潛入)</div>
         <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
-        <div><span class="key-badge">E</span> 合作社熱食 / 騎火柴人自行車 / 採集 / 競速</div>
+        <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
         <div><span class="key-badge">J</span> 開啟 / 收合歷練任務看板</div>
         <div><span class="key-badge">M</span> 開啟 / 靜音 BGM 音樂</div>
         <div><span class="key-badge">左鍵</span> 揮擊武器 / 投籃蓄力</div>

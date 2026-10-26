@@ -49,6 +49,7 @@ export class Player {
   private wasSwimming: boolean = false; // 游泳狀態切換檢測
   public isMoving: boolean = false;   // 當前是否正在移動推進
   public isSprinting: boolean = false; // 當前是否處於衝刺加速狀態
+  public isSneaking: boolean = false;  // 潛龍諜影靜音潛行模式 (無腳步聲，背刺專用)
   public poisonTimer: number = 0;     // 中毒持續時間 (5秒)
   public poisonTickTimer: number = 0; // 中毒跳血計時
   public isInvisible: boolean = false; // 隱形模式 (如三分球投籃瞄準時不遮擋籃框與準心)
@@ -912,21 +913,34 @@ export class Player {
     const isMoving = _playerMoveDir.lengthSq() > 0.001;
     this.isMoving = isMoving;
 
-    // 2. 衝刺與體力消耗 (Sprint & Stamina)
+    // 潛龍諜影潛行步態 (MGS Sneak Mode)
+    // 鍵盤：按住 Ctrl 鍵為靜音步行；手機：虛擬搖桿推桿半徑小於 0.5 為靜音步行
+    const isCtrlPressed = !!(input.keys['ControlLeft'] || input.keys['ControlRight']);
+    const isJoystickSneak = hasVirtualJoystick && input.virtualAxisMagnitude > 0.05 && input.virtualAxisMagnitude < 0.5;
+    const wantsSneak = (isCtrlPressed || isJoystickSneak) && isMoving && !input.sprint;
+    this.isSneaking = wantsSneak;
+
+    // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)
     let currentSpeed = this.walkSpeed;
-    if (this.isSwimming) {
-      currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
-      if (input.sprint && isMoving && this.stamina > 5) {
+    if (this.isSneaking) {
+      currentSpeed = 2.4; // 靜音潛行步速 2.4 m/s (無腳步聲，NPC 無法在背後察覺)
+      this.bodyMesh.position.y = 0.92; // 壓低身形潛行
+    } else {
+      this.bodyMesh.position.y = 1.05; // 恢復正常直立身姿
+      if (this.isSwimming) {
+        currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
+        if (input.sprint && isMoving && this.stamina > 5) {
+          this.stamina = Math.max(0, this.stamina - delta * 24.0);
+        } else {
+          this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
+        }
+      } else if (input.sprint && isMoving && this.stamina > 5) {
+        currentSpeed = this.sprintSpeed;
         this.stamina = Math.max(0, this.stamina - delta * 24.0);
       } else {
+        // 體力自動恢復
         this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
       }
-    } else if (input.sprint && isMoving && this.stamina > 5) {
-      currentSpeed = this.sprintSpeed;
-      this.stamina = Math.max(0, this.stamina - delta * 24.0);
-    } else {
-      // 體力自動恢復
-      this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
     }
 
     currentSpeed *= analogSpeedScale;
