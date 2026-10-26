@@ -512,7 +512,7 @@ class SchoolGTASandbox {
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住 C / Z 鍵靜音慢步，從背後靠近守衛進行 CQC 擊昏！', 5000);
+        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行 CQC 擊昏！', 5000);
       }
     }
   }

@@ -78,6 +78,9 @@ export class InputManager {
         if (this.onAttackCallback) this.onAttackCallback();
       } else if (e.button === 2) {
         this.mouseButtons.right = true;
+        if (!this.isPointerLocked && !this.isTouchDevice) {
+          this.requestPointerLock();
+        }
       }
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
@@ -93,8 +96,14 @@ export class InputManager {
       this.lastMouseY = null;
     });
 
-    // Prevent context menu on right click
+    // 攔截滑鼠右鍵選單 (ContextMenu)，電腦版專用於按住右鍵靜音慢步潛行
     window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // 視窗失焦防按鍵與滑鼠卡死
+    window.addEventListener('blur', () => {
+      this.mouseButtons.left = false;
+      this.mouseButtons.right = false;
+    });
 
     // Mouse movement
     window.addEventListener('mousemove', (e) => {
@@ -302,7 +311,7 @@ export class InputManager {
   }
 
   public get sneak(): boolean {
-    return !!(this.keys['KeyC'] || this.keys['KeyZ'] || this.keys['ControlLeft'] || this.keys['ControlRight']);
+    return this.mouseButtons.right || !!(this.keys['ControlLeft'] || this.keys['ControlRight']);
   }
 
   public get horn(): boolean {
