@@ -1768,18 +1768,31 @@ export class HUD {
     ctx.stroke();
   }
 
-  // 更新 CQC 潛入擊昏提示按鈕
+  // 更新 CQC 潛入擊昏提示 (HUD 戰術提示與手機攻擊按鈕聯動)
   public updateCqcPrompt(visible: boolean, targetNpcRole: string = '') {
     const el = document.getElementById('cqc-prompt-container');
     const textEl = document.getElementById('cqc-btn-text');
+    const mobileAttackBtn = document.getElementById('m-btn-attack');
+
     if (el) {
       el.style.display = visible ? 'flex' : 'none';
       if (textEl && visible) {
         if (targetNpcRole === 'DETENTION_BOSS') {
-          textEl.textContent = '[F / 攻擊] ⚡ 總教官弱點破盾重擊！';
+          textEl.textContent = '⚡ [左鍵 / F / 攻擊鈕] 總教官弱點破盾重擊！';
         } else {
-          textEl.textContent = '[F / 攻擊] 🥷 絞喉擊昏 (CQC)';
+          textEl.textContent = '🥷 [左鍵 / F / 攻擊鈕] 絞喉擊昏 (CQC)';
         }
+      }
+    }
+
+    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 🥷 暗殺態，不需專屬 CQC 鈕)
+    if (mobileAttackBtn) {
+      if (visible) {
+        mobileAttackBtn.classList.add('cqc-active');
+        mobileAttackBtn.textContent = '🥷';
+      } else {
+        mobileAttackBtn.classList.remove('cqc-active');
+        mobileAttackBtn.textContent = '👊';
       }
     }
   }

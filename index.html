@@ -2240,6 +2240,17 @@
       box-shadow: 0 0 16px rgba(231, 76, 60, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
     }
 
+    #m-btn-attack.cqc-active {
+      background: radial-gradient(circle, rgba(220, 38, 38, 0.96) 0%, rgba(153, 27, 27, 0.96) 100%) !important;
+      border-color: #fca5a5 !important;
+      box-shadow: 0 0 25px rgba(239, 68, 68, 0.95), 0 0 10px rgba(254, 202, 202, 0.8) !important;
+      animation: pulse-cqc-btn 0.8s infinite alternate ease-in-out;
+    }
+    @keyframes pulse-cqc-btn {
+      from { transform: scale(1.0); }
+      to { transform: scale(1.15); }
+    }
+
     /* 跳躍按鍵 (跳) */
     #m-btn-jump {
       bottom: 86px;
@@ -3144,11 +3155,11 @@
       🚨 ALERT <span id="mgs-alert-timer">99.99</span>
     </div>
 
-    <!-- CQC 背後擊昏動作提示與快捷按鈕 -->
-    <div id="cqc-prompt-container" style="display:none; position:fixed; bottom:130px; left:50%; transform:translateX(-50%); z-index:120; pointer-events:auto;">
-      <button id="btn-cqc-action" style="background:linear-gradient(135deg, #ef4444, #b91c1c); border:2px solid #fecaca; color:#ffffff; font-size:17px; font-weight:900; padding:12px 24px; border-radius:30px; box-shadow:0 0 20px rgba(239,68,68,0.8); cursor:pointer; display:flex; align-items:center; gap:8px;">
-        🥷 <span id="cqc-btn-text">[F / 攻擊] 絞喉擊昏 (CQC)</span>
-      </button>
+    <!-- CQC 背後擊昏動作提示 (純戰術 HUD 提示，手機與電腦均統一透過【攻擊鍵 / F】執行，手機無需額外專屬按鈕) -->
+    <div id="cqc-prompt-container" style="display:none; position:fixed; bottom:130px; left:50%; transform:translateX(-50%); z-index:120; pointer-events:none;">
+      <div style="background:rgba(15, 23, 42, 0.90); border:2px solid #ef4444; color:#ffffff; font-size:16px; font-weight:900; padding:10px 24px; border-radius:30px; box-shadow:0 0 25px rgba(239,68,68,0.75); backdrop-filter:blur(6px); display:flex; align-items:center; gap:8px;">
+        <span id="cqc-btn-text">🥷【左鍵 / F / 攻擊鈕】暗殺 (CQC)</span>
+      </div>
     </div>
 
     <!-- 絕境越獄通關結算對話框 (Tactical Escape Victory Modal) -->
@@ -3182,15 +3193,14 @@
         <div class="controls-panel-title">🎮 鍵盤快捷鍵指南</div>
         <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
         <div><span class="key-badge">滑鼠右鍵</span> 按住靜音慢步 (手機搖桿推半程&lt;0.5)</div>
+        <div><span class="key-badge">左鍵</span><span class="key-badge">F</span> 揮擊武器 / 背後暗殺 (合併按鍵)</div>
         <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
         <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
         <div><span class="key-badge">1</span><span class="key-badge">2</span><span class="key-badge">3</span> 切換武器 (拳/球棒)</div>
-        <div><span class="key-badge">F</span> 絞喉無聲擊昏 (CQC 潛入)</div>
         <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
         <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
         <div><span class="key-badge">J</span> 開啟 / 收合歷練任務看板</div>
         <div><span class="key-badge">M</span> 開啟 / 靜音 BGM 音樂</div>
-        <div><span class="key-badge">左鍵</span> 揮擊武器 / 投籃蓄力</div>
       </div>
 
       <!-- 技能狀態快捷展示卡 (Skill HUD Card) -->

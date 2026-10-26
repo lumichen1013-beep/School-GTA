@@ -46,6 +46,10 @@ export class InputManager {
       if (e.code === 'KeyQ') {
         if (this.onSkillCallback) this.onSkillCallback();
       }
+      if (e.code === 'KeyF') {
+        // F 鍵與攻擊鍵完全合併：觸發攻擊/暗殺
+        if (this.onAttackCallback) this.onAttackCallback();
+      }
       if (e.code === 'KeyM') {
         if (this.onToggleWorldCallback) {
           this.onToggleWorldCallback();
@@ -60,6 +64,9 @@ export class InputManager {
 
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
+      if (e.code === 'KeyF') {
+        if (this.onAttackReleaseCallback) this.onAttackReleaseCallback();
+      }
     });
 
     // Click canvas to re-acquire pointer lock if lost (e.g. after ESC)

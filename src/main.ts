@@ -1464,10 +1464,6 @@ class SchoolGTASandbox {
         } else {
           this.wantedSystem.showBanner(`🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`, 2500);
         }
-      } else if (e.code === 'KeyF') {
-        if (this.currentWorldType === 'DETENTION') {
-          this.performCqcTakedown();
-        }
       } else if (e.code === 'KeyJ') {
         this.hud.toggleQuestTracker();
       } else if (e.code === 'KeyP') {
@@ -2639,7 +2635,7 @@ class SchoolGTASandbox {
       }
       this.hud.updateCqcPrompt(
         this.nearbyCqcTarget !== null,
-        this.nearbyCqcTarget?.role === 'DETENTION_BOSS' ? '🥷 [F / 點擊] 總長弱點暗殺破防！' : '🥷 [F / 點擊] 暗殺 (CQC)'
+        this.nearbyCqcTarget?.role || ''
       );
     }
 
