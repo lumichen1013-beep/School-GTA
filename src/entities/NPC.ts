@@ -1965,6 +1965,19 @@ export class NPC {
       return;
     }
 
+    // 特訓資深學長主動切磋 (警戒半徑調緊湊至 8.5m，出生點安全半徑調小，玩家稍往前走即展開切磋對抗)
+    if (this.role === 'DETENTION_SENIOR') {
+      const seniorDistSq = this.position.distanceToSquared(playerPos);
+      if (seniorDistSq < 72.25) { // 8.5m 內主動發起切磋
+        if (this.isPaused) this.cancelPause();
+        this.isChasing = true;
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        onSpotPlayer();
+        return;
+      }
+    }
+
     const isDetentionRole =
       this.role === 'DETENTION_GUARD' ||
       this.role === 'DETENTION_SENIOR' ||

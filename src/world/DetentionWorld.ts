@@ -755,38 +755,76 @@ export class DetentionWorld {
     });
   }
 
-  // 幀迴圈更新探照燈掃視與警戒檢測
+  // 幀迴圈更新探照燈掃視與警戒檢測 (動態追蹤玩家 + 移動速度合理平滑化，告別瞬間爆衝)
   public update(delta: number, playerPos: THREE.Vector3): { isDetectedBySearchlight: boolean; nearestDist: number } {
     let anyDetected = false;
     let minDistance = 999;
 
     const _scratchLook = new THREE.Vector3();
+    const isPlayerOutdoors = playerPos.y < 3.0;
+
+    // 合理平滑速度：
+    // 玩家正常步行 5.0 m/s，疾跑 10.0 m/s
+    // 探照燈平時追蹤速度設為 4.8 m/s：給予緊湊的追逐壓迫感，且玩家疾跑或滑步/閃身步能及時擺脫甩開
+    const trackingSpeed = 4.8;
+    const sweepSpeed = 2.8;
 
     for (const sl of this.searchlights) {
-      sl.angle += sl.speed * delta;
+      sl.angle += delta * 0.75; // 穩定平順的探查掃描週期
 
-      // Lissajous 曲線軌跡掃視操場
-      const targetX = sl.centerX + Math.cos(sl.angle) * sl.radiusX;
-      const targetZ = sl.centerZ + Math.sin(sl.angle * 1.3) * sl.radiusZ;
+      let targetX = 0;
+      let targetZ = 0;
+      let moveSpeed = trackingSpeed;
 
-      sl.currentGroundPos.set(targetX, 0.06, targetZ);
-      sl.groundSpot.position.copy(sl.currentGroundPos);
+      if (isPlayerOutdoors) {
+        // 儘量追蹤玩家：四角哨塔探照燈動態轉向並追蹤玩家所在方位
+        // 附加 ±3.6m 模擬哨兵微幅晃動巡查扇面，四座塔各有不同相位，不會疊成單一點
+        const phaseOffset = sl.id * 1.5708; // 每座塔相差 90 度
+        const sweepOffsetX = Math.cos(sl.angle + phaseOffset) * 3.6;
+        const sweepOffsetZ = Math.sin(sl.angle * 1.25 + phaseOffset) * 3.6;
+
+        targetX = playerPos.x + sweepOffsetX;
+        targetZ = playerPos.z + sweepOffsetZ;
+        moveSpeed = trackingSpeed;
+      } else {
+        // 進入建築掩體時失去追蹤目標，回到各區域外圍穩定巡邏
+        targetX = sl.centerX + Math.cos(sl.angle * 0.4) * (sl.radiusX * 0.6);
+        targetZ = sl.centerZ + Math.sin(sl.angle * 0.5) * (sl.radiusZ * 0.6);
+        moveSpeed = sweepSpeed;
+      }
+
+      // 限制光斑在特訓校場圍牆範圍內
+      targetX = THREE.MathUtils.clamp(targetX, -82, 82);
+      targetZ = THREE.MathUtils.clamp(targetZ, -82, 82);
+
+      // 以合理物理角動量與平滑線速度步進，消除過快爆衝問題
+      const dx = targetX - sl.currentGroundPos.x;
+      const dz = targetZ - sl.currentGroundPos.z;
+      const distToTarget = Math.hypot(dx, dz);
+
+      if (distToTarget > 0.05) {
+        const step = Math.min(distToTarget, moveSpeed * delta);
+        sl.currentGroundPos.x += (dx / distToTarget) * step;
+        sl.currentGroundPos.z += (dz / distToTarget) * step;
+      }
+
+      sl.groundSpot.position.set(sl.currentGroundPos.x, 0.06, sl.currentGroundPos.z);
 
       // 燈頭與光錐精準朝向地面光斑
-      _scratchLook.copy(sl.currentGroundPos);
+      _scratchLook.set(sl.currentGroundPos.x, 0.06, sl.currentGroundPos.z);
       sl.housing.lookAt(_scratchLook);
 
       // 計算與玩家平面距離
-      const dx = playerPos.x - sl.currentGroundPos.x;
-      const dz = playerPos.z - sl.currentGroundPos.z;
-      const dist = Math.hypot(dx, dz);
+      const pDx = playerPos.x - sl.currentGroundPos.x;
+      const pDz = playerPos.z - sl.currentGroundPos.z;
+      const dist = Math.hypot(pDx, pDz);
 
       if (dist < minDistance) {
         minDistance = dist;
       }
 
       // 當玩家在光圈半徑 3.6m 內，且身處室外操場 (Y < 3.0)
-      if (dist < 3.6 && playerPos.y < 3.0) {
+      if (dist < 3.6 && isPlayerOutdoors) {
         sl.isDetecting = true;
         anyDetected = true;
 

@@ -735,122 +735,201 @@ class SchoolGTASandbox {
   }
 
   private spawnDetentionNPCs() {
-    // 1. 總教官 Boss【鐵面總長】(駐守教官總部大樓外廣場，遠離玩家起點)
+    // 1. 總教官 Boss【鐵面總長】(駐守教官總部北側點名校場，視野開闊絕不穿牆)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(45, 0, 35),
+      new THREE.Vector3(52, 0, 16),
       'DETENTION_BOSS',
       [
-        new THREE.Vector3(45, 0, 35),
-        new THREE.Vector3(55, 0, 35),
-        new THREE.Vector3(55, 0, 20),
-        new THREE.Vector3(35, 0, 20),
-        new THREE.Vector3(35, 0, 35)
+        new THREE.Vector3(40, 0, 16),
+        new THREE.Vector3(65, 0, 16),
+        new THREE.Vector3(65, 0, 12),
+        new THREE.Vector3(40, 0, 12)
       ],
       'OFFICER_PATROL'
     ));
 
-    // 2. 特訓教官群 (5 名，防暴盾 + 警棍，駐守各區周邊要道，拉開警戒縱深)
-    // 南大門守衛
+    // 2. 特訓教官群 (8 名，防暴盾 + 警棍，全院要道巡查)
+    // 南大門主崗哨長
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 75),
+      new THREE.Vector3(0, 0, 82),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-15, 0, 75), new THREE.Vector3(15, 0, 75), new THREE.Vector3(0, 0, 65)],
+      [new THREE.Vector3(-6, 0, 82), new THREE.Vector3(6, 0, 82), new THREE.Vector3(6, 0, 88), new THREE.Vector3(-6, 0, 88)],
       'OFFICER_PATROL'
     ));
-    // 營舍西側巡邏守衛
+    // 南大門副崗執勤教官
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-35, 0, -45),
+      new THREE.Vector3(-5, 0, 85),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-35, 0, -45), new THREE.Vector3(-55, 0, -45), new THREE.Vector3(-55, 0, -65), new THREE.Vector3(-35, 0, -65)],
+      [new THREE.Vector3(-5, 0, 85), new THREE.Vector3(-5, 0, 76), new THREE.Vector3(5, 0, 76), new THREE.Vector3(5, 0, 85)],
       'OFFICER_PATROL'
     ));
-    // 食堂東側巡邏守衛
+    // 營舍前庭巡察教官 (完全在營舍大樓與樓梯外側開闊前庭)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(42, 0, -45),
+      new THREE.Vector3(-35, 0, -25),
       'DETENTION_GUARD',
-      [new THREE.Vector3(42, 0, -45), new THREE.Vector3(58, 0, -45), new THREE.Vector3(58, 0, -60), new THREE.Vector3(42, 0, -60)],
+      [new THREE.Vector3(-35, 0, -25), new THREE.Vector3(-55, 0, -25), new THREE.Vector3(-55, 0, -18), new THREE.Vector3(-35, 0, -18)],
       'OFFICER_PATROL'
     ));
-    // 實習工廠西南守衛
+    // 食堂外廊巡查教官 (在福利社露天餐桌外圍通道)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-45, 0, 35),
+      new THREE.Vector3(45, 0, -24),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-45, 0, 35), new THREE.Vector3(-60, 0, 35), new THREE.Vector3(-60, 0, 55), new THREE.Vector3(-45, 0, 55)],
+      [new THREE.Vector3(35, 0, -24), new THREE.Vector3(65, 0, -24), new THREE.Vector3(65, 0, -18), new THREE.Vector3(35, 0, -18)],
       'OFFICER_PATROL'
     ));
-    // 操場跑道南側巡哨
+    // 實習工廠北側調度教官 (工廠正門北側空地)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 40),
+      new THREE.Vector3(-50, 0, 18),
       'DETENTION_GUARD',
-      [new THREE.Vector3(0, 0, 40), new THREE.Vector3(25, 0, 40), new THREE.Vector3(-25, 0, 40)],
+      [new THREE.Vector3(-40, 0, 18), new THREE.Vector3(-65, 0, 18), new THREE.Vector3(-65, 0, 14), new THREE.Vector3(-40, 0, 14)],
+      'OFFICER_PATROL'
+    ));
+    // 操場跑道南側巡哨教官 (距出生點 12m，適度施加前進張力)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, 22),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(0, 0, 22), new THREE.Vector3(18, 0, 22), new THREE.Vector3(0, 0, 32), new THREE.Vector3(-18, 0, 22)],
+      'OFFICER_PATROL'
+    ));
+    // 西側鐵網長廊巡邏教官
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-85, 0, 0),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(-85, 0, -25), new THREE.Vector3(-85, 0, 25), new THREE.Vector3(-88, 0, 25), new THREE.Vector3(-88, 0, -25)],
+      'OFFICER_PATROL'
+    ));
+    // 東側鐵網長廊巡邏教官
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(85, 0, 0),
+      'DETENTION_GUARD',
+      [new THREE.Vector3(85, 0, -25), new THREE.Vector3(85, 0, 25), new THREE.Vector3(88, 0, 25), new THREE.Vector3(88, 0, -25)],
       'OFFICER_PATROL'
     ));
 
-    // 3. 特訓狼犬 (2 隻，配置於偏遠死角防範偷溜，不堵塞出生點)
+    // 3. 重訓霸榜生 (3 名，強健體魄重拳防守)
+    // 輪胎重訓區霸榜生 (距出生點 11m)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(55, 0, -55),
+      new THREE.Vector3(0, 0, -1),
+      'DETENTION_HEAVY',
+      [new THREE.Vector3(0, 0, -1), new THREE.Vector3(6, 0, -1), new THREE.Vector3(6, 0, 3), new THREE.Vector3(0, 0, 3)],
+      'OFFICER_PATROL'
+    ));
+    // 工廠南側重裝搬運霸榜生 (工廠後方寬敞貨運通道)
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-45, 0, 80),
+      'DETENTION_HEAVY',
+      [new THREE.Vector3(-35, 0, 80), new THREE.Vector3(-60, 0, 80), new THREE.Vector3(-60, 0, 86), new THREE.Vector3(-35, 0, 86)],
+      'OFFICER_PATROL'
+    ));
+    // 操場東側重量鍛鍊霸榜生
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(18, 0, 0),
+      'DETENTION_HEAVY',
+      [new THREE.Vector3(18, 0, 0), new THREE.Vector3(24, 0, 0), new THREE.Vector3(24, 0, 6), new THREE.Vector3(18, 0, 6)],
+      'OFFICER_PATROL'
+    ));
+
+    // 4. 特訓狼犬 (3 隻，邊界與外圍警戒)
+    // 東北角鐵網狼犬
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(84, 0, -55),
       'DETENTION_WOLF',
-      [new THREE.Vector3(55, 0, -55), new THREE.Vector3(65, 0, -35), new THREE.Vector3(40, 0, -35)],
+      [new THREE.Vector3(84, 0, -65), new THREE.Vector3(84, 0, -35), new THREE.Vector3(89, 0, -35), new THREE.Vector3(89, 0, -65)],
       'JOGGING'
     ));
+    // 西北角鐵網狼犬
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-55, 0, -55),
+      new THREE.Vector3(-84, 0, -55),
       'DETENTION_WOLF',
-      [new THREE.Vector3(-55, 0, -55), new THREE.Vector3(-65, 0, -35), new THREE.Vector3(-40, 0, -35)],
+      [new THREE.Vector3(-84, 0, -65), new THREE.Vector3(-84, 0, -35), new THREE.Vector3(-89, 0, -35), new THREE.Vector3(-89, 0, -65)],
+      'JOGGING'
+    ));
+    // 操場外環巡查犬
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, 52),
+      'DETENTION_WOLF',
+      [new THREE.Vector3(0, 0, 52), new THREE.Vector3(28, 0, 48), new THREE.Vector3(0, 0, 58), new THREE.Vector3(-28, 0, 48)],
       'JOGGING'
     ));
 
-    // 4. 重訓霸榜生 (2 名，各在器材區與庫房鍛鍊，不主動追擊)
+    // 5. 特訓資深學長 / 學員群 (8 名，設施訓練、跑步與切磋)
+    // 單槓區特訓學長 (距出生點 9m，靠近觸發切磋)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, -14),
-      'DETENTION_HEAVY',
-      [new THREE.Vector3(0, 0, -14), new THREE.Vector3(5, 0, -14), new THREE.Vector3(-5, 0, -14)],
-      'OFFICER_PATROL'
-    ));
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-48, 0, 52),
-      'DETENTION_HEAVY',
-      [new THREE.Vector3(-48, 0, 52), new THREE.Vector3(-42, 0, 52), new THREE.Vector3(-42, 0, 46)],
-      'OFFICER_PATROL'
-    ));
-
-    // 5. 特訓資深學長 (4 名，在單槓、臥推與操場巡迴鍛鍊，不主動攻擊)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-18, 0, 10),
+      new THREE.Vector3(-9, 0, 10),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(-18, 0, 10), new THREE.Vector3(-22, 0, 12), new THREE.Vector3(-15, 0, 15)],
+      [new THREE.Vector3(-9, 0, 10), new THREE.Vector3(-7, 0, 12), new THREE.Vector3(-9, 0, 14), new THREE.Vector3(-11, 0, 12)],
       'HURRIED_WALK'
     ));
+    // 臥推區特訓學長 (距出生點 9m，靠近觸發切磋)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(18, 0, 10),
+      new THREE.Vector3(9, 0, 10),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(18, 0, 10), new THREE.Vector3(22, 0, 12), new THREE.Vector3(15, 0, 15)],
+      [new THREE.Vector3(9, 0, 10), new THREE.Vector3(11, 0, 12), new THREE.Vector3(9, 0, 14), new THREE.Vector3(7, 0, 12)],
       'HURRIED_WALK'
     ));
+    // 雙槓訓練學長
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, -55),
+      new THREE.Vector3(-8, 0, 3),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(0, 0, -55), new THREE.Vector3(30, 0, -55), new THREE.Vector3(-30, 0, -55)],
+      [new THREE.Vector3(-8, 0, 3), new THREE.Vector3(-5, 0, 3), new THREE.Vector3(-5, 0, 6), new THREE.Vector3(-8, 0, 6)],
+      'HURRIED_WALK'
+    ));
+    // 障礙跳躍學長
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-2, 0, -4),
+      'DETENTION_SENIOR',
+      [new THREE.Vector3(-2, 0, -4), new THREE.Vector3(4, 0, -4), new THREE.Vector3(4, 0, -1), new THREE.Vector3(-2, 0, -1)],
+      'HURRIED_WALK'
+    ));
+    // 北側操場慢跑學長
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(0, 0, -28),
+      'DETENTION_SENIOR',
+      [new THREE.Vector3(0, 0, -28), new THREE.Vector3(25, 0, -28), new THREE.Vector3(0, 0, -22), new THREE.Vector3(-25, 0, -28)],
       'JOGGING'
     ));
+    // 東側操場衝刺學長
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(55, 0, 20),
+      new THREE.Vector3(35, 0, 0),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(55, 0, 20), new THREE.Vector3(45, 0, 20), new THREE.Vector3(45, 0, 10)],
+      [new THREE.Vector3(35, 0, 0), new THREE.Vector3(35, 0, 15), new THREE.Vector3(28, 0, 15), new THREE.Vector3(28, 0, 0)],
+      'HURRIED_WALK'
+    ));
+    // 食堂外露天休整學員
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(38, 0, -28),
+      'DETENTION_SENIOR',
+      [new THREE.Vector3(32, 0, -28), new THREE.Vector3(48, 0, -28), new THREE.Vector3(48, 0, -24), new THREE.Vector3(32, 0, -24)],
+      'CASUAL_WALK'
+    ));
+    // 工廠裝配通道學員
+    this.detentionNPCs.push(new NPC(
+      this.engine.scene,
+      new THREE.Vector3(-20, 0, 35),
+      'DETENTION_SENIOR',
+      [new THREE.Vector3(-20, 0, 35), new THREE.Vector3(-20, 0, 50), new THREE.Vector3(-16, 0, 50), new THREE.Vector3(-16, 0, 35)],
       'HURRIED_WALK'
     ));
 
@@ -1439,7 +1518,7 @@ class SchoolGTASandbox {
       n.resetAggro();
     }
 
-    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : new THREE.Vector3(-35, 0, -35);
+    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : new THREE.Vector3(-35, 0, -25);
 
     setTimeout(() => {
       this.player.respawn(respawnPos);
