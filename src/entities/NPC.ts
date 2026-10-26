@@ -1,8 +1,23 @@
 import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { soundManager } from '../audio/SoundEffects';
+import { IndoorManager } from '../systems/IndoorManager';
 
-export type NPCRole = 'STUDENT' | 'INSPECTOR' | 'TEACHER' | 'INSTRUCTOR' | 'DOG' | 'BIKE_PATROL' | 'BANDIT' | 'PE_TEACHER_BOSS' | 'DODGE_TEACHER';
+export type NPCRole =
+  | 'STUDENT'
+  | 'INSPECTOR'
+  | 'TEACHER'
+  | 'INSTRUCTOR'
+  | 'DOG'
+  | 'BIKE_PATROL'
+  | 'BANDIT'
+  | 'PE_TEACHER_BOSS'
+  | 'DODGE_TEACHER'
+  | 'DETENTION_GUARD'
+  | 'DETENTION_SENIOR'
+  | 'DETENTION_HEAVY'
+  | 'DETENTION_WOLF'
+  | 'DETENTION_BOSS';
 
 export type NPCIdleBehavior = 'LOOK_AROUND' | 'PHONE' | 'STRETCH' | 'HANDS_BEHIND_BACK' | 'CHAT' | 'DOG_SNIFF' | 'DOG_SIT';
 export type NPCMovementStyle = 'CASUAL_WALK' | 'HURRIED_WALK' | 'JOGGING' | 'OFFICER_PATROL';
@@ -260,6 +275,51 @@ export class NPC {
       this.attackRange = 2.4;
       this.movementStyle = 'CASUAL_WALK';
       this.pauseChance = 0.30;
+    } else if (role === 'DETENTION_GUARD') {
+      // 特訓教官：血量 320，防暴海綿盾與指揮棒，正面免傷高，會吹哨召集同伴
+      this.maxHp = 320;
+      this.speed = 4.8 + speedJitter * 0.4;
+      this.chaseSpeed = 9.2;
+      this.attackPower = 20;
+      this.attackRange = 1.8;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.45;
+    } else if (role === 'DETENTION_SENIOR') {
+      // 特訓資深學長：血量 220，攻擊力高、移動快、主動發起切磋
+      this.maxHp = 220;
+      this.speed = 5.4 + speedJitter * 0.5;
+      this.chaseSpeed = 9.8;
+      this.attackPower = 24;
+      this.attackRange = 1.6;
+      this.movementStyle = movementStyle || 'HURRIED_WALK';
+      this.pauseChance = 0.35;
+    } else if (role === 'DETENTION_HEAVY') {
+      // 重訓霸榜生：血量 450，高血量霸體
+      this.maxHp = 450;
+      this.speed = 4.0 + speedJitter * 0.3;
+      this.chaseSpeed = 7.8;
+      this.attackPower = 36;
+      this.attackRange = 1.9;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.50;
+    } else if (role === 'DETENTION_WOLF') {
+      // 特訓狼犬：血量 260，敏捷撲倒
+      this.maxHp = 260;
+      this.speed = 4.6 + speedJitter * 0.4;
+      this.chaseSpeed = 11.5;
+      this.attackPower = 28;
+      this.attackRange = 2.2;
+      this.movementStyle = 'JOGGING';
+      this.pauseChance = 0.40;
+    } else if (role === 'DETENTION_BOSS') {
+      // 總教官 Boss【鐵面總長】：血量 880，閃身步身法與反擊
+      this.maxHp = 880;
+      this.speed = 4.6;
+      this.chaseSpeed = 9.5;
+      this.attackPower = 34;
+      this.attackRange = 2.0;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 0.35;
     } else if (role === 'INSPECTOR') {
       // 風紀糾察 (步巡)：雙手負後巡查校園
       this.maxHp = 158;
@@ -298,8 +358,18 @@ export class NPC {
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
     this.dynamicSpeed = this.speed;
 
-    // 下雨天隨身攜帶雨傘機率 (平民學生與師長約 75% 攜傘，25% 無傘)
-    if (role !== 'DOG' && role !== 'BIKE_PATROL' && role !== 'BANDIT' && role !== 'PE_TEACHER_BOSS') {
+    // 下雨天隨身攜帶雨傘機率 (平民學生與師長約 75% 攜傘，25% 無傘；少年院特訓群不持傘)
+    if (
+      role !== 'DOG' &&
+      role !== 'BIKE_PATROL' &&
+      role !== 'BANDIT' &&
+      role !== 'PE_TEACHER_BOSS' &&
+      role !== 'DETENTION_GUARD' &&
+      role !== 'DETENTION_SENIOR' &&
+      role !== 'DETENTION_HEAVY' &&
+      role !== 'DETENTION_WOLF' &&
+      role !== 'DETENTION_BOSS'
+    ) {
       this.hasUmbrella = Math.random() < 0.75;
     }
 
@@ -308,7 +378,7 @@ export class NPC {
     this.mesh.position.copy(this.position);
 
     // 依角色建造不同 3D 外觀模型
-    if (role === 'DOG') {
+    if (role === 'DOG' || role === 'DETENTION_WOLF') {
       this.buildDogModel();
     } else if (role === 'BIKE_PATROL') {
       this.isOriginalBikePatrol = true;
@@ -322,7 +392,7 @@ export class NPC {
     }
 
     // 頭頂 3D 浮動血條與昏迷倒數告示牌組 (面朝攝影機視角，清晰易辨)
-    const hpY = role === 'DOG' ? 1.05 : 2.05;
+    const hpY = (role === 'DOG' || role === 'DETENTION_WOLF') ? 1.05 : 2.05;
     this.hpBarGroup = new THREE.Group();
     this.hpBarGroup.position.set(0, hpY, 0);
 
@@ -442,16 +512,25 @@ export class NPC {
     this.koBadgeTexture.needsUpdate = true;
   }
 
-  // 1. 建造校犬柴柴（赤柴犬）3D 模型 (經典赤柴黃棕毛色、胸腹白毛裏白、白眉毛、捲尾巴、四足白襪、紅項圈與金鈴鐺)
+  // 1. 建造校犬柴柴 / 特訓狼犬 3D 模型
   private buildDogModel() {
-    // 柴犬經典配色材質
-    const shibaTanMat = new THREE.MeshLambertMaterial({ color: 0xc87a32 }); // 赤柴經典溫暖金棕橘色
-    const shibaWhiteMat = new THREE.MeshLambertMaterial({ color: 0xfff6ea }); // 柴犬標誌性裏白 (Urajiro) 象牙奶白
-    const noseBlackMat = new THREE.MeshLambertMaterial({ color: 0x1e272e }); // 黑鼻子與嘴唇線
-    const innerEarMat = new THREE.MeshLambertMaterial({ color: 0xf5d5c5 }); // 粉嫩耳朵內側
-    const collarMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); // 日式紅色項圈
-    const goldMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f }); // 金色金屬鈴鐺/狗牌
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const isWolf = this.role === 'DETENTION_WOLF';
+    if (isWolf) {
+      this.mesh.scale.set(1.15, 1.15, 1.15);
+    }
+
+    // 經典配色材質 (柴犬: 暖金棕配奶白 / 特訓狼犬: 鐵甲黑背毛配棕褐)
+    const bodyColor = isWolf ? 0x222831 : 0xc87a32;
+    const underColor = isWolf ? 0x8b5a2b : 0xfff6ea;
+    const collarColor = isWolf ? 0xc0392b : 0xe74c3c;
+
+    const shibaTanMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const shibaWhiteMat = new THREE.MeshLambertMaterial({ color: underColor });
+    const noseBlackMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
+    const innerEarMat = new THREE.MeshLambertMaterial({ color: isWolf ? 0x5a3e2b : 0xf5d5c5 });
+    const collarMat = new THREE.MeshLambertMaterial({ color: collarColor });
+    const goldMat = new THREE.MeshLambertMaterial({ color: isWolf ? 0x95a5a6 : 0xf1c40f });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: isWolf ? 0xf1c40f : 0xffffff });
     const pupilMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 
     // A. 身體主幹 (背部金棕毛色)
@@ -715,6 +794,22 @@ export class NPC {
       // 閃身步老師：神秘深紫武術長袍配墨黑勁裝
       shirtColor = 0x582c87;
       pantsColor = 0x1e272e;
+    } else if (this.role === 'DETENTION_GUARD') {
+      // 特訓教官：戰術深藍警備制服
+      shirtColor = 0x243342;
+      pantsColor = 0x1a252f;
+    } else if (this.role === 'DETENTION_SENIOR') {
+      // 特訓資深學長：受訓橘紅背心與戰術灰褲
+      shirtColor = 0xd35400;
+      pantsColor = 0x3d3d3d;
+    } else if (this.role === 'DETENTION_HEAVY') {
+      // 重訓霸榜生：黑色無袖重訓背心與深海軍藍短褲
+      shirtColor = 0x1e272e;
+      pantsColor = 0x2c3e50;
+    } else if (this.role === 'DETENTION_BOSS') {
+      // 鐵面總長：威嚴鐵黑將官大衣
+      shirtColor = 0x1a2129;
+      pantsColor = 0x11161d;
     }
 
     const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });
@@ -765,6 +860,28 @@ export class NPC {
       const headBand = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), headBandMat);
       headBand.position.y = 1.76;
       addHumanoidPart(headBand);
+    } else if (this.role === 'DETENTION_HEAVY') {
+      // 重訓霸榜生：粗獷體格與深褐牛皮健美舉重腰帶
+      torso.scale.set(1.28, 1.05, 1.25);
+      const beltMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.16, 0.42), beltMat);
+      belt.position.y = 0.75;
+      addHumanoidPart(belt);
+      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.44), new THREE.MeshLambertMaterial({ color: 0xbdc3c7 }));
+      buckle.position.set(0, 0.75, 0);
+      addHumanoidPart(buckle);
+    } else if (this.role === 'DETENTION_BOSS') {
+      // 鐵面總長：金色將官肩章與金屬哨鍊
+      const epL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1c40f }));
+      epL.position.set(-0.35, 1.44, 0);
+      addHumanoidPart(epL);
+      const epR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1c40f }));
+      epR.position.set(0.35, 1.44, 0);
+      addHumanoidPart(epR);
+
+      const bWhistle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), new THREE.MeshLambertMaterial({ color: 0xdcdde1 }));
+      bWhistle.position.set(0, 1.25, 0.2);
+      addHumanoidPart(bWhistle);
     }
 
     // 頭部
@@ -788,6 +905,44 @@ export class NPC {
       const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.16), new THREE.MeshLambertMaterial({ color: 0x111111 }));
       visor.position.set(0, 0.21, 0.14);
       head.add(visor);
+    } else if (this.role === 'DETENTION_GUARD') {
+      // 特訓教官防暴貝雷帽
+      const beret = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.22, 0.12, 12),
+        new THREE.MeshLambertMaterial({ color: 0x11161d })
+      );
+      beret.position.set(0, 0.24, 0);
+      head.add(beret);
+    } else if (this.role === 'DETENTION_BOSS') {
+      // 鐵面總長大盤帽與金徽章、金屬鐵面遮面
+      const bCap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.22, 0.14, 12),
+        new THREE.MeshLambertMaterial({ color: 0x11161d })
+      );
+      bCap.position.set(0, 0.26, 0);
+      head.add(bCap);
+
+      const bVisor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.03, 0.18),
+        new THREE.MeshLambertMaterial({ color: 0x050505 })
+      );
+      bVisor.position.set(0, 0.22, 0.16);
+      bVisor.rotation.x = 0.2;
+      head.add(bVisor);
+
+      const bBadge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.08, 0.02),
+        new THREE.MeshLambertMaterial({ color: 0xf1c40f })
+      );
+      bBadge.position.set(0, 0.28, 0.22);
+      head.add(bBadge);
+
+      const bossMask = new THREE.Mesh(
+        new THREE.BoxGeometry(0.36, 0.12, 0.15),
+        new THREE.MeshLambertMaterial({ color: 0x7f8c8d })
+      );
+      bossMask.position.set(0, 0.04, 0.18);
+      head.add(bossMask);
     }
 
     // 手腳
@@ -799,6 +954,31 @@ export class NPC {
     this.rightArm = new THREE.Mesh(armGeo, shirtMat);
     this.rightArm.position.set(0.45, 1.05, 0);
     addHumanoidPart(this.rightArm);
+
+    // 重訓霸榜生增粗手臂
+    if (this.role === 'DETENTION_HEAVY') {
+      this.leftArm.scale.set(1.3, 1.0, 1.3);
+      this.rightArm.scale.set(1.3, 1.0, 1.3);
+    }
+
+    // 特訓教官手持防暴海綿盾 (左手) 與防暴警棍 (右手)
+    if (this.role === 'DETENTION_GUARD') {
+      const shieldMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
+      const shield = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.85, 0.52), shieldMat);
+      shield.position.set(-0.1, -0.05, 0.22);
+      this.leftArm.add(shield);
+
+      const shieldStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.53), new THREE.MeshBasicMaterial({ color: 0xf1c40f }));
+      shieldStripe.position.set(-0.1, -0.05, 0.22);
+      this.leftArm.add(shieldStripe);
+
+      const baton = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 0.65, 8),
+        new THREE.MeshLambertMaterial({ color: 0x111111 })
+      );
+      baton.position.set(0, -0.22, 0.15);
+      this.rightArm.add(baton);
+    }
 
     // 體育老師專屬羽球拍 3D 裝備 (Attached to right arm)
     if (this.role === 'PE_TEACHER_BOSS') {
@@ -1011,6 +1191,25 @@ export class NPC {
         this.performBearShake(this.lastColliders);
       }
       return false;
+    } else if (this.role === 'DETENTION_GUARD') {
+      // 特訓教官防暴海綿盾格擋：免傷 75%，並吹哨召集周圍同伴
+      amount = Math.max(1, Math.round(amount * 0.25));
+      soundManager.playBanditSlash();
+      if (this.whistleCooldown <= 0) {
+        soundManager.playWhistle();
+        this.whistleCooldown = 4.0;
+      }
+    } else if (this.role === 'DETENTION_BOSS') {
+      // 鐵面總長受擊：50% 機率施展「閃身步」避開攻擊並迅速反擊
+      if (!this.isDodging && Math.random() < 0.50) {
+        this.performFlashStep(this.lastColliders);
+        this.attackCooldown = 0.22;
+        return false;
+      }
+      if (this.hp < this.maxHp * 0.5 && this.whistleCooldown <= 0) {
+        soundManager.playWhistle();
+        this.whistleCooldown = 6.0;
+      }
     }
 
     this.hp = Math.max(0, this.hp - amount);
@@ -1085,6 +1284,12 @@ export class NPC {
       this.isChasing = false;
     }
 
+    // 重訓霸榜生高血量霸體：未倒地前免疫衝撞擊飛
+    if (this.role === 'DETENTION_HEAVY' && this.hp > 0) {
+      this.isKnockedFlying = false;
+      return wasKnockedDown;
+    }
+
     // 計算擊飛拋物線：強烈向上拋射 + 水平擊飛
     this.isKnockedFlying = true;
     const horizontalForce = Math.max(force * 1.3, 10.0);
@@ -1102,11 +1307,11 @@ export class NPC {
   // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
   public triggerAttackAnimation(delta: number = 0.016) {
     this.attackAnimTimer = 0.35;
-    if (this.role === 'DOG') {
+    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
       soundManager.playDogBark();
     } else if (this.role === 'BIKE_PATROL') {
       soundManager.playBicycleBell();
-    } else if (this.role === 'BANDIT') {
+    } else if (this.role === 'BANDIT' || this.role === 'DETENTION_GUARD') {
       soundManager.playBanditSlash();
     } else if (this.role === 'PE_TEACHER_BOSS') {
       soundManager.playBadmintonWhoosh();
@@ -1123,6 +1328,21 @@ export class NPC {
       case 'PE_TEACHER_BOSS':
         // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
+      case 'DETENTION_BOSS':
+        // 鐵面總長：威嚴寸勁重拳
+        return { damage: 34, hForce: 14.0, vForce: 6.8 };
+      case 'DETENTION_HEAVY':
+        // 重訓霸榜生：超重拳出擊
+        return { damage: 36, hForce: 15.0, vForce: 7.5 };
+      case 'DETENTION_WOLF':
+        // 特訓狼犬：撲咬跳擊
+        return { damage: 28, hForce: 13.0, vForce: 6.0 };
+      case 'DETENTION_GUARD':
+        // 特訓教官：防暴警棍猛擊
+        return { damage: 20, hForce: 9.0, vForce: 4.0 };
+      case 'DETENTION_SENIOR':
+        // 特訓資深學長：硬派連環拳
+        return { damage: 24, hForce: 10.0, vForce: 4.5 };
       case 'BANDIT':
         // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高 (攻擊力提高兩倍)
         return { damage: 44, hForce: 10.0, vForce: 5.5 };
@@ -1651,7 +1871,9 @@ export class NPC {
     const distSq = dx * dx + dy * dy + dz * dz;
 
     // 視距半徑
-    const maxViewDist = this.role === 'DOG' ? 18.0 : this.role === 'BIKE_PATROL' ? 16.0 : 13.0;
+    const maxViewDist = (this.role === 'DOG' || this.role === 'DETENTION_WOLF') ? 22.0 :
+      (this.role === 'DETENTION_BOSS' || this.role === 'DETENTION_GUARD') ? 22.0 :
+      this.role === 'BIKE_PATROL' ? 16.0 : 14.0;
     if (distSq > maxViewDist * maxViewDist) return false;
 
     // 視錐夾角檢測 (水平前向向量與目標方向向量的點積)
@@ -1743,8 +1965,28 @@ export class NPC {
       return;
     }
 
-    // 通緝星級為 0 時，非學生 NPC 解除追捕
-    if (wantedLevel === 0 && this.role !== 'STUDENT') {
+    // 特訓資深學長好鬥主動發起切磋
+    if (this.role === 'DETENTION_SENIOR') {
+      const distSq = this.position.distanceToSquared(playerPos);
+      if (distSq < 100.0) { // 10m 內主動靠近挑戰
+        if (this.isPaused) this.cancelPause();
+        this.isChasing = true;
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        onSpotPlayer();
+        return;
+      }
+    }
+
+    const isDetentionRole =
+      this.role === 'DETENTION_GUARD' ||
+      this.role === 'DETENTION_SENIOR' ||
+      this.role === 'DETENTION_HEAVY' ||
+      this.role === 'DETENTION_WOLF' ||
+      this.role === 'DETENTION_BOSS';
+
+    // 通緝星級為 0 且非自衛狀態時，一般校園 NPC 解除追捕
+    if (wantedLevel === 0 && this.role !== 'STUDENT' && !isDetentionRole && !this.isChasing) {
       this.resetAggro();
       return;
     }
@@ -2121,7 +2363,7 @@ export class NPC {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
 
-    const isOutdoor = this.baseFloorY < 1.0;
+    const isOutdoor = !IndoorManager.isIndoors(this.position);
     const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
 
     // 傘的顯示與收納狀態更新 (室內、倒地、追捕或雨停時自動收傘)

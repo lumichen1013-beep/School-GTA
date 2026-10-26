@@ -349,6 +349,34 @@
       font-weight: bold;
     }
 
+    .world-badge {
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(41, 128, 185, 0.25);
+      border: 1px solid rgba(52, 152, 219, 0.45);
+      transition: all 0.2s ease;
+      user-select: none;
+      color: #ecf0f1;
+    }
+
+    .world-badge:hover {
+      background: rgba(41, 128, 185, 0.45);
+      border-color: rgba(52, 152, 219, 0.8);
+      transform: translateY(-1px);
+    }
+
+    .world-key-hint {
+      font-size: 10px;
+      padding: 1px 4px;
+      background: rgba(0, 0, 0, 0.45);
+      border-radius: 3px;
+      color: #38bdf8;
+      border: 1px solid rgba(52, 152, 219, 0.4);
+      margin-left: 4px;
+      font-weight: bold;
+    }
+
     .hud-action-pills {
       display: flex;
       align-items: center;
@@ -1697,6 +1725,275 @@
       100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0), 0 8px 24px rgba(255, 136, 0, 0.4); }
     }
 
+    /* 雙世界切換與選擇介面 (World Selection UI) */
+    #world-select-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 840px;
+      margin-top: 10px;
+      animation: modalSlide 0.35s ease;
+      pointer-events: auto;
+    }
+
+    .world-select-prompt {
+      font-size: 17px;
+      font-weight: 800;
+      color: #ecf0f1;
+      margin-bottom: 14px;
+      letter-spacing: 1.5px;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+    }
+
+    .world-select-grid {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      align-items: stretch;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .world-card {
+      flex: 1 1 340px;
+      max-width: 390px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      border-radius: 16px;
+      padding: 22px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(10px);
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      cursor: pointer;
+    }
+
+    .world-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(52, 152, 219, 0.85);
+      box-shadow: 0 16px 42px rgba(52, 152, 219, 0.3);
+    }
+
+    .world-card.hardcore {
+      border-color: rgba(231, 76, 60, 0.4);
+    }
+
+    .world-card.hardcore:hover {
+      border-color: rgba(231, 76, 60, 0.95);
+      box-shadow: 0 16px 45px rgba(231, 76, 60, 0.4);
+    }
+
+    .world-card-badge {
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .world-card-badge.normal {
+      background: linear-gradient(135deg, #27ae60, #2ecc71);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(46, 204, 113, 0.4);
+    }
+
+    .world-card-badge.hardcore {
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(231, 76, 60, 0.5);
+    }
+
+    .world-card-icon {
+      font-size: 44px;
+      margin-bottom: 6px;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+    }
+
+    .world-card-name {
+      font-size: 23px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 3px;
+    }
+
+    .world-card-tagline {
+      font-size: 12.5px;
+      color: #f39c12;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .world-card-features {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      line-height: 1.75;
+      text-align: left;
+      width: 100%;
+      margin-bottom: 18px;
+      flex-grow: 1;
+      padding: 0 6px;
+    }
+
+    .world-card-btn {
+      width: 100%;
+      padding: 12px 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 15.5px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.15s ease;
+      color: #fff;
+    }
+
+    .world-card-btn:hover {
+      filter: brightness(1.12);
+      transform: scale(1.02);
+    }
+
+    .world-card-btn.campus-btn {
+      background: linear-gradient(135deg, #2980b9, #3498db);
+      box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+    }
+
+    .world-card-btn.detention-btn {
+      background: linear-gradient(135deg, #b71540, #eb2f06);
+      box-shadow: 0 4px 15px rgba(235, 47, 6, 0.4);
+    }
+
+    .world-card-current {
+      font-size: 13px;
+      color: #2ecc71;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    /* 少年院開場劇情電影級遮罩 (Cutscene Overlay) */
+    #cutscene-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1500;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: transparent;
+    }
+
+    .cutscene-letterbox {
+      height: 8.5vh;
+      background: #000;
+      width: 100%;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.95);
+      z-index: 1505;
+    }
+
+    .cutscene-skip-badge {
+      position: absolute;
+      top: calc(8.5vh + 14px);
+      right: 20px;
+      background: rgba(10, 15, 25, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      z-index: 1515;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .cutscene-skip-badge:hover {
+      background: rgba(30, 40, 60, 0.95);
+      transform: scale(1.04);
+      border-color: rgba(255, 255, 255, 0.55);
+    }
+
+    .cutscene-skip-key {
+      display: inline-block;
+      background: #ffd32a;
+      color: #111;
+      font-weight: 900;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-right: 6px;
+      font-size: 11px;
+    }
+
+    .cutscene-subtitle-container {
+      position: absolute;
+      bottom: calc(8.5vh + 20px);
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 85%;
+      text-align: center;
+      z-index: 1515;
+      pointer-events: none;
+    }
+
+    .cutscene-subtitle-text {
+      display: inline-block;
+      background: rgba(10, 15, 25, 0.88);
+      border: 1px solid rgba(241, 196, 15, 0.5);
+      border-radius: 10px;
+      padding: 12px 28px;
+      color: #fff;
+      font-size: clamp(14px, 2.5vw, 20px);
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(241, 196, 15, 0.4);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+    }
+
+    /* 遊戲內空間傳送 Modal */
+    .world-modal-card {
+      background: #0f172a;
+      border: 2px solid #3498db;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(52, 152, 219, 0.3);
+      border-radius: 18px;
+      width: 780px;
+      max-width: 92vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px 28px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: modalSlide 0.25s ease;
+    }
+
+    .world-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      padding-bottom: 12px;
+    }
+
+    .world-modal-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #38bdf8;
+    }
+
+    .world-modal-desc {
+      font-size: 13.5px;
+      color: #cbd5e1;
+      margin-bottom: 4px;
+    }
+
     /* 被追捕時外框淡淡的紅色閃爍特效 (Pursuit Alert Vignette) */
     #pursuit-vignette {
       position: absolute;
@@ -2560,6 +2857,10 @@
           <div class="status-badge">
             <span class="badge-item">💰 <span class="cash-val" id="cash-text">NT$ 250</span></span>
             <span class="badge-item">⏰ <span class="time-val" id="clock-text">12:15 PM</span></span>
+            <span class="badge-item world-badge" id="world-badge" title="點擊切換世界 (或按 M 鍵)">
+              <span id="world-text">🏫 天天國中</span>
+              <span class="world-key-hint">M</span>
+            </span>
             <span class="badge-item weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
               <span id="weather-text">☀️ 晴朗</span>
               <span class="weather-key-hint">P</span>
@@ -2569,11 +2870,11 @@
           <div class="hud-action-pills">
             <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
             <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
-            <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 M 鍵)">
+            <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 B 鍵)">
               <span id="bgm-icon">🎵</span>
               <span id="bgm-text">BGM: 校園漫步</span>
               <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
-              <span class="bgm-key-hint">M</span>
+              <span class="bgm-key-hint">B</span>
             </div>
           </div>
         </div>
@@ -2904,6 +3205,60 @@
     </div>
   </div>
 
+  <!-- 世界切換管理傳送視窗 (按 M 鍵或點擊 HUD 世界圖示) -->
+  <div id="world-modal" class="modal-backdrop">
+    <div class="world-modal-card">
+      <div class="world-modal-header">
+        <div class="world-modal-title">🌐 空間傳送 · 世界切換管理</div>
+        <button class="commissary-close" id="world-modal-close-btn">&times;</button>
+      </div>
+      <div class="world-modal-desc">可隨時自由穿梭於【天天國中】與【第七少年特訓院】雙世界！</div>
+      <div class="world-select-grid">
+        <!-- 世界 1：天天國中 -->
+        <div class="world-card" id="modal-card-campus">
+          <div class="world-card-badge normal">普通難度 ★★★☆☆</div>
+          <div class="world-card-icon">🏫</div>
+          <div class="world-card-name">天天國中</div>
+          <div class="world-card-current" id="modal-current-campus">當前所在世界</div>
+          <div class="world-card-features">
+            <div>🏀 三分球投籃挑戰賽</div>
+            <div>🚲 火柴人自行車漫遊</div>
+            <div>🏊 50m 泳池競速與生態探索區</div>
+            <div>🏸 4F 羽球館大如老師搶分賽</div>
+          </div>
+          <button class="world-card-btn campus-btn" id="modal-btn-campus">傳送至天天國中</button>
+        </div>
+
+        <!-- 世界 2：少年院 -->
+        <div class="world-card hardcore" id="modal-card-detention">
+          <div class="world-card-badge hardcore">極限特訓 ★★★★★</div>
+          <div class="world-card-icon">⛓️</div>
+          <div class="world-card-name">第七少年特訓院</div>
+          <div class="world-card-current" id="modal-current-detention">未在此世界</div>
+          <div class="world-card-features">
+            <div>🌧️ 夜雨雷鳴電影級開場劇情動畫</div>
+            <div>💡 4 具動態高空探照燈掃描警戒</div>
+            <div>🛡️ 防暴海綿盾特訓教官與凶暴狼犬</div>
+            <div>🥋 總教官【鐵面總長】閃身步反擊 Boss</div>
+          </div>
+          <button class="world-card-btn detention-btn" id="modal-btn-detention">傳送至少年院 (含劇情)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 少年院開場劇情電影級遮罩 (Cutscene Overlay) -->
+  <div id="cutscene-overlay" style="display: none;">
+    <div class="cutscene-letterbox top"></div>
+    <div class="cutscene-skip-badge" id="cutscene-skip-btn">
+      <span class="cutscene-skip-key">SPACE</span> 點擊或按空白鍵跳過 (Skip)
+    </div>
+    <div class="cutscene-subtitle-container">
+      <div class="cutscene-subtitle-text" id="cutscene-subtitle-text"></div>
+    </div>
+    <div class="cutscene-letterbox bottom"></div>
+  </div>
+
   <!-- Start Game / Click to Lock Mouse -->
   <div id="start-screen">
     <div class="game-logo">學校GTA</div>
@@ -2918,10 +3273,46 @@
       <div class="loading-bar-track">
         <div id="loading-bar-fill" style="width: 0%;"></div>
       </div>
-      <div class="loading-hint">⚡ 載入完成後即可直接點擊螢幕暢玩</div>
+      <div class="loading-hint">⚡ 載入完成後請選擇想要探索的世界</div>
     </div>
 
-    <button class="btn-start" id="btn-start" disabled>載入資源中 (0%)...</button>
+    <button class="btn-start" id="btn-start" disabled style="display: none;">載入資源中 (0%)...</button>
+
+    <!-- 雙世界選擇卡片 (載入完成後展開) -->
+    <div id="world-select-container" style="display: none;">
+      <div class="world-select-prompt">請選擇啟動世界：</div>
+      <div class="world-select-grid">
+        <!-- 世界 1：天天國中 -->
+        <div class="world-card" id="card-world-campus">
+          <div class="world-card-badge normal">普通難度 ★★★☆☆</div>
+          <div class="world-card-icon">🏫</div>
+          <div class="world-card-name">天天國中</div>
+          <div class="world-card-tagline">活力校園 · 自由探索</div>
+          <div class="world-card-features">
+            <div>🏀 三分球投籃挑戰賽</div>
+            <div>🚲 火柴人自行車漫遊</div>
+            <div>🏊 50m 泳池競速與生態探索區</div>
+            <div>🏸 4F 羽球館大如老師搶分賽</div>
+          </div>
+          <button class="world-card-btn campus-btn" id="btn-start-campus">🏫 進入天天國中 (開始遊玩)</button>
+        </div>
+
+        <!-- 世界 2：少年院 -->
+        <div class="world-card hardcore" id="card-world-detention">
+          <div class="world-card-badge hardcore">極限特訓 ★★★★★</div>
+          <div class="world-card-icon">⛓️</div>
+          <div class="world-card-name">第七少年特訓院</div>
+          <div class="world-card-tagline">硬派泥濘 · 嚴格特訓</div>
+          <div class="world-card-features">
+            <div>🌧️ 夜雨雷鳴電影級開場劇情動畫</div>
+            <div>💡 4 具動態高空探照燈掃描警戒</div>
+            <div>🛡️ 防暴海綿盾特訓教官與凶暴狼犬</div>
+            <div>🥋 總教官【鐵面總長】閃身步反擊 Boss</div>
+          </div>
+          <button class="world-card-btn detention-btn" id="btn-start-detention">⛓️ 進入特訓 (開場劇情)</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援) -->

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
+import { IndoorManager } from '../systems/IndoorManager';
 
 export class ThirdPersonCamera {
   public camera: THREE.PerspectiveCamera;
@@ -88,7 +89,7 @@ export class ThirdPersonCamera {
     // 演藝大樓本體 (X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0，1~3F 演藝廳 Y < 11.5，4F 羽球館 Y: 12.0 ~ 16.5)
     const inPerformingArts = targetPos.x >= 63.0 && targetPos.x <= 85.0 && targetPos.z >= 23.0 && targetPos.z <= 53.0;
 
-    const isIndoors = (inMainBuilding || inStairwell || inPerformingArts || inElevator) && targetPos.y < 17.5;
+    const isIndoors = IndoorManager.isIndoors(targetPos) || inStairwell || inElevator;
 
     // 2. 平滑調節適當跟隨距離：
     // 在電梯車廂內設定特寫目標距離 1.75m，防止後腦杓剪裁與穿頂

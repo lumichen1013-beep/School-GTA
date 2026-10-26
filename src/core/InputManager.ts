@@ -22,6 +22,7 @@ export class InputManager {
   private onAttackCallback: (() => void) | null = null;
   private onAttackReleaseCallback: (() => void) | null = null;
   private onToggleBGMCallback: (() => void) | null = null;
+  private onToggleWorldCallback: (() => void) | null = null;
   private lastMouseX: number | null = null;
   private lastMouseY: number | null = null;
 
@@ -42,6 +43,13 @@ export class InputManager {
         if (this.onSkillCallback) this.onSkillCallback();
       }
       if (e.code === 'KeyM') {
+        if (this.onToggleWorldCallback) {
+          this.onToggleWorldCallback();
+        } else if (this.onToggleBGMCallback) {
+          this.onToggleBGMCallback();
+        }
+      }
+      if (e.code === 'KeyB') {
         if (this.onToggleBGMCallback) this.onToggleBGMCallback();
       }
     });
@@ -246,6 +254,10 @@ export class InputManager {
 
   public onToggleBGM(callback: () => void) {
     this.onToggleBGMCallback = callback;
+  }
+
+  public onToggleWorld(callback: () => void) {
+    this.onToggleWorldCallback = callback;
   }
 
   // 每幀消耗累積的旋轉位移

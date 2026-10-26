@@ -114,6 +114,19 @@ export class HUD {
   private qDodgeDesc: HTMLElement | null;
   private qDodgeStatus: HTMLElement | null;
 
+  // 雙世界切換與空間傳送 Modal
+  private worldBadgeEl: HTMLElement | null;
+  private worldTextEl: HTMLElement | null;
+  public onWorldToggle?: () => void;
+  private worldModalEl: HTMLElement | null;
+  private worldModalCloseBtnEl: HTMLElement | null;
+  private modalBtnCampusEl: HTMLElement | null;
+  private modalBtnDetentionEl: HTMLElement | null;
+  private modalCurrentCampusEl: HTMLElement | null;
+  private modalCurrentDetentionEl: HTMLElement | null;
+  public isWorldModalOpen: boolean = false;
+  private onWorldSwitchCallback?: (targetWorld: 'CAMPUS' | 'DETENTION') => void;
+
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
@@ -141,6 +154,38 @@ export class HUD {
       this.weatherBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this.onWeatherToggle) this.onWeatherToggle();
+      });
+    }
+
+    this.worldBadgeEl = document.getElementById('world-badge');
+    this.worldTextEl = document.getElementById('world-text');
+    if (this.worldBadgeEl) {
+      this.worldBadgeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.onWorldToggle) this.onWorldToggle();
+      });
+    }
+
+    this.worldModalEl = document.getElementById('world-modal');
+    this.worldModalCloseBtnEl = document.getElementById('world-modal-close-btn');
+    this.modalBtnCampusEl = document.getElementById('modal-btn-campus');
+    this.modalBtnDetentionEl = document.getElementById('modal-btn-detention');
+    this.modalCurrentCampusEl = document.getElementById('modal-current-campus');
+    this.modalCurrentDetentionEl = document.getElementById('modal-current-detention');
+
+    if (this.worldModalCloseBtnEl) {
+      this.worldModalCloseBtnEl.addEventListener('click', () => this.closeWorldModal());
+    }
+    if (this.modalBtnCampusEl) {
+      this.modalBtnCampusEl.addEventListener('click', () => {
+        if (this.onWorldSwitchCallback) this.onWorldSwitchCallback('CAMPUS');
+        this.closeWorldModal();
+      });
+    }
+    if (this.modalBtnDetentionEl) {
+      this.modalBtnDetentionEl.addEventListener('click', () => {
+        if (this.onWorldSwitchCallback) this.onWorldSwitchCallback('DETENTION');
+        this.closeWorldModal();
       });
     }
 
@@ -1046,6 +1091,42 @@ export class HUD {
     }
   }
 
+  // 雙世界 HUD 與空間傳送 Modal 管理
+  public updateWorldHUD(name: string) {
+    if (this.worldTextEl) {
+      this.worldTextEl.textContent = name;
+    }
+  }
+
+  public openWorldModal(currentWorld: 'CAMPUS' | 'DETENTION', onSwitch: (world: 'CAMPUS' | 'DETENTION') => void) {
+    if (!this.worldModalEl) return;
+    this.isWorldModalOpen = true;
+    this.onWorldSwitchCallback = onSwitch;
+
+    if (this.modalCurrentCampusEl && this.modalCurrentDetentionEl) {
+      if (currentWorld === 'CAMPUS') {
+        this.modalCurrentCampusEl.textContent = '✅ 當前所在世界';
+        this.modalCurrentCampusEl.style.color = '#2ecc71';
+        this.modalCurrentDetentionEl.textContent = '未在此世界 (點擊傳送)';
+        this.modalCurrentDetentionEl.style.color = '#e74c3c';
+      } else {
+        this.modalCurrentCampusEl.textContent = '未在此世界 (點擊傳送)';
+        this.modalCurrentCampusEl.style.color = '#3498db';
+        this.modalCurrentDetentionEl.textContent = '✅ 當前所在世界';
+        this.modalCurrentDetentionEl.style.color = '#2ecc71';
+      }
+    }
+
+    this.worldModalEl.style.display = 'flex';
+  }
+
+  public closeWorldModal() {
+    if (this.worldModalEl) {
+      this.worldModalEl.style.display = 'none';
+      this.isWorldModalOpen = false;
+    }
+  }
+
   // 即時更新技能 HUD 狀態 (技能圖示、名稱、冷卻倒數與扇形遮罩)
   public updateSkillHUD(skillLevel: number, cdRemaining: number, maxCd: number) {
     if (!this.skillHudCardEl || !this.skillIconEl || !this.skillNameEl || !this.skillDescEl || !this.skillCdNumberEl || !this.skillCooldownOverlayEl) {
@@ -1287,7 +1368,22 @@ export class HUD {
       let dotColor = '#e2e8f0';
       let dotRadius = 3.5;
 
-      if (npc.role === 'TEACHER' || npc.role === 'INSTRUCTOR') {
+      if (npc.role === 'DETENTION_BOSS') {
+        dotColor = '#ff2222';
+        dotRadius = 6.5;
+      } else if (npc.role === 'DETENTION_GUARD') {
+        dotColor = '#2563eb';
+        dotRadius = 5.2;
+      } else if (npc.role === 'DETENTION_HEAVY') {
+        dotColor = '#7c3aed';
+        dotRadius = 5.8;
+      } else if (npc.role === 'DETENTION_SENIOR') {
+        dotColor = '#f59e0b';
+        dotRadius = 4.5;
+      } else if (npc.role === 'DETENTION_WOLF') {
+        dotColor = '#ea580c';
+        dotRadius = 4.6;
+      } else if (npc.role === 'TEACHER' || npc.role === 'INSTRUCTOR') {
         dotColor = '#dc2626';
         dotRadius = 5.5;
       } else if (npc.role === 'BANDIT') {

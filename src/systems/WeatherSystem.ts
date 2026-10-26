@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Engine } from '../core/Engine';
 import { soundManager } from '../audio/SoundEffects';
+import { IndoorManager } from './IndoorManager';
 
 export type WeatherType = 'SUNNY' | 'RAIN' | 'THUNDERSTORM' | 'FOG' | 'SUNSET';
 
@@ -180,6 +181,7 @@ export class WeatherSystem {
   private rainMaterial: THREE.PointsMaterial;
   private rainPoints: THREE.Points;
   private rainPositions: Float32Array;
+  public currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
 
   // 天氣變更回呼 (同步更新 HUD 與 Banner)
   public onWeatherChange?: (preset: WeatherPreset, isManual: boolean) => void;
@@ -298,7 +300,10 @@ export class WeatherSystem {
     }
   }
 
-  public update(delta: number, playerPos: THREE.Vector3) {
+  public update(delta: number, playerPos: THREE.Vector3, currentWorld?: 'CAMPUS' | 'DETENTION') {
+    if (currentWorld) {
+      this.currentWorld = currentWorld;
+    }
     // 1. 天氣平滑過渡插值運算 (4.5s 柔和平滑漸變，絕無生硬瞬切)
     let curPreset = WEATHER_PRESETS[this.currentWeather];
     let tgtPreset = WEATHER_PRESETS[this.targetWeather];
@@ -389,7 +394,16 @@ export class WeatherSystem {
       }
     }
 
-    // 4. 雨滴粒子系統即時模擬 (圍繞玩家以 60m 空間動態更新，0-GC 高效下落)
+    // 4. 即時室內聽雨音效調整 (室內音量衰減且低通濾波，呈現真實隔牆隔頂聽雨效果)
+    const isPlayerIndoors = IndoorManager.isIndoors(playerPos, this.currentWorld);
+    if (this.currentRainCount > 0) {
+      const targetRainVol = this.isTransitioning
+        ? THREE.MathUtils.lerp(curPreset.rainVolume, tgtPreset.rainVolume, transitionBlend)
+        : curPreset.rainVolume;
+      soundManager.setRainIntensity(targetRainVol, 0.4, isPlayerIndoors);
+    }
+
+    // 5. 雨滴粒子系統即時模擬 (圍繞玩家以 60m 空間動態更新，0-GC 高效下落)
     if (this.currentRainCount > 0) {
       const pos = this.rainPositions;
       const count = this.currentRainCount;
@@ -414,11 +428,22 @@ export class WeatherSystem {
         pos[idx + 1] -= fallSpeed * delta;
         pos[idx + 2] += windZ * delta;
 
-        // 觸地循環重置回上方隨機位置
-        if (pos[idx + 1] < minY) {
-          pos[idx + 1] = maxY + Math.random() * 4.0;
-          pos[idx] = playerPos.x + (Math.random() - 0.5) * rangeX * 2.0;
-          pos[idx + 2] = playerPos.z + (Math.random() - 0.5) * rangeZ * 2.0;
+        // 檢查該粒子所在 (X, Z) 地面投影上方是否有建築物屋頂
+        const px = pos[idx];
+        const pz = pos[idx + 2];
+        const roofY = IndoorManager.getRoofHeightAt(px, pz, this.currentWorld);
+        const effectiveFloorY = (roofY !== null) ? roofY : minY;
+
+        // 觸地/觸及建築屋頂循環重置回天空隨機位置 (雨水落到屋頂即被阻擋吸收，絕不滲透落入室內！)
+        if (pos[idx + 1] <= effectiveFloorY) {
+          const newX = playerPos.x + (Math.random() - 0.5) * rangeX * 2.0;
+          const newZ = playerPos.z + (Math.random() - 0.5) * rangeZ * 2.0;
+          pos[idx] = newX;
+          pos[idx + 2] = newZ;
+
+          const spawnRoofY = IndoorManager.getRoofHeightAt(newX, newZ, this.currentWorld);
+          const minSpawnY = (spawnRoofY !== null) ? Math.max(maxY, spawnRoofY + 2.5) : maxY;
+          pos[idx + 1] = minSpawnY + Math.random() * 4.0;
         }
 
         // 水平超出玩家範圍跟隨包裝
@@ -427,6 +452,11 @@ export class WeatherSystem {
 
         if (pos[idx + 2] < playerPos.z - rangeZ) pos[idx + 2] += rangeZ * 2.0;
         else if (pos[idx + 2] > playerPos.z + rangeZ) pos[idx + 2] -= rangeZ * 2.0;
+        // 水平循環後若粒子不幸位於室內 (Y < 屋頂高度)，立即提至天空上方
+        const wrapRoofY = IndoorManager.getRoofHeightAt(pos[idx], pos[idx + 2], this.currentWorld);
+        if (wrapRoofY !== null && pos[idx + 1] < wrapRoofY) {
+          pos[idx + 1] = Math.max(maxY, wrapRoofY + 2.5) + Math.random() * 4.0;
+        }
       }
 
       this.rainGeometry.attributes.position.needsUpdate = true;

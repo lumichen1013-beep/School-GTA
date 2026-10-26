@@ -3,6 +3,7 @@ import { CollidableBox } from '../world/CampusWorld';
 import { InputManager } from '../core/InputManager';
 import { soundManager } from '../audio/SoundEffects';
 import { Bicycle } from '../vehicles/Bicycle';
+import { IndoorManager } from '../systems/IndoorManager';
 
 export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 
@@ -733,9 +734,18 @@ export class Player {
   }
 
   // 下雨天撐傘與收傘狀態機判定 (支援自行車騎乘、游泳、室內、擊飛與死亡自動收傘)
-  public updateUmbrella(isRaining: boolean, isRidingBike: boolean = false) {
-    // 判定是否處於室內遮蔽處 (教學大樓 1F~3F 走廊與教室，4F 屋頂露天球場與戶外地面除外)
-    const isIndoors = (this.position.x >= 25.0 && this.position.x <= 50.0 && this.position.z >= -10.0 && this.position.z <= 100.0 && this.position.y < 11.5);
+  public updateUmbrella(isRaining: boolean, isRidingBike: boolean = false, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS') {
+    // 少年院世界為鐵血特訓營舍，學員一律不持傘
+    if (currentWorld === 'DETENTION') {
+      if (this.isHoldingUmbrella) {
+        this.isHoldingUmbrella = false;
+        this.umbrellaMesh.visible = false;
+      }
+      return;
+    }
+
+    // 判定是否處於室內遮蔽處 (建築物室內、走廊、體育館與車棚屋頂下方，露天頂樓天台除外)
+    const isIndoors = IndoorManager.isIndoors(this.position, currentWorld);
     const canHoldUmbrella = isRaining &&
       !isRidingBike &&
       !this.isRidingVehicle &&
@@ -791,9 +801,10 @@ export class Player {
     rightVec: THREE.Vector3,
     colliders: CollidableBox[],
     isRaining: boolean = false,
-    isRidingBike: boolean = false
+    isRidingBike: boolean = false,
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS'
   ) {
-    this.updateUmbrella(isRaining, isRidingBike);
+    this.updateUmbrella(isRaining, isRidingBike, currentWorld);
 
     if (this.isDead) {
       this.isHoldingUmbrella = false;

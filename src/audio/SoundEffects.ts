@@ -832,7 +832,7 @@ export class SoundEffects {
   private rainFilter: BiquadFilterNode | null = null;
   private currentRainIntensity: number = 0;
 
-  public setRainIntensity(intensity: number, rampTime: number = 2.0) {
+  public setRainIntensity(intensity: number, rampTime: number = 2.0, isIndoors: boolean = false) {
     this.initCtx();
     if (!this.ctx) return;
 
@@ -853,7 +853,7 @@ export class SoundEffects {
 
       this.rainFilter = this.ctx.createBiquadFilter();
       this.rainFilter.type = 'lowpass';
-      this.rainFilter.frequency.setValueAtTime(900, this.ctx.currentTime);
+      this.rainFilter.frequency.setValueAtTime(isIndoors ? 360 : 900, this.ctx.currentTime);
 
       this.rainGain = this.ctx.createGain();
       this.rainGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -866,12 +866,14 @@ export class SoundEffects {
 
     if (this.rainGain && this.rainFilter) {
       const now = this.ctx.currentTime;
-      const targetVol = this.isMuted ? 0 : Math.max(0, Math.min(0.42, intensity * 0.42));
+      // 若在室內：雨聲音量衰減至 22%，呈現隔著實體屋頂與牆壁聽雨的沉悶真實音效
+      const volMultiplier = isIndoors ? 0.22 : 1.0;
+      const targetVol = this.isMuted ? 0 : Math.max(0, Math.min(0.42, intensity * 0.42 * volMultiplier));
       this.rainGain.gain.cancelScheduledValues(now);
       this.rainGain.gain.linearRampToValueAtTime(targetVol, now + rampTime);
 
-      // 雨勢越強，濾波器截止頻率越高，聲音越澎湃急促
-      const targetFreq = 700 + intensity * 1100; // 700Hz (小雨) ~ 1800Hz (雷雨)
+      // 雨勢越強，濾波器截止頻率越高；室內則大幅降至 360Hz（低通沉悶聽雨）
+      const targetFreq = isIndoors ? 360 : (700 + intensity * 1100);
       this.rainFilter.frequency.cancelScheduledValues(now);
       this.rainFilter.frequency.linearRampToValueAtTime(targetFreq, now + rampTime);
     }
