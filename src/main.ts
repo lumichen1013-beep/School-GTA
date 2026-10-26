@@ -819,7 +819,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-20, 0, -84),
       'DETENTION_GUARD',
       [new THREE.Vector3(-35, 0, -84), new THREE.Vector3(-12, 0, -84)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 2. 中央空地東側巡邏教官 G2 (巡邏區：X = 18, Z: -70 ~ -50，避開東側大樓)
@@ -828,7 +828,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(18, 0, -60),
       'DETENTION_GUARD',
       [new THREE.Vector3(18, 0, -70), new THREE.Vector3(18, 0, -50)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 3. 門禁卡 A 崗亭巡視教官 G3 (巡視中央安全崗亭，X = -4, Z: -68 ~ -52)
@@ -837,7 +837,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-4, 0, -60),
       'DETENTION_GUARD',
       [new THREE.Vector3(-4, 0, -68), new THREE.Vector3(-4, 0, -52)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 4. 管制閘門 1 哨戒長 G4 (守衛在 Z = -32, X: -5 ~ 5 橫向視察閘口)
@@ -846,7 +846,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, -32),
       'DETENTION_GUARD',
       [new THREE.Vector3(-5, 0, -32), new THREE.Vector3(5, 0, -32)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 12. A 區西側監舍外廊巡哨 G12 (X: -72, Z: -75 ~ -45)
@@ -855,7 +855,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-72, 0, -60),
       'DETENTION_GUARD',
       [new THREE.Vector3(-72, 0, -75), new THREE.Vector3(-72, 0, -45)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 13. A 區東側食堂側廊巡哨 G13 (X: 82, Z: -75 ~ -45)
@@ -864,7 +864,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(82, 0, -60),
       'DETENTION_GUARD',
       [new THREE.Vector3(82, 0, -75), new THREE.Vector3(82, 0, -45)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 14. A 區南前庭西折角守衛 G14 (Z = -32, X: -22 ~ -10)
@@ -873,7 +873,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-15, 0, -32),
       'DETENTION_GUARD',
       [new THREE.Vector3(-22, 0, -32), new THREE.Vector3(-10, 0, -32)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // ==========================================
@@ -885,7 +885,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-22, 0, -6),
       'DETENTION_GUARD',
       [new THREE.Vector3(-22, 0, -12), new THREE.Vector3(-22, 0, 0)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 6. 貨櫃東側縱向走道巡邏隊 G6 (X = 22, Z: -12 ~ 0，寬敞直道)
@@ -894,7 +894,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(22, 0, -6),
       'DETENTION_GUARD',
       [new THREE.Vector3(22, 0, -12), new THREE.Vector3(22, 0, 0)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 7. 貨櫃中央十字路口巡哨霸榜生 G7 (Z = 0, X: -6 ~ 6，無障礙十字路口)
@@ -903,7 +903,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, 0),
       'DETENTION_HEAVY',
       [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(6, 0, 0)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 8. 貨櫃盲區黃色門禁卡 B 駐守教官 G8 (X = 24, Z: 0 ~ 8，東側藏寶走道)
@@ -912,7 +912,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(24, 0, 4),
       'DETENTION_GUARD',
       [new THREE.Vector3(24, 0, 0), new THREE.Vector3(24, 0, 8)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 9. 管制閘門 2 哨戒長 G9 (守衛在 Z = 30, X: -5 ~ 5 橫向視察閘口)
@@ -921,7 +921,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, 30),
       'DETENTION_GUARD',
       [new THREE.Vector3(-5, 0, 30), new THREE.Vector3(5, 0, 30)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 10. B 區特訓巡邏狼犬 1 (西側寬廣開闊地帶多點巡邏)
@@ -939,7 +939,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, -12),
       'DETENTION_SENIOR',
       [new THREE.Vector3(-6, 0, -12), new THREE.Vector3(6, 0, -12)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 16. B 區南走道巡查資深教官 G16 (Z = 14, X: -8 ~ 8)
@@ -948,7 +948,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, 14),
       'DETENTION_GUARD',
       [new THREE.Vector3(-8, 0, 14), new THREE.Vector3(8, 0, 14)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 17. B 區東側外圍巡邏狼犬 2 (東側開闊地帶四點巡邏)
@@ -969,7 +969,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(-14, 0, 50),
       'DETENTION_GUARD',
       [new THREE.Vector3(-14, 0, 42), new THREE.Vector3(-14, 0, 58)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 19. C 區競技場東翼護衛長 G19 (X = 14, Z: 42 ~ 58)
@@ -978,7 +978,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(14, 0, 50),
       'DETENTION_GUARD',
       [new THREE.Vector3(14, 0, 42), new THREE.Vector3(14, 0, 58)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 20. C 區南大門哨戒長 G20 (守衛在 Z = 88, X: -8 ~ 8)
@@ -987,7 +987,7 @@ class SchoolGTASandbox {
       new THREE.Vector3(0, 0, 88),
       'DETENTION_GUARD',
       [new THREE.Vector3(-8, 0, 88), new THREE.Vector3(8, 0, 88)],
-      'CASUAL_WALK'
+      'OFFICER_PATROL'
     ));
 
     // 11. 守門小 Boss：【鐵面總教官】(防暴大盾，正中開闊競技場巡邏)

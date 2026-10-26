@@ -289,50 +289,50 @@ export class NPC {
       this.movementStyle = 'CASUAL_WALK';
       this.pauseChance = 0.30;
     } else if (role === 'DETENTION_GUARD') {
-      // 特訓教官：血量 160，防暴海綿盾與指揮棒，格擋免傷 35%，吹哨召集同伴
+      // 特訓教官：血量 160，防暴海綿盾與指揮棒，格擋免傷 35%，慢速規律巡邏 (1.45 m/s，玩家潛行 2.4 m/s 可順暢追近背刺)
       this.maxHp = 160;
-      this.speed = 4.2 + speedJitter * 0.3;
+      this.speed = 1.45;
       this.chaseSpeed = 7.6;
       this.attackPower = 12;
       this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.45;
+      this.pauseChance = 1.0;
     } else if (role === 'DETENTION_SENIOR') {
-      // 特訓資深學長：血量 130，移動敏捷，遵循切磋規矩 (不主動圍毆)
+      // 特訓資深學長：血量 130，慢速規律步巡 (1.50 m/s)，遵循切磋規矩 (不主動圍毆)
       this.maxHp = 130;
-      this.speed = 4.8 + speedJitter * 0.4;
+      this.speed = 1.50;
       this.chaseSpeed = 8.2;
       this.attackPower = 14;
       this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'HURRIED_WALK';
-      this.pauseChance = 0.40;
+      this.movementStyle = movementStyle || 'OFFICER_PATROL';
+      this.pauseChance = 1.0;
     } else if (role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：血量 220，重拳霸體，移動緩慢易拉扯
+      // 重訓霸榜生：血量 220，重拳霸體，沉穩慢步巡邏 (1.30 m/s)
       this.maxHp = 220;
-      this.speed = 3.6 + speedJitter * 0.3;
+      this.speed = 1.30;
       this.chaseSpeed = 6.6;
       this.attackPower = 18;
       this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.50;
+      this.pauseChance = 1.0;
     } else if (role === 'DETENTION_WOLF') {
-      // 特訓狼犬：血量 105 (脆皮敏捷)，速度平衡為 8.6 m/s (玩家疾跑 10.0 m/s 可擺脫)
+      // 特訓狼犬：血量 105 (脆皮敏捷)，巡邏沉穩慢行 (1.80 m/s)，追擊 8.6 m/s
       this.maxHp = 105;
-      this.speed = 4.2 + speedJitter * 0.3;
+      this.speed = 1.80;
       this.chaseSpeed = 8.6;
       this.attackPower = 10;
       this.attackRange = 2.0;
       this.movementStyle = 'JOGGING';
-      this.pauseChance = 0.40;
+      this.pauseChance = 1.0;
     } else if (role === 'DETENTION_BOSS') {
-      // 總教官 Boss【鐵面總長】：血量 420，威嚴寸勁重拳與身法反擊
+      // 總教官 Boss【鐵面總長】：血量 420，威嚴寸勁重拳與身法反擊，沉穩步巡 (1.35 m/s)
       this.maxHp = 420;
-      this.speed = 4.2;
-      this.chaseSpeed = 8.0;
+      this.speed = 1.35;
+      this.chaseSpeed = 7.8;
       this.attackPower = 20;
       this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.35;
+      this.pauseChance = 1.0;
     } else if (role === 'INSPECTOR') {
       // 風紀糾察 (步巡)：雙手負後巡查校園
       this.maxHp = 158;
@@ -1714,11 +1714,21 @@ export class NPC {
     this.isPaused = true;
     this.pauseAnimTimer = 0;
 
-    if (this.role === 'DOG') {
-      this.currentIdleBehavior = Math.random() < 0.6 ? 'DOG_SNIFF' : 'DOG_SIT';
-      this.pauseTimer = this.currentIdleBehavior === 'DOG_SNIFF'
-        ? (3.0 + Math.random() * 2.5)
-        : (4.0 + Math.random() * 3.0);
+    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
+      if (this.role === 'DETENTION_WOLF') {
+        // 特訓狼犬：定點警戒嗅聞 3.5 秒
+        this.currentIdleBehavior = 'DOG_SNIFF';
+        this.pauseTimer = 3.5;
+      } else {
+        this.currentIdleBehavior = Math.random() < 0.6 ? 'DOG_SNIFF' : 'DOG_SIT';
+        this.pauseTimer = this.currentIdleBehavior === 'DOG_SNIFF'
+          ? (3.0 + Math.random() * 2.5)
+          : (4.0 + Math.random() * 3.0);
+      }
+    } else if (this.role.startsWith('DETENTION_')) {
+      // 特訓院哨兵守衛：100% 固定立正環顧警戒，固定 3.5 秒 (Boss 4.0 秒)，背後暴露便於潛行 CQC
+      this.currentIdleBehavior = 'LOOK_AROUND';
+      this.pauseTimer = this.role === 'DETENTION_BOSS' ? 4.0 : 3.5;
     } else if (this.role === 'BIKE_PATROL') {
       this.currentIdleBehavior = 'LOOK_AROUND';
       this.pauseTimer = 2.0 + Math.random() * 2.0;
@@ -1795,7 +1805,7 @@ export class NPC {
     if (this.mesh) {
       this.mesh.rotation.x = 0;
       this.mesh.rotation.z = 0;
-      if (this.role === 'DOG') {
+      if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
         this.mesh.position.y = this.baseFloorY;
       }
     }
@@ -1803,7 +1813,7 @@ export class NPC {
 
   // 待機/發呆行為多樣性程序化動作 (0-GC 純量運算)
   private applyIdleAnimation(delta: number) {
-    if (this.role === 'DOG') {
+    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
       if (this.currentIdleBehavior === 'DOG_SNIFF') {
         // 低頭嗅聞青草，尾巴歡快輕搖
         if (this.dogHead) {
@@ -1874,8 +1884,14 @@ export class NPC {
           this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 1.4) * 0.65;
           this.headMesh.rotation.x = Math.sin(this.pauseAnimTimer * 0.7) * 0.08;
         }
-        if (this.leftArm) this.leftArm.rotation.set(0, 0, -0.05);
-        if (this.rightArm) this.rightArm.rotation.set(0, 0, 0.05);
+        if (this.movementStyle === 'OFFICER_PATROL') {
+          // 巡邏哨兵威嚴雙手負於身後，立正戒備，背後暴露
+          if (this.leftArm) this.leftArm.rotation.set(0.38, 0.25, -0.15);
+          if (this.rightArm) this.rightArm.rotation.set(0.38, -0.25, 0.15);
+        } else {
+          if (this.leftArm) this.leftArm.rotation.set(0, 0, -0.05);
+          if (this.rightArm) this.rightArm.rotation.set(0, 0, 0.05);
+        }
         if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
         if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
         break;
@@ -3060,6 +3076,8 @@ export class NPC {
           this.isPaused = false;
           this.resetPose();
           this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+          this.lastRecordedPos.copy(this.position);
+          this.stuckCheckTimer = 0;
         }
 
         // 頭頂 3D 浮動血條永遠面朝視角/玩家
@@ -3073,10 +3091,11 @@ export class NPC {
       }
 
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
-      const wpDistSq = this.role === 'BIKE_PATROL' ? 12.25 : (this.movementStyle === 'JOGGING' ? 4.84 : 3.24); // 火柴人自行車 15m/s 適度擴大檢查半徑 (3.5m) 避免高速繞圈
+      const isDetention = this.role.startsWith('DETENTION_');
+      const wpDistSq = isDetention ? 2.25 : (this.role === 'BIKE_PATROL' ? 12.25 : (this.movementStyle === 'JOGGING' ? 4.84 : 3.24));
       if (this.position.distanceToSquared(targetPos) < wpDistSq) {
-        // 下雨天沒帶傘時絕不停留發呆，持續快步尋找遮蔽處
-        const canPause = (!isRaining || !isOutdoorHumanoid || this.hasUmbrella) && Math.random() < this.pauseChance;
+        // 下雨天沒帶傘時絕不停留發呆，持續快步尋找遮蔽處；第二世界特訓守衛 100% 固定駐足警戒 3.5s
+        const canPause = isDetention ? true : ((!isRaining || !isOutdoorHumanoid || this.hasUmbrella) && Math.random() < this.pauseChance);
         if (canPause) {
           this.enterPauseState();
           const dx = playerPos.x - this.position.x;
@@ -3121,7 +3140,7 @@ export class NPC {
       if (!isTooCloseToPlayer) {
         const moveStepX = _npcMoveDir.x * currentSpeed * delta;
         const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
-        const radius = this.role === 'DOG' ? 0.35 : 0.45;
+        const radius = (this.role === 'DOG' || this.role === 'DETENTION_WOLF') ? 0.35 : 0.45;
 
         // X 軸移動檢測
         let nextX = this.position.x + moveStepX;
@@ -3241,12 +3260,18 @@ export class NPC {
       // 轉向與俯仰姿態
       const targetRotation = Math.atan2(_npcMoveDir.x, _npcMoveDir.z);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
-      const turnRate = this.role === 'DOG' ? 14.0 : (this.role === 'BIKE_PATROL' ? 12.0 : 10.0);
+      const isDetention = this.role.startsWith('DETENTION_');
+      const isCanine = this.role === 'DOG' || this.role === 'DETENTION_WOLF';
+      const turnRate = isCanine
+        ? (this.isChasing ? 14.0 : 4.0)
+        : (this.role === 'BIKE_PATROL'
+          ? 12.0
+          : (isDetention && !this.isChasing ? 3.2 : 10.0));
       this.rotationY += diff * Math.min(delta * turnRate, 1.0);
       this.mesh.rotation.y = this.rotationY;
 
       // 追捕姿態視覺回饋：衝刺時前傾壓低、調息時微喘
-      if (this.role !== 'DOG' && this.role !== 'BIKE_PATROL') {
+      if (!isCanine && this.role !== 'BIKE_PATROL') {
         if (this.isChasing) {
           const targetTilt = this.isBurstSprinting ? 0.14 : (0.05 + Math.sin(this.animTimer * 2.5) * 0.03);
           this.mesh.rotation.x += (targetTilt - this.mesh.rotation.x) * Math.min(delta * 6.0, 1.0);
@@ -3256,17 +3281,19 @@ export class NPC {
       }
 
       // 6. 專屬動作動畫
-      // 動態步頻：步態頻率與實際位移速度嚴格成比例！
-      const animRate = this.role === 'DOG'
-        ? Math.max(8.0, currentSpeed * 2.2 + 2.0)
+      // 動態步頻：步態頻率與實際位移速度嚴格成比例！避免慢走時太空步滑步
+      const animRate = isCanine
+        ? (this.isChasing ? 12.0 : Math.max(3.2, currentSpeed * 2.4))
         : (this.isChasing
           ? (this.isBurstSprinting ? 16.0 : 9.5)
-          : (this.movementStyle === 'JOGGING' ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5)));
+          : (isDetention
+            ? Math.max(2.6, currentSpeed * 2.6)
+            : (this.movementStyle === 'JOGGING' ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5))));
       this.animTimer += delta * animRate;
 
-      if (this.role === 'DOG') {
-        // 校犬四足奔馳動畫：跨步幅度隨速度動態放大 (Gallop stride scaling)
-        const strideMag = Math.min(0.85, 0.40 + (currentSpeed / 12.0) * 0.42);
+      if (isCanine) {
+        // 犬科四足奔馳/慢巡步態動畫：跨步幅度隨速度動態放大 (Gallop / Prowl stride scaling)
+        const strideMag = Math.min(0.85, 0.35 + (currentSpeed / 12.0) * 0.45);
         const dogRun = Math.sin(this.animTimer) * strideMag;
         if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.x = dogRun;
         if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.x = -dogRun;
@@ -3283,7 +3310,7 @@ export class NPC {
         } else {
           if (this.dogHead) this.dogHead.position.z = 0.48;
         }
-        this.mesh.position.y = this.baseFloorY + Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.02);
+        this.mesh.position.y = this.baseFloorY + Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.015);
       } else if (this.role === 'BIKE_PATROL') {
         // 單車糾察隊輪胎旋轉
         const spin = (currentSpeed / 0.38) * delta;
@@ -3371,9 +3398,10 @@ export class NPC {
     }
 
     this.mesh.position.copy(this.position);
-    // 柴柴奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
-    if (this.role === 'DOG' && _npcMoveDir.lengthSq() > 0.05) {
-      this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.02);
+    // 犬科四足奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
+    const isCanineRole = this.role === 'DOG' || this.role === 'DETENTION_WOLF';
+    if (isCanineRole && _npcMoveDir.lengthSq() > 0.05) {
+      this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.015);
     }
 
     // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家 (0-GC 純量計算)
