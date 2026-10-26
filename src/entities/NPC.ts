@@ -40,12 +40,32 @@ export interface NPCAfterimageItem {
 
 // 模組頂層靜態共享 Scratch Vectors (0-GC 避免每幀垃圾回收引發微卡頓)
 const _npcMoveDir = new THREE.Vector3();
-const _npcToPlayer = new THREE.Vector3();
-const _npcForward = new THREE.Vector3();
-const _npcEyePos = new THREE.Vector3();
-const _npcTargetEye = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
+
+// 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
+export interface AttackSpec {
+  damage: number;
+  hForce: number;
+  vForce: number;
+}
+
+const _ATTACK_SPECS: Record<string, AttackSpec> = {
+  DODGE_TEACHER: { damage: 0, hForce: 5.0, vForce: 2.0 },
+  PE_TEACHER_BOSS: { damage: 28, hForce: 13.0, vForce: 7.0 },
+  DETENTION_BOSS: { damage: 20, hForce: 10.0, vForce: 4.5 },
+  DETENTION_HEAVY: { damage: 18, hForce: 12.0, vForce: 5.0 },
+  DETENTION_WOLF: { damage: 10, hForce: 7.0, vForce: 3.5 },
+  DETENTION_GUARD: { damage: 12, hForce: 7.0, vForce: 3.0 },
+  DETENTION_SENIOR: { damage: 14, hForce: 8.0, vForce: 3.5 },
+  BANDIT: { damage: 44, hForce: 10.0, vForce: 5.5 },
+  TEACHER: { damage: 28, hForce: 10.0, vForce: 6.0 },
+  DOG: { damage: 24, hForce: 11.5, vForce: 5.0 },
+  BIKE_PATROL: { damage: 22, hForce: 12.5, vForce: 6.5 },
+  INSPECTOR: { damage: 18, hForce: 8.0, vForce: 4.5 },
+  STUDENT: { damage: 12, hForce: 6.0, vForce: 3.5 }
+};
+const _DEFAULT_ATTACK_SPEC: AttackSpec = { damage: 12, hForce: 6.0, vForce: 3.5 };
 
 // 3D 羽球靜態共享幾何體與材質 (0-GC 全域快取複用，杜絕頻繁發球引發 GC 微卡頓或 GPU 洩漏)
 // 1. 軟木塞球頭 (Cork Head)：半徑約 0.075m 橢圓小球，位於飛行方向最前端 (+Z)
@@ -184,7 +204,6 @@ export class NPC {
   private lastKoBadgeSec: number = -1;
 
   // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法系統
-  private sceneRef?: THREE.Scene;
   private lastColliders: CollidableBox[] = [];
   public isConversing: boolean = false;
   private isDodging: boolean = false;
@@ -237,7 +256,6 @@ export class NPC {
     this.position = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
     this.role = role;
-    this.sceneRef = scene;
     this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), new THREE.Vector3(startPos.x + 8, startPos.y, startPos.z)];
 
     // 隨機速度自然微擾動 (+/- 0.25 m/s)，破除千篇一律的僵硬同速
@@ -1735,49 +1753,9 @@ export class NPC {
     }
   }
 
-  // 獲取各角色攻擊傷害與擊飛衝量規格
-  public getAttackSpecs(): { damage: number; hForce: number; vForce: number } {
-    switch (this.role) {
-      case 'DODGE_TEACHER':
-        return { damage: 0, hForce: 5.0, vForce: 2.0 };
-      case 'PE_TEACHER_BOSS':
-        // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
-        return { damage: 28, hForce: 13.0, vForce: 7.0 };
-      case 'DETENTION_BOSS':
-        // 鐵面總長：威嚴寸勁重拳 (傷害 20，衝量平衡)
-        return { damage: 20, hForce: 10.0, vForce: 4.5 };
-      case 'DETENTION_HEAVY':
-        // 重訓霸榜生：超重拳出擊 (傷害 18，強力擊退拉開距離，避免連擊秒殺)
-        return { damage: 18, hForce: 12.0, vForce: 5.0 };
-      case 'DETENTION_WOLF':
-        // 特訓狼犬：飛撲咬擊 (傷害 10，玩家可從容反擊)
-        return { damage: 10, hForce: 7.0, vForce: 3.5 };
-      case 'DETENTION_GUARD':
-        // 特訓教官：防暴警棍猛擊 (傷害 12)
-        return { damage: 12, hForce: 7.0, vForce: 3.0 };
-      case 'DETENTION_SENIOR':
-        // 特訓資深學長：切磋拳法 (傷害 14)
-        return { damage: 14, hForce: 8.0, vForce: 3.5 };
-      case 'BANDIT':
-        // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高 (攻擊力提高兩倍)
-        return { damage: 44, hForce: 10.0, vForce: 5.5 };
-      case 'TEACHER':
-        // 生教組長/教官：強烈教官拳擊，強力擊退擊飛
-        return { damage: 28, hForce: 10.0, vForce: 6.0 };
-      case 'DOG':
-        // 校犬柴柴：兇猛飛撲咬擊，極高水平衝撞力
-        return { damage: 24, hForce: 11.5, vForce: 5.0 };
-      case 'BIKE_PATROL':
-        // 單車糾察隊：單車前輪猛烈撞擊，高拋擊飛
-        return { damage: 22, hForce: 12.5, vForce: 6.5 };
-      case 'INSPECTOR':
-        // 風紀糾察：維安揮擊
-        return { damage: 18, hForce: 8.0, vForce: 4.5 };
-      case 'STUDENT':
-      default:
-        // 平民學生：反擊揮拳
-        return { damage: 12, hForce: 6.0, vForce: 3.5 };
-    }
+  // 獲取各角色攻擊傷害與擊飛衝量規格 (0-GC，查表常數快取)
+  public getAttackSpecs(): AttackSpec {
+    return _ATTACK_SPECS[this.role] || _DEFAULT_ATTACK_SPEC;
   }
 
   // 失去自行車 (遭到玩家搶奪，妥善卸除並釋放單車零件與幾何體)
@@ -2331,11 +2309,6 @@ export class NPC {
     return true;
   }
 
-  // 3D 線段與軸對齊包圍盒 (AABB) 相交檢測
-  private segmentIntersectsAABB(p1: THREE.Vector3, p2: THREE.Vector3, min: THREE.Vector3, max: THREE.Vector3): boolean {
-    return NPC.segmentIntersectsAABBCoords(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, min, max);
-  }
-
   // 3D 視錐與障礙物遮擋檢測 (Line of Sight with Obstacle Occlusion, 0-GC 純純量運算)
   public canSeePlayer(
     playerPos: THREE.Vector3,
@@ -2386,7 +2359,7 @@ export class NPC {
       return false; // 不在視野角內
     }
 
-    // 3D 視線障礙物遮擋檢測 (Line of Sight Raycast against Walls & Solid Objects)
+    // 3D 視線障礙物遮擋檢測 (Line of Sight Raycast with AABB Broadphase Culling)
     if (colliders.length > 0) {
       const eyeY = this.role === 'DOG' ? 0.6 : 1.5;
       const eyePosX = this.position.x;
@@ -2397,9 +2370,22 @@ export class NPC {
       const targetEyeY = playerPos.y + (isPlayerSneaking ? 0.75 : 1.2);
       const targetEyeZ = playerPos.z;
 
+      // 視線光線包圍盒粗篩 (Broadphase 提早剔除遠處 90% 障礙物)
+      const minRayX = Math.min(eyePosX, targetEyeX);
+      const maxRayX = Math.max(eyePosX, targetEyeX);
+      const minRayY = Math.min(eyePosY, targetEyeY);
+      const maxRayY = Math.max(eyePosY, targetEyeY);
+      const minRayZ = Math.min(eyePosZ, targetEyeZ);
+      const maxRayZ = Math.max(eyePosZ, targetEyeZ);
+
       for (let i = 0; i < colliders.length; i++) {
         const box = colliders[i];
         if (box.isFloorOnly) continue; // 地板/坡道不遮擋水平視線
+        if (box.min.x > maxRayX || box.max.x < minRayX ||
+            box.min.y > maxRayY || box.max.y < minRayY ||
+            box.min.z > maxRayZ || box.max.z < minRayZ) {
+          continue; // 粗篩直接排除不相交的遠端障礙物
+        }
         if (NPC.segmentIntersectsAABBCoords(eyePosX, eyePosY, eyePosZ, targetEyeX, targetEyeY, targetEyeZ, box.min, box.max)) {
           return false; // 視線被實體牆壁、門框或障礙物阻擋！
         }
@@ -3590,13 +3576,14 @@ export class NPC {
         }
 
         if (!hitX) {
-          for (const box of colliders) {
+          for (let i = 0; i < colliders.length; i++) {
+            const box = colliders[i];
             if (box.isFloorOnly) continue;
+            if (nextX + radius <= box.min.x || nextX - radius >= box.max.x ||
+                this.position.z + radius <= box.min.z || this.position.z - radius >= box.max.z) {
+              continue;
+            }
             if (
-              nextX + radius > box.min.x &&
-              nextX - radius < box.max.x &&
-              this.position.z + radius > box.min.z &&
-              this.position.z - radius < box.max.z &&
               this.position.y + 0.3 < box.max.y &&
               this.position.y + 1.6 > box.min.y
             ) {
@@ -3622,13 +3609,14 @@ export class NPC {
         }
 
         if (!hitZ) {
-          for (const box of colliders) {
+          for (let i = 0; i < colliders.length; i++) {
+            const box = colliders[i];
             if (box.isFloorOnly) continue;
+            if (this.position.x + radius <= box.min.x || this.position.x - radius >= box.max.x ||
+                nextZ + radius <= box.min.z || nextZ - radius >= box.max.z) {
+              continue;
+            }
             if (
-              this.position.x + radius > box.min.x &&
-              this.position.x - radius < box.max.x &&
-              nextZ + radius > box.min.z &&
-              nextZ - radius < box.max.z &&
               this.position.y + 0.3 < box.max.y &&
               this.position.y + 1.6 > box.min.y
             ) {
@@ -3662,29 +3650,26 @@ export class NPC {
         }
 
         // 5. 防穿牆與卡牆修復 (永遠朝外側退回，絕不向建築內部彈射)
-        for (const box of colliders) {
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
           if (box.isFloorOnly) continue;
+          if (this.position.x + radius <= box.min.x || this.position.x - radius >= box.max.x ||
+              this.position.z + radius <= box.min.z || this.position.z - radius >= box.max.z) {
+            continue;
+          }
           if (this.position.y + 0.3 < box.max.y && this.position.y + 1.6 > box.min.y) {
-            if (
-              this.position.x + radius > box.min.x &&
-              this.position.x - radius < box.max.x &&
-              this.position.z + radius > box.min.z &&
-              this.position.z - radius < box.max.z
-            ) {
-              // 計算自幾何中心往外的方向
-              const boxCenterX = (box.min.x + box.max.x) * 0.5;
-              const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-              const halfBoxX = (box.max.x - box.min.x) * 0.5;
-              const halfBoxZ = (box.max.z - box.min.z) * 0.5;
+            const boxCenterX = (box.min.x + box.max.x) * 0.5;
+            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
+            const halfBoxX = (box.max.x - box.min.x) * 0.5;
+            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
 
-              const overlapX = (halfBoxX + radius) - Math.abs(this.position.x - boxCenterX);
-              const overlapZ = (halfBoxZ + radius) - Math.abs(this.position.z - boxCenterZ);
+            const overlapX = (halfBoxX + radius) - Math.abs(this.position.x - boxCenterX);
+            const overlapZ = (halfBoxZ + radius) - Math.abs(this.position.z - boxCenterZ);
 
-              if (overlapX < overlapZ) {
-                this.position.x = this.position.x >= boxCenterX ? box.max.x + radius + 0.02 : box.min.x - radius - 0.02;
-              } else {
-                this.position.z = this.position.z >= boxCenterZ ? box.max.z + radius + 0.02 : box.min.z - radius - 0.02;
-              }
+            if (overlapX < overlapZ) {
+              this.position.x = this.position.x >= boxCenterX ? box.max.x + radius + 0.02 : box.min.x - radius - 0.02;
+            } else {
+              this.position.z = this.position.z >= boxCenterZ ? box.max.z + radius + 0.02 : box.min.z - radius - 0.02;
             }
           }
         }

@@ -261,8 +261,6 @@ export class CampusWorld {
 
   // 建造可上下樓、有真實雙跑折返樓梯間、通暢走廊與教室內部、空中天橋貫通的立體校舍
   private buildWalkableSchoolBuilding(baseX: number, baseY: number, baseZ: number, buildingName: string, isBuildingA: boolean) {
-    const wallColor = 0xfaebd7; // 米黃瓷磚外牆
-    const floorColor = 0xb0bec5; // 磨石子走廊地板
     const railColor = 0x27ae60; // 經典綠色防護欄杆
     const innerWallColor = 0xf5f6fa; // 教室白灰內牆
     const woodColor = 0x8d6e63; // 課桌木色
@@ -609,7 +607,7 @@ export class CampusWorld {
     isNorthFacing: boolean,
     numFloors: number,
     floorH: number,
-    buildingName: string
+    _buildingName?: string
   ) {
     const wallMat = new THREE.MeshLambertMaterial({ color: 0xfaebd7, side: THREE.DoubleSide });
     const stepMat = new THREE.MeshLambertMaterial({ color: 0xbdc3c7 });
@@ -968,7 +966,7 @@ export class CampusWorld {
     const pillarMat = new THREE.MeshLambertMaterial({ color: 0xdfe6e9 });
     const roofMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
 
-    const bridgeX = 31.0; // 嚴密對齊兩側走廊中心線 (28.0 ~ 34.0)
+    const bridgeX = baseX; // 嚴密對齊兩側走廊中心線 (28.0 ~ 34.0)
 
     // 2 樓與 3 樓空中走廊天橋 (2F: Y = 6.0m, 3F: Y = 12.0m)
     [1, 2].forEach((floorIdx) => {
@@ -2078,7 +2076,7 @@ export class CampusWorld {
     // 1. 一樓演藝廳地坪
     const gFloor = new THREE.Mesh(new THREE.PlaneGeometry(bW, bL), new THREE.MeshLambertMaterial({ color: 0x2c3e50 }));
     gFloor.rotation.x = -Math.PI / 2;
-    gFloor.position.set(baseX, 0.02, baseZ);
+    gFloor.position.set(baseX, baseY + 0.02, baseZ);
     gFloor.receiveShadow = true;
     this.group.add(gFloor);
 

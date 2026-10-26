@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Player } from '../entities/Player';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { soundManager } from '../audio/SoundEffects';
-import { NPC } from '../entities/NPC';
 
 export class DetentionCutscene {
   public scene: THREE.Scene;
@@ -20,7 +19,6 @@ export class DetentionCutscene {
   private vanDoor?: THREE.Mesh;
   private vanHeadlights: THREE.SpotLight[] = [];
   private vanStrobeLight?: THREE.PointLight;
-  private vanSmokeParticles: THREE.Points | null = null;
 
   // 動畫過場中的總教官
   private wardenMesh?: THREE.Group;
@@ -214,7 +212,6 @@ export class DetentionCutscene {
     // 兩名隨行特訓教官 (分立左右)
     for (let i = 0; i < 2; i++) {
       const gMesh = new THREE.Group();
-      const sign = i === 0 ? -1 : 1;
       const gTorso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.38), new THREE.MeshLambertMaterial({ color: 0x243342 }));
       gTorso.position.y = 1.05;
       const gHead = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.38, 0.35), skinMat);

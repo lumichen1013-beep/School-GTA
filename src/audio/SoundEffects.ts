@@ -865,6 +865,10 @@ export class SoundEffects {
   private rainFilter: BiquadFilterNode | null = null;
   private currentRainIntensity: number = 0;
 
+  public get rainIntensity(): number {
+    return this.currentRainIntensity;
+  }
+
   public setRainIntensity(intensity: number, rampTime: number = 2.0, isIndoors: boolean = false) {
     this.initCtx();
     if (!this.ctx) return;

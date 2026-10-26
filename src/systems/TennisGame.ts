@@ -7,7 +7,6 @@ import { soundManager } from '../audio/SoundEffects';
 import { InputManager } from '../core/InputManager';
 
 const _scratchServeTarget = new THREE.Vector3();
-const _scratchDirToCoach = new THREE.Vector3();
 const _scratchLookTarget = new THREE.Vector3();
 
 export class TennisGame {

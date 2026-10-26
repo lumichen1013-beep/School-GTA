@@ -115,7 +115,6 @@ export class HUD {
   private dodgeDialogTextEl: HTMLElement | null;
   private dodgeCashValEl: HTMLElement | null;
   public isDodgeDialogOpen: boolean = false;
-  private onDodgeLearnCallback?: (targetLevel: number) => void;
 
   // 技能 HUD 展示槽
   private skillHudCardEl: HTMLElement | null;
@@ -1055,7 +1054,6 @@ export class HUD {
   public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void) {
     if (!this.dodgeTeacherModalEl) return;
     this.isDodgeDialogOpen = true;
-    this.onDodgeLearnCallback = onLearn;
 
     if (this.dodgeCashValEl) {
       this.dodgeCashValEl.textContent = `NT$ ${cash}`;
@@ -1122,7 +1120,6 @@ export class HUD {
     if (this.dodgeTeacherModalEl) {
       this.dodgeTeacherModalEl.style.display = 'none';
       this.isDodgeDialogOpen = false;
-      this.onDodgeLearnCallback = undefined;
     }
   }
 

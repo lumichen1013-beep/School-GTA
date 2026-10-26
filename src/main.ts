@@ -8,8 +8,9 @@ import { DetentionCutscene } from './world/DetentionCutscene';
 import { Player } from './entities/Player';
 import { Bicycle } from './vehicles/Bicycle';
 import { NPC } from './entities/NPC';
+import { createCampusNPCs, createDetentionNPCs } from './world/NPCSpawner';
 import { WantedSystem } from './systems/WantedSystem';
-import { HUD, CommissaryItem, DetentionRadarData } from './ui/HUD';
+import { HUD, CommissaryItem, DetentionRadarData, MissionTrackerData } from './ui/HUD';
 import { soundManager } from './audio/SoundEffects';
 import { bgmManager } from './audio/BGMManager';
 import { EcologicalGarden } from './world/EcologicalGarden';
@@ -118,6 +119,42 @@ class SchoolGTASandbox {
     banner: string;
   } | null = null;
 
+  // 0-GC 介面更新常態快取物件 (避免 60fps 幀迴圈每幀重複配置堆疊記憶體)
+  private cachedMissionTrackerData: MissionTrackerData = {
+    studentDefeated: 0,
+    hasNormalBat: false,
+    teacherDefeated: 0,
+    dogDefeated: 0,
+    bikeDefeated: 0,
+    inspectorDefeated: 0,
+    hasSpecialBat: false,
+    plantBossDefeated: false,
+    peBossDefeated: false,
+    trackRecordText: '未完成',
+    swimRecordText: '未完成',
+    basketballStreak: 0,
+    basketballRecord: 0,
+    hasRiddenBike: false,
+    hasEscapedDog: false,
+    hasWishedPond: false,
+    hasTastedHotFood: false,
+    dodgeSkillLevel: 0
+  };
+
+  private cachedDetentionRadarData: DetentionRadarData = {
+    isGateAOpen: false,
+    isGateBOpen: false,
+    isSouthGateOpen: false,
+    hasKeycardA: false,
+    hasKeycardB: false,
+    hasMasterKeycard: false,
+    keycardAPos: new THREE.Vector3(),
+    keycardBPos: new THREE.Vector3(),
+    masterKeycardPos: null,
+    alertLevel: 'NORMAL',
+    alertTimer: 0
+  };
+
   constructor() {
     // 綁定開始畫面監聽
     this.setupStartScreen();
@@ -202,8 +239,8 @@ class SchoolGTASandbox {
 
     // 階段 4 (80%)：生成校園師生、主任教官、校犬柴柴、少年院教官與鐵面總長
     this.updateProgress(80, '正在生成校園師生、主任教官、校犬柴柴、少年院教官與鐵面總長...');
-    this.spawnCampusNPCs();
-    this.spawnDetentionNPCs();
+    this.campusNPCs = createCampusNPCs(this.engine.scene);
+    this.detentionNPCs = createDetentionNPCs(this.engine.scene);
     this.npcs = this.campusNPCs;
     this.wantedSystem = new WantedSystem();
     this.wantedSystem.onWantedCleared = () => {
@@ -528,497 +565,6 @@ class SchoolGTASandbox {
         this.cameraCtrl.resetBehind(this.player.position, 0);
         this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
       }
-    }
-  }
-
-  private spawnCampusNPCs() {
-    // 1. 生教組長 (中庭綠帶與走廊威嚴步巡，巡邏路徑延伸至 95m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(15, 0, 15),
-      'TEACHER',
-      [
-        new THREE.Vector3(15, 0, 15),
-        new THREE.Vector3(15, 0, 50),
-        new THREE.Vector3(2, 0, 58),
-        new THREE.Vector3(-5, 0, 30),
-        new THREE.Vector3(5, 0, 12)
-      ],
-      'OFFICER_PATROL'
-    ));
-
-    // 2. 主任教官 (校門口廣場與中央大道大型巡邏圈，巡邏路徑延伸至 85m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 92),
-      'INSTRUCTOR',
-      [
-        new THREE.Vector3(0, 0, 92),
-        new THREE.Vector3(-18, 0, 85),
-        new THREE.Vector3(-12, 0, 58),
-        new THREE.Vector3(12, 0, 58),
-        new THREE.Vector3(18, 0, 85)
-      ],
-      'OFFICER_PATROL'
-    ));
-
-    // 3. 校犬柴柴 (遼闊草皮大範圍自由巡遊，嗅聞青草與原地端坐休養，巡查範圍 150m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-45, 0, -15),
-      'DOG',
-      [
-        new THREE.Vector3(-45, 0, -15),
-        new THREE.Vector3(-25, 0, 5),
-        new THREE.Vector3(-22, 0, 42),
-        new THREE.Vector3(-48, 0, 58),
-        new THREE.Vector3(-72, 0, 32),
-        new THREE.Vector3(-65, 0, -8)
-      ]
-    ));
-
-    // 4. 單車巡邏糾察隊 (共 4 名，覆蓋全校各大主幹道與運動場外環，每圈 130m~175m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-22, 0, 55),
-      'BIKE_PATROL',
-      [new THREE.Vector3(-22, 0, 55), new THREE.Vector3(-22, 0, -15), new THREE.Vector3(8, 0, -35), new THREE.Vector3(8, 0, 65)]
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-45, 0, -55),
-      'BIKE_PATROL',
-      [new THREE.Vector3(-45, 0, -55), new THREE.Vector3(-12, 0, -50), new THREE.Vector3(-5, 0, -18), new THREE.Vector3(-38, 0, -22)]
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(12, 0, 8),
-      'BIKE_PATROL',
-      [new THREE.Vector3(12, 0, 8), new THREE.Vector3(12, 0, 82), new THREE.Vector3(-6, 0, 78), new THREE.Vector3(-6, 0, 12)]
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-82, 0, -6),
-      'BIKE_PATROL',
-      [new THREE.Vector3(-82, 0, -6), new THREE.Vector3(-82, 0, 64), new THREE.Vector3(-48, 0, 70), new THREE.Vector3(-48, 0, -12)]
-    ));
-
-    // 5. 風紀糾察隊 (步巡 2 名，雙手負後巡查，路線 80m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(15, 0, -18),
-      'INSPECTOR',
-      [new THREE.Vector3(15, 0, -18), new THREE.Vector3(5, 0, -42), new THREE.Vector3(-14, 0, -40), new THREE.Vector3(-8, 0, -15)],
-      'OFFICER_PATROL'
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 92),
-      'INSPECTOR',
-      [new THREE.Vector3(0, 0, 92), new THREE.Vector3(-16, 0, 82), new THREE.Vector3(-10, 0, 65), new THREE.Vector3(12, 0, 65), new THREE.Vector3(16, 0, 82)],
-      'OFFICER_PATROL'
-    ));
-
-    // 6. 普通學生 (12 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
-    // 6.1 田徑跑者 1 號 (PU 跑道標準逆時針慢跑 200m 全圈，雙臂屈肘泵動，中途拉筋伸展)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-30, 0, 14),
-      'STUDENT',
-      [
-        new THREE.Vector3(-30, 0, 14),
-        new THREE.Vector3(-55, 0, -10),
-        new THREE.Vector3(-80, 0, 20),
-        new THREE.Vector3(-80, 0, 45),
-        new THREE.Vector3(-55, 0, 70),
-        new THREE.Vector3(-30, 0, 45)
-      ],
-      'JOGGING'
-    ));
-
-    // 6.2 田徑跑者 2 號 (錯開半圈起跑的慢跑同學)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-80, 0, 30),
-      'STUDENT',
-      [
-        new THREE.Vector3(-80, 0, 30),
-        new THREE.Vector3(-80, 0, 50),
-        new THREE.Vector3(-55, 0, 70),
-        new THREE.Vector3(-30, 0, 40),
-        new THREE.Vector3(-30, 0, 14),
-        new THREE.Vector3(-55, 0, -10)
-      ],
-      'JOGGING'
-    ));
-
-    // 6.3 趕課疾走同學 (從林蔭大道大步快走奔向教學樓 A 棟，75m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 72),
-      'STUDENT',
-      [
-        new THREE.Vector3(0, 0, 72),
-        new THREE.Vector3(12, 0, 52),
-        new THREE.Vector3(18, 0, 22),
-        new THREE.Vector3(22, 0, 8),
-        new THREE.Vector3(16, 0, 32)
-      ],
-      'HURRIED_WALK'
-    ));
-
-    // 6.4 趕買早餐同學 (大步快走前往合作社，70m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(12, 0, 12),
-      'STUDENT',
-      [
-        new THREE.Vector3(12, 0, 12),
-        new THREE.Vector3(2, 0, -12),
-        new THREE.Vector3(-10, 0, -32),
-        new THREE.Vector3(-15, 0, -46),
-        new THREE.Vector3(-4, 0, -28)
-      ],
-      'HURRIED_WALK'
-    ));
-
-    // 6.5 & 6.6 合作社戶外桌交談結伴同學 (CASUAL_WALK 結伴散步與原地熱烈手勢交談)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-14, 0, -42),
-      'STUDENT',
-      [new THREE.Vector3(-14, 0, -42), new THREE.Vector3(-24, 0, -46), new THREE.Vector3(-32, 0, -52), new THREE.Vector3(-22, 0, -38)],
-      'CASUAL_WALK'
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-12, 0, -40),
-      'STUDENT',
-      [new THREE.Vector3(-12, 0, -40), new THREE.Vector3(-22, 0, -44), new THREE.Vector3(-30, 0, -50), new THREE.Vector3(-20, 0, -36)],
-      'CASUAL_WALK'
-    ));
-
-    // 6.7 低頭滑手機同學 (沿中央林蔭大道散步，高頻率停步低頭看手機 55m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(2, 0, 18),
-      'STUDENT',
-      [new THREE.Vector3(2, 0, 18), new THREE.Vector3(2, 0, 42), new THREE.Vector3(2, 0, 70), new THREE.Vector3(2, 0, 36)],
-      'CASUAL_WALK'
-    ));
-
-    // 6.8 中庭花園漫步同學 (環形巡遊噴泉綠樹廣場 55m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(8, 0, 22),
-      'STUDENT',
-      [new THREE.Vector3(8, 0, 22), new THREE.Vector3(14, 0, 42), new THREE.Vector3(6, 0, 56), new THREE.Vector3(-2, 0, 38)],
-      'CASUAL_WALK'
-    ));
-
-    // 6.9 & 6.10 樹下聊天雙人組 (結伴在中庭林蔭大道旁談笑 50m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-8, 0, 16),
-      'STUDENT',
-      [new THREE.Vector3(-8, 0, 16), new THREE.Vector3(-14, 0, 32), new THREE.Vector3(-8, 0, 44), new THREE.Vector3(-2, 0, 28)],
-      'CASUAL_WALK'
-    ));
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-6, 0, 18),
-      'STUDENT',
-      [new THREE.Vector3(-6, 0, 18), new THREE.Vector3(-12, 0, 34), new THREE.Vector3(-6, 0, 46), new THREE.Vector3(0, 0, 30)],
-      'CASUAL_WALK'
-    ));
-
-    // 6.11 生態池許願小憩同學 (漫步生態園水池與石橋 40m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-46, 0, -74),
-      'STUDENT',
-      [new THREE.Vector3(-46, 0, -74), new THREE.Vector3(-55, 0, -80), new THREE.Vector3(-64, 0, -78), new THREE.Vector3(-52, 0, -70)],
-      'CASUAL_WALK'
-    ));
-
-    // 6.12 校門口迎賓大道散步同學 (45m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-16, 0, 84),
-      'STUDENT',
-      [new THREE.Vector3(-16, 0, 84), new THREE.Vector3(0, 0, 88), new THREE.Vector3(16, 0, 84), new THREE.Vector3(0, 0, 80)],
-      'CASUAL_WALK'
-    ));
-
-    // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋長程巡邏路線)
-    // 2F 巡堂老師：橫跨 A 棟走廊、空中走廊天橋至 B 棟走廊 (全長 70m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(31, 6.0, 10),
-      'TEACHER',
-      [new THREE.Vector3(31, 6.0, 10), new THREE.Vector3(31, 6.0, 32), new THREE.Vector3(31, 6.0, 52), new THREE.Vector3(31, 6.0, 78)],
-      'OFFICER_PATROL'
-    ));
-    // 2F 跨棟散步學生：從 B 棟經天橋走往 A 棟 (全長 65m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(31, 6.0, 76),
-      'STUDENT',
-      [new THREE.Vector3(31, 6.0, 76), new THREE.Vector3(31, 6.0, 50), new THREE.Vector3(31, 6.0, 30), new THREE.Vector3(31, 6.0, 14)],
-      'CASUAL_WALK'
-    ));
-    // 2F 教室內學生 (完整巡遊教室空間，24m~26m)
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 8), 'STUDENT', [new THREE.Vector3(36, 6.0, 8), new THREE.Vector3(44, 6.0, 8), new THREE.Vector3(44, 6.0, 16), new THREE.Vector3(36, 6.0, 16)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 22), 'STUDENT', [new THREE.Vector3(36, 6.0, 22), new THREE.Vector3(44, 6.0, 22), new THREE.Vector3(44, 6.0, 30), new THREE.Vector3(36, 6.0, 30)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 60), 'STUDENT', [new THREE.Vector3(36, 6.0, 60), new THREE.Vector3(44, 6.0, 60), new THREE.Vector3(44, 6.0, 68), new THREE.Vector3(36, 6.0, 68)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 6.0, 74), 'STUDENT', [new THREE.Vector3(36, 6.0, 74), new THREE.Vector3(44, 6.0, 74), new THREE.Vector3(44, 6.0, 84), new THREE.Vector3(36, 6.0, 84)]));
-
-    // 3F 巡堂老師：橫跨 A 棟走廊、空中走廊天橋至 B 棟走廊 (全長 70m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(31, 12.0, 12),
-      'TEACHER',
-      [new THREE.Vector3(31, 12.0, 12), new THREE.Vector3(31, 12.0, 32), new THREE.Vector3(31, 12.0, 52), new THREE.Vector3(31, 12.0, 78)],
-      'OFFICER_PATROL'
-    ));
-    // 3F 跨棟散步學生：從 B 棟經天橋走往 A 棟 (全長 65m+)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(31, 12.0, 76),
-      'STUDENT',
-      [new THREE.Vector3(31, 12.0, 76), new THREE.Vector3(31, 12.0, 50), new THREE.Vector3(31, 12.0, 30), new THREE.Vector3(31, 12.0, 14)],
-      'CASUAL_WALK'
-    ));
-    // 3F 教室內學生 (完整巡遊教室空間，24m~26m)
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 8), 'STUDENT', [new THREE.Vector3(36, 12.0, 8), new THREE.Vector3(44, 12.0, 8), new THREE.Vector3(44, 12.0, 16), new THREE.Vector3(36, 12.0, 16)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 22), 'STUDENT', [new THREE.Vector3(36, 12.0, 22), new THREE.Vector3(44, 12.0, 22), new THREE.Vector3(44, 12.0, 30), new THREE.Vector3(36, 12.0, 30)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 60), 'STUDENT', [new THREE.Vector3(36, 12.0, 60), new THREE.Vector3(44, 12.0, 60), new THREE.Vector3(44, 12.0, 68), new THREE.Vector3(36, 12.0, 68)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(36, 12.0, 74), 'STUDENT', [new THREE.Vector3(36, 12.0, 74), new THREE.Vector3(44, 12.0, 74), new THREE.Vector3(44, 12.0, 84), new THREE.Vector3(36, 12.0, 84)]));
-
-    // 8. 校外強盜 (圍牆外長程巡邏，65m~110m)
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(-35, 0, 118), 'BANDIT', [new THREE.Vector3(-35, 0, 118), new THREE.Vector3(0, 0, 118), new THREE.Vector3(35, 0, 118), new THREE.Vector3(0, 0, 122)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(15, 0, 124), 'BANDIT', [new THREE.Vector3(15, 0, 124), new THREE.Vector3(48, 0, 124), new THREE.Vector3(32, 0, 128), new THREE.Vector3(15, 0, 128)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(-15, 0, 126), 'BANDIT', [new THREE.Vector3(-15, 0, 126), new THREE.Vector3(-48, 0, 126), new THREE.Vector3(-32, 0, 130), new THREE.Vector3(-15, 0, 130)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(-118, 0, -45), 'BANDIT', [new THREE.Vector3(-118, 0, -45), new THREE.Vector3(-118, 0, 10), new THREE.Vector3(-118, 0, 65), new THREE.Vector3(-118, 0, 15)]));
-    this.campusNPCs.push(new NPC(this.engine.scene, new THREE.Vector3(118, 0, -45), 'BANDIT', [new THREE.Vector3(118, 0, -45), new THREE.Vector3(118, 0, 10), new THREE.Vector3(118, 0, 65), new THREE.Vector3(118, 0, 15)]));
-
-    // 9. 演藝大樓 4F 羽球場：大如老師 (北半場步法跑動 drill)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(76, 12.0, 31),
-      'PE_TEACHER_BOSS',
-      [new THREE.Vector3(72, 12.0, 31), new THREE.Vector3(80, 12.0, 31), new THREE.Vector3(76, 12.0, 27), new THREE.Vector3(76, 12.0, 34)],
-      'OFFICER_PATROL'
-    ));
-
-    // 10. 教學大樓 1F 走廊：閃身步老師 (身法宗師，傳授閃身步與狗熊哆嗦毛，長廊身法巡走 20m)
-    this.campusNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(32, 0.0, 18),
-      'DODGE_TEACHER',
-      [new THREE.Vector3(32, 0.0, 8), new THREE.Vector3(32, 0.0, 18), new THREE.Vector3(32, 0.0, 28), new THREE.Vector3(32, 0.0, 18)],
-      'OFFICER_PATROL'
-    ));
-  }
-
-  private spawnDetentionNPCs() {
-    this.detentionNPCs = [];
-
-    // ==========================================
-    // A 區：牢房生活長廊迷宮 (Z: -90 ~ -28)
-    // ==========================================
-    // 1. 北走廊折返巡邏教官 G1 (巡邏區：X -26 ~ -10, Z = -84，避開開局出生點掩體)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-16, 0, -84),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-26, 0, -84), new THREE.Vector3(-10, 0, -84)],
-      'OFFICER_PATROL'
-    ));
-
-    // 2. 中央空地東側巡邏教官 G2 (巡邏區：X = 18, Z: -70 ~ -50，避開東側大樓)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(18, 0, -60),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(18, 0, -70), new THREE.Vector3(18, 0, -50)],
-      'OFFICER_PATROL'
-    ));
-
-    // 3. 門禁卡 A 崗亭巡視教官 G3 (巡視中央安全崗亭，X = -4, Z: -68 ~ -52)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-4, 0, -60),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-4, 0, -68), new THREE.Vector3(-4, 0, -52)],
-      'OFFICER_PATROL'
-    ));
-
-    // 4. 管制閘門 1 哨戒長 G4 (守衛在 Z = -32, X: -5 ~ 5 橫向視察閘口)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, -32),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-5, 0, -32), new THREE.Vector3(5, 0, -32)],
-      'OFFICER_PATROL'
-    ));
-
-    // 12. A 區西側監舍外廊巡哨 G12 (X: -72, Z: -66 ~ -42，保留出生點外圍充沛安全盲區)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-72, 0, -54),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-72, 0, -66), new THREE.Vector3(-72, 0, -42)],
-      'OFFICER_PATROL'
-    ));
-
-    // 13. A 區東側食堂側廊巡哨 G13 (X: 82, Z: -75 ~ -45)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(82, 0, -60),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(82, 0, -75), new THREE.Vector3(82, 0, -45)],
-      'OFFICER_PATROL'
-    ));
-
-    // 14. A 區南前庭西折角守衛 G14 (Z = -32, X: -22 ~ -10)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-15, 0, -32),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-22, 0, -32), new THREE.Vector3(-10, 0, -32)],
-      'OFFICER_PATROL'
-    ));
-
-    // ==========================================
-    // B 區：操場重裝軍規貨櫃迷宮 (Z: -28 ~ 35)
-    // ==========================================
-    // 5. 貨櫃西側縱向走道巡邏隊 G5 (X = -22, Z: -12 ~ 0，寬敞直道)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-22, 0, -6),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-22, 0, -12), new THREE.Vector3(-22, 0, 0)],
-      'OFFICER_PATROL'
-    ));
-
-    // 6. 貨櫃東側縱向走道巡邏隊 G6 (X = 22, Z: -12 ~ 0，寬敞直道)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(22, 0, -6),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(22, 0, -12), new THREE.Vector3(22, 0, 0)],
-      'OFFICER_PATROL'
-    ));
-
-    // 7. 貨櫃中央十字路口巡哨霸榜生 G7 (Z = 0, X: -6 ~ 6，無障礙十字路口)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 0),
-      'DETENTION_HEAVY',
-      [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(6, 0, 0)],
-      'OFFICER_PATROL'
-    ));
-
-    // 8. 貨櫃盲區黃色門禁卡 B 駐守教官 G8 (X = 24, Z: 0 ~ 8，東側藏寶走道)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(24, 0, 4),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(24, 0, 0), new THREE.Vector3(24, 0, 8)],
-      'OFFICER_PATROL'
-    ));
-
-    // 9. 管制閘門 2 哨戒長 G9 (守衛在 Z = 30, X: -5 ~ 5 橫向視察閘口)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 30),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-5, 0, 30), new THREE.Vector3(5, 0, 30)],
-      'OFFICER_PATROL'
-    ));
-
-    // 10. B 區特訓巡邏狼犬 1 (西側寬廣開闊地帶多點巡邏)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-30, 0, -5),
-      'DETENTION_WOLF',
-      [new THREE.Vector3(-30, 0, -12), new THREE.Vector3(-30, 0, 16), new THREE.Vector3(-18, 0, 16), new THREE.Vector3(-18, 0, -12)],
-      'JOGGING'
-    ));
-
-    // 15. B 區北走道巡邏資深學長 G15 (Z = -12, X: -6 ~ 6)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, -12),
-      'DETENTION_SENIOR',
-      [new THREE.Vector3(-6, 0, -12), new THREE.Vector3(6, 0, -12)],
-      'OFFICER_PATROL'
-    ));
-
-    // 16. B 區南走道巡查資深教官 G16 (Z = 14, X: -8 ~ 8)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 14),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-8, 0, 14), new THREE.Vector3(8, 0, 14)],
-      'OFFICER_PATROL'
-    ));
-
-    // 17. B 區東側外圍巡邏狼犬 2 (東側開闊地帶四點巡邏)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(32, 0, -5),
-      'DETENTION_WOLF',
-      [new THREE.Vector3(32, 0, -12), new THREE.Vector3(32, 0, 16), new THREE.Vector3(20, 0, 16), new THREE.Vector3(20, 0, -12)],
-      'JOGGING'
-    ));
-
-    // ==========================================
-    // C 區：終極哨戒門庭 (Z: 35 ~ 95)
-    // ==========================================
-    // 18. C 區競技場西翼護衛長 G18 (X = -14, Z: 42 ~ 58)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(-14, 0, 50),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-14, 0, 42), new THREE.Vector3(-14, 0, 58)],
-      'OFFICER_PATROL'
-    ));
-
-    // 19. C 區競技場東翼護衛長 G19 (X = 14, Z: 42 ~ 58)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(14, 0, 50),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(14, 0, 42), new THREE.Vector3(14, 0, 58)],
-      'OFFICER_PATROL'
-    ));
-
-    // 20. C 區南大門哨戒長 G20 (守衛在 Z = 88, X: -8 ~ 8)
-    this.detentionNPCs.push(new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 88),
-      'DETENTION_GUARD',
-      [new THREE.Vector3(-8, 0, 88), new THREE.Vector3(8, 0, 88)],
-      'OFFICER_PATROL'
-    ));
-
-    // 11. 守門小 Boss：【鐵面總教官】(防暴大盾，正中開闊競技場巡邏)
-    const boss = new NPC(
-      this.engine.scene,
-      new THREE.Vector3(0, 0, 63),
-      'DETENTION_BOSS',
-      [new THREE.Vector3(-10, 0, 63), new THREE.Vector3(10, 0, 63)],
-      'OFFICER_PATROL'
-    );
-    boss.maxHp = 300;
-    boss.hp = 300;
-    this.detentionNPCs.push(boss);
-
-    // 初始隱藏少年院 NPC
-    for (const npc of this.detentionNPCs) {
-      npc.mesh.visible = false;
     }
   }
 
@@ -1670,7 +1216,7 @@ class SchoolGTASandbox {
         soundManager.playSchoolBell();
       } else {
         // 暗殺成功後：總教官立即轉身解除發呆，狂怒轉為攻擊模式 (Combat Attack Mode)！
-        const dirToPlayer = new THREE.Vector3().subVectors(this.player.position, target.position).setY(0);
+        const dirToPlayer = _scratchImpactDir.subVectors(this.player.position, target.position).setY(0);
         if (dirToPlayer.lengthSq() > 0.01) {
           dirToPlayer.normalize();
           target.rotationY = Math.atan2(dirToPlayer.x, dirToPlayer.z);
@@ -2235,9 +1781,18 @@ class SchoolGTASandbox {
           let playerBlockedX = false;
           let playerBlockedZ = false;
 
+          const minX = Math.min(testPlayerX, this.player.position.x) - playerRadius;
+          const maxX = Math.max(testPlayerX, this.player.position.x) + playerRadius;
+          const minZ = Math.min(testPlayerZ, this.player.position.z) - playerRadius;
+          const maxZ = Math.max(testPlayerZ, this.player.position.z) + playerRadius;
+
           for (let i = 0; i < colliders.length; i++) {
             const box = colliders[i];
             if (box.isFloorOnly) continue;
+            // 2D 寬泛包圍盒快速淘汰：跳過 95%+ 遠距離障礙物，大幅節省頂點碰撞計算
+            if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) {
+              continue;
+            }
             if (this.player.position.y + playerHeight > box.min.y && this.player.position.y + stepHeight < box.max.y) {
               if (
                 testPlayerX + playerRadius > box.min.x &&
@@ -2745,7 +2300,6 @@ class SchoolGTASandbox {
 
       // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定
       this.nearbyCqcTarget = null;
-      let isHidingAssassination = false;
       if (!this.player.isDead) {
         for (const npc of this.detentionNPCs) {
           if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
@@ -2770,7 +2324,6 @@ class SchoolGTASandbox {
             // 刺客教條草堆暗殺：未發現玩家時，只要守衛經過草堆 3.0m 內，任意角度均可直接伏擊拖入刺殺！
             if (dist <= 3.0) {
               this.nearbyCqcTarget = npc;
-              isHidingAssassination = true;
               break;
             }
           } else {
@@ -3103,26 +2656,26 @@ class SchoolGTASandbox {
 
     if (this.currentWorldType === 'CAMPUS') {
       const peCoach = this.campusNPCs.find(n => n.role === 'PE_TEACHER_BOSS');
-      this.hud.updateMissionTracker({
-        studentDefeated: this.studentDefeatedCount,
-        hasNormalBat: this.player.hasNormalBat,
-        teacherDefeated: this.teacherDefeatedCount,
-        dogDefeated: this.dogDefeatedCount,
-        bikeDefeated: this.bikePatrolDefeatedCount,
-        inspectorDefeated: this.inspectorDefeatedCount,
-        hasSpecialBat: this.player.hasSpecialBat,
-        plantBossDefeated: this.ecologicalGarden.boss.isDead,
-        peBossDefeated: this.tennisGame.coachDefeated || (peCoach ? peCoach.hp <= 0 : false),
-        trackRecordText: this.racingGame.bestTrackTime ? `${this.racingGame.bestTrackTime.toFixed(1)}s` : '未完成',
-        swimRecordText: this.racingGame.bestSwimTime ? `${this.racingGame.bestSwimTime.toFixed(1)}s` : '未完成',
-        basketballStreak: this.basketballGame.scoreStreak,
-        basketballRecord: this.basketballGame.bestStreak,
-        hasRiddenBike: this.hasRiddenBike,
-        hasEscapedDog: this.hasEscapedDog,
-        hasWishedPond: this.hasWishedPond,
-        hasTastedHotFood: this.hasTastedHotFood,
-        dodgeSkillLevel: this.dodgeSkillLevel
-      });
+      const tracker = this.cachedMissionTrackerData;
+      tracker.studentDefeated = this.studentDefeatedCount;
+      tracker.hasNormalBat = this.player.hasNormalBat;
+      tracker.teacherDefeated = this.teacherDefeatedCount;
+      tracker.dogDefeated = this.dogDefeatedCount;
+      tracker.bikeDefeated = this.bikePatrolDefeatedCount;
+      tracker.inspectorDefeated = this.inspectorDefeatedCount;
+      tracker.hasSpecialBat = this.player.hasSpecialBat;
+      tracker.plantBossDefeated = this.ecologicalGarden.boss.isDead;
+      tracker.peBossDefeated = this.tennisGame.coachDefeated || (peCoach ? peCoach.hp <= 0 : false);
+      tracker.trackRecordText = this.racingGame.bestTrackTime ? `${this.racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
+      tracker.swimRecordText = this.racingGame.bestSwimTime ? `${this.racingGame.bestSwimTime.toFixed(1)}s` : '未完成';
+      tracker.basketballStreak = this.basketballGame.scoreStreak;
+      tracker.basketballRecord = this.basketballGame.bestStreak;
+      tracker.hasRiddenBike = this.hasRiddenBike;
+      tracker.hasEscapedDog = this.hasEscapedDog;
+      tracker.hasWishedPond = this.hasWishedPond;
+      tracker.hasTastedHotFood = this.hasTastedHotFood;
+      tracker.dodgeSkillLevel = this.dodgeSkillLevel;
+      this.hud.updateMissionTracker(tracker);
     } else {
       const wardenBoss = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
       this.hud.updateWorld2EscapeTracker(
@@ -3146,19 +2699,19 @@ class SchoolGTASandbox {
         if (hasCaution) radarAlert = 'CAUTION';
       }
 
-      detentionRadarData = {
-        isGateAOpen: this.detentionWorld.isGateAOpen,
-        isGateBOpen: this.detentionWorld.isGateBOpen,
-        isSouthGateOpen: this.detentionWorld.isSouthGateOpen,
-        hasKeycardA: this.hasKeycardA,
-        hasKeycardB: this.hasKeycardB,
-        hasMasterKeycard: this.hasMasterKeycard,
-        keycardAPos: this.detentionWorld.keycardAPos,
-        keycardBPos: this.detentionWorld.keycardBPos,
-        masterKeycardPos: this.detentionWorld.masterKeycardPos,
-        alertLevel: radarAlert,
-        alertTimer: this.detentionAlertTimer
-      };
+      const radar = this.cachedDetentionRadarData;
+      radar.isGateAOpen = this.detentionWorld.isGateAOpen;
+      radar.isGateBOpen = this.detentionWorld.isGateBOpen;
+      radar.isSouthGateOpen = this.detentionWorld.isSouthGateOpen;
+      radar.hasKeycardA = this.hasKeycardA;
+      radar.hasKeycardB = this.hasKeycardB;
+      radar.hasMasterKeycard = this.hasMasterKeycard;
+      radar.keycardAPos = this.detentionWorld.keycardAPos;
+      radar.keycardBPos = this.detentionWorld.keycardBPos;
+      radar.masterKeycardPos = this.detentionWorld.masterKeycardPos;
+      radar.alertLevel = radarAlert;
+      radar.alertTimer = this.detentionAlertTimer;
+      detentionRadarData = radar;
     }
 
     this.hud.update(

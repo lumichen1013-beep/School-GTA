@@ -1,0 +1,331 @@
+import * as THREE from 'three';
+import { NPC, NPCRole, NPCMovementStyle } from '../entities/NPC';
+
+export interface NPCSpawnDef {
+  role: NPCRole;
+  pos: [number, number, number];
+  waypoints: [number, number, number][];
+  style?: NPCMovementStyle;
+  hp?: number;
+  maxHp?: number;
+}
+
+// ============================================================================
+// 天天國中校園 NPC 生成配置數據
+// ============================================================================
+const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
+  // 1. 生教組長 (中庭綠帶與走廊威嚴步巡，巡邏路徑延伸至 95m+)
+  {
+    role: 'TEACHER',
+    pos: [15, 0, 15],
+    waypoints: [[15, 0, 15], [15, 0, 50], [2, 0, 58], [-5, 0, 30], [5, 0, 12]],
+    style: 'OFFICER_PATROL'
+  },
+  // 2. 主任教官 (校門口廣場與中央大道大型巡邏圈，巡邏路徑延伸至 85m+)
+  {
+    role: 'INSTRUCTOR',
+    pos: [0, 0, 92],
+    waypoints: [[0, 0, 92], [-18, 0, 85], [-12, 0, 58], [12, 0, 58], [18, 0, 85]],
+    style: 'OFFICER_PATROL'
+  },
+  // 3. 校犬柴柴 (遼闊草皮大範圍自由巡遊，嗅聞青草與原地端坐休養，巡查範圍 150m+)
+  {
+    role: 'DOG',
+    pos: [-45, 0, -15],
+    waypoints: [[-45, 0, -15], [-25, 0, 5], [-22, 0, 42], [-48, 0, 58], [-72, 0, 32], [-65, 0, -8]]
+  },
+  // 4. 單車巡邏糾察隊 (共 4 名，覆蓋全校各大主幹道與運動場外環，每圈 130m~175m)
+  {
+    role: 'BIKE_PATROL',
+    pos: [-22, 0, 55],
+    waypoints: [[-22, 0, 55], [-22, 0, -15], [8, 0, -35], [8, 0, 65]]
+  },
+  {
+    role: 'BIKE_PATROL',
+    pos: [-45, 0, -55],
+    waypoints: [[-45, 0, -55], [-12, 0, -50], [-5, 0, -18], [-38, 0, -22]]
+  },
+  {
+    role: 'BIKE_PATROL',
+    pos: [12, 0, 8],
+    waypoints: [[12, 0, 8], [12, 0, 82], [-6, 0, 78], [-6, 0, 12]]
+  },
+  {
+    role: 'BIKE_PATROL',
+    pos: [-82, 0, -6],
+    waypoints: [[-82, 0, -6], [-82, 0, 64], [-48, 0, 70], [-48, 0, -12]]
+  },
+  // 5. 風紀糾察隊 (步巡 2 名，雙手負後巡查，路線 80m+)
+  {
+    role: 'INSPECTOR',
+    pos: [15, 0, -18],
+    waypoints: [[15, 0, -18], [5, 0, -42], [-14, 0, -40], [-8, 0, -15]],
+    style: 'OFFICER_PATROL'
+  },
+  {
+    role: 'INSPECTOR',
+    pos: [0, 0, 92],
+    waypoints: [[0, 0, 92], [-16, 0, 82], [-10, 0, 65], [12, 0, 65], [16, 0, 82]],
+    style: 'OFFICER_PATROL'
+  },
+  // 6. 普通學生 (12 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
+  // 6.1 田徑跑者 1 號 (PU 跑道標準逆時針慢跑 200m 全圈)
+  {
+    role: 'STUDENT',
+    pos: [-30, 0, 14],
+    waypoints: [[-30, 0, 14], [-55, 0, -10], [-80, 0, 20], [-80, 0, 45], [-55, 0, 70], [-30, 0, 45]],
+    style: 'JOGGING'
+  },
+  // 6.2 田徑跑者 2 號 (錯開半圈起跑的慢跑同學)
+  {
+    role: 'STUDENT',
+    pos: [-80, 0, 30],
+    waypoints: [[-80, 0, 30], [-80, 0, 50], [-55, 0, 70], [-30, 0, 40], [-30, 0, 14], [-55, 0, -10]],
+    style: 'JOGGING'
+  },
+  // 6.3 趕課疾走同學 (從林蔭大道大步快走奔向教學樓 A 棟，75m)
+  {
+    role: 'STUDENT',
+    pos: [0, 0, 72],
+    waypoints: [[0, 0, 72], [12, 0, 52], [18, 0, 22], [22, 0, 8], [16, 0, 32]],
+    style: 'HURRIED_WALK'
+  },
+  // 6.4 趕買早餐同學 (大步快走前往合作社，70m)
+  {
+    role: 'STUDENT',
+    pos: [12, 0, 12],
+    waypoints: [[12, 0, 12], [2, 0, -12], [-10, 0, -32], [-15, 0, -46], [-4, 0, -28]],
+    style: 'HURRIED_WALK'
+  },
+  // 6.5 & 6.6 合作社戶外桌交談結伴同學
+  {
+    role: 'STUDENT',
+    pos: [-14, 0, -42],
+    waypoints: [[-14, 0, -42], [-24, 0, -46], [-32, 0, -52], [-22, 0, -38]],
+    style: 'CASUAL_WALK'
+  },
+  {
+    role: 'STUDENT',
+    pos: [-12, 0, -40],
+    waypoints: [[-12, 0, -40], [-22, 0, -44], [-30, 0, -50], [-20, 0, -36]],
+    style: 'CASUAL_WALK'
+  },
+  // 6.7 低頭滑手機同學 (沿中央林蔭大道散步，高頻率停步低頭看手機 55m)
+  {
+    role: 'STUDENT',
+    pos: [2, 0, 18],
+    waypoints: [[2, 0, 18], [2, 0, 42], [2, 0, 70], [2, 0, 36]],
+    style: 'CASUAL_WALK'
+  },
+  // 6.8 中庭花園漫步同學 (環形巡遊噴泉綠樹廣場 55m)
+  {
+    role: 'STUDENT',
+    pos: [8, 0, 22],
+    waypoints: [[8, 0, 22], [14, 0, 42], [6, 0, 56], [-2, 0, 38]],
+    style: 'CASUAL_WALK'
+  },
+  // 6.9 & 6.10 樹下聊天雙人組 (結伴在中庭林蔭大道旁談笑 50m)
+  {
+    role: 'STUDENT',
+    pos: [-8, 0, 16],
+    waypoints: [[-8, 0, 16], [-14, 0, 32], [-8, 0, 44], [-2, 0, 28]],
+    style: 'CASUAL_WALK'
+  },
+  {
+    role: 'STUDENT',
+    pos: [-6, 0, 18],
+    waypoints: [[-6, 0, 18], [-12, 0, 34], [-6, 0, 46], [0, 0, 30]],
+    style: 'CASUAL_WALK'
+  },
+  // 6.11 生態池許願小憩同學 (漫步生態園水池與石橋 40m)
+  {
+    role: 'STUDENT',
+    pos: [-46, 0, -74],
+    waypoints: [[-46, 0, -74], [-55, 0, -80], [-64, 0, -78], [-52, 0, -70]],
+    style: 'CASUAL_WALK'
+  },
+  // 6.12 校門口迎賓大道散步同學 (45m)
+  {
+    role: 'STUDENT',
+    pos: [-16, 0, 84],
+    waypoints: [[-16, 0, 84], [0, 0, 88], [16, 0, 84], [0, 0, 80]],
+    style: 'CASUAL_WALK'
+  },
+  // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋)
+  {
+    role: 'TEACHER',
+    pos: [31, 6.0, 10],
+    waypoints: [[31, 6.0, 10], [31, 6.0, 32], [31, 6.0, 52], [31, 6.0, 78]],
+    style: 'OFFICER_PATROL'
+  },
+  {
+    role: 'STUDENT',
+    pos: [31, 6.0, 76],
+    waypoints: [[31, 6.0, 76], [31, 6.0, 50], [31, 6.0, 30], [31, 6.0, 14]],
+    style: 'CASUAL_WALK'
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 6.0, 8],
+    waypoints: [[36, 6.0, 8], [44, 6.0, 8], [44, 6.0, 16], [36, 6.0, 16]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 6.0, 22],
+    waypoints: [[36, 6.0, 22], [44, 6.0, 22], [44, 6.0, 30], [36, 6.0, 30]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 6.0, 60],
+    waypoints: [[36, 6.0, 60], [44, 6.0, 60], [44, 6.0, 68], [36, 6.0, 68]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 6.0, 74],
+    waypoints: [[36, 6.0, 74], [44, 6.0, 74], [44, 6.0, 84], [36, 6.0, 84]]
+  },
+  {
+    role: 'TEACHER',
+    pos: [31, 12.0, 12],
+    waypoints: [[31, 12.0, 12], [31, 12.0, 32], [31, 12.0, 52], [31, 12.0, 78]],
+    style: 'OFFICER_PATROL'
+  },
+  {
+    role: 'STUDENT',
+    pos: [31, 12.0, 76],
+    waypoints: [[31, 12.0, 76], [31, 12.0, 50], [31, 12.0, 30], [31, 12.0, 14]],
+    style: 'CASUAL_WALK'
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 12.0, 8],
+    waypoints: [[36, 12.0, 8], [44, 12.0, 8], [44, 12.0, 16], [36, 12.0, 16]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 12.0, 22],
+    waypoints: [[36, 12.0, 22], [44, 12.0, 22], [44, 12.0, 30], [36, 12.0, 30]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 12.0, 60],
+    waypoints: [[36, 12.0, 60], [44, 12.0, 60], [44, 12.0, 68], [36, 12.0, 68]]
+  },
+  {
+    role: 'STUDENT',
+    pos: [36, 12.0, 74],
+    waypoints: [[36, 12.0, 74], [44, 12.0, 74], [44, 12.0, 84], [36, 12.0, 84]]
+  },
+  // 8. 校外強盜 (圍牆外長程巡邏，65m~110m)
+  {
+    role: 'BANDIT',
+    pos: [-35, 0, 118],
+    waypoints: [[-35, 0, 118], [0, 0, 118], [35, 0, 118], [0, 0, 122]]
+  },
+  {
+    role: 'BANDIT',
+    pos: [15, 0, 124],
+    waypoints: [[15, 0, 124], [48, 0, 124], [32, 0, 128], [15, 0, 128]]
+  },
+  {
+    role: 'BANDIT',
+    pos: [-15, 0, 126],
+    waypoints: [[-15, 0, 126], [-48, 0, 126], [-32, 0, 130], [-15, 0, 130]]
+  },
+  {
+    role: 'BANDIT',
+    pos: [-118, 0, -45],
+    waypoints: [[-118, 0, -45], [-118, 0, 10], [-118, 0, 65], [-118, 0, 15]]
+  },
+  {
+    role: 'BANDIT',
+    pos: [118, 0, -45],
+    waypoints: [[118, 0, -45], [118, 0, 10], [118, 0, 65], [118, 0, 15]]
+  },
+  // 9. 演藝大樓 4F 羽球場：大如老師 (北半場步法跑動 drill)
+  {
+    role: 'PE_TEACHER_BOSS',
+    pos: [76, 12.0, 31],
+    waypoints: [[72, 12.0, 31], [80, 12.0, 31], [76, 12.0, 27], [76, 12.0, 34]],
+    style: 'OFFICER_PATROL'
+  },
+  // 10. 教學大樓 1F 走廊：閃身步老師 (身法宗師，傳授閃身步與狗熊哆嗦毛，長廊身法巡走 20m)
+  {
+    role: 'DODGE_TEACHER',
+    pos: [32, 0.0, 18],
+    waypoints: [[32, 0.0, 8], [32, 0.0, 18], [32, 0.0, 28], [32, 0.0, 18]],
+    style: 'OFFICER_PATROL'
+  }
+];
+
+// ============================================================================
+// 第二世界【特訓少年院】NPC 生成配置數據
+// ============================================================================
+const DETENTION_NPC_DEFS: NPCSpawnDef[] = [
+  // A 區：牢房生活長廊迷宮 (Z: -90 ~ -28)
+  { role: 'DETENTION_GUARD', pos: [-16, 0, -84], waypoints: [[-26, 0, -84], [-10, 0, -84]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [18, 0, -60], waypoints: [[18, 0, -70], [18, 0, -50]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [-4, 0, -60], waypoints: [[-4, 0, -68], [-4, 0, -52]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [0, 0, -32], waypoints: [[-5, 0, -32], [5, 0, -32]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [-72, 0, -54], waypoints: [[-72, 0, -66], [-72, 0, -42]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [82, 0, -60], waypoints: [[82, 0, -75], [82, 0, -45]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [-15, 0, -32], waypoints: [[-22, 0, -32], [-10, 0, -32]], style: 'OFFICER_PATROL' },
+
+  // B 區：操場重裝軍規貨櫃迷宮 (Z: -28 ~ 35)
+  { role: 'DETENTION_GUARD', pos: [-22, 0, -6], waypoints: [[-22, 0, -12], [-22, 0, 0]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [22, 0, -6], waypoints: [[22, 0, -12], [22, 0, 0]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_HEAVY', pos: [0, 0, 0], waypoints: [[-6, 0, 0], [6, 0, 0]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [24, 0, 4], waypoints: [[24, 0, 0], [24, 0, 8]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [0, 0, 30], waypoints: [[-5, 0, 30], [5, 0, 30]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_WOLF', pos: [-30, 0, -5], waypoints: [[-30, 0, -12], [-30, 0, 16], [-18, 0, 16], [-18, 0, -12]] },
+  { role: 'DETENTION_SENIOR', pos: [0, 0, -12], waypoints: [[-6, 0, -12], [6, 0, -12]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [0, 0, 14], waypoints: [[-8, 0, 14], [8, 0, 14]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_WOLF', pos: [32, 0, -5], waypoints: [[32, 0, -12], [32, 0, 16], [20, 0, 16], [20, 0, -12]] },
+
+  // C 區：終極禁閉高牆與絕境逃脫大門庭 (Z: 35 ~ 95)
+  { role: 'DETENTION_GUARD', pos: [-14, 0, 50], waypoints: [[-14, 0, 42], [-14, 0, 58]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [14, 0, 50], waypoints: [[14, 0, 42], [14, 0, 58]], style: 'OFFICER_PATROL' },
+  { role: 'DETENTION_GUARD', pos: [0, 0, 88], waypoints: [[-8, 0, 88], [8, 0, 88]], style: 'OFFICER_PATROL' },
+
+  // 11. C 區小 Boss【鐵面總教官】(駐守在 Z = 63, X: -10 ~ 10 橫向巡視)
+  {
+    role: 'DETENTION_BOSS',
+    pos: [0, 0, 63],
+    waypoints: [[-10, 0, 63], [10, 0, 63]],
+    style: 'OFFICER_PATROL',
+    hp: 300,
+    maxHp: 300
+  }
+];
+
+function instantiateNPCs(scene: THREE.Scene, defs: NPCSpawnDef[], initialVisible: boolean = true): NPC[] {
+  const result: NPC[] = [];
+  for (let i = 0; i < defs.length; i++) {
+    const d = defs[i];
+    const startVec = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2]);
+    const wpVecs: THREE.Vector3[] = [];
+    for (let w = 0; w < d.waypoints.length; w++) {
+      wpVecs.push(new THREE.Vector3(d.waypoints[w][0], d.waypoints[w][1], d.waypoints[w][2]));
+    }
+    const npc = new NPC(scene, startVec, d.role, wpVecs, d.style);
+    if (d.hp !== undefined) npc.hp = d.hp;
+    if (d.maxHp !== undefined) npc.maxHp = d.maxHp;
+    npc.mesh.visible = initialVisible;
+    result.push(npc);
+  }
+  return result;
+}
+
+/**
+ * 建立天天國中第一世界全體校園 NPC (學生、老師、教官、糾察隊、強盜、Boss)
+ */
+export function createCampusNPCs(scene: THREE.Scene): NPC[] {
+  return instantiateNPCs(scene, CAMPUS_NPC_DEFS, true);
+}
+
+/**
+ * 建立特訓少年院第二世界全體 NPC (守衛教官、特訓學長、巡查狼犬、總教官 Boss)
+ */
+export function createDetentionNPCs(scene: THREE.Scene): NPC[] {
+  return instantiateNPCs(scene, DETENTION_NPC_DEFS, false);
+}

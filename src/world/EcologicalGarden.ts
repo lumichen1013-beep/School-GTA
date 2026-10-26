@@ -826,7 +826,7 @@ export class EcologicalGarden {
     playerPos: THREE.Vector3,
     player: Player,
     onPlayerHit: (amount: number, reason: string) => void,
-    onBossDefeated: () => void
+    _onBossDefeated?: () => void
   ) {
     // A. 食人藤蔓怪物邏輯
     for (const vine of this.hostileVines) {
@@ -1067,7 +1067,7 @@ export class EcologicalGarden {
     hitOrigin: THREE.Vector3,
     hitRadius: number,
     damage: number,
-    playerForward: THREE.Vector3
+    _playerForward?: THREE.Vector3
   ): { hit: boolean; name: string; defeated: boolean; isBoss: boolean } {
     // 優先判定 Boss
     if (!this.boss.isDead) {

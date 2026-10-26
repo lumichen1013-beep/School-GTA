@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { InputManager } from '../core/InputManager';
 import { soundManager } from '../audio/SoundEffects';
-import { Bicycle } from '../vehicles/Bicycle';
 import { IndoorManager } from '../systems/IndoorManager';
 
 export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
@@ -41,7 +40,6 @@ export class Player {
   // 羽球拍造型 (Badminton Racket Model - 4F 羽球挑戰賽專屬造型)
   public isHoldingRacket: boolean = false;
   private racketMesh!: THREE.Group;
-  private previousWeaponBeforeRacket: WeaponType = 'FIST';
 
   // Speeds: 行走 5.0 | 跑步 10.0 (與教官、糾察隊在相同狀態下速度完全一致)
   public walkSpeed: number = 5.0;
@@ -699,9 +697,6 @@ export class Player {
   // 裝備羽球拍造型 (4F 羽球比賽專用，只改變視覺外觀，比賽結束或搭電梯時還原)
   public equipBadmintonRacket(equip: boolean) {
     if (equip) {
-      if (!this.isHoldingRacket) {
-        this.previousWeaponBeforeRacket = this.currentWeapon;
-      }
       this.isHoldingRacket = true;
       if (this.racketMesh) this.racketMesh.visible = true;
       if (this.normalBatMesh) this.normalBatMesh.visible = false;
@@ -723,7 +718,6 @@ export class Player {
 
     this.currentWeapon = type;
     if (this.isHoldingRacket) {
-      this.previousWeaponBeforeRacket = type;
       if (this.racketMesh) this.racketMesh.visible = true;
       if (this.normalBatMesh) this.normalBatMesh.visible = false;
       if (this.specialBatMesh) this.specialBatMesh.visible = false;

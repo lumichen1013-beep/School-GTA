@@ -238,8 +238,9 @@ export class WaterSplashVFX {
     // 身後腳踢處爆發
     const feetX = pos.x - sinY * 0.8;
     const feetZ = pos.z - cosY * 0.8;
-    for (let i = 0; i < 5; i++) {
-      const spd = 2.0 + Math.random() * 2.2;
+    const burstCount = isSprinting ? 7 : 5;
+    for (let i = 0; i < burstCount; i++) {
+      const spd = (isSprinting ? 2.6 : 2.0) + Math.random() * 2.2;
       const vx = -sinY * spd + (Math.random() - 0.5) * 1.4;
       const vz = -cosY * spd + (Math.random() - 0.5) * 1.4;
       const vy = 2.2 + Math.random() * 2.4;
