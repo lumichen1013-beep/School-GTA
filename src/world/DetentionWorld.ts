@@ -40,6 +40,12 @@ export class DetentionWorld {
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.scene.add(this.group);
+
+    // 第二世界專屬環境補光 (附加於 this.group，隨世界切換自動隱藏/顯示，完全不影響第一世界)
+    const detentionAmbientFill = new THREE.HemisphereLight(0xffffff, 0x99aebb, 0.40);
+    detentionAmbientFill.position.set(0, 50, 0);
+    this.group.add(detentionAmbientFill);
+
     this.buildDetentionFacility();
   }
 
@@ -604,44 +610,45 @@ export class DetentionWorld {
 
     // ==========================================
     // 9. 幾何體合併 (mergeGeometries) 產出低 Draw Call Mesh
+    // 配色全面升級：明亮清爽的軍規特訓學院風貌，告別幽暗污濁，確保全景視野清晰通透
     // ==========================================
     const mudMat = new THREE.MeshLambertMaterial({
-      color: 0x3d3027 // 粗糙深褐色泥濘泥土
+      color: 0xc2b5a3 // 明亮溫潤的特訓校場沙洲礫石地表 (反射率高、寬闊明朗)
     });
     const trackMat = new THREE.MeshLambertMaterial({
-      color: 0x5a4133 // 稍深紅泥砂碎石跑道
+      color: 0xc05d43 // 鮮明亮麗的紅土/磚紅專業體能環形跑道
     });
     const concreteMat = new THREE.MeshLambertMaterial({
-      color: 0x4a4e54 // 沉重工業風冷凝灰水泥
+      color: 0xdfe6ec // 現代工業建築淺灰白色石灰石混泥土 (營舍、總部、工廠大樓全面明亮化)
     });
     const darkSteelMat = new THREE.MeshLambertMaterial({
-      color: 0x1f2429 // 暗黑防鏽鋼架
+      color: 0x5c728a // 清晰鍍鋅金屬藍灰鋼架 (瞭望塔柱、樓梯、單槓立柱，具備金屬高光)
     });
     const rustedMetalMat = new THREE.MeshLambertMaterial({
-      color: 0x403126 // 泥漬生鏽金屬/看板
+      color: 0x5dade2 // 清澈天藍反射水窪積水鏡面與鍍鋅鋼板
     });
     const fenceWireMat = new THREE.MeshLambertMaterial({
-      color: 0x718093,
+      color: 0xa4b0be, // 明亮鍍鋅防攀刺鐵絲網
       transparent: true,
-      opacity: 0.65,
+      opacity: 0.60,
       side: THREE.DoubleSide
     });
     const corrugatedMat = new THREE.MeshLambertMaterial({
-      color: 0x34495e // 鐵灰波浪鐵皮
+      color: 0x4a779d // 醒目鮮明的地中海海軍鋼藍波浪鐵皮頂棚
     });
     const yellowHazardMat = new THREE.MeshLambertMaterial({
-      color: 0xe67e22 // 警示黃黑條紋底色
+      color: 0xf1c40f // 亮麗警示高光金黃色 (招牌、防撞邊緣)
     });
     const woodPlankMat = new THREE.MeshLambertMaterial({
-      color: 0x8d6e63 // 木質棧板
+      color: 0xd7ccc8 // 明亮淺色松木/白樺木質棧板與長椅
     });
     const glassMat = new THREE.MeshLambertMaterial({
-      color: 0x2c3e50,
+      color: 0xa0e7e5, // 通透亮麗的淺青藍採光建築玻璃
       transparent: true,
-      opacity: 0.5
+      opacity: 0.60
     });
     const tireRubberMat = new THREE.MeshLambertMaterial({
-      color: 0x181818 // 碳黑橡膠
+      color: 0x4b5563 // 質感板岩灰啞光重訓輪胎，立體結構清晰分明
     });
 
     const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material) => {

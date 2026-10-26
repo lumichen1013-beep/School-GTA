@@ -795,21 +795,21 @@ export class NPC {
       shirtColor = 0x582c87;
       pantsColor = 0x1e272e;
     } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官：戰術深藍警備制服
-      shirtColor = 0x243342;
-      pantsColor = 0x1a252f;
+      // 特訓教官：高對比海軍藍警備制服與深灰長褲
+      shirtColor = 0x2980b9;
+      pantsColor = 0x34495e;
     } else if (this.role === 'DETENTION_SENIOR') {
-      // 特訓資深學長：受訓橘紅背心與戰術灰褲
-      shirtColor = 0xd35400;
-      pantsColor = 0x3d3d3d;
+      // 特訓資深學長：高可視度亮橘運動背心與休閒淺灰運動褲
+      shirtColor = 0xe67e22;
+      pantsColor = 0x718093;
     } else if (this.role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：黑色無袖重訓背心與深海軍藍短褲
-      shirtColor = 0x1e272e;
+      // 重訓霸榜生：石墨炭灰重訓背心與深海軍藍短褲
+      shirtColor = 0x485460;
       pantsColor = 0x2c3e50;
     } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長：威嚴鐵黑將官大衣
-      shirtColor = 0x1a2129;
-      pantsColor = 0x11161d;
+      // 鐵面總長：威嚴深海軍藍金邊將官大衣
+      shirtColor = 0x2c3a47;
+      pantsColor = 0x1e272e;
     }
 
     const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });

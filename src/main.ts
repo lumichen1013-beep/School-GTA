@@ -138,7 +138,8 @@ class SchoolGTASandbox {
     this.detentionCutscene.onComplete = () => {
       const cutsceneOverlay = document.getElementById('cutscene-overlay');
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
-      this.wantedSystem.showBanner('⛓️【第一天特訓開始！】只有規矩與汗水！', 3500);
+      this.weatherSystem.setWeather('SUNNY', true, false);
+      this.wantedSystem.showBanner('⛓️【第一天特訓開始！】晴空萬里，只有規矩與汗水！', 3500);
     };
     await new Promise(r => requestAnimationFrame(r));
 
@@ -410,18 +411,19 @@ class SchoolGTASandbox {
       this.npcs = this.detentionNPCs;
 
       this.hud.updateWorldHUD('⛓️ 少年院');
-      this.weatherSystem.setWeather('THUNDERSTORM', false, false);
 
       if (!skipCutscene) {
         if (cutsceneOverlay) cutsceneOverlay.style.display = 'flex';
+        this.weatherSystem.setWeather('THUNDERSTORM', false, false);
         this.detentionCutscene.start(this.cameraCtrl, this.player);
       } else {
         if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+        this.weatherSystem.setWeather('SUNNY', false, false);
         this.player.position.set(0, 0, 10);
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('⛓️ 已進入【第七少年特訓院】！只有規矩與汗水！', 3000);
+        this.wantedSystem.showBanner('⛓️ 已進入【第七少年特訓院】！晴空萬里，只有規矩與汗水！', 3000);
       }
     }
   }

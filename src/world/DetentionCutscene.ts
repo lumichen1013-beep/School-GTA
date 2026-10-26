@@ -48,22 +48,22 @@ export class DetentionCutscene {
     this.vanGroup = new THREE.Group();
 
     // 1. 車身主體 (長 7.6m, 寬 2.8m, 高 2.6m)
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1a2129 }); // 鐵甲消光黑藍
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3d4e61 }); // 現代特訓戰術亮藍灰
     const vanBody = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.2, 7.2), bodyMat);
     vanBody.position.y = 1.6;
     this.vanGroup.add(vanBody);
 
     // 2. 駕駛艙車頭前斜切
-    const noseMat = new THREE.MeshLambertMaterial({ color: 0x11161d });
+    const noseMat = new THREE.MeshLambertMaterial({ color: 0x2e3d4f });
     const vanNose = new THREE.Mesh(new THREE.BoxGeometry(2.78, 1.4, 1.8), noseMat);
     vanNose.position.set(0, 1.1, -4.0);
     this.vanGroup.add(vanNose);
 
     // 3. 前擋風玻璃與金屬防暴鐵網
     const glassMat = new THREE.MeshLambertMaterial({
-      color: 0x1b2838,
+      color: 0x81ecec,
       transparent: true,
-      opacity: 0.7
+      opacity: 0.75
     });
     const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.9, 0.1), glassMat);
     windshield.rotation.x = 0.35;
@@ -80,13 +80,13 @@ export class DetentionCutscene {
     }
 
     // 5. 車身黃黑警示防撞條紋
-    const hazardMat = new THREE.MeshLambertMaterial({ color: 0xd35400 });
+    const hazardMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f }); // 鮮豔高可視度金黃
     const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.6, 0.3), hazardMat);
     bumper.position.set(0, 0.7, -4.9);
     this.vanGroup.add(bumper);
 
     // 6. 右側滑動車門 (分鏡 3 開啟)
-    const doorMat = new THREE.MeshLambertMaterial({ color: 0x222f3e });
+    const doorMat = new THREE.MeshLambertMaterial({ color: 0x4a607a });
     this.vanDoor = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.9, 1.4), doorMat);
     this.vanDoor.position.set(1.42, 1.4, 0.8);
     this.vanGroup.add(this.vanDoor);
