@@ -1099,11 +1099,23 @@ export class Player {
         this.position.y + height > box.min.y &&
         this.position.y + stepHeight < box.max.y
       ) {
+        // 若當前位置本已重疊，但 targetX 正在遠離障礙物中心 (向外逃出)，允許移動逃脫
+        const boxCenterX = (box.min.x + box.max.x) * 0.5;
+        const currentDist = Math.abs(this.position.x - boxCenterX);
+        const targetDist = Math.abs(targetX - boxCenterX);
+        if (targetDist > currentDist) {
+          continue;
+        }
         collidedX = true;
         break;
       }
     }
-    if (!collidedX) this.position.x = targetX;
+    if (!collidedX) {
+      this.position.x = targetX;
+    } else {
+      this.velocity.x = 0;
+      this.knockVelocity.x = 0;
+    }
 
     // Z 軸移動
     const targetZ = this.position.z + this.velocity.z * delta;
@@ -1118,11 +1130,61 @@ export class Player {
         this.position.y + height > box.min.y &&
         this.position.y + stepHeight < box.max.y
       ) {
+        // 若當前位置本已重疊，但 targetZ 正在遠離障礙物中心 (向外逃出)，允許移動逃脫
+        const boxCenterZ = (box.min.z + box.max.z) * 0.5;
+        const currentDist = Math.abs(this.position.z - boxCenterZ);
+        const targetDist = Math.abs(targetZ - boxCenterZ);
+        if (targetDist > currentDist) {
+          continue;
+        }
         collidedZ = true;
         break;
       }
     }
-    if (!collidedZ) this.position.z = targetZ;
+    if (!collidedZ) {
+      this.position.z = targetZ;
+    } else {
+      this.velocity.z = 0;
+      this.knockVelocity.z = 0;
+    }
+
+    // 防卡牆與牆角擠壓自解修復 (Depenetration / Anti-Stuck Auto Ejection)
+    // 進行 2 輪迭代，可完全排除直角牆角 (Corner) 同時與兩面牆交疊的情況
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
+        if (box.isFloorOnly) continue;
+        if (
+          this.position.y + height > box.min.y &&
+          this.position.y + stepHeight < box.max.y
+        ) {
+          if (
+            this.position.x + halfWidth > box.min.x &&
+            this.position.x - halfWidth < box.max.x &&
+            this.position.z + halfWidth > box.min.z &&
+            this.position.z - halfWidth < box.max.z
+          ) {
+            const boxCenterX = (box.min.x + box.max.x) * 0.5;
+            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
+            const halfBoxX = (box.max.x - box.min.x) * 0.5;
+            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
+
+            const overlapX = (halfBoxX + halfWidth) - Math.abs(this.position.x - boxCenterX);
+            const overlapZ = (halfBoxZ + halfWidth) - Math.abs(this.position.z - boxCenterZ);
+
+            if (overlapX < overlapZ) {
+              this.position.x = this.position.x >= boxCenterX ? box.max.x + halfWidth + 0.02 : box.min.x - halfWidth - 0.02;
+              this.velocity.x = 0;
+              this.knockVelocity.x = 0;
+            } else {
+              this.position.z = this.position.z >= boxCenterZ ? box.max.z + halfWidth + 0.02 : box.min.z - halfWidth - 0.02;
+              this.velocity.z = 0;
+              this.knockVelocity.z = 0;
+            }
+          }
+        }
+      }
+    }
 
     // Y 軸移動 (重力與垂直檢測，支援水平層板與連續坡道階梯)
     const targetY = this.position.y + this.velocity.y * delta;

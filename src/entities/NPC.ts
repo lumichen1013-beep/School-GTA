@@ -3110,123 +3110,129 @@ export class NPC {
     // 4. 計算移動方向與位移 (0-GC 重複利用 Scratch Vector)
     _npcMoveDir.subVectors(targetPos, this.position);
     _npcMoveDir.y = 0;
+    const distToTargetSq = _npcMoveDir.lengthSq();
 
-    if (_npcMoveDir.lengthSq() > 0.05) {
+    if (distToTargetSq > 0.05) {
       _npcMoveDir.normalize();
 
-      const moveStepX = _npcMoveDir.x * currentSpeed * delta;
-      const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
-      const radius = this.role === 'DOG' ? 0.35 : 0.45;
+      // 近戰警戒距離停止前進：當追捕中看得見玩家且距離小於 1.15m 時，站在近戰打擊範圍內專注攻擊，避免強推玩家進牆角
+      const isTooCloseToPlayer = this.isChasing && this.lostSightTimer <= 0 && distToTargetSq < 1.32; // ~1.15m
 
-      // X 軸移動檢測
-      let nextX = this.position.x + moveStepX;
-      let hitX = false;
+      if (!isTooCloseToPlayer) {
+        const moveStepX = _npcMoveDir.x * currentSpeed * delta;
+        const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
+        const radius = this.role === 'DOG' ? 0.35 : 0.45;
 
-      // 校犬嚴格禁止靠近或跨入教學樓邊界 (X: 24.5 以東)
-      if (this.role === 'DOG' && nextX >= 24.5 && this.position.z >= -10.0 && this.position.z <= 100.0) {
-        hitX = true;
-      }
+        // X 軸移動檢測
+        let nextX = this.position.x + moveStepX;
+        let hitX = false;
 
-      // 強盜嚴格禁止跨入校園內部
-      if (this.role === 'BANDIT' && nextX > -118.0 && nextX < 118.0 && this.position.z < 107.0) {
-        hitX = true;
-      }
+        // 校犬嚴格禁止靠近或跨入教學樓邊界 (X: 24.5 以東)
+        if (this.role === 'DOG' && nextX >= 24.5 && this.position.z >= -10.0 && this.position.z <= 100.0) {
+          hitX = true;
+        }
 
-      if (!hitX) {
-        for (const box of colliders) {
-          if (box.isFloorOnly) continue;
-          if (
-            nextX + radius > box.min.x &&
-            nextX - radius < box.max.x &&
-            this.position.z + radius > box.min.z &&
-            this.position.z - radius < box.max.z &&
-            this.position.y + 0.3 < box.max.y &&
-            this.position.y + 1.6 > box.min.y
-          ) {
-            hitX = true;
-            break;
+        // 強盜嚴格禁止跨入校園內部
+        if (this.role === 'BANDIT' && nextX > -118.0 && nextX < 118.0 && this.position.z < 107.0) {
+          hitX = true;
+        }
+
+        if (!hitX) {
+          for (const box of colliders) {
+            if (box.isFloorOnly) continue;
+            if (
+              nextX + radius > box.min.x &&
+              nextX - radius < box.max.x &&
+              this.position.z + radius > box.min.z &&
+              this.position.z - radius < box.max.z &&
+              this.position.y + 0.3 < box.max.y &&
+              this.position.y + 1.6 > box.min.y
+            ) {
+              hitX = true;
+              break;
+            }
           }
         }
-      }
-      if (!hitX) this.position.x = nextX;
+        if (!hitX) this.position.x = nextX;
 
-      // Z 軸移動檢測
-      let nextZ = this.position.z + moveStepZ;
-      let hitZ = false;
+        // Z 軸移動檢測
+        let nextZ = this.position.z + moveStepZ;
+        let hitZ = false;
 
-      // 校犬嚴格禁止靠近教學樓
-      if (this.role === 'DOG' && this.position.x >= 24.5 && nextZ >= -10.0 && nextZ <= 100.0) {
-        hitZ = true;
-      }
+        // 校犬嚴格禁止靠近教學樓
+        if (this.role === 'DOG' && this.position.x >= 24.5 && nextZ >= -10.0 && nextZ <= 100.0) {
+          hitZ = true;
+        }
 
-      // 強盜嚴格禁止跨入校門進入校園 (Z <= 106.8)
-      if (this.role === 'BANDIT' && nextZ < 107.2 && Math.abs(this.position.x) < 118.0) {
-        hitZ = true;
-      }
+        // 強盜嚴格禁止跨入校門進入校園 (Z <= 106.8)
+        if (this.role === 'BANDIT' && nextZ < 107.2 && Math.abs(this.position.x) < 118.0) {
+          hitZ = true;
+        }
 
-      if (!hitZ) {
-        for (const box of colliders) {
-          if (box.isFloorOnly) continue;
-          if (
-            this.position.x + radius > box.min.x &&
-            this.position.x - radius < box.max.x &&
-            nextZ + radius > box.min.z &&
-            nextZ - radius < box.max.z &&
-            this.position.y + 0.3 < box.max.y &&
-            this.position.y + 1.6 > box.min.y
-          ) {
-            hitZ = true;
-            break;
+        if (!hitZ) {
+          for (const box of colliders) {
+            if (box.isFloorOnly) continue;
+            if (
+              this.position.x + radius > box.min.x &&
+              this.position.x - radius < box.max.x &&
+              nextZ + radius > box.min.z &&
+              nextZ - radius < box.max.z &&
+              this.position.y + 0.3 < box.max.y &&
+              this.position.y + 1.6 > box.min.y
+            ) {
+              hitZ = true;
+              break;
+            }
           }
         }
-      }
-      if (!hitZ) this.position.z = nextZ;
+        if (!hitZ) this.position.z = nextZ;
 
-      // 校犬位置邊界修正與維持地面
-      if (this.role === 'DOG') {
-        if (this.position.x > 24.2 && this.position.z >= -10.0 && this.position.z <= 100.0) {
-          this.position.x = 24.2;
+        // 校犬位置邊界修正與維持地面
+        if (this.role === 'DOG') {
+          if (this.position.x > 24.2 && this.position.z >= -10.0 && this.position.z <= 100.0) {
+            this.position.x = 24.2;
+          }
+          this.position.y = 0;
         }
-        this.position.y = 0;
-      }
 
-      // 強盜邊界回推：絕不能在校園內
-      if (this.role === 'BANDIT') {
-        if (this.position.z < 107.2 && Math.abs(this.position.x) < 118.0) {
-          this.position.z = 107.2;
+        // 強盜邊界回推：絕不能在校園內
+        if (this.role === 'BANDIT') {
+          if (this.position.z < 107.2 && Math.abs(this.position.x) < 118.0) {
+            this.position.z = 107.2;
+          }
         }
-      }
 
-      // 大如老師 邊界回推：嚴格鎖定在 4F 羽球場北側發球半場內，絕對不會離開球場
-      if (this.role === 'PE_TEACHER_BOSS') {
-        this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
-        this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 37.0);
-        this.position.y = 12.0;
-      }
+        // 大如老師 邊界回推：嚴格鎖定在 4F 羽球場北側發球半場內，絕對不會離開球場
+        if (this.role === 'PE_TEACHER_BOSS') {
+          this.position.x = THREE.MathUtils.clamp(this.position.x, 63.8, 84.2);
+          this.position.z = THREE.MathUtils.clamp(this.position.z, 23.8, 37.0);
+          this.position.y = 12.0;
+        }
 
-      // 5. 防穿牆與卡牆修復 (永遠朝外側退回，絕不向建築內部彈射)
-      for (const box of colliders) {
-        if (box.isFloorOnly) continue;
-        if (this.position.y + 0.3 < box.max.y && this.position.y + 1.6 > box.min.y) {
-          if (
-            this.position.x + radius > box.min.x &&
-            this.position.x - radius < box.max.x &&
-            this.position.z + radius > box.min.z &&
-            this.position.z - radius < box.max.z
-          ) {
-            // 計算自幾何中心往外的方向
-            const boxCenterX = (box.min.x + box.max.x) * 0.5;
-            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-            const halfBoxX = (box.max.x - box.min.x) * 0.5;
-            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
+        // 5. 防穿牆與卡牆修復 (永遠朝外側退回，絕不向建築內部彈射)
+        for (const box of colliders) {
+          if (box.isFloorOnly) continue;
+          if (this.position.y + 0.3 < box.max.y && this.position.y + 1.6 > box.min.y) {
+            if (
+              this.position.x + radius > box.min.x &&
+              this.position.x - radius < box.max.x &&
+              this.position.z + radius > box.min.z &&
+              this.position.z - radius < box.max.z
+            ) {
+              // 計算自幾何中心往外的方向
+              const boxCenterX = (box.min.x + box.max.x) * 0.5;
+              const boxCenterZ = (box.min.z + box.max.z) * 0.5;
+              const halfBoxX = (box.max.x - box.min.x) * 0.5;
+              const halfBoxZ = (box.max.z - box.min.z) * 0.5;
 
-            const overlapX = (halfBoxX + radius) - Math.abs(this.position.x - boxCenterX);
-            const overlapZ = (halfBoxZ + radius) - Math.abs(this.position.z - boxCenterZ);
+              const overlapX = (halfBoxX + radius) - Math.abs(this.position.x - boxCenterX);
+              const overlapZ = (halfBoxZ + radius) - Math.abs(this.position.z - boxCenterZ);
 
-            if (overlapX < overlapZ) {
-              this.position.x = this.position.x >= boxCenterX ? box.max.x + radius + 0.02 : box.min.x - radius - 0.02;
-            } else {
-              this.position.z = this.position.z >= boxCenterZ ? box.max.z + radius + 0.02 : box.min.z - radius - 0.02;
+              if (overlapX < overlapZ) {
+                this.position.x = this.position.x >= boxCenterX ? box.max.x + radius + 0.02 : box.min.x - radius - 0.02;
+              } else {
+                this.position.z = this.position.z >= boxCenterZ ? box.max.z + radius + 0.02 : box.min.z - radius - 0.02;
+              }
             }
           }
         }

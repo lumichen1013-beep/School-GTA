@@ -2102,8 +2102,13 @@ class SchoolGTASandbox {
   private resolveCharacterSeparation() {
     const minDistance = 0.85;
     const minDistanceSq = minDistance * minDistance;
+    const colliders = this.activeColliders;
 
     if (!this.player.isRidingVehicle && !this.player.isDead) {
+      const playerRadius = 0.35;
+      const playerHeight = 1.8;
+      const stepHeight = 0.65;
+
       for (const npc of this.npcs) {
         if (npc.isKnockedDown || npc.isKnockedFlying) continue;
 
@@ -2113,14 +2118,51 @@ class SchoolGTASandbox {
 
         if (distSq < minDistanceSq && distSq > 0.0001) {
           const dist = Math.sqrt(distSq);
-          const overlap = (minDistance - dist) * 0.5;
+          const totalOverlap = minDistance - dist;
           const nx = dx / dist;
           const nz = dz / dist;
 
-          this.player.position.x -= nx * overlap;
-          this.player.position.z -= nz * overlap;
-          npc.position.x += nx * overlap;
-          npc.position.z += nz * overlap;
+          // 檢測將玩家推向 (-nx, -nz) 是否會撞牆或嵌進建築/牆角
+          const testPlayerX = this.player.position.x - nx * totalOverlap * 0.5;
+          const testPlayerZ = this.player.position.z - nz * totalOverlap * 0.5;
+
+          let playerBlockedX = false;
+          let playerBlockedZ = false;
+
+          for (let i = 0; i < colliders.length; i++) {
+            const box = colliders[i];
+            if (box.isFloorOnly) continue;
+            if (this.player.position.y + playerHeight > box.min.y && this.player.position.y + stepHeight < box.max.y) {
+              if (
+                testPlayerX + playerRadius > box.min.x &&
+                testPlayerX - playerRadius < box.max.x &&
+                this.player.position.z + playerRadius > box.min.z &&
+                this.player.position.z - playerRadius < box.max.z
+              ) {
+                playerBlockedX = true;
+              }
+              if (
+                this.player.position.x + playerRadius > box.min.x &&
+                this.player.position.x - playerRadius < box.max.x &&
+                testPlayerZ + playerRadius > box.min.z &&
+                testPlayerZ - playerRadius < box.max.z
+              ) {
+                playerBlockedZ = true;
+              }
+            }
+          }
+
+          // 若玩家身後靠牆或身處死角，玩家堅定不移，由 NPC 全額退讓，徹底杜絕被推擠卡進牆體
+          const movePlayerX = playerBlockedX ? 0 : -nx * totalOverlap * 0.5;
+          const movePlayerZ = playerBlockedZ ? 0 : -nz * totalOverlap * 0.5;
+
+          const moveNpcX = playerBlockedX ? nx * totalOverlap : nx * totalOverlap * 0.5;
+          const moveNpcZ = playerBlockedZ ? nz * totalOverlap : nz * totalOverlap * 0.5;
+
+          this.player.position.x += movePlayerX;
+          this.player.position.z += movePlayerZ;
+          npc.position.x += moveNpcX;
+          npc.position.z += moveNpcZ;
 
           this.player.mesh.position.copy(this.player.position);
           npc.mesh.position.copy(npc.position);
