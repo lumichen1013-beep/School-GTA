@@ -139,7 +139,13 @@ class SchoolGTASandbox {
       const cutsceneOverlay = document.getElementById('cutscene-overlay');
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
       this.weatherSystem.setWeather('SUNNY', true, false);
-      this.wantedSystem.showBanner('⛓️【第一天特訓開始！】晴空萬里，只有規矩與汗水！', 3500);
+      if (this.player) {
+        this.player.hasNormalBat = true;
+        this.player.setWeapon('NORMAL_BAT');
+        this.player.maxHp = 150;
+        this.player.hp = 150;
+      }
+      this.wantedSystem.showBanner('⛓️【第一天特訓開始！】晴空萬里，只有規矩與汗水！已配備特訓防暴棒，體力提升至 150 HP！', 3500);
     };
     await new Promise(r => requestAnimationFrame(r));
 
@@ -369,6 +375,10 @@ class SchoolGTASandbox {
       }
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
 
+      // 回歸天天國中：重設生命值上限為 100
+      this.player.maxHp = 100;
+      this.player.hp = Math.min(this.player.hp, 100);
+
       this.world.group.visible = true;
       this.ecologicalGarden.group.visible = true;
       this.detentionWorld.group.visible = false;
@@ -410,6 +420,12 @@ class SchoolGTASandbox {
       }
       this.npcs = this.detentionNPCs;
 
+      // 少年院特訓數值適應：血量上限提升為 150，配備特訓防暴球棒 (攻擊力 55)
+      this.player.maxHp = 150;
+      this.player.hp = 150;
+      this.player.hasNormalBat = true;
+      this.player.setWeapon('NORMAL_BAT');
+
       this.hud.updateWorldHUD('⛓️ 少年院');
 
       if (!skipCutscene) {
@@ -423,7 +439,7 @@ class SchoolGTASandbox {
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('⛓️ 已進入【第七少年特訓院】！晴空萬里，只有規矩與汗水！', 3000);
+        this.wantedSystem.showBanner('⛓️ 已進入【第七少年特訓院】！配備特訓防暴棒，體能提升至 150 HP！', 3500);
       }
     }
   }
@@ -719,117 +735,122 @@ class SchoolGTASandbox {
   }
 
   private spawnDetentionNPCs() {
-    // 1. 總教官 Boss【鐵面總長】(操場指揮台與正前方)
+    // 1. 總教官 Boss【鐵面總長】(駐守教官總部大樓外廣場，遠離玩家起點)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, -2),
+      new THREE.Vector3(45, 0, 35),
       'DETENTION_BOSS',
       [
-        new THREE.Vector3(0, 0, -2),
-        new THREE.Vector3(15, 0, -5),
-        new THREE.Vector3(15, 0, 15),
-        new THREE.Vector3(-15, 0, 15),
-        new THREE.Vector3(-15, 0, -5)
+        new THREE.Vector3(45, 0, 35),
+        new THREE.Vector3(55, 0, 35),
+        new THREE.Vector3(55, 0, 20),
+        new THREE.Vector3(35, 0, 20),
+        new THREE.Vector3(35, 0, 35)
       ],
       'OFFICER_PATROL'
     ));
 
-    // 2. 特訓教官群 (5 名，防暴盾 + 警棍，各區步巡)
+    // 2. 特訓教官群 (5 名，防暴盾 + 警棍，駐守各區周邊要道，拉開警戒縱深)
+    // 南大門守衛
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 60),
+      new THREE.Vector3(0, 0, 75),
       'DETENTION_GUARD',
-      [new THREE.Vector3(0, 0, 60), new THREE.Vector3(0, 0, 35), new THREE.Vector3(12, 0, 45), new THREE.Vector3(-12, 0, 45)],
+      [new THREE.Vector3(-15, 0, 75), new THREE.Vector3(15, 0, 75), new THREE.Vector3(0, 0, 65)],
       'OFFICER_PATROL'
     ));
+    // 營舍西側巡邏守衛
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-35, 0, -35),
+      new THREE.Vector3(-35, 0, -45),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-35, 0, -35), new THREE.Vector3(-20, 0, -35), new THREE.Vector3(-20, 0, -50), new THREE.Vector3(-35, 0, -50)],
+      [new THREE.Vector3(-35, 0, -45), new THREE.Vector3(-55, 0, -45), new THREE.Vector3(-55, 0, -65), new THREE.Vector3(-35, 0, -65)],
       'OFFICER_PATROL'
     ));
+    // 食堂東側巡邏守衛
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(40, 0, -35),
+      new THREE.Vector3(42, 0, -45),
       'DETENTION_GUARD',
-      [new THREE.Vector3(40, 0, -35), new THREE.Vector3(55, 0, -35), new THREE.Vector3(55, 0, -50), new THREE.Vector3(40, 0, -50)],
+      [new THREE.Vector3(42, 0, -45), new THREE.Vector3(58, 0, -45), new THREE.Vector3(58, 0, -60), new THREE.Vector3(42, 0, -60)],
       'OFFICER_PATROL'
     ));
+    // 實習工廠西南守衛
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-45, 0, 25),
+      new THREE.Vector3(-45, 0, 35),
       'DETENTION_GUARD',
-      [new THREE.Vector3(-45, 0, 25), new THREE.Vector3(-65, 0, 25), new THREE.Vector3(-65, 0, 45), new THREE.Vector3(-45, 0, 45)],
+      [new THREE.Vector3(-45, 0, 35), new THREE.Vector3(-60, 0, 35), new THREE.Vector3(-60, 0, 55), new THREE.Vector3(-45, 0, 55)],
       'OFFICER_PATROL'
     ));
+    // 操場跑道南側巡哨
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, 22),
+      new THREE.Vector3(0, 0, 40),
       'DETENTION_GUARD',
-      [new THREE.Vector3(0, 0, 22), new THREE.Vector3(22, 0, 22), new THREE.Vector3(22, 0, 0), new THREE.Vector3(-22, 0, 0), new THREE.Vector3(-22, 0, 22)],
+      [new THREE.Vector3(0, 0, 40), new THREE.Vector3(25, 0, 40), new THREE.Vector3(-25, 0, 40)],
       'OFFICER_PATROL'
     ));
 
-    // 3. 特訓狼犬 (2 隻，超快撲擊)
+    // 3. 特訓狼犬 (2 隻，配置於偏遠死角防範偷溜，不堵塞出生點)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(60, 0, 0),
+      new THREE.Vector3(55, 0, -55),
       'DETENTION_WOLF',
-      [new THREE.Vector3(60, 0, 0), new THREE.Vector3(60, 0, 35), new THREE.Vector3(45, 0, 15), new THREE.Vector3(45, 0, -15)],
+      [new THREE.Vector3(55, 0, -55), new THREE.Vector3(65, 0, -35), new THREE.Vector3(40, 0, -35)],
       'JOGGING'
     ));
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-60, 0, 0),
+      new THREE.Vector3(-55, 0, -55),
       'DETENTION_WOLF',
-      [new THREE.Vector3(-60, 0, 0), new THREE.Vector3(-60, 0, -30), new THREE.Vector3(-45, 0, -10), new THREE.Vector3(-45, 0, 20)],
+      [new THREE.Vector3(-55, 0, -55), new THREE.Vector3(-65, 0, -35), new THREE.Vector3(-40, 0, -35)],
       'JOGGING'
     ));
 
-    // 4. 重訓霸榜生 (2 名，超高血量霸體)
+    // 4. 重訓霸榜生 (2 名，各在器材區與庫房鍛鍊，不主動追擊)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(12, 0, 8),
+      new THREE.Vector3(0, 0, -14),
       'DETENTION_HEAVY',
-      [new THREE.Vector3(12, 0, 8), new THREE.Vector3(15, 0, 12), new THREE.Vector3(10, 0, 12)],
+      [new THREE.Vector3(0, 0, -14), new THREE.Vector3(5, 0, -14), new THREE.Vector3(-5, 0, -14)],
       'OFFICER_PATROL'
     ));
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(0, 0, -12),
+      new THREE.Vector3(-48, 0, 52),
       'DETENTION_HEAVY',
-      [new THREE.Vector3(0, 0, -12), new THREE.Vector3(5, 0, -10), new THREE.Vector3(-5, 0, -10)],
+      [new THREE.Vector3(-48, 0, 52), new THREE.Vector3(-42, 0, 52), new THREE.Vector3(-42, 0, 46)],
       'OFFICER_PATROL'
     ));
 
-    // 5. 特訓資深學長 (4 名，好鬥好戰主動切磋)
+    // 5. 特訓資深學長 (4 名，在單槓、臥推與操場巡迴鍛鍊，不主動攻擊)
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-12, 0, 8),
+      new THREE.Vector3(-18, 0, 10),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(-12, 0, 8), new THREE.Vector3(-16, 0, 10), new THREE.Vector3(-10, 0, 12)],
+      [new THREE.Vector3(-18, 0, 10), new THREE.Vector3(-22, 0, 12), new THREE.Vector3(-15, 0, 15)],
       'HURRIED_WALK'
     ));
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-5, 0, 16),
+      new THREE.Vector3(18, 0, 10),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(-5, 0, 16), new THREE.Vector3(6, 0, 16), new THREE.Vector3(0, 0, 6)],
+      [new THREE.Vector3(18, 0, 10), new THREE.Vector3(22, 0, 12), new THREE.Vector3(15, 0, 15)],
       'HURRIED_WALK'
     ));
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(-50, 0, -45),
+      new THREE.Vector3(0, 0, -55),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(-50, 0, -45), new THREE.Vector3(50, 0, -45), new THREE.Vector3(50, 0, 45), new THREE.Vector3(-50, 0, 45)],
+      [new THREE.Vector3(0, 0, -55), new THREE.Vector3(30, 0, -55), new THREE.Vector3(-30, 0, -55)],
       'JOGGING'
     ));
     this.detentionNPCs.push(new NPC(
       this.engine.scene,
-      new THREE.Vector3(32, 0, -30),
+      new THREE.Vector3(55, 0, 20),
       'DETENTION_SENIOR',
-      [new THREE.Vector3(32, 0, -30), new THREE.Vector3(45, 0, -25), new THREE.Vector3(35, 0, -15)],
+      [new THREE.Vector3(55, 0, 20), new THREE.Vector3(45, 0, 20), new THREE.Vector3(45, 0, 10)],
       'HURRIED_WALK'
     ));
 
@@ -851,21 +872,23 @@ class SchoolGTASandbox {
           return;
         }
         if (this.player.position.distanceTo(this.detentionWorld.pullupStationPos) < 3.0) {
-          this.player.stamina = Math.min(this.player.maxStamina, this.player.stamina + 40);
-          this.wantedSystem.showBanner('💪【特訓單槓】引體向上特訓！精力全面恢復 +40！', 2500);
+          this.player.stamina = Math.min(this.player.maxStamina, this.player.stamina + 60);
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
+          this.wantedSystem.showBanner('💪【特訓單槓】引體向上特訓！體力 +25 HP，精力大幅恢復 +60！', 2500);
           soundManager.playPunch();
           return;
         }
         if (this.player.position.distanceTo(this.detentionWorld.benchpressStationPos) < 3.0) {
-          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 35);
-          this.wantedSystem.showBanner('🏋️【特訓大重量臥推】極限力量爆發！體力恢復 +35 HP！', 2500);
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 50);
+          this.wantedSystem.showBanner('🏋️【特訓大重量臥推】極限力量爆發！體力強效恢復 +50 HP！', 2500);
           soundManager.playBanditSlash();
           return;
         }
         if (this.player.position.distanceTo(this.detentionWorld.tireStationPos) < 3.5) {
-          this.wantedSystem.showBanner('🛞【巨型輪胎翻滾特訓】重裝肌耐力翻滾！解鎖 6 秒狂暴極速衝刺！', 3000);
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 15);
+          this.wantedSystem.showBanner('🛞【巨型輪胎翻滾特訓】重裝肌耐力翻滾！體力 +15 HP，解鎖 8 秒狂暴極速衝刺！', 3000);
           this.player.sprintSpeed = 14.0;
-          setTimeout(() => { this.player.sprintSpeed = 10.0; }, 6000);
+          setTimeout(() => { this.player.sprintSpeed = 10.0; }, 8000);
           soundManager.playBanditSlash();
           return;
         }
@@ -1416,16 +1439,22 @@ class SchoolGTASandbox {
       n.resetAggro();
     }
 
-    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : new THREE.Vector3(0, 0, 10);
+    const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : new THREE.Vector3(-35, 0, -35);
 
     setTimeout(() => {
       this.player.respawn(respawnPos);
+      if (this.currentWorldType === 'DETENTION') {
+        this.player.maxHp = 150;
+        this.player.hp = 150;
+        this.player.hasNormalBat = true;
+        this.player.setWeapon('NORMAL_BAT');
+      }
       this.wantedSystem.clearWanted();
       for (const n of this.npcs) {
         n.resetAggro();
       }
       this.isHandlingDeath = false;
-      const recoverMsg = this.currentWorldType === 'CAMPUS' ? '已在保健室休養恢復，全校警報全面解除' : '已在特訓醫務所恢復，特訓警戒重新整理！';
+      const recoverMsg = this.currentWorldType === 'CAMPUS' ? '已在保健室休養恢復，全校警報全面解除' : '已在特訓營舍醫務所恢復，特訓警戒全面重新整理！';
       this.wantedSystem.showBanner(recoverMsg, 3500);
     }, 3000);
   }
@@ -2152,24 +2181,38 @@ class SchoolGTASandbox {
       }
     }
 
-    // 6.5 少年院動態探照燈掃視與警戒檢測
+    // 6.5 少年院動態探照燈掃視與警戒檢測 (給予 2.2 秒充裕反應逃脫時間，公平且富技巧性)
     if (this.currentWorldType === 'DETENTION') {
       const slState = this.detentionWorld.update(delta, targetPosition);
       if (slState.isDetectedBySearchlight) {
         this.searchlightAlertTimer += delta;
-        if (this.searchlightAlertTimer >= 0.8) {
-          if (this.wantedSystem.stars < 3) {
-            this.wantedSystem.reportCrime(3, '探照燈高空鎖定！觸發少年院一級防暴警報！');
+        if (this.searchlightAlertTimer >= 0.3 && this.searchlightAlertTimer < 2.2) {
+          this.wantedSystem.showBanner('⚠️ 探照燈照射中！立即跑出光斑或尋找掩體！', 600);
+        } else if (this.searchlightAlertTimer >= 2.2) {
+          this.searchlightAlertTimer = 0;
+          if (this.wantedSystem.stars < 1) {
+            this.wantedSystem.reportCrime(1, '夜間擅闖操場禁區 (探照燈鎖定)');
             soundManager.playAlert();
           }
+          // 僅呼叫最近 1 名特訓警衛前來查看
+          let nearestGuard: NPC | null = null;
+          let nearestDist = 999;
           for (const n of this.detentionNPCs) {
-            if (!n.isKnockedDown && n.position.distanceTo(targetPosition) < 35) {
-              n.isChasing = true;
+            if (!n.isKnockedDown && (n.role === 'DETENTION_GUARD' || n.role === 'DETENTION_WOLF')) {
+              const d = n.position.distanceTo(targetPosition);
+              if (d < nearestDist) {
+                nearestDist = d;
+                nearestGuard = n;
+              }
             }
+          }
+          if (nearestGuard && nearestDist < 30) {
+            nearestGuard.isChasing = true;
+            nearestGuard.lastKnownPos.copy(targetPosition);
           }
         }
       } else {
-        this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 0.8);
+        this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 1.5);
       }
     }
 

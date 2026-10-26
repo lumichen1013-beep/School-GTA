@@ -276,48 +276,48 @@ export class NPC {
       this.movementStyle = 'CASUAL_WALK';
       this.pauseChance = 0.30;
     } else if (role === 'DETENTION_GUARD') {
-      // 特訓教官：血量 320，防暴海綿盾與指揮棒，正面免傷高，會吹哨召集同伴
-      this.maxHp = 320;
-      this.speed = 4.8 + speedJitter * 0.4;
-      this.chaseSpeed = 9.2;
-      this.attackPower = 20;
-      this.attackRange = 1.8;
+      // 特訓教官：血量 160，防暴海綿盾與指揮棒，格擋免傷 35%，吹哨召集同伴
+      this.maxHp = 160;
+      this.speed = 4.2 + speedJitter * 0.3;
+      this.chaseSpeed = 7.6;
+      this.attackPower = 12;
+      this.attackRange = 1.7;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.45;
     } else if (role === 'DETENTION_SENIOR') {
-      // 特訓資深學長：血量 220，攻擊力高、移動快、主動發起切磋
-      this.maxHp = 220;
-      this.speed = 5.4 + speedJitter * 0.5;
-      this.chaseSpeed = 9.8;
-      this.attackPower = 24;
+      // 特訓資深學長：血量 130，移動敏捷，遵循切磋規矩 (不主動圍毆)
+      this.maxHp = 130;
+      this.speed = 4.8 + speedJitter * 0.4;
+      this.chaseSpeed = 8.2;
+      this.attackPower = 14;
       this.attackRange = 1.6;
       this.movementStyle = movementStyle || 'HURRIED_WALK';
-      this.pauseChance = 0.35;
+      this.pauseChance = 0.40;
     } else if (role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：血量 450，高血量霸體
-      this.maxHp = 450;
-      this.speed = 4.0 + speedJitter * 0.3;
-      this.chaseSpeed = 7.8;
-      this.attackPower = 36;
-      this.attackRange = 1.9;
+      // 重訓霸榜生：血量 220，重拳霸體，移動緩慢易拉扯
+      this.maxHp = 220;
+      this.speed = 3.6 + speedJitter * 0.3;
+      this.chaseSpeed = 6.6;
+      this.attackPower = 18;
+      this.attackRange = 1.8;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.50;
     } else if (role === 'DETENTION_WOLF') {
-      // 特訓狼犬：血量 260，敏捷撲倒
-      this.maxHp = 260;
-      this.speed = 4.6 + speedJitter * 0.4;
-      this.chaseSpeed = 11.5;
-      this.attackPower = 28;
-      this.attackRange = 2.2;
+      // 特訓狼犬：血量 105 (脆皮敏捷)，速度平衡為 8.6 m/s (玩家疾跑 10.0 m/s 可擺脫)
+      this.maxHp = 105;
+      this.speed = 4.2 + speedJitter * 0.3;
+      this.chaseSpeed = 8.6;
+      this.attackPower = 10;
+      this.attackRange = 2.0;
       this.movementStyle = 'JOGGING';
       this.pauseChance = 0.40;
     } else if (role === 'DETENTION_BOSS') {
-      // 總教官 Boss【鐵面總長】：血量 880，閃身步身法與反擊
-      this.maxHp = 880;
-      this.speed = 4.6;
-      this.chaseSpeed = 9.5;
-      this.attackPower = 34;
-      this.attackRange = 2.0;
+      // 總教官 Boss【鐵面總長】：血量 420，威嚴寸勁重拳與身法反擊
+      this.maxHp = 420;
+      this.speed = 4.2;
+      this.chaseSpeed = 8.0;
+      this.attackPower = 20;
+      this.attackRange = 1.9;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.35;
     } else if (role === 'INSPECTOR') {
@@ -1192,23 +1192,23 @@ export class NPC {
       }
       return false;
     } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官防暴海綿盾格擋：免傷 75%，並吹哨召集周圍同伴
-      amount = Math.max(1, Math.round(amount * 0.25));
+      // 特訓教官防暴海綿盾格擋：免傷 35%，吹哨冷卻拉長至 12 秒且低血量才吹哨
+      amount = Math.max(1, Math.round(amount * 0.65));
       soundManager.playBanditSlash();
-      if (this.whistleCooldown <= 0) {
+      if (this.hp < this.maxHp * 0.40 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
-        this.whistleCooldown = 4.0;
+        this.whistleCooldown = 12.0;
       }
     } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長受擊：50% 機率施展「閃身步」避開攻擊並迅速反擊
-      if (!this.isDodging && Math.random() < 0.50) {
+      // 鐵面總長受擊：20% 機率施展「閃身步」避開攻擊，反擊前搖留有公平反應間隔
+      if (!this.isDodging && Math.random() < 0.20) {
         this.performFlashStep(this.lastColliders);
-        this.attackCooldown = 0.22;
+        this.attackCooldown = 0.65;
         return false;
       }
-      if (this.hp < this.maxHp * 0.5 && this.whistleCooldown <= 0) {
+      if (this.hp < this.maxHp * 0.35 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
-        this.whistleCooldown = 6.0;
+        this.whistleCooldown = 16.0;
       }
     }
 
@@ -1284,8 +1284,8 @@ export class NPC {
       this.isChasing = false;
     }
 
-    // 重訓霸榜生高血量霸體：未倒地前免疫衝撞擊飛
-    if (this.role === 'DETENTION_HEAVY' && this.hp > 0) {
+    // 重訓霸榜生高血量霸體：半血以上免疫衝撞擊飛，低於半血後可被擊退
+    if (this.role === 'DETENTION_HEAVY' && this.hp > this.maxHp * 0.5) {
       this.isKnockedFlying = false;
       return wasKnockedDown;
     }
@@ -1329,20 +1329,20 @@ export class NPC {
         // 大如老師：羽球拍近戰殺球重扣，極高傷害與震飛
         return { damage: 28, hForce: 13.0, vForce: 7.0 };
       case 'DETENTION_BOSS':
-        // 鐵面總長：威嚴寸勁重拳
-        return { damage: 34, hForce: 14.0, vForce: 6.8 };
+        // 鐵面總長：威嚴寸勁重拳 (傷害 20，衝量平衡)
+        return { damage: 20, hForce: 10.0, vForce: 4.5 };
       case 'DETENTION_HEAVY':
-        // 重訓霸榜生：超重拳出擊
-        return { damage: 36, hForce: 15.0, vForce: 7.5 };
+        // 重訓霸榜生：超重拳出擊 (傷害 18，強力擊退拉開距離，避免連擊秒殺)
+        return { damage: 18, hForce: 12.0, vForce: 5.0 };
       case 'DETENTION_WOLF':
-        // 特訓狼犬：撲咬跳擊
-        return { damage: 28, hForce: 13.0, vForce: 6.0 };
+        // 特訓狼犬：飛撲咬擊 (傷害 10，玩家可從容反擊)
+        return { damage: 10, hForce: 7.0, vForce: 3.5 };
       case 'DETENTION_GUARD':
-        // 特訓教官：防暴警棍猛擊
-        return { damage: 20, hForce: 9.0, vForce: 4.0 };
+        // 特訓教官：防暴警棍猛擊 (傷害 12)
+        return { damage: 12, hForce: 7.0, vForce: 3.0 };
       case 'DETENTION_SENIOR':
-        // 特訓資深學長：硬派連環拳
-        return { damage: 24, hForce: 10.0, vForce: 4.5 };
+        // 特訓資深學長：切磋拳法 (傷害 14)
+        return { damage: 14, hForce: 8.0, vForce: 3.5 };
       case 'BANDIT':
         // 校外強盜：手持利刃猛烈劈砍，攻速快且傷害高 (攻擊力提高兩倍)
         return { damage: 44, hForce: 10.0, vForce: 5.5 };
@@ -1965,19 +1965,6 @@ export class NPC {
       return;
     }
 
-    // 特訓資深學長好鬥主動發起切磋
-    if (this.role === 'DETENTION_SENIOR') {
-      const distSq = this.position.distanceToSquared(playerPos);
-      if (distSq < 100.0) { // 10m 內主動靠近挑戰
-        if (this.isPaused) this.cancelPause();
-        this.isChasing = true;
-        this.lostSightTimer = 0;
-        this.lastKnownPos.copy(playerPos);
-        onSpotPlayer();
-        return;
-      }
-    }
-
     const isDetentionRole =
       this.role === 'DETENTION_GUARD' ||
       this.role === 'DETENTION_SENIOR' ||
@@ -1985,10 +1972,14 @@ export class NPC {
       this.role === 'DETENTION_WOLF' ||
       this.role === 'DETENTION_BOSS';
 
-    // 通緝星級為 0 且非自衛狀態時，一般校園 NPC 解除追捕
-    if (wantedLevel === 0 && this.role !== 'STUDENT' && !isDetentionRole && !this.isChasing) {
-      this.resetAggro();
-      return;
+    const distSq = this.position.distanceToSquared(playerPos);
+
+    // 通緝星級為 0 時，失去視線超過 3.5 秒或距離超過 20m 即脫離追捕，恢復巡邏崗位
+    if (wantedLevel === 0) {
+      if (this.role !== 'STUDENT' && (!this.isChasing || this.lostSightTimer > 3.5 || distSq > 400.0)) {
+        this.resetAggro();
+        return;
+      }
     }
 
     // 校犬專屬仇恨邏輯：教學大樓保護禁區
@@ -1998,7 +1989,6 @@ export class NPC {
     }
 
     // 通用視線與追逐判定 (校犬、教官、巡堂老師、糾察隊、激怒學生)
-    const distSq = this.position.distanceToSquared(playerPos);
     const seesPlayer = this.canSeePlayer(playerPos, colliders);
 
     // 發現玩家觸發追逐 (通緝中且在視距內)
