@@ -77,8 +77,8 @@ class SchoolGTASandbox {
   private racingGame!: RacingGame;
   private tennisGame!: TennisGame;
 
-  // 經濟與任務解鎖統計系統 (初始 3000 元，足以學滿「閃身步」與「狗熊哆嗦毛」)
-  private playerCash: number = 3000;
+  // 經濟與任務解鎖統計系統 (初始改為 100 元)
+  private playerCash: number = 100;
   private studentDefeatedCount: number = 0;
   private teacherDefeatedCount: number = 0;
   private dogDefeatedCount: number = 0;
@@ -1402,11 +1402,19 @@ class SchoolGTASandbox {
               this.detentionAlertTimer = 15.0;
               this.detentionAlertCount++;
 
-              if (npc.role === 'DETENTION_BOSS' && !npc.isBossStunned) {
-                this.wantedSystem.showBanner('🛡️ 總教官正面持盾防禦！正面攻擊無效！需誘使撞柱硬直破盾！', 2500);
-                soundManager.playPunch();
-                this.player.setAttackCooldown(0.5);
-                break;
+              if (npc.role === 'DETENTION_BOSS') {
+                if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
+                  this.wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
+                  soundManager.playPunch();
+                  this.player.setAttackCooldown(0.5);
+                  break;
+                }
+                if (!npc.isBossStunned) {
+                  this.wantedSystem.showBanner('🛡️ 總教官正面持盾防禦！正面攻擊無效！需誘使撞柱硬直破盾！', 2500);
+                  soundManager.playPunch();
+                  this.player.setAttackCooldown(0.5);
+                  break;
+                }
               }
 
               // 判定是否為正面攻擊 (玩家處於守衛前方 240 度視角內)
@@ -1573,7 +1581,7 @@ class SchoolGTASandbox {
     if (this.basketballGame.isHolding) {
       this.basketballGame.drop(this.player, this.hud, this.wantedSystem);
     }
-    this.tennisGame.startMatch(this.hud, peCoach, this.engine.scene);
+    this.tennisGame.startMatch(this.hud, peCoach, this.engine.scene, this.player, this.cameraCtrl);
   }
 
   // 潛龍諜影 CQC 近身潛入擊昏 / 刺客教條草堆暗殺
@@ -1583,7 +1591,21 @@ class SchoolGTASandbox {
     const isFromHiding = this.player.isHidingInCover;
     const coverName = this.player.currentHidingSpotName || '草堆';
 
+    // 嚴格暗殺判定：若已被敵人發現 (! 警戒狀態)，完全無法發動暗殺！
+    if (target.alertState === 'ALERT') {
+      const isStunnedBoss = (target.role === 'DETENTION_BOSS' && target.isBossStunned && !target.isBossInvulnerable && target.bossInvulnerableTimer <= 0);
+      if (!isStunnedBoss) {
+        this.wantedSystem.showBanner('⚠️ 敵人已發現你 (! 狀態)！無法發動暗殺！需脫離視線或誘敵硬直！', 2000);
+        return;
+      }
+    }
+
     if (target.role === 'DETENTION_BOSS') {
+      if (target.isBossInvulnerable || target.bossInvulnerableTimer > 0) {
+        this.wantedSystem.showBanner(`🛡️ 總教官處於金鐘護盾無敵中 (${target.bossInvulnerableTimer.toFixed(1)}s)！免疫暗殺與傷害！`, 1800);
+        return;
+      }
+
       this.player.attack();
 
       const isFinalBlow = (target.hp - 100) <= 0;
@@ -1604,10 +1626,10 @@ class SchoolGTASandbox {
       target.position.addScaledVector(_scratchImpactDir, 0.45);
       target.mesh.position.copy(target.position);
 
-      // 總教官背後暗殺 / 刺客草堆伏擊破盾：
-      target.hp = Math.max(0, target.hp - 100);
+      // 總教官背後暗殺 / 刺客草堆伏擊破盾 (每次精確造成 100 傷害，300 HP 需暗殺 3 次才能擊破)：
       target.isBossStunned = false;
-      target.takeDamage(100);
+      target.bossStunTimer = 0;
+      target.applyAssassinationDamage(100);
 
       const qteTitle = isFinalBlow
         ? (isFromHiding ? '🗡️【刺客教條·草堆終結】' : '🗡️【刺客教條·終極處決】')
@@ -1615,7 +1637,7 @@ class SchoolGTASandbox {
 
       const qteSub = isFinalBlow
         ? '徹底擊潰鐵面總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`;
+        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總教官狂怒轉為攻擊模式！)`;
 
       this.hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
 
@@ -1627,20 +1649,41 @@ class SchoolGTASandbox {
         this.wantedSystem.showBanner(
           isFromHiding
             ? `🗡️【刺客教條·致命草車突襲】一擊終結總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-            : '🏆 狂賀！無聲暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+            : '🏆 狂賀！第三次終極暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
           5000
         );
         soundManager.playSchoolBell();
       } else {
-        // 暗殺重創後，總教官陷入受創踉蹌硬直 3.0 秒，背後持續露出，給予連續暗殺或拉開距離機會
-        target.pauseTimer = 3.0;
-        target.isPaused = true;
-        target.resetPose();
+        // 暗殺成功後：總教官立即轉身解除發呆，狂怒轉為攻擊模式 (Combat Attack Mode)！
+        const dirToPlayer = new THREE.Vector3().subVectors(this.player.position, target.position).setY(0);
+        if (dirToPlayer.lengthSq() > 0.01) {
+          dirToPlayer.normalize();
+          target.rotationY = Math.atan2(dirToPlayer.x, dirToPlayer.z);
+          target.mesh.rotation.y = target.rotationY;
+        }
+
+        target.isPaused = false;
+        target.pauseTimer = 0;
+        target.isBossStunned = false;
+        target.bossStunTimer = 0;
+        target.setAlertState('ALERT');
+        target.isChasing = true;
+        target.lostSightTimer = 0;
+        target.lastKnownPos.copy(this.player.position);
+        target.attackCooldown = 0.5; // 0.5 秒後發動攻擊
+        target.bossChargeCooldown = 2.0; // 2 秒後準備發動狂暴衝撞
+
+        // 啟動 3 秒金鐘護盾無敵時間 (防止玩家連點秒殺，此期間總教官仍在主動攻擊追殺玩家)
+        target.bossInvulnerableTimer = 3.0;
+        target.isBossInvulnerable = true;
+
+        soundManager.playWhistle();
+
         this.wantedSystem.showBanner(
           isFromHiding
-            ? `🗡️【刺客教條·掩體突襲】從${coverName}猛撲重創總教官！造成 100 傷害！(剩餘 HP: ${target.hp}/300)`
-            : `🥷 總教官背部致命重創！造成 100 點重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`,
-          2500
+            ? `🗡️【草堆突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官狂怒轉為攻擊模式！金鐘護盾 3 秒！快閃避！`
+            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官狂怒轉為攻擊模式！金鐘護盾 3 秒！快閃避！`,
+          3000
         );
       }
       this.nearbyCqcTarget = null;
@@ -2690,10 +2733,25 @@ class SchoolGTASandbox {
       if (!this.player.isDead) {
         for (const npc of this.detentionNPCs) {
           if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
+
+          // 1. 若被 NPC 發現 (! 警戒狀態)，完全無法發動暗殺！
+          if (npc.alertState === 'ALERT') {
+            // 特殊破綻特例：總教官撞柱陷入重度眩暈硬直中 (isBossStunned) 且非無敵狀態除外
+            const isStunnedBoss = (npc.role === 'DETENTION_BOSS' && npc.isBossStunned && !npc.isBossInvulnerable && npc.bossInvulnerableTimer <= 0);
+            if (!isStunnedBoss) {
+              continue;
+            }
+          }
+
+          // 2. 總教官被暗殺後 3 秒金鐘護盾無敵期：無法被鎖定或暗殺 (防止連點擊殺)
+          if (npc.role === 'DETENTION_BOSS' && (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0)) {
+            continue;
+          }
+
           const dist = npc.position.distanceTo(targetPosition);
 
           if (this.player.isHidingInCover) {
-            // 刺客教條草堆暗殺：只要守衛經過草堆 3.0m 內，任意角度均可直接伏擊拖入刺殺！
+            // 刺客教條草堆暗殺：未發現玩家時，只要守衛經過草堆 3.0m 內，任意角度均可直接伏擊拖入刺殺！
             if (dist <= 3.0) {
               this.nearbyCqcTarget = npc;
               isHidingAssassination = true;
@@ -2708,7 +2766,7 @@ class SchoolGTASandbox {
               const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
               const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
 
-              // 每個 NPC (包含總教官 Boss) 均可在背後空檔觸發 CQC 暗殺
+              // 每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後空檔觸發 CQC 暗殺
               if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
                 this.nearbyCqcTarget = npc;
                 break;

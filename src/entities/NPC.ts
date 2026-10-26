@@ -106,6 +106,8 @@ export class NPC {
   // 小 Boss【鐵面總教官】專屬破盾與衝撞硬直機制
   public isBossStunned: boolean = false;
   public bossStunTimer: number = 0;
+  public bossInvulnerableTimer: number = 0;
+  public isBossInvulnerable: boolean = false;
   public bossChargeCooldown: number = 5.0;
   public isBossWindingUp: boolean = false;
   public bossWindupTimer: number = 0;
@@ -116,6 +118,7 @@ export class NPC {
   public bossShieldCharges: number = 3;
   public bossTelegraphGroup?: THREE.Group;
   private bossTelegraphMat?: THREE.MeshBasicMaterial;
+  public bossBarrierMesh?: THREE.Mesh;
 
   // 單車衝撞擊飛與無敵幀 (避免持續性傷害)
   public isKnockedFlying: boolean = false;
@@ -411,6 +414,19 @@ export class NPC {
       if (role === 'DETENTION_BOSS') {
         this.bossTelegraphGroup = this.buildBossTelegraphMesh();
         this.mesh.add(this.bossTelegraphGroup);
+
+        const barrierGeo = new THREE.SphereGeometry(1.35, 16, 12);
+        const barrierMat = new THREE.MeshBasicMaterial({
+          color: 0xf59e0b,
+          transparent: true,
+          opacity: 0.38,
+          wireframe: true,
+          depthWrite: false
+        });
+        this.bossBarrierMesh = new THREE.Mesh(barrierGeo, barrierMat);
+        this.bossBarrierMesh.position.set(0, 1.05, 0);
+        this.bossBarrierMesh.visible = false;
+        this.mesh.add(this.bossBarrierMesh);
       }
     }
 
@@ -556,6 +572,34 @@ export class NPC {
     ctx.fillText(`💫 昏迷中 (${sec}s)`, 128, 32);
 
     this.koBadgeTexture.needsUpdate = true;
+  }
+
+  // 顯示自定義頭頂動態文字徽章 (如金鐘護體、破盾硬直等)
+  public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
+    const ctx = this.koBadgeCanvas.getContext('2d');
+    if (!ctx) return;
+    this.lastKoBadgeSec = -105;
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.roundRect(8, 4, 240, 56, 12);
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 32);
+    this.koBadgeTexture.needsUpdate = true;
+    this.koBadgeSprite.visible = true;
+  }
+
+  // 隱藏頭頂動態文字徽章
+  public hideStatusBadge() {
+    this.koBadgeSprite.visible = false;
+    this.lastKoBadgeSec = -1;
   }
 
   // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)
@@ -1495,9 +1539,55 @@ export class NPC {
     }
   }
 
+  // 更新血條比例與顏色
+  public updateHpBar() {
+    if (!this.hpBarMesh) return;
+    const ratio = Math.max(0.01, this.hp / this.maxHp);
+    this.hpBarMesh.scale.x = ratio;
+    if (ratio < 0.35) {
+      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xe74c3c);
+    } else if (ratio < 0.65) {
+      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xf39c12);
+    } else {
+      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
+    }
+  }
+
+  // 總教官被暗殺/草堆伏擊扣血專用 (精確扣除指定血量並更新血條，不觸發閃身步免傷)
+  public applyAssassinationDamage(amount: number = 100): boolean {
+    if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
+    this.hp = Math.max(0, this.hp - amount);
+    this.updateHpBar();
+    soundManager.playPunch();
+
+    if (this.hp <= 0) {
+      this.isKnockedDown = true;
+      this.isPermanentlyKnockedOut = true;
+      if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
+      this.isChasing = false;
+      this.isBurstSprinting = false;
+      this.dynamicSpeed = this.speed;
+      if (this.hpBarBgMesh) this.hpBarBgMesh.visible = false;
+      if (this.hpBarMesh) this.hpBarMesh.visible = false;
+      if (this.koBadgeSprite) this.koBadgeSprite.visible = true;
+      if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
+      if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
+      if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+      if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+      this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
+      this.mesh.position.y = this.baseFloorY + 0.25;
+      return true; // 擊倒KO
+    }
+    return false;
+  }
+
   // 受到傷害
   public takeDamage(amount: number): boolean {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
+    if (this.isBossInvulnerable) {
+      soundManager.playBanditSlash();
+      return false; // 金鐘護盾無敵期間免疫一切正面攻擊
+    }
     if (this.isPaused) this.cancelPause();
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1824,8 +1914,14 @@ export class NPC {
     }
   }
 
-  // 羽球教練發射羽球 (羽球小遊戲：飛行速度 11.5 m/s，高弧度過網，靜態幾何複用 0-GC)
-  public tryShootShuttlecock(targetPos: THREE.Vector3, scene: THREE.Scene, cooldown: number = 2.2): ShuttlecockProjectile | null {
+  // 羽球教練發射羽球 (羽球小遊戲：飛行速度、變速扣殺與過網弧線可自訂，0-GC)
+  public tryShootShuttlecock(
+    targetPos: THREE.Vector3,
+    scene: THREE.Scene,
+    cooldown: number = 2.2,
+    customSpeed: number = 11.5,
+    customArc: number = 0.8
+  ): ShuttlecockProjectile | null {
     if (this.role !== 'PE_TEACHER_BOSS' || this.isKnockedDown || this.hp <= 0) return null;
     if (this.shuttlecockCooldown > 0) return null;
 
@@ -1851,18 +1947,18 @@ export class NPC {
     const startPos = new THREE.Vector3(this.position.x, this.position.y + 1.35, this.position.z);
     group.position.copy(startPos);
 
-    // 合理化羽球飛行速度：11.5 m/s，並略帶微弧線上拋過網 (純純量運算，0 暫存 Vector3 分配)
+    // 羽球飛行速度與過網弧線動態運算 (純純量運算，0 暫存 Vector3 分配)
     const toTargetX = targetPos.x - startPos.x;
     const toTargetY = (targetPos.y + 0.8) - startPos.y;
     const toTargetZ = targetPos.z - startPos.z;
     const horizDist = Math.max(2.0, Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ));
-    const speed = 11.5; // 合理羽球速度 (11.5 m/s)
+    const speed = customSpeed; // 支援變速 (放小球 9.8 vs 殺球 16.5)
     const flightTime = horizDist / speed;
 
     const velX = toTargetX / flightTime;
     const velZ = toTargetZ / flightTime;
     // 考慮網高與重力：過網弧線
-    const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + 0.8;
+    const velY = (toTargetY / flightTime) + 0.5 * 9.8 * flightTime + customArc;
 
     const vel = new THREE.Vector3(velX, velY, velZ);
 
@@ -3167,6 +3263,32 @@ export class NPC {
         this.hpBarGroup.rotation.y = ang - this.rotationY;
       }
       return;
+    }
+
+    // 總教官被暗殺受創後之 3 秒金鐘護盾無敵期 (防止被連續快速背刺秒殺)
+    if (this.role === 'DETENTION_BOSS' && this.bossInvulnerableTimer > 0 && !this.isKnockedDown) {
+      this.bossInvulnerableTimer -= delta;
+      this.isBossInvulnerable = true;
+
+      if (this.bossBarrierMesh) {
+        this.bossBarrierMesh.visible = true;
+        this.bossBarrierMesh.rotation.y += delta * 3.5;
+        (this.bossBarrierMesh.material as THREE.MeshBasicMaterial).opacity = 0.25 + Math.sin(this.bossInvulnerableTimer * 16.0) * 0.2;
+      }
+
+      this.showStatusBadge(`🛡️ 護盾中 (${this.bossInvulnerableTimer.toFixed(1)}s)`, 'rgba(234, 88, 12, 0.95)', '#fde047');
+
+      if (this.bossInvulnerableTimer <= 0) {
+        this.bossInvulnerableTimer = 0;
+        this.isBossInvulnerable = false;
+        if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
+        this.hideStatusBadge();
+        this.setAlertState('ALERT');
+        this.isChasing = true;
+        this.bossChargeCooldown = 3.5;
+      }
+    } else if (this.bossBarrierMesh && this.bossBarrierMesh.visible && this.bossInvulnerableTimer <= 0) {
+      this.bossBarrierMesh.visible = false;
     }
 
     // 總教官衝撞前置危險預警階段 (Windup Telegraph)

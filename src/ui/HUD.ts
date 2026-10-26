@@ -1882,6 +1882,12 @@ export class HUD {
   ) {
     const modal = document.getElementById('detention-victory-modal');
     if (!modal) return;
+
+    // 1. 立即解除滑鼠指標鎖定 (Pointer Lock)，使 PC 玩家滑鼠指標可自由點選操作
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+
     modal.style.display = 'flex';
 
     const min = Math.floor(escapeTimeSec / 60).toString().padStart(2, '0');
@@ -1921,16 +1927,67 @@ export class HUD {
 
     const replayBtn = document.getElementById('btn-replay-detention');
     const campusBtn = document.getElementById('btn-return-campus');
+
+    // 防誤觸保護期 (300ms)：避免玩家在通關那一瞬的按鍵/點擊立刻將結算跳過
+    let canDismiss = false;
+    const dismissTimer = setTimeout(() => {
+      canDismiss = true;
+    }, 300);
+
+    const cleanupAndDismiss = (action: () => void) => {
+      clearTimeout(dismissTimer);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('click', onGlobalClick);
+      window.removeEventListener('touchend', onGlobalTouch);
+      modal.style.display = 'none';
+      action();
+    };
+
+    // PC 端：空白鍵 (Space) / Enter / Escape 回主畫面
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!canDismiss) return;
+      if (e.code === 'Space' || e.key === ' ' || e.code === 'Enter' || e.code === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanupAndDismiss(onReturnCampus);
+      }
+    };
+
+    // Mobile 手機端任意點擊 / 觸控 或 PC 滑鼠點擊回主畫面 (點「重新挑戰」除外)
+    const onGlobalClick = (e: MouseEvent) => {
+      if (!canDismiss) return;
+      if (replayBtn && replayBtn.contains(e.target as Node)) {
+        cleanupAndDismiss(onReplay);
+      } else {
+        cleanupAndDismiss(onReturnCampus);
+      }
+    };
+
+    const onGlobalTouch = (e: TouchEvent) => {
+      if (!canDismiss) return;
+      if (replayBtn && replayBtn.contains(e.target as Node)) {
+        cleanupAndDismiss(onReplay);
+      } else {
+        cleanupAndDismiss(onReturnCampus);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    setTimeout(() => {
+      window.addEventListener('click', onGlobalClick);
+      window.addEventListener('touchend', onGlobalTouch);
+    }, 150);
+
     if (replayBtn) {
-      replayBtn.onclick = () => {
-        modal.style.display = 'none';
-        onReplay();
+      replayBtn.onclick = (e) => {
+        e.stopPropagation();
+        cleanupAndDismiss(onReplay);
       };
     }
     if (campusBtn) {
-      campusBtn.onclick = () => {
-        modal.style.display = 'none';
-        onReturnCampus();
+      campusBtn.onclick = (e) => {
+        e.stopPropagation();
+        cleanupAndDismiss(onReturnCampus);
       };
     }
   }
