@@ -2068,6 +2068,107 @@
       100% { opacity: 0.95; filter: hue-rotate(30deg); }
     }
 
+    /* 慢動作處決特寫電影黑邊與命中閃爍特效 (Cinematic Execution Letterbox & Impact Flash) */
+    #cinematic-bars {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 120;
+    }
+
+    .cinema-bar {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 9vh;
+      min-height: 48px;
+      max-height: 90px;
+      background: #000000;
+      transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.85);
+    }
+
+    .cinema-bar-top {
+      top: 0;
+      transform: translateY(-100%);
+    }
+
+    .cinema-bar-bottom {
+      bottom: 0;
+      transform: translateY(100%);
+    }
+
+    #cinematic-bars.active .cinema-bar-top {
+      transform: translateY(0);
+    }
+
+    #cinematic-bars.active .cinema-bar-bottom {
+      transform: translateY(0);
+    }
+
+    #cinema-flash {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.75) 0%, rgba(255, 82, 82, 0.45) 40%, rgba(0, 0, 0, 0.7) 100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease-out;
+    }
+
+    #cinema-flash.flash {
+      opacity: 1;
+    }
+
+    #cinema-qte-title {
+      position: absolute;
+      top: 15%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    #cinematic-bars.active #cinema-qte-title {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.0);
+    }
+
+    .qte-main-badge {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      padding: 6px 20px;
+      border-radius: 30px;
+      color: #ffffff;
+      background: linear-gradient(135deg, rgba(231, 76, 60, 0.95), rgba(192, 57, 43, 0.95));
+      box-shadow: 0 0 25px rgba(231, 76, 60, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      white-space: nowrap;
+    }
+
+    .qte-sub-text {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1c40f;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.65);
+      padding: 3px 12px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+
     /* 學校懲戒記過等級 (School Disciplinary Demerits) */
     .demerit-container {
       background: rgba(13, 19, 33, 0.85);
@@ -2791,6 +2892,17 @@
   <div id="pursuit-vignette"></div>
   <!-- 中毒時的生病墨綠暗角特效 -->
   <div id="poison-vignette"></div>
+
+  <!-- 慢動作處決特寫電影黑邊與命中閃爍特效 (Cinematic Execution Letterbox & Impact Flash) -->
+  <div id="cinematic-bars">
+    <div class="cinema-bar cinema-bar-top"></div>
+    <div class="cinema-bar cinema-bar-bottom"></div>
+    <div id="cinema-flash"></div>
+    <div id="cinema-qte-title">
+      <div class="qte-main-badge" id="cinema-qte-badge">⚡ 弱點破甲暴擊</div>
+      <div class="qte-sub-text" id="cinema-qte-sub">總教官護甲崩解！陷入踉蹌硬直！</div>
+    </div>
+  </div>
 
   <!-- HUD Interface -->
   <div id="hud-overlay">

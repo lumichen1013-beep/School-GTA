@@ -539,6 +539,39 @@ export class SoundEffects {
     osc2.stop(now + 0.31);
   }
 
+  // 刺客處決/慢動作暴擊重音 (Cinematic Bullet Time Impact Boom & Armor Crunch)
+  public playCinematicExecutionHit() {
+    this.initCtx();
+    if (!this.ctx || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    // 1. 低頻震顫震撼低音 (Sub-bass boom)
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(130, now);
+    subOsc.frequency.exponentialRampToValueAtTime(28, now + 0.65);
+    subGain.gain.setValueAtTime(0.65, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.70);
+    subOsc.connect(subGain);
+    subGain.connect(this.ctx.destination);
+    subOsc.start(now);
+    subOsc.stop(now + 0.72);
+
+    // 2. 金屬破甲撕裂聲 (Armor break metallic crunch)
+    const crunchOsc = this.ctx.createOscillator();
+    const crunchGain = this.ctx.createGain();
+    crunchOsc.type = 'triangle';
+    crunchOsc.frequency.setValueAtTime(540, now);
+    crunchOsc.frequency.exponentialRampToValueAtTime(75, now + 0.35);
+    crunchGain.gain.setValueAtTime(0.42, now);
+    crunchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+    crunchOsc.connect(crunchGain);
+    crunchGain.connect(this.ctx.destination);
+    crunchOsc.start(now);
+    crunchOsc.stop(now + 0.40);
+  }
+
   // 食人花 Boss 巨顎咬噬聲 (Monster Chomp)
   public playBossBite() {
     this.initCtx();

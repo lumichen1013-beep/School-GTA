@@ -58,6 +58,13 @@ class SchoolGTASandbox {
   private isDetentionEscapeComplete: boolean = false;
   private nearbyCqcTarget: NPC | null = null;
 
+  // 慢動作特寫與時間膨脹系統 (Bullet Time & Boss Cinematic Execution)
+  private bulletTimeTimer: number = 0;
+  private bulletTimeDuration: number = 0;
+  private bulletTimeScale: number = 0.15;
+  private wasBossWindingUp: boolean = false;
+  private wasBossStunned: boolean = false;
+
   public get activeColliders(): CollidableBox[] {
     return this.currentWorldType === 'CAMPUS' ? this.world.colliders : this.detentionWorld.colliders;
   }
@@ -1577,12 +1584,40 @@ class SchoolGTASandbox {
     const coverName = this.player.currentHidingSpotName || '草堆';
 
     if (target.role === 'DETENTION_BOSS') {
+      this.player.attack();
+
+      const isFinalBlow = (target.hp - 100) <= 0;
+      const bulletDuration = isFinalBlow ? 1.5 : 0.95;
+      const bulletScale = isFinalBlow ? 0.08 : 0.16;
+
+      this.bulletTimeTimer = bulletDuration;
+      this.bulletTimeDuration = bulletDuration;
+      this.bulletTimeScale = bulletScale;
+
+      soundManager.playCinematicExecutionHit();
+      this.cameraCtrl.triggerCinematicExecution(target.position, this.player.position, bulletDuration, isFinalBlow, this.activeColliders);
+
+      // 受創向外踉蹌微推
+      _scratchImpactDir.subVectors(target.position, this.player.position).setY(0);
+      if (_scratchImpactDir.lengthSq() < 0.01) _scratchImpactDir.set(0, 0, 1);
+      else _scratchImpactDir.normalize();
+      target.position.addScaledVector(_scratchImpactDir, 0.45);
+      target.mesh.position.copy(target.position);
+
       // 總教官背後暗殺 / 刺客草堆伏擊破盾：
       target.hp = Math.max(0, target.hp - 100);
       target.isBossStunned = false;
       target.takeDamage(100);
-      soundManager.playPunch();
-      soundManager.playBatHit();
+
+      const qteTitle = isFinalBlow
+        ? (isFromHiding ? '🗡️【刺客教條·草堆終結】' : '🗡️【刺客教條·終極處決】')
+        : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
+
+      const qteSub = isFinalBlow
+        ? '徹底擊潰鐵面總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
+        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總長踉蹌硬直中！)`;
+
+      this.hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
 
       if (target.hp <= 0) {
         target.knockoutSilently();
@@ -2215,7 +2250,16 @@ class SchoolGTASandbox {
   private tick = () => {
     requestAnimationFrame(this.tick);
 
-    const delta = this.engine.getDelta();
+    const rawDelta = this.engine.getDelta();
+    let simDelta = rawDelta;
+    if (this.bulletTimeTimer > 0) {
+      this.bulletTimeTimer -= rawDelta;
+      const progress = Math.max(0, this.bulletTimeTimer / this.bulletTimeDuration);
+      // 特寫打擊慢動作平滑曲線：前期強烈時間膨脹，末期順滑恢復標準時間
+      const currentScale = THREE.MathUtils.lerp(1.0, this.bulletTimeScale, Math.pow(progress, 0.7));
+      simDelta = rawDelta * currentScale;
+    }
+    const delta = simDelta;
 
     // -1. 少年院開場電影級劇情動畫更新與 Space 跳過
     if (this.detentionCutscene && this.detentionCutscene.isActive) {
@@ -2773,6 +2817,50 @@ class SchoolGTASandbox {
     // NPC 攻擊玩家判定
     for (const npc of this.npcs) {
       if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
+
+      // 總教官狂暴衝撞命中玩家判定
+      if (npc.role === 'DETENTION_BOSS' && npc.bossIsCharging && !this.player.isDead) {
+        const distToPlayer = npc.position.distanceTo(targetPosition);
+        if (distToPlayer <= 2.2) {
+          if (this.player.isDodging) {
+            this.wantedSystem.showBanner(this.dodgeSkillLevel === 2 ? '🐻 狗熊哆嗦毛！極限閃避總教官狂暴衝撞！' : '💨 閃身步！極限側閃避開總教官衝撞！', 1800);
+            soundManager.playDodge(this.dodgeSkillLevel === 2);
+          } else {
+            npc.bossIsCharging = false;
+            npc.pauseTimer = 1.0;
+            npc.isPaused = true;
+            if (npc.bossTelegraphGroup) npc.bossTelegraphGroup.visible = false;
+            soundManager.playPunch();
+            soundManager.playBatHit();
+            this.wantedSystem.showBanner('💥 遭到總教官狂暴衝撞重創！擊飛！(-30 HP)', 2500);
+            this.wantedSystem.notifyAttacked();
+            const justDied = this.player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 30, '鐵面總教官');
+            if (justDied) {
+              this.handlePlayerDeath('被鐵面總教官狂暴衝撞擊潰！');
+            }
+          }
+        }
+      }
+
+      // 總教官危險預警與眩暈狀態提示
+      if (npc.role === 'DETENTION_BOSS') {
+        if (npc.isBossWindingUp && !this.wasBossWindingUp) {
+          this.wasBossWindingUp = true;
+          this.wantedSystem.showBanner('⚠️【危險警報】鐵面總教官鎖定衝撞軌跡！立即側向閃避或引導撞柱！', 2200);
+        } else if (!npc.isBossWindingUp) {
+          this.wasBossWindingUp = false;
+        }
+
+        if (npc.isBossStunned && !this.wasBossStunned) {
+          this.wasBossStunned = true;
+          this.wantedSystem.showBanner('⚡ 總教官猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈！快繞後刺殺！', 2500);
+        } else if (!npc.isBossStunned) {
+          this.wasBossStunned = false;
+        }
+      }
+
+      if (npc.isBossWindingUp || npc.bossIsCharging || npc.isBossStunned) continue;
+
       const distToPlayer = npc.position.distanceTo(targetPosition);
       const isWithin2m = distToPlayer <= 2.0;
       const attackDist = (this.currentWorldType === 'DETENTION') ? 2.0 : Math.max(1.8, npc.attackRange);
@@ -2829,8 +2917,8 @@ class SchoolGTASandbox {
     // 10. 更新通緝星級系統
     this.wantedSystem.update(delta, isAnyChasing);
 
-    // 11. 更新攝影機
-    this.cameraCtrl.update(targetPosition, delta, this.activeColliders);
+    // 11. 更新攝影機 (使用 rawDelta 維持 60fps 絲滑運鏡與慢動作特寫)
+    this.cameraCtrl.update(targetPosition, rawDelta, this.activeColliders);
 
     // 12. 更新生態探索園區 (僅限天天國中)
     if (this.currentWorldType === 'CAMPUS') {
@@ -3002,7 +3090,7 @@ class SchoolGTASandbox {
     );
 
     // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
-    this.weatherSystem.update(delta, targetPosition);
+    this.weatherSystem.update(rawDelta, targetPosition);
 
     // 16. 渲染畫面
     this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);

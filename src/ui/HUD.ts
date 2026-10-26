@@ -130,6 +130,13 @@ export class HUD {
   private qDodgeDesc: HTMLElement | null;
   private qDodgeStatus: HTMLElement | null;
 
+  // 慢動作處決特寫與電影黑邊
+  private cinematicBarsEl: HTMLElement | null;
+  private cinemaFlashEl: HTMLElement | null;
+  private cinemaQteBadgeEl: HTMLElement | null;
+  private cinemaQteSubEl: HTMLElement | null;
+  private cinemaDismissTimer: any = null;
+
   // 雙世界切換與空間傳送 Modal
   private worldBadgeEl: HTMLElement | null;
   private worldTextEl: HTMLElement | null;
@@ -188,6 +195,11 @@ export class HUD {
     this.modalBtnDetentionEl = document.getElementById('modal-btn-detention');
     this.modalCurrentCampusEl = document.getElementById('modal-current-campus');
     this.modalCurrentDetentionEl = document.getElementById('modal-current-detention');
+
+    this.cinematicBarsEl = document.getElementById('cinematic-bars');
+    this.cinemaFlashEl = document.getElementById('cinema-flash');
+    this.cinemaQteBadgeEl = document.getElementById('cinema-qte-badge');
+    this.cinemaQteSubEl = document.getElementById('cinema-qte-sub');
 
     if (this.worldModalCloseBtnEl) {
       this.worldModalCloseBtnEl.addEventListener('click', () => this.closeWorldModal());
@@ -1838,6 +1850,26 @@ export class HUD {
         banner.style.display = 'none';
       }
     }
+  }
+
+  // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
+  public triggerCinematicExecution(title: string, subtitle: string, duration: number = 1.0) {
+    if (!this.cinematicBarsEl) return;
+    if (this.cinemaQteBadgeEl) this.cinemaQteBadgeEl.textContent = title;
+    if (this.cinemaQteSubEl) this.cinemaQteSubEl.textContent = subtitle;
+
+    this.cinematicBarsEl.classList.add('active');
+    if (this.cinemaFlashEl) {
+      this.cinemaFlashEl.classList.add('flash');
+      setTimeout(() => {
+        if (this.cinemaFlashEl) this.cinemaFlashEl.classList.remove('flash');
+      }, 140);
+    }
+
+    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    this.cinemaDismissTimer = setTimeout(() => {
+      if (this.cinematicBarsEl) this.cinematicBarsEl.classList.remove('active');
+    }, Math.max(350, Math.round(duration * 1000)));
   }
 
   // 顯示特訓院絕境越獄通關結算對話框

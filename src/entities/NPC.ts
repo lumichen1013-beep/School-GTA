@@ -107,9 +107,15 @@ export class NPC {
   public isBossStunned: boolean = false;
   public bossStunTimer: number = 0;
   public bossChargeCooldown: number = 5.0;
+  public isBossWindingUp: boolean = false;
+  public bossWindupTimer: number = 0;
   public bossIsCharging: boolean = false;
+  public bossChargeTraveled: number = 0;
+  public bossChargeMaxDist: number = 24.0;
   public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
   public bossShieldCharges: number = 3;
+  public bossTelegraphGroup?: THREE.Group;
+  private bossTelegraphMat?: THREE.MeshBasicMaterial;
 
   // 單車衝撞擊飛與無敵幀 (避免持續性傷害)
   public isKnockedFlying: boolean = false;
@@ -402,6 +408,10 @@ export class NPC {
       this.buildBanditModel();
     } else {
       this.buildHumanoidModel();
+      if (role === 'DETENTION_BOSS') {
+        this.bossTelegraphGroup = this.buildBossTelegraphMesh();
+        this.mesh.add(this.bossTelegraphGroup);
+      }
     }
 
     // 頭頂 3D 浮動血條與昏迷倒數告示牌組 (面朝攝影機視角，清晰易辨)
@@ -604,6 +614,9 @@ export class NPC {
     this.isChasing = false;
     this.isBurstSprinting = false;
     this.alertState = 'NORMAL';
+    this.isBossWindingUp = false;
+    this.bossIsCharging = false;
+    if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
 
     if (this.hpBarBgMesh) this.hpBarBgMesh.visible = false;
     if (this.hpBarMesh) this.hpBarMesh.visible = false;
@@ -631,8 +644,10 @@ export class NPC {
     if (this.role !== 'DETENTION_BOSS' || this.isKnockedDown) return;
     this.isBossStunned = true;
     this.bossStunTimer = duration;
+    this.isBossWindingUp = false;
     this.bossIsCharging = false;
     this.isChasing = false;
+    if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
 
     // 顯示硬直星星
     const ctx = this.koBadgeCanvas.getContext('2d');
@@ -1266,6 +1281,73 @@ export class NPC {
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
     addHumanoidPart(this.rightLeg);
+  }
+
+  // 建造總教官狂暴衝撞 3D 地面紅色危險預警軌跡線 (Telegraph Danger Corridor)
+  private buildBossTelegraphMesh(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'boss_telegraph';
+    group.visible = false;
+
+    // 地面警示紅毯 (2.4m 寬，22.0m 長，自腳下向前方 +Z 延伸)
+    const planeGeo = new THREE.PlaneGeometry(2.4, 22.0);
+    planeGeo.rotateX(-Math.PI / 2);
+    planeGeo.translate(0, 0.02, 11.0);
+
+    this.bossTelegraphMat = new THREE.MeshBasicMaterial({
+      color: 0xff1744,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const groundPlane = new THREE.Mesh(planeGeo, this.bossTelegraphMat);
+    group.add(groundPlane);
+
+    // 左右兩側發光紅霓虹導軌邊界 (Left & Right Glowing Laser Rails)
+    const railMat = new THREE.MeshBasicMaterial({ color: 0xff3838, depthWrite: false });
+    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 22.0), railMat);
+    leftRail.position.set(-1.2, 0.03, 11.0);
+    group.add(leftRail);
+
+    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 22.0), railMat);
+    rightRail.position.set(1.2, 0.03, 11.0);
+    group.add(rightRail);
+
+    // 衝撞前進動態導向箭頭 (Forward Chevrons >>>)
+    const chevronMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false
+    });
+    for (let i = 1; i <= 6; i++) {
+      const zPos = i * 3.4;
+      // V 字型人字箭頭
+      const armL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.95), chevronMat);
+      armL.position.set(-0.35, 0.035, zPos);
+      armL.rotation.y = Math.PI / 4;
+      group.add(armL);
+
+      const armR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.95), chevronMat);
+      armR.position.set(0.35, 0.035, zPos);
+      armR.rotation.y = -Math.PI / 4;
+      group.add(armR);
+    }
+
+    // 衝撞落點危險警示橫桿 (End Impact Danger Barrier)
+    const endBarMat = new THREE.MeshBasicMaterial({ color: 0xff0033, depthWrite: false });
+    const endBar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.4), endBarMat);
+    endBar.position.set(0, 0.035, 22.0);
+    group.add(endBar);
+
+    // 腳底起點警示條
+    const startBarMat = new THREE.MeshBasicMaterial({ color: 0xffd32a, depthWrite: false });
+    const startBar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.05, 0.25), startBarMat);
+    startBar.position.set(0, 0.035, 0.35);
+    group.add(startBar);
+
+    return group;
   }
 
   // 建造 3D Low-Poly 雨傘模型 (傘中棒、握把、10 角多邊傘面、頂端金屬針)
@@ -2028,6 +2110,11 @@ export class NPC {
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
     this.whistleCooldown = 3.0;
     this.lostSightTimer = 0;
+    if (this.role === 'DETENTION_BOSS') {
+      this.isBossWindingUp = false;
+      this.bossIsCharging = false;
+      if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
+    }
   }
 
   // 觸發全校廣播立正定格發呆
@@ -2263,13 +2350,28 @@ export class NPC {
       const distSq = this.position.distanceToSquared(playerPos);
       const seesPlayer = this.canSeePlayer(playerPos, colliders, isPlayerHiding, isPlayerSneaking);
 
-      // 總教官衝鋒衝撞冷卻與觸發
-      if (this.role === 'DETENTION_BOSS' && this.isChasing && !this.bossIsCharging && !this.isBossStunned) {
+      // 總教官衝鋒衝撞冷卻與危險預警軌跡線觸發 (1.25 秒蓄力前置預警)
+      if (
+        this.role === 'DETENTION_BOSS' &&
+        this.isChasing &&
+        !this.bossIsCharging &&
+        !this.isBossWindingUp &&
+        !this.isBossStunned &&
+        !this.isKnockedDown
+      ) {
         this.bossChargeCooldown -= delta;
-        if (this.bossChargeCooldown <= 0 && distSq > 36.0 && distSq < 400.0) {
-          this.bossIsCharging = true;
-          this.bossChargeCooldown = 6.5;
+        if (this.bossChargeCooldown <= 0 && distSq > 36.0 && distSq < 484.0) {
+          this.isBossWindingUp = true;
+          this.bossWindupTimer = 1.25;
+          this.bossChargeCooldown = 7.5;
+          // 鎖定當前玩家方向 (1.25秒內玩家可往側向閃躲！)
           this.bossChargeDir.subVectors(playerPos, this.position).setY(0).normalize();
+          this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
+          this.mesh.rotation.y = this.rotationY;
+          if (this.bossTelegraphGroup) {
+            this.bossTelegraphGroup.visible = true;
+          }
+          soundManager.playWhistle();
         }
       }
 
@@ -3067,27 +3169,79 @@ export class NPC {
       return;
     }
 
-    // 總教官衝鋒撞柱判定
+    // 總教官衝撞前置危險預警階段 (Windup Telegraph)
+    if (this.isBossWindingUp && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
+      this.bossWindupTimer -= delta;
+
+      // 地面預警軌跡線脈動閃爍 (頻率隨蓄力倒數加快)
+      if (this.bossTelegraphMat) {
+        const pulseRate = 14.0 + (1.25 - Math.max(0, this.bossWindupTimer)) * 14.0;
+        this.bossTelegraphMat.opacity = 0.35 + Math.sin(this.bossWindupTimer * pulseRate) * 0.35;
+      }
+
+      // 蓄力戰術衝鋒動作：微蹲、雙臂/盾牌架於胸前向前抵禦、地面微顫
+      this.mesh.position.y = this.baseFloorY - 0.12;
+      this.mesh.position.x = this.position.x + (Math.random() - 0.5) * 0.04;
+      this.mesh.position.z = this.position.z + (Math.random() - 0.5) * 0.04;
+      this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
+      this.mesh.rotation.y = this.rotationY;
+
+      if (this.leftArm) this.leftArm.rotation.set(-1.1, 0.35, -0.35);
+      if (this.rightArm) this.rightArm.rotation.set(-1.1, -0.35, 0.35);
+
+      if (this.bossWindupTimer <= 0) {
+        this.isBossWindingUp = false;
+        this.bossIsCharging = true;
+        this.bossChargeTraveled = 0;
+        this.mesh.position.copy(this.position);
+        if (this.bossTelegraphGroup) {
+          this.bossTelegraphGroup.visible = false;
+        }
+      }
+      return;
+    }
+
+    // 總教官狂暴衝鋒判定 (狂暴衝刺 14 m/s + 撞柱重度眩暈 + 距離上限)
     if (this.bossIsCharging && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
-      this.position.x += this.bossChargeDir.x * 12.0 * delta;
-      this.position.z += this.bossChargeDir.z * 12.0 * delta;
+      const stepDist = 14.0 * delta;
+      this.position.x += this.bossChargeDir.x * stepDist;
+      this.position.z += this.bossChargeDir.z * stepDist;
+      this.bossChargeTraveled += stepDist;
       this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
 
+      // 雙臂前推衝鋒姿勢
+      if (this.leftArm) this.leftArm.rotation.set(-1.3, 0.2, -0.2);
+      if (this.rightArm) this.rightArm.rotation.set(-1.3, -0.2, 0.2);
+
       // 檢測是否撞上水泥加固柱或障礙盒
+      let hitObstacle = false;
       for (const box of colliders) {
         if (box.isFloorOnly) continue;
         if (
-          this.position.x + 0.6 > box.min.x &&
-          this.position.x - 0.6 < box.max.x &&
-          this.position.z + 0.6 > box.min.z &&
-          this.position.z - 0.6 < box.max.z
+          this.position.x + 0.65 > box.min.x &&
+          this.position.x - 0.65 < box.max.x &&
+          this.position.z + 0.65 > box.min.z &&
+          this.position.z - 0.65 < box.max.z
         ) {
-          // 猛烈撞擊！陷入 3.5 秒眩暈硬直！
+          hitObstacle = true;
+          // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
           this.stunBoss(3.5);
           soundManager.playPunch();
+          soundManager.playBatHit();
+          if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
           break;
         }
       }
+
+      if (!hitObstacle && this.bossChargeTraveled >= this.bossChargeMaxDist) {
+        // 超過衝撞最大距離 (24m)，煞車收招
+        this.bossIsCharging = false;
+        this.pauseTimer = 0.8;
+        this.isPaused = true;
+        this.resetPose();
+        if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
+      }
+
       this.mesh.position.copy(this.position);
       return;
     }

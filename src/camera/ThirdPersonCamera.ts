@@ -17,13 +17,23 @@ export class ThirdPersonCamera {
   public sensitivityX: number = 0.0022;
   public sensitivityY: number = 0.002;
 
+  // 慢動作特寫鏡頭系統 (Cinematic Execution Close-Up)
+  public isCinematicExecution: boolean = false;
+  private cinematicTimer: number = 0;
+  private cinematicDuration: number = 0;
+  private cinematicCamPos: THREE.Vector3 = new THREE.Vector3();
+  private cinematicLookAt: THREE.Vector3 = new THREE.Vector3();
+  private defaultFov: number = 65;
+
   constructor(fov: number, aspect: number, near: number, far: number) {
+    this.defaultFov = fov;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
   }
 
   private isVehicleMode: boolean = false;
 
   public updateRotation(deltaX: number, deltaY: number) {
+    if (this.isCinematicExecution && this.cinematicTimer > 0) return; // 特寫運鏡期間鎖定自由視角旋轉
     this.yaw -= deltaX * this.sensitivityX;
     this.pitch += deltaY * this.sensitivityY;
 
@@ -38,10 +48,80 @@ export class ThirdPersonCamera {
     // 直向螢幕 (aspect < 1.0) 時適當補償 FOV，避免視野被截斷過窄
     const baseFov = this.isVehicleMode ? 72 : 65;
     if (aspect < 1.0) {
-      this.camera.fov = Math.min(80, baseFov + (1.0 - aspect) * 12);
+      this.defaultFov = Math.min(80, baseFov + (1.0 - aspect) * 12);
     } else {
-      this.camera.fov = baseFov;
+      this.defaultFov = baseFov;
     }
+    if (!this.isCinematicExecution) {
+      this.camera.fov = this.defaultFov;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
+  // 觸發暗殺/處決慢動作特寫鏡頭 (Cinematic Camera Framing)
+  public triggerCinematicExecution(
+    bossPos: THREE.Vector3,
+    playerPos: THREE.Vector3,
+    duration: number = 1.0,
+    isFinisher: boolean = false,
+    colliders: CollidableBox[] = []
+  ) {
+    this.isCinematicExecution = true;
+    this.cinematicTimer = duration;
+    this.cinematicDuration = duration;
+
+    // 焦點設在玩家與受擊目標中間略偏打擊點 (高度約 1.15m)
+    const midPoint = new THREE.Vector3().addVectors(playerPos, bossPos).multiplyScalar(0.5);
+    this.cinematicLookAt.copy(midPoint).add(new THREE.Vector3(0, 1.15, 0));
+
+    // 打擊方向 (從 Boss 指向 Player)
+    const strikeDir = new THREE.Vector3().subVectors(playerPos, bossPos);
+    strikeDir.y = 0;
+    if (strikeDir.lengthSq() < 0.01) {
+      strikeDir.set(0, 0, 1);
+    } else {
+      strikeDir.normalize();
+    }
+
+    // 垂直側翼向量 (90度側角)
+    const sideDir = new THREE.Vector3(-strikeDir.z, 0, strikeDir.x);
+
+    // 低角度仰角側前方 2.1m 特寫：形成極富張力的近身搏擊刺客特寫
+    const dist = isFinisher ? 2.5 : 2.1;
+    this.cinematicCamPos.copy(midPoint)
+      .addScaledVector(sideDir, dist * 0.88)
+      .addScaledVector(strikeDir, dist * 0.45);
+    this.cinematicCamPos.y = Math.max(0.45, playerPos.y + 0.82);
+
+    // 障礙物防穿牆檢測 (避免特寫鏡頭推入水泥柱或掩體)
+    if (colliders.length > 0) {
+      const rayDir = this.cinematicCamPos.clone().sub(midPoint);
+      const targetDist = rayDir.length();
+      if (targetDist > 0.1) {
+        rayDir.normalize();
+        let minHit = targetDist;
+        for (const box of colliders) {
+          if (box.isFloorOnly) continue;
+          const hit = this.intersectRayAABB(
+            midPoint,
+            rayDir,
+            box.min.x - 0.25, box.max.x + 0.25,
+            box.min.y - 0.25, box.max.y + 0.25,
+            box.min.z - 0.25, box.max.z + 0.25,
+            minHit
+          );
+          if (hit !== null && hit < minHit && hit > 0.3) {
+            minHit = hit;
+          }
+        }
+        if (minHit < targetDist) {
+          this.cinematicCamPos.copy(midPoint).addScaledVector(rayDir, minHit - 0.1);
+        }
+      }
+    }
+
+    // 鏡頭特寫拉近 (FOV: 65 -> 48 帶來魄力壓縮感)
+    this.camera.fov = 48;
     this.camera.updateProjectionMatrix();
   }
 
@@ -69,6 +149,36 @@ export class ThirdPersonCamera {
   }
 
   public update(targetPos: THREE.Vector3, delta: number, colliders: CollidableBox[] = []) {
+    // 慢動作特寫鏡頭模式 (Cinematic Execution Hold & Smooth Recovery)
+    if (this.isCinematicExecution) {
+      this.cinematicTimer -= delta;
+      if (this.cinematicTimer > 0) {
+        // 快速推入特寫機位 (帶微彈性平滑)
+        this.currentPosition.lerp(this.cinematicCamPos, Math.min(delta * 14.0, 1.0));
+        this.currentLookAt.lerp(this.cinematicLookAt, Math.min(delta * 14.0, 1.0));
+
+        // 打擊微震顫 (Trauma Shake)
+        const trauma = Math.max(0, this.cinematicTimer / this.cinematicDuration);
+        const shake = trauma * 0.035;
+        this.camera.position.set(
+          this.currentPosition.x + (Math.random() - 0.5) * shake,
+          this.currentPosition.y + (Math.random() - 0.5) * shake,
+          this.currentPosition.z + (Math.random() - 0.5) * shake
+        );
+        this.camera.lookAt(this.currentLookAt);
+        return;
+      } else {
+        // 特寫計時結束，平滑復原 FOV
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.defaultFov, Math.min(delta * 6.0, 1.0));
+        this.camera.updateProjectionMatrix();
+        if (Math.abs(this.camera.fov - this.defaultFov) < 0.5) {
+          this.camera.fov = this.defaultFov;
+          this.camera.updateProjectionMatrix();
+          this.isCinematicExecution = false;
+        }
+      }
+    }
+
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)
     const focusPoint = this.target.clone().add(new THREE.Vector3(0, 1.35, 0));
