@@ -526,7 +526,7 @@ class SchoolGTASandbox {
         this.player.velocity.set(0, 0, 0);
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
-        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行 CQC 擊昏！', 5000);
+        this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
       }
     }
   }
@@ -1358,7 +1358,7 @@ class SchoolGTASandbox {
         // 若玩家處於攻擊間隔冷卻中，不執行攻擊
         if (!this.player.canAttack) return;
 
-        // 第二世界：若處於守衛身後觸發 CQC 潛入擊昏
+        // 第二世界：若處於守衛身後觸發暗殺擊昏
         if (this.currentWorldType === 'DETENTION' && this.nearbyCqcTarget && !this.nearbyCqcTarget.isKnockedDown) {
           this.performCqcTakedown();
           return;
@@ -1599,7 +1599,7 @@ class SchoolGTASandbox {
     this.tennisGame.startMatch(this.hud, peCoach, this.engine.scene, this.player, this.cameraCtrl);
   }
 
-  // 潛龍諜影 CQC 近身潛入擊昏 / 刺客教條草堆暗殺
+  // 潛行背後暗殺擊昏 / 刺客教條草堆伏擊
   private performCqcTakedown() {
     if (!this.nearbyCqcTarget || this.nearbyCqcTarget.isKnockedDown || this.player.isDead) return;
     const target = this.nearbyCqcTarget;
@@ -1712,7 +1712,7 @@ class SchoolGTASandbox {
     if (isFromHiding) {
       this.wantedSystem.showBanner(`🗡️【刺客教條·草堆暗殺】將 ${target.getRoleTitle()} 拖入${coverName}無聲刺殺！無人察覺！`, 2500);
     } else {
-      this.wantedSystem.showBanner(`🥷 CQC 潛入擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷)`, 2000);
+      this.wantedSystem.showBanner(`🥷 潛行擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷)`, 2000);
     }
     this.nearbyCqcTarget = null;
     this.hud.updateCqcPrompt(false);
@@ -2743,7 +2743,7 @@ class SchoolGTASandbox {
       }
       this.hud.updateMgsAlert(this.detentionAlertTimer);
 
-      // CQC 身後近身判定 與 刺客教條草堆暗殺判定
+      // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定
       this.nearbyCqcTarget = null;
       let isHidingAssassination = false;
       if (!this.player.isDead) {
@@ -2782,7 +2782,7 @@ class SchoolGTASandbox {
               const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
               const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
 
-              // 每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後空檔觸發 CQC 暗殺
+              // 每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後空檔觸發暗殺擊昏
               if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
                 this.nearbyCqcTarget = npc;
                 break;

@@ -1780,7 +1780,7 @@ export class HUD {
     ctx.stroke();
   }
 
-  // 更新 CQC 暗殺提示 (動態浮動於目標 NPC 頭頂上方，僅顯示「擊暈」)
+  // 更新暗殺/擊昏提示 (動態浮動於目標 NPC 頭頂上方，僅顯示「擊暈」)
   public updateCqcPrompt(
     visible: boolean,
     screenX: number = 0,

@@ -649,7 +649,7 @@ export class NPC {
     }
   }
 
-  // 潛龍諜影無聲 CQC 擊昏 (從 NPC 背後 1.8m 內發動，永久癱瘓不重生)
+  // 潛行背後暗殺擊昏 (從 NPC 背後盲區發動，永久擊昏癱瘓不重生)
   public knockoutSilently() {
     this.hp = 0;
     this.isKnockedDown = true;
