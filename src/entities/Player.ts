@@ -934,13 +934,21 @@ export class Player {
       input.keys['ControlRight']
     );
     const isJoystickSneak = hasVirtualJoystick && input.virtualAxisMagnitude > 0.05 && input.virtualAxisMagnitude < 0.5;
-    const wantsSneak = (isSneakTriggered && !input.sprint) || (isJoystickSneak && !input.sprint);
+    const wantsSneak = isSneakTriggered || isJoystickSneak;
     this.isSneaking = wantsSneak;
 
     // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)
     let currentSpeed = this.walkSpeed;
     if (this.isSneaking) {
-      currentSpeed = 2.4; // 靜音潛行步速 2.4 m/s (無腳步聲，NPC 無法在背後察覺)
+      if (input.sprint && isMoving && this.stamina > 5) {
+        // 刺客疾速潛行 (Crouch-Sprint 疾速低姿滑行 6.5 m/s，依舊 0 噪音，消耗極少體力)
+        currentSpeed = 6.5;
+        this.stamina = Math.max(0, this.stamina - delta * 12.0);
+      } else {
+        // 基礎敏捷潛行步速：自原先 2.4 m/s 大幅提速至 4.0 m/s (提升 67%，快速拉近與 1.45 m/s 巡邏警衛的距離)
+        currentSpeed = 4.0;
+        this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
+      }
     } else {
       if (this.isSwimming) {
         currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
@@ -1103,7 +1111,7 @@ export class Player {
     // 7. 人物走動與攻擊動畫擺動 (Procedural Animation)
     const isSprinting = currentSpeed === (this.isSwimming ? 7.8 : this.sprintSpeed);
     this.isSprinting = isMoving && isSprinting;
-    this.animatePlayer(delta, isMoving, isSprinting);
+    this.animatePlayer(delta, isMoving, isSprinting, currentSpeed);
   }
 
   private applyMovementAndCollision(delta: number, colliders: CollidableBox[]) {
@@ -1266,7 +1274,7 @@ export class Player {
     this.updateAfterimages(delta);
   }
 
-  private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean) {
+  private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean, currentSpeed: number = 5.0) {
     if (this.isSwimming) {
       // 1. 身體俯仰趴平姿態 (Prone Freestyle vs Treading Water)
       // 自由式划水衝刺/前進時：前傾俯趴約 70~75 度 (1.20 ~ 1.28 rad)
@@ -1415,9 +1423,11 @@ export class Player {
       }
     } else if (isMoving) {
       if (this.isSneaking) {
-        // 潛行蹲姿移動：小步頻率、低重心潛行擺臂
-        this.animTimer += delta * 6.5;
-        const swing = Math.sin(this.animTimer) * 0.26;
+        // 潛行蹲姿移動：依移動速度動態縮放擺幅與步頻 (4.0 m/s 敏捷潛行，6.5 m/s 疾行潛行)
+        const sneakAnimRate = (currentSpeed / 4.0) * 10.5;
+        this.animTimer += delta * sneakAnimRate;
+        const swingMag = currentSpeed > 5.0 ? 0.42 : 0.30;
+        const swing = Math.sin(this.animTimer) * swingMag;
         if (this.isHoldingUmbrella) {
           const bob = Math.sin(this.animTimer) * 0.02;
           this.leftArm.rotation.set(-Math.PI * 0.65 + bob, -0.12, 0.12);
