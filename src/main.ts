@@ -949,7 +949,7 @@ class SchoolGTASandbox {
 
       // 少年院專屬互動點 (食堂補給、單槓訓練、臥推重訓、翻巨型輪胎)
       if (this.currentWorldType === 'DETENTION') {
-        if (this.player.position.distanceTo(this.detentionWorld.commissaryPos) < 3.8) {
+        if (this.player.position.distanceTo(this.detentionWorld.commissaryPos) < 4.2) {
           this.hud.openCommissary(this.playerCash, (item) => this.buyCommissaryItem(item));
           return;
         }
@@ -2172,8 +2172,8 @@ class SchoolGTASandbox {
 
     // 6. 更新互動提示
     if (this.currentWorldType === 'DETENTION') {
-      if (targetPosition.distanceTo(this.detentionWorld.commissaryPos) < 3.8) {
-        this.hud.showPrompt('E', '少年院福利社 (購買乾糧補給)');
+      if (targetPosition.distanceTo(this.detentionWorld.commissaryPos) < 4.2) {
+        this.hud.showPrompt('E', '🏪 特訓小賣部 (購買體能與急救補給品)');
       } else if (targetPosition.distanceTo(this.detentionWorld.pullupStationPos) < 3.0) {
         this.hud.showPrompt('E', '💪 引體向上特訓 (恢復精力)');
       } else if (targetPosition.distanceTo(this.detentionWorld.benchpressStationPos) < 3.0) {
@@ -2267,34 +2267,33 @@ class SchoolGTASandbox {
       }
     }
 
-    // 6.5 少年院動態探照燈掃視與警戒檢測 (給予 2.2 秒充裕反應逃脫時間，公平且富技巧性)
+    // 6.5 少年院動態探照燈掃視與警戒檢測 (被探照燈照到時全體 NPC 聚集並主動攻擊)
     if (this.currentWorldType === 'DETENTION') {
       const slState = this.detentionWorld.update(delta, targetPosition);
       if (slState.isDetectedBySearchlight) {
         this.searchlightAlertTimer += delta;
-        if (this.searchlightAlertTimer >= 0.3 && this.searchlightAlertTimer < 2.2) {
-          this.wantedSystem.showBanner('⚠️ 探照燈照射中！立即跑出光斑或尋找掩體！', 600);
-        } else if (this.searchlightAlertTimer >= 2.2) {
-          this.searchlightAlertTimer = 0;
-          if (this.wantedSystem.stars < 1) {
-            this.wantedSystem.reportCrime(1, '夜間擅闖操場禁區 (探照燈鎖定)');
+        if (this.searchlightAlertTimer < 1.0) {
+          this.wantedSystem.showBanner('⚠️ 探照燈高空鎖定中！守衛部隊正迅速朝光斑聚集，立即逃往掩體！', 500);
+        } else if (this.searchlightAlertTimer >= 1.0) {
+          this.searchlightAlertTimer = 0.5; // 維持警報觸發與圍剿態勢
+          if (this.wantedSystem.stars < 2) {
+            this.wantedSystem.reportCrime(2, '探照燈高空鎖定！觸發特訓防暴圍剿警報！');
             soundManager.playAlert();
+            soundManager.playWhistle();
           }
-          // 僅呼叫最近 1 名特訓警衛前來查看
-          let nearestGuard: NPC | null = null;
-          let nearestDist = 999;
+          // 核心機制：被探照燈照到時，全體 NPC 聚集並主動攻擊！
+          // 半徑 60m 內所有少年院 NPC（教官、狼犬、學長、霸榜生、總長）全力往玩家位置衝刺聚集
           for (const n of this.detentionNPCs) {
-            if (!n.isKnockedDown && (n.role === 'DETENTION_GUARD' || n.role === 'DETENTION_WOLF')) {
+            if (!n.isKnockedDown) {
               const d = n.position.distanceTo(targetPosition);
-              if (d < nearestDist) {
-                nearestDist = d;
-                nearestGuard = n;
+              if (d < 60.0) {
+                if (n.isPaused) n.cancelPause();
+                n.isChasing = true;
+                n.isBurstSprinting = true;
+                n.lostSightTimer = 0;
+                n.lastKnownPos.copy(targetPosition);
               }
             }
-          }
-          if (nearestGuard && nearestDist < 30) {
-            nearestGuard.isChasing = true;
-            nearestGuard.lastKnownPos.copy(targetPosition);
           }
         }
       } else {
@@ -2385,10 +2384,20 @@ class SchoolGTASandbox {
       }
     }
 
-    // NPC 攻擊玩家判定
+    // NPC 攻擊玩家判定 (距離玩家 2m 內主動發起攻擊)
     for (const npc of this.npcs) {
-      const inAttackRange = !npc.isKnockedDown && npc.isChasing && npc.position.distanceTo(targetPosition) < npc.attackRange;
-      if (inAttackRange && !this.player.isDead && npc.attackCooldown <= 0) {
+      const distToPlayer = npc.position.distanceTo(targetPosition);
+      const isWithin2m = distToPlayer <= 2.0;
+      const attackDist = (this.currentWorldType === 'DETENTION') ? 2.0 : Math.max(1.8, npc.attackRange);
+
+      // 當 NPC 距離玩家 <= 2m 時，且不在 5 秒保護期內，立即主動發動攻擊！
+      const shouldAttack = !npc.isKnockedDown && !isSpawnGraceActive && (npc.isChasing || isWithin2m) && distToPlayer <= attackDist;
+
+      if (shouldAttack && !this.player.isDead && npc.attackCooldown <= 0) {
+        if (!npc.isChasing) {
+          npc.isChasing = true;
+          npc.lastKnownPos.copy(targetPosition);
+        }
         if (this.player.isDodging) {
           npc.attackCooldown = 0.85;
           npc.triggerAttackAnimation(delta);
@@ -2416,7 +2425,7 @@ class SchoolGTASandbox {
           this.cameraCtrl.setMode(false);
           this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下火柴人自行車！`, 2500);
         } else {
-          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
+          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}近身 2 米主動重擊！`, 1500);
         }
 
         this.wantedSystem.notifyAttacked();

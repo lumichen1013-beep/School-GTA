@@ -25,7 +25,7 @@ export class DetentionWorld {
 
   // 少年院關鍵點位
   public spawnPos: THREE.Vector3 = new THREE.Vector3(0, 0, 10);
-  public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -46); // 食堂福利社取餐/補給窗口
+  public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-12, 0, 10); // 單槓訓練區
   public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(12, 0, 10); // 臥推訓練區
   public tireStationPos: THREE.Vector3 = new THREE.Vector3(0, 0, -8); // 巨型輪胎翻滾區
@@ -66,17 +66,17 @@ export class DetentionWorld {
     });
   }
 
-  // 註冊可平滑行走的斜坡 (Ramps)
-  public addRamp(minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number) {
+  // 註冊可平滑行走的斜坡 (Ramps) - 支援上下樓梯坡道物理檢測
+  public addRamp(minX: number, maxX: number, minZ: number, maxZ: number, yAtMinZ: number, yAtMaxZ: number) {
     this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), minY, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), maxY, Math.max(minZ, maxZ)),
+      min: new THREE.Vector3(Math.min(minX, maxX), Math.min(yAtMinZ, yAtMaxZ) - 0.4, Math.min(minZ, maxZ)),
+      max: new THREE.Vector3(Math.max(minX, maxX), Math.max(yAtMinZ, yAtMaxZ) + 0.4, Math.min(minZ, maxZ)),
       isFloorOnly: true,
       isRamp: true,
       rampMinZ: Math.min(minZ, maxZ),
       rampMaxZ: Math.max(minZ, maxZ),
-      rampYAtMinZ: minY,
-      rampYAtMaxZ: maxY
+      rampYAtMinZ: yAtMinZ,
+      rampYAtMaxZ: yAtMaxZ
     });
   }
 
@@ -346,11 +346,15 @@ export class DetentionWorld {
     darkSteelGeos.push(walkwayFloor);
     this.addFloorSlab(bCx - walkwayW / 2, bCx + walkwayW / 2, walkwayZ - walkwayD / 2, walkwayZ + walkwayD / 2, walkwayY);
 
-    // 2F 走廊外圍安全鐵欄杆
-    const wRail = new THREE.BoxGeometry(walkwayW, 1.2, 0.08);
-    wRail.translate(bCx, walkwayY + 0.7, walkwayZ + walkwayD / 2);
+    // 2F 走廊外圍安全鐵欄杆 (在樓梯口留出順暢通行開口，絕不擋住玩家上樓)
+    const stairX = bCx + walkwayW / 2 - 1.5;
+    const stairW = 3.2;
+    const railW = (stairX - stairW / 2) - (bCx - walkwayW / 2);
+    const railCx = (bCx - walkwayW / 2) + railW / 2;
+    const wRail = new THREE.BoxGeometry(railW, 1.2, 0.08);
+    wRail.translate(railCx, walkwayY + 0.7, walkwayZ + walkwayD / 2);
     fenceWireGeos.push(wRail);
-    this.addCollider(bCx - walkwayW / 2, bCx + walkwayW / 2, walkwayZ + walkwayD / 2 - 0.15, walkwayZ + walkwayD / 2 + 0.15, walkwayY, walkwayY + 1.4);
+    this.addCollider(bCx - walkwayW / 2, stairX - stairW / 2, walkwayZ + walkwayD / 2 - 0.15, walkwayZ + walkwayD / 2 + 0.15, walkwayY, walkwayY + 1.4);
 
     // 2F 支撐鋼立柱 (從地面延伸支撐 2F 走廊)
     for (let x = bCx - walkwayW / 2 + 3; x <= bCx + walkwayW / 2 - 3; x += 7) {
@@ -361,9 +365,8 @@ export class DetentionWorld {
     }
 
     // 通往 2F 的重型工業鋼架樓梯 (從地面 Y: 0 爬升至 Y: 4.5, 寬 3.0m, 長 8.5m)
-    const stairX = bCx + walkwayW / 2 - 1.5;
-    const stairStartZ = walkwayZ + walkwayD / 2 + 8.5;
-    const stairEndZ = walkwayZ + walkwayD / 2;
+    const stairStartZ = walkwayZ + walkwayD / 2 + 8.5; // Z = -32.3 (地面起點)
+    const stairEndZ = walkwayZ + walkwayD / 2;         // Z = -40.8 (2F 頂端)
     const numSteps = 18;
     for (let s = 0; s < numSteps; s++) {
       const t = s / numSteps;
@@ -373,8 +376,8 @@ export class DetentionWorld {
       stepMesh.translate(stairX, stepY + 0.12, stepZ);
       darkSteelGeos.push(stepMesh);
     }
-    // 樓梯斜坡碰撞體，保證玩家如履平地流暢走上 2F！
-    this.addRamp(stairX - 1.6, stairX + 1.6, stairEndZ, stairStartZ, 0, walkwayY);
+    // 樓梯斜坡碰撞體 (Z: -40.8 ~ -32.3，MinZ 處高度為 4.5m，MaxZ 處高度為 0m，平滑上下樓如履平地)
+    this.addRamp(stairX - 1.6, stairX + 1.6, stairEndZ, stairStartZ, walkwayY, 0);
 
     // 宿舍窗戶安全鐵護欄 (每間宿舍窗口有粗鐵欄杆)
     for (let x = bCx - bW / 2 + 4; x <= bCx + bW / 2 - 4; x += 5.5) {
@@ -405,20 +408,29 @@ export class DetentionWorld {
     concreteGeos.push(cMain);
     this.addCollider(cCx - cW / 2, cCx + cW / 2, cCz - cD / 2, cCz + cD / 2, 0, cH + 0.4);
 
-    // 戶外取餐大門與前廊 (前廊雨棚)
-    const cCanopy = new THREE.BoxGeometry(16, 0.3, 5);
-    cCanopy.translate(38, 3.8, -42.5);
+    // 戶外特訓小賣部與補給窗口 (提供止血繃帶、高能葡萄糖液、壓縮乾糧等物資)
+    const counter = new THREE.BoxGeometry(5.5, 1.1, 1.2);
+    counter.translate(38, 0.55, -44.5);
+    concreteGeos.push(counter);
+    this.addCollider(35.0, 41.0, -45.2, -43.8, 0, 1.5);
+
+    // 小賣部展示架與醫療補給箱
+    const supplyShelf = new THREE.BoxGeometry(4.8, 0.9, 0.5);
+    supplyShelf.translate(38, 1.45, -44.8);
+    darkSteelGeos.push(supplyShelf);
+
+    const medBox = new THREE.BoxGeometry(0.8, 0.5, 0.5);
+    medBox.translate(36.8, 1.35, -44.3);
+    yellowHazardGeos.push(medBox);
+
+    // 小賣部遮雨棚架
+    const cCanopy = new THREE.BoxGeometry(8.5, 0.25, 3.8);
+    cCanopy.translate(38, 3.2, -43.0);
     corrugatedIronGeos.push(cCanopy);
 
-    // 福利社窗口吧台 (互動點所在)
-    const counter = new THREE.BoxGeometry(5.5, 1.1, 1.2);
-    counter.translate(38, 0.55, -45.6);
-    concreteGeos.push(counter);
-    this.addCollider(35.0, 41.0, -46.5, -44.5, 0, 1.5);
-
-    // 食堂招牌「特訓營養食堂 · 補給福利站」
-    const cSign = new THREE.BoxGeometry(14, 1.2, 0.2);
-    cSign.translate(38, 4.4, -42.5);
+    // 小賣部招牌「🏪 特訓小賣部 · 戰術物資補給站」
+    const cSign = new THREE.BoxGeometry(8.5, 1.0, 0.2);
+    cSign.translate(38, 3.8, -42.8);
     yellowHazardGeos.push(cSign);
 
     // 長條鋼製餐桌與金屬圓凳組 (8 組)
@@ -623,6 +635,50 @@ export class DetentionWorld {
       darkSteelGeos.push(dipBar1, dipBar2);
       this.addCollider(dx - 0.55, dx + 0.55, -1.3, 1.3, 0, 1.3);
     }
+
+    // ==========================================
+    // 8.5 戰術防暴與遮蔽掩體組 (掩體增設：防範探照燈直射、拉扯走位與規避追捕)
+    // ==========================================
+    // 1. 工業防暴深藍集裝箱貨櫃掩體 A (西側校場 X: -22, Z: -2)
+    const contA = new THREE.BoxGeometry(5.6, 2.7, 2.6);
+    contA.translate(-22, 1.35, -2);
+    darkSteelGeos.push(contA);
+    this.addCollider(-24.9, -19.1, -3.4, -0.6, 0, 2.75);
+
+    // 2. 軍規海運鮮紅集裝箱貨櫃掩體 B (東側校場 X: 22, Z: -2)
+    const contB = new THREE.BoxGeometry(5.6, 2.7, 2.6);
+    contB.translate(22, 1.35, -2);
+    corrugatedIronGeos.push(contB);
+    this.addCollider(19.1, 24.9, -3.4, -0.6, 0, 2.75);
+
+    // 3. 混凝土防暴隔牆掩體 (雙組 L 型防彈牆，南側跑道前沿)
+    const barW1 = new THREE.BoxGeometry(4.2, 1.6, 0.6);
+    barW1.translate(-7, 0.8, 26);
+    concreteGeos.push(barW1);
+    this.addCollider(-9.2, -4.8, 25.6, 26.4, 0, 1.7);
+
+    const barW2 = new THREE.BoxGeometry(4.2, 1.6, 0.6);
+    barW2.translate(7, 0.8, 26);
+    concreteGeos.push(barW2);
+    this.addCollider(4.8, 9.2, 25.6, 26.4, 0, 1.7);
+
+    // 4. 軍規防汛防暴沙包掩體陣地 (北側跑道內圈 X: 0, Z: -20)
+    const sandbag = new THREE.BoxGeometry(5.2, 1.3, 1.4);
+    sandbag.translate(0, 0.65, -20);
+    concreteGeos.push(sandbag);
+    this.addCollider(-2.7, 2.7, -20.8, -19.2, 0, 1.4);
+
+    // 5. 重型物資木棧板與軍械防潮木箱組 (西南側 X: -21, Z: 18)
+    const palGrp1 = new THREE.BoxGeometry(3.6, 1.8, 2.4);
+    palGrp1.translate(-21, 0.9, 18);
+    woodPlankGeos.push(palGrp1);
+    this.addCollider(-22.9, -19.1, 16.7, 19.3, 0, 1.9);
+
+    // 6. 重型物資木棧板與軍械防潮木箱組 (東南側 X: 21, Z: 18)
+    const palGrp2 = new THREE.BoxGeometry(3.6, 1.8, 2.4);
+    palGrp2.translate(21, 0.9, 18);
+    woodPlankGeos.push(palGrp2);
+    this.addCollider(19.1, 22.9, 16.7, 19.3, 0, 1.9);
 
     // ==========================================
     // 9. 幾何體合併 (mergeGeometries) 產出低 Draw Call Mesh
@@ -839,8 +895,12 @@ export class DetentionWorld {
         minDistance = dist;
       }
 
-      // 當玩家在光圈半徑 3.6m 內，且身處室外操場 (Y < 3.0)
-      if (dist < 3.6 && isPlayerOutdoors) {
+      // 探照燈不可以穿過掩體：光線從塔頂 (sl.towerPos) 投向玩家 (playerPos, Y=1.2)
+      // 若射線路徑遭到任何掩體或建築實體碰撞箱遮擋，則判定掩體完全遮蔽！
+      const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
+
+      // 當玩家在光圈半徑 3.6m 內，且身處室外操場 (Y < 3.0) 且未被掩體遮擋
+      if (dist < 3.6 && isPlayerOutdoors && !isOccludedByCover) {
         sl.isDetecting = true;
         anyDetected = true;
 
@@ -863,6 +923,53 @@ export class DetentionWorld {
       isDetectedBySearchlight: anyDetected,
       nearestDist: minDistance
     };
+  }
+
+  // 檢測從起點 (瞭望塔) 到終點 (玩家) 的視線射線是否被實體掩體/建築碰撞箱阻擋
+  public isRayBlockedByColliders(start: THREE.Vector3, targetPos: THREE.Vector3): boolean {
+    const endX = targetPos.x;
+    const endY = targetPos.y + 1.2; // 玩家身形有效中線高度
+    const endZ = targetPos.z;
+
+    const dirX = endX - start.x;
+    const dirY = endY - start.y;
+    const dirZ = endZ - start.z;
+    const len = Math.hypot(dirX, dirY, dirZ);
+    if (len < 0.001) return false;
+
+    const invDirX = 1.0 / (Math.abs(dirX) > 0.0001 ? dirX : 0.0001);
+    const invDirY = 1.0 / (Math.abs(dirY) > 0.0001 ? dirY : 0.0001);
+    const invDirZ = 1.0 / (Math.abs(dirZ) > 0.0001 ? dirZ : 0.0001);
+
+    for (let i = 0; i < this.colliders.length; i++) {
+      const box = this.colliders[i];
+      if (box.isFloorOnly) continue; // 地板/層板不阻礙高空俯視
+
+      // AABB Slab Test
+      const t1x = (box.min.x - start.x) * invDirX;
+      const t2x = (box.max.x - start.x) * invDirX;
+      const tMinX = Math.min(t1x, t2x);
+      const tMaxX = Math.max(t1x, t2x);
+
+      const t1y = (box.min.y - start.y) * invDirY;
+      const t2y = (box.max.y - start.y) * invDirY;
+      const tMinY = Math.min(t1y, t2y);
+      const tMaxY = Math.max(t1y, t2y);
+
+      const t1z = (box.min.z - start.z) * invDirZ;
+      const t2z = (box.max.z - start.z) * invDirZ;
+      const tMinZ = Math.min(t1z, t2z);
+      const tMaxZ = Math.max(t1z, t2z);
+
+      const tEnter = Math.max(tMinX, tMinY, tMinZ);
+      const tExit = Math.min(tMaxX, tMaxY, tMaxZ);
+
+      // 當光線穿透實體盒 (t 位於 0.02 到 0.98 之間) 即判定被遮蔽
+      if (tEnter <= tExit && tExit > 0.02 && tEnter < 0.98) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // 銷毀與清理資源

@@ -281,7 +281,7 @@ export class NPC {
       this.speed = 4.2 + speedJitter * 0.3;
       this.chaseSpeed = 7.6;
       this.attackPower = 12;
-      this.attackRange = 1.7;
+      this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.45;
     } else if (role === 'DETENTION_SENIOR') {
@@ -290,7 +290,7 @@ export class NPC {
       this.speed = 4.8 + speedJitter * 0.4;
       this.chaseSpeed = 8.2;
       this.attackPower = 14;
-      this.attackRange = 1.6;
+      this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'HURRIED_WALK';
       this.pauseChance = 0.40;
     } else if (role === 'DETENTION_HEAVY') {
@@ -299,7 +299,7 @@ export class NPC {
       this.speed = 3.6 + speedJitter * 0.3;
       this.chaseSpeed = 6.6;
       this.attackPower = 18;
-      this.attackRange = 1.8;
+      this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.50;
     } else if (role === 'DETENTION_WOLF') {
@@ -317,7 +317,7 @@ export class NPC {
       this.speed = 4.2;
       this.chaseSpeed = 8.0;
       this.attackPower = 20;
-      this.attackRange = 1.9;
+      this.attackRange = 2.0;
       this.movementStyle = movementStyle || 'OFFICER_PATROL';
       this.pauseChance = 0.35;
     } else if (role === 'INSPECTOR') {
@@ -1996,6 +1996,16 @@ export class NPC {
         activeSpotDistSq = 144.0; // 資深學長切磋，12m 發現主動挑戰
       } else if (this.role === 'DETENTION_HEAVY') {
         activeSpotDistSq = 100.0; // 霸榜生力量領域，10m 靠近主動重拳
+      }
+
+      // 核心機制：NPC 距離玩家 2m (distSq <= 4.0) 內立即主動鎖定並主動攻擊！
+      if (distSq <= 4.0) {
+        if (this.isPaused) this.cancelPause();
+        this.isChasing = true;
+        this.lostSightTimer = 0;
+        this.lastKnownPos.copy(playerPos);
+        onSpotPlayer();
+        return;
       }
 
       if (seesPlayer && distSq < activeSpotDistSq) {

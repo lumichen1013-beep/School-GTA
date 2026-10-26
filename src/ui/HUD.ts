@@ -13,12 +13,14 @@ export interface CommissaryItem {
 }
 
 export const COMMISSARY_MENU: CommissaryItem[] = [
-  { id: 'bento', name: '經典排骨便當', icon: '🍱', price: 50, healHp: 50, restoreStamina: false, desc: '古早味炸排骨，香氣四溢大補血！(+50 HP)' },
-  { id: 'chicken', name: '香脆豪大大雞排', icon: '🍗', price: 40, healHp: 40, restoreStamina: false, desc: '外皮酥脆多汁，下課排隊必吃！(+40 HP)' },
-  { id: 'boba', name: '波霸珍珠奶茶', icon: '🧋', price: 30, healHp: 30, restoreStamina: true, desc: '微糖微冰，體力與精力雙重滿足！(+30 HP & 精力滿)' },
-  { id: 'sandwich', name: '火腿起司三明治', icon: '🥪', price: 20, healHp: 20, restoreStamina: false, desc: '新鮮土司夾蛋，清爽飽足！(+20 HP)' },
-  { id: 'tea-egg', name: '香濃茶葉蛋', icon: '🥚', price: 12, healHp: 12, restoreStamina: false, desc: '合作社滷得最入味的經典！(+12 HP)' },
-  { id: 'sport-drink', name: '活力運動飲料', icon: '⚡', price: 15, healHp: 10, restoreStamina: true, desc: '迅速補充水分電解質！(+10 HP & 精力全滿)' }
+  { id: 'first-aid', name: '戰術急救止血繃帶', icon: '🩹', price: 25, healHp: 40, restoreStamina: false, desc: '防暴常備急救物資，快速止血穩固傷勢！(+40 HP)' },
+  { id: 'glucose', name: '高能葡萄糖補給液', icon: '💉', price: 45, healHp: 80, restoreStamina: false, desc: '極速吸收，強效重傷回血！(+80 HP)' },
+  { id: 'combat-ration', name: '軍規高熱量特訓乾糧', icon: '🥫', price: 35, healHp: 55, restoreStamina: true, desc: '高能壓縮乾糧，全面補足體能與精力！(+55 HP & 精力滿)' },
+  { id: 'sport-water', name: '超能電解質運動水', icon: '⚡', price: 20, healHp: 25, restoreStamina: true, desc: '深層補充微量元素，精力全滿！(+25 HP & 精力滿)' },
+  { id: 'iron-pill', name: '鐵血生肌大補丸', icon: '🛡️', price: 65, healHp: 110, restoreStamina: true, desc: '特訓所頂級秘方，體力大幅填滿！(+110 HP & 精力滿)' },
+  { id: 'bento', name: '特訓高蛋白厚切牛排便當', icon: '🍱', price: 50, healHp: 65, restoreStamina: false, desc: '古早風味厚切肉排，香氣四溢大補血！(+65 HP)' },
+  { id: 'chicken', name: '香脆豪大大雞排', icon: '🍗', price: 40, healHp: 40, restoreStamina: false, desc: '外皮酥脆多汁，下課特訓必吃！(+40 HP)' },
+  { id: 'boba', name: '波霸珍珠奶茶', icon: '🧋', price: 30, healHp: 30, restoreStamina: true, desc: '微糖微冰，體力與精力雙重滿足！(+30 HP & 精力滿)' }
 ];
 
 export interface MissionTrackerData {
