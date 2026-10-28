@@ -37,7 +37,14 @@ export class Engine {
     this.setupLighting();
 
     // 4. 視窗縮放與螢幕翻轉自適應：統一由 scheduleLayoutSync 處理 (翻轉後尺寸需數百毫秒才穩定，分段補量)
-    const onLayoutChange = () => this.scheduleLayoutSync();
+    // 以 rAF 合併同一幀內的大量事件 (iOS 工具列伸縮時 visualViewport scroll/resize 連續觸發)
+    const onLayoutChange = () => {
+      if (this.layoutRaf) return;
+      this.layoutRaf = requestAnimationFrame(() => {
+        this.layoutRaf = 0;
+        this.scheduleLayoutSync();
+      });
+    };
     window.addEventListener('resize', onLayoutChange);
     window.addEventListener('orientationchange', onLayoutChange);
     if (window.visualViewport) {
@@ -48,6 +55,7 @@ export class Engine {
   }
 
   private layoutSyncTimers: number[] = [];
+  private layoutRaf = 0;
   private lastLayoutW = 0;
   private lastLayoutH = 0;
   private viewportMetaContent: string | null = null;
@@ -64,22 +72,32 @@ export class Engine {
   // 2. 意外的雙指縮放 (iOS 忽略 user-scalable=no) 透過重設 viewport meta 還原為 1 倍
   // 3. 寫入 --app-w / --app-h 讓 body 與 HUD 精準貼齊可視區 (避開工具列遮擋與翻轉後殘留舊高度)
   // 4. 廣播 app-layout-change 讓 HUD 等以 JS 量測的版面數值重新同步
+  // 僅在尺寸改變或曾修正捲動/縮放時才寫入 CSS 變數並廣播，避免無變化時觸發 HUD 量測造成同步重排
   private syncLayout() {
-    if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    let corrected = false;
+    if (window.scrollX !== 0 || window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+      corrected = true;
+    }
+    if (document.documentElement.scrollTop !== 0) { document.documentElement.scrollTop = 0; corrected = true; }
+    if (document.body.scrollTop !== 0) { document.body.scrollTop = 0; corrected = true; }
 
     const vv = window.visualViewport;
-    if (vv && Math.abs(vv.scale - 1) > 0.01) this.resetPageZoom();
+    if (vv && Math.abs(vv.scale - 1) > 0.01) {
+      this.resetPageZoom();
+      corrected = true;
+    }
 
     const width = Math.round(vv ? vv.width : window.innerWidth);
     const height = Math.round(vv ? vv.height : window.innerHeight);
     if (width <= 0 || height <= 0) return;
-    const rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--app-w', `${width}px`);
-    rootStyle.setProperty('--app-h', `${height}px`);
+    const sizeChanged = width !== this.lastLayoutW || height !== this.lastLayoutH;
+    if (!sizeChanged && !corrected) return;
 
-    if (width !== this.lastLayoutW || height !== this.lastLayoutH) {
+    if (sizeChanged) {
+      const rootStyle = document.documentElement.style;
+      rootStyle.setProperty('--app-w', `${width}px`);
+      rootStyle.setProperty('--app-h', `${height}px`);
       this.lastLayoutW = width;
       this.lastLayoutH = height;
       this.resize(width, height);
@@ -138,10 +156,11 @@ export class Engine {
   public resize(width: number = window.innerWidth, height: number = window.innerHeight) {
     const safeWidth = Math.max(width, 1);
     const safeHeight = Math.max(height, 1);
-    this.renderer.setSize(safeWidth, safeHeight);
+    // 先設像素比再設尺寸：setPixelRatio 內部會以舊尺寸再呼叫一次 setSize，順序顛倒會重複配置繪圖緩衝區
     const isMobile = Engine.isMobileDevice();
     const maxPixelRatio = isMobile ? 1.5 : 2;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+    this.renderer.setSize(safeWidth, safeHeight);
     if (this.onResizeCallback) {
       this.onResizeCallback(safeWidth, safeHeight, safeWidth / safeHeight);
     }

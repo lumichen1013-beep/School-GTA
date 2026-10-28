@@ -1,3 +1,23 @@
+// 觸控落在這些 UI 上時不作為視角旋轉手指 (開始畫面、開場動畫、操作按鈕、搖桿與各面板)
+const TOUCH_LOOK_EXCLUDE_SELECTOR = [
+  '#start-screen',
+  '#cutscene-overlay',
+  '#touch-joystick-zone',
+  '#mobile-action-buttons',
+  '.mobile-btn',
+  '#commissary-modal',
+  '#bgm-badge',
+  '#toggle-mobile-mode-btn',
+  '#btn-fullscreen',
+  '#hud-action-pills',
+  '#quest-tracker-panel',
+  '#fullmap-modal',
+  '.demerit-container',
+  '.hud-top-right',
+  '.minimap-wrapper',
+  'button'
+].join(', ');
+
 export class InputManager {
   public keys: { [key: string]: boolean } = {};
   public mouseDeltaX: number = 0;
@@ -42,6 +62,8 @@ export class InputManager {
         e.preventDefault();
       }
       this.keys[e.code] = true;
+      // 長按自動重複的 keydown 不重複觸發動作 (F 保留長按連續攻擊)
+      if (e.repeat && e.code !== 'KeyF') return;
       if (e.code === 'KeyE') {
         if (this.onInteractCallback) this.onInteractCallback();
       }
@@ -112,6 +134,11 @@ export class InputManager {
     window.addEventListener('blur', () => {
       this.mouseButtons.left = false;
       this.mouseButtons.right = false;
+      // 失焦時收不到 keyup：清空按鍵與虛擬搖桿，避免角色持續移動
+      for (const code in this.keys) this.keys[code] = false;
+      this.setVirtualAxis(0, 0);
+      this.virtualSprint = false;
+      this.virtualJump = false;
     });
 
     // Mouse movement
@@ -159,24 +186,7 @@ export class InputManager {
         const touch = e.changedTouches[i];
         const target = touch.target as HTMLElement;
         // 如果點在操作按鈕、搖桿、UI 面板、開始畫面或開場動畫 (跳過鈕) 上，不觸發視角旋轉
-        if (
-          target.closest('#start-screen') ||
-          target.closest('#cutscene-overlay') ||
-          target.closest('#touch-joystick-zone') ||
-          target.closest('#mobile-action-buttons') ||
-          target.closest('.mobile-btn') ||
-          target.closest('#commissary-modal') ||
-          target.closest('#bgm-badge') ||
-          target.closest('#toggle-mobile-mode-btn') ||
-          target.closest('#btn-fullscreen') ||
-          target.closest('#hud-action-pills') ||
-          target.closest('#quest-tracker-panel') ||
-          target.closest('#fullmap-modal') ||
-          target.closest('.demerit-container') ||
-          target.closest('.hud-top-right') ||
-          target.closest('.minimap-wrapper') ||
-          target.closest('button')
-        ) {
+        if (target.closest(TOUCH_LOOK_EXCLUDE_SELECTOR)) {
           continue;
         }
         // 右側螢幕區域 (避開左側搖桿區) 作為攝影機滑動旋轉視角控制
@@ -233,7 +243,7 @@ export class InputManager {
     this.virtualJump = false;
   }
 
-  public resetTouchLook() {
+  private resetTouchLook() {
     this.touchLookId = null;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
@@ -336,10 +346,6 @@ export class InputManager {
 
   public get jump(): boolean {
     return !!(this.keys['Space'] || this.virtualJump);
-  }
-
-  public get interact(): boolean {
-    return !!this.keys['KeyE'];
   }
 
   public get horn(): boolean {

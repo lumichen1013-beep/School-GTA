@@ -117,6 +117,16 @@ export class IndoorManager {
     DETENTION: IndoorManager.ZONES.filter(z => z.world === 'ALL' || z.world === 'DETENTION')
   };
 
+  // 各世界最高屋頂高度：雨滴高於此值時必不在任何屋頂之下，可略過逐區查詢
+  private static readonly maxRoofByWorld: Record<'CAMPUS' | 'DETENTION', number> = {
+    CAMPUS: Math.max(...IndoorManager.zonesByWorld.CAMPUS.map(z => z.roofY)),
+    DETENTION: Math.max(...IndoorManager.zonesByWorld.DETENTION.map(z => z.roofY))
+  };
+
+  public static maxRoofY(currentWorld: 'CAMPUS' | 'DETENTION'): number {
+    return this.maxRoofByWorld[currentWorld];
+  }
+
   private static zonesFor(currentWorld: 'CAMPUS' | 'DETENTION'): IndoorZone[] {
     return this.zonesByWorld[currentWorld];
   }

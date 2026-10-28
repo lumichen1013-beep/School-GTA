@@ -4,6 +4,7 @@ import { queryColliders } from '../physics/aabb';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
 import type { GameContext } from './GameContext';
+import { isBehindNpc, isBossStunOpening } from './DetentionMode';
 
 const _scratchPlayerForward = new THREE.Vector3();
 const _scratchImpactDir = new THREE.Vector3();
@@ -26,6 +27,12 @@ export class CombatSystem {
   private wasBossStunned: boolean = false;
 
   constructor(private readonly ctx: GameContext) {}
+
+  // 切換世界時清除慢動作與暗殺後跳計時，避免在另一個世界觸發
+  public resetTransientState() {
+    this.bulletTimeTimer = 0;
+    this.bossJumpDelayTimer = 0;
+  }
 
   // 套用慢動作時間膨脹後的模擬時間步長
   public scaleDelta(rawDelta: number): number {
@@ -128,14 +135,8 @@ export class CombatSystem {
             }
           }
 
-          // 判定是否為正面攻擊 (dot >= -0.15，非背後盲區)：技能間隔 0.5 秒且擊退效果減半
-          const guardFwdX = Math.sin(npc.rotationY);
-          const guardFwdZ = Math.cos(npc.rotationY);
-          const toPlayerX = player.position.x - npc.position.x;
-          const toPlayerZ = player.position.z - npc.position.z;
-          const dist = Math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
-          const dot = dist > 0.001 ? guardFwdX * (toPlayerX / dist) + guardFwdZ * (toPlayerZ / dist) : 1;
-          if (dot >= -0.15) {
+          // 正面攻擊 (非背後盲區)：技能間隔 0.5 秒且擊退效果減半
+          if (!isBehindNpc(npc, player.position.x, player.position.z)) {
             actualKnockback = knockback * 0.5;
             player.setAttackCooldown(0.5);
             wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
@@ -163,8 +164,7 @@ export class CombatSystem {
 
     // 嚴格暗殺判定：若已被敵人發現 (! 警戒狀態)，完全無法發動暗殺！
     if (target.alertState === 'ALERT') {
-      const isStunnedBoss = (target.role === 'DETENTION_BOSS' && target.isBossStunned && !target.isBossInvulnerable && target.bossInvulnerableTimer <= 0);
-      if (!isStunnedBoss) {
+      if (!isBossStunOpening(target)) {
         wantedSystem.showBanner('⚠️ 敵人已發現你 (! 狀態)！無法發動暗殺！需脫離視線或誘敵硬直！', 2000);
         return;
       }

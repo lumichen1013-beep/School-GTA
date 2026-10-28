@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 interface SplashDroplet {
-  mesh: THREE.Mesh<THREE.DodecahedronGeometry, THREE.MeshBasicMaterial>;
+  position: THREE.Vector3;
   velocity: THREE.Vector3;
   life: number;
   maxLife: number;
@@ -10,7 +10,7 @@ interface SplashDroplet {
 }
 
 interface WaterRipple {
-  mesh: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
+  position: THREE.Vector3;
   life: number;
   maxLife: number;
   initialScale: number;
@@ -18,9 +18,21 @@ interface WaterRipple {
   active: boolean;
 }
 
+// 水珠交替使用晶瑩純白 (泡沫) 與冰川淡天藍色 (水光)
+const DROPLET_COLORS = [new THREE.Color(0xffffff), new THREE.Color(0xb3e5fc)];
+// 漣漪由清澈湛藍淡出至泳池水色 (共用材質無法逐一調整透明度，改以顏色融入水面呈現淡出)
+const RIPPLE_COLOR = new THREE.Color(0x81d4fa);
+const RIPPLE_FADE_COLOR = new THREE.Color(0x0097e6);
+const RIPPLE_QUAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+const _scratchMatrix = new THREE.Matrix4();
+const _scratchScale = new THREE.Vector3();
+const _scratchColor = new THREE.Color();
+const _identityQuat = new THREE.Quaternion();
+const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
 /**
  * 高性能游泳水花與漣漪特效系統 (Water Splash & Ripples VFX)
- * - 具備雙重輕量物件池 (Object Pool)：飛濺水珠微粒池 (100) + 水面擴散漣漪池 (30)
+ * - 雙重物件池：飛濺水珠微粒 (100) + 水面擴散漣漪 (30)，各以單一 InstancedMesh 繪製 (2 次 Draw Call)
  * - 0 GC 記憶體垃圾回收負擔，行動端與低端設備流暢維持 60 FPS
  * - 支援身後踢水噴濺、兩側大風車划水擴散、與划水音效節奏對齊爆發
  */
@@ -31,11 +43,13 @@ export class WaterSplashVFX {
   private readonly MAX_DROPLETS = 100;
   private droplets: SplashDroplet[] = [];
   private nextDropletIdx: number = 0;
+  private dropletMesh: THREE.InstancedMesh;
 
   // 2. 水面擴散漣漪物件池 (Expanding Ripples Pool)
   private readonly MAX_RIPPLES = 30;
   private ripples: WaterRipple[] = [];
   private nextRippleIdx: number = 0;
+  private rippleMesh: THREE.InstancedMesh;
 
   // 發射計時器 (Emission Timers)
   private kickSprayTimer: number = 0;
@@ -47,30 +61,22 @@ export class WaterSplashVFX {
     this.group = new THREE.Group();
     scene.add(this.group);
 
-    this.initDropletsPool();
-    this.initRipplesPool();
+    this.dropletMesh = this.initDropletsPool();
+    this.rippleMesh = this.initRipplesPool();
   }
 
-  // 初始化打水飛濺水珠物件池
-  private initDropletsPool() {
+  // 初始化打水飛濺水珠物件池 (未使用的實例以零縮放矩陣隱藏)
+  private initDropletsPool(): THREE.InstancedMesh {
     const geo = new THREE.DodecahedronGeometry(0.048, 0); // 低多邊形晶瑩水珠幾何體
-
+    const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false });
+    const mesh = new THREE.InstancedMesh(geo, mat, this.MAX_DROPLETS);
+    mesh.frustumCulled = false; // 實例位置每幀變動，略過整體包圍球剔除
+    mesh.visible = false;
     for (let i = 0; i < this.MAX_DROPLETS; i++) {
-      // 交替使用晶瑩純白 (泡沬) 與冰川淡天藍色 (水光)
-      const color = i % 2 === 0 ? 0xffffff : 0xb3e5fc;
-      const mat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.85,
-        depthWrite: false
-      });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.visible = false;
-      this.group.add(mesh);
-
+      mesh.setMatrixAt(i, _zeroMatrix);
+      mesh.setColorAt(i, DROPLET_COLORS[i % 2]);
       this.droplets.push({
-        mesh,
+        position: new THREE.Vector3(),
         velocity: new THREE.Vector3(),
         life: 0,
         maxLife: 1,
@@ -78,28 +84,27 @@ export class WaterSplashVFX {
         active: false
       });
     }
+    this.group.add(mesh);
+    return mesh;
   }
 
   // 初始化水面擴散漣漪物件池
-  private initRipplesPool() {
+  private initRipplesPool(): THREE.InstancedMesh {
     const ringGeo = new THREE.RingGeometry(0.16, 0.36, 24);
-
+    const mat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const mesh = new THREE.InstancedMesh(ringGeo, mat, this.MAX_RIPPLES);
+    mesh.frustumCulled = false;
+    mesh.visible = false;
     for (let i = 0; i < this.MAX_RIPPLES; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x81d4fa, // 清澈湛藍水波光環
-        transparent: true,
-        opacity: 0.75,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-
-      const mesh = new THREE.Mesh(ringGeo, mat);
-      mesh.rotation.x = -Math.PI / 2; // 水平貼齊水面
-      mesh.visible = false;
-      this.group.add(mesh);
-
+      mesh.setMatrixAt(i, _zeroMatrix);
+      mesh.setColorAt(i, RIPPLE_COLOR);
       this.ripples.push({
-        mesh,
+        position: new THREE.Vector3(),
         life: 0,
         maxLife: 1,
         initialScale: 0.4,
@@ -107,6 +112,8 @@ export class WaterSplashVFX {
         active: false
       });
     }
+    this.group.add(mesh);
+    return mesh;
   }
 
   /**
@@ -125,15 +132,13 @@ export class WaterSplashVFX {
     const droplet = this.droplets[this.nextDropletIdx];
     this.nextDropletIdx = (this.nextDropletIdx + 1) % this.MAX_DROPLETS;
 
-    droplet.mesh.position.set(x, y, z);
+    droplet.position.set(x, y, z);
     droplet.velocity.set(vx, vy, vz);
     droplet.life = maxLife;
     droplet.maxLife = maxLife;
     droplet.baseScale = baseScale;
-    droplet.mesh.scale.setScalar(baseScale);
-    droplet.mesh.material.opacity = 0.85;
-    droplet.mesh.visible = true;
     droplet.active = true;
+    this.dropletMesh.visible = true;
   }
 
   /**
@@ -150,16 +155,14 @@ export class WaterSplashVFX {
     const ripple = this.ripples[this.nextRippleIdx];
     this.nextRippleIdx = (this.nextRippleIdx + 1) % this.MAX_RIPPLES;
 
-    // 稍微抬高 0.005m，緊密貼齊水面並杜絕 Z-fighting 閃爍
-    ripple.mesh.position.set(x, y + 0.006, z);
+    // 稍微抬高 0.006m，緊密貼齊水面並杜絕 Z-fighting 閃爍
+    ripple.position.set(x, y + 0.006, z);
     ripple.life = maxLife;
     ripple.maxLife = maxLife;
     ripple.initialScale = initialScale;
     ripple.targetScale = targetScale;
-    ripple.mesh.scale.set(initialScale, initialScale, initialScale);
-    ripple.mesh.material.opacity = 0.75;
-    ripple.mesh.visible = true;
     ripple.active = true;
+    this.rippleMesh.visible = true;
   }
 
   /**
@@ -271,58 +274,70 @@ export class WaterSplashVFX {
   ) {
     const clampedDelta = Math.min(delta, 0.1); // 防止切換分頁時的大跳幀
 
-    // 1. 更新所有使用中的水珠微粒
+    // 1. 更新所有使用中的水珠微粒 (淡出改以縮小呈現，共用材質不逐一調整透明度)
     const gravity = 13.5;
-    for (let i = 0; i < this.MAX_DROPLETS; i++) {
-      const droplet = this.droplets[i];
-      if (!droplet.active) continue;
+    let dropletsAlive = 0;
+    if (this.dropletMesh.visible) {
+      for (let i = 0; i < this.MAX_DROPLETS; i++) {
+        const droplet = this.droplets[i];
+        if (!droplet.active) continue;
 
-      droplet.life -= clampedDelta;
-      if (droplet.life <= 0) {
-        droplet.active = false;
-        droplet.mesh.visible = false;
-        continue;
+        droplet.life -= clampedDelta;
+        if (droplet.life <= 0) {
+          droplet.active = false;
+          this.dropletMesh.setMatrixAt(i, _zeroMatrix);
+          continue;
+        }
+
+        // 重力與位移物理更新
+        droplet.velocity.y -= gravity * clampedDelta;
+        droplet.position.addScaledVector(droplet.velocity, clampedDelta);
+
+        // 當水珠回落跌入水面下方時，迅速消散
+        if (droplet.position.y <= waterY) {
+          droplet.position.y = waterY;
+          droplet.life -= clampedDelta * 2.5; // 加速沉沒消失
+        }
+
+        // 線性平滑縮小淡出
+        const lifeRatio = Math.max(0, droplet.life / droplet.maxLife);
+        _scratchScale.setScalar(droplet.baseScale * lifeRatio);
+        _scratchMatrix.compose(droplet.position, _identityQuat, _scratchScale);
+        this.dropletMesh.setMatrixAt(i, _scratchMatrix);
+        dropletsAlive++;
       }
-
-      // 重力與位移物理更新
-      droplet.velocity.y -= gravity * clampedDelta;
-      droplet.mesh.position.addScaledVector(droplet.velocity, clampedDelta);
-
-      // 當水珠回落跌入水面下方時，迅速消散
-      if (droplet.mesh.position.y <= waterY) {
-        droplet.mesh.position.y = waterY;
-        droplet.life -= clampedDelta * 2.5; // 加速沉沒消失
-      }
-
-      // 線性平滑淡出與縮放
-      const lifeRatio = Math.max(0, droplet.life / droplet.maxLife);
-      droplet.mesh.material.opacity = lifeRatio * 0.85;
-      droplet.mesh.scale.setScalar(droplet.baseScale * (0.5 + 0.5 * lifeRatio));
+      this.dropletMesh.instanceMatrix.needsUpdate = true;
+      if (dropletsAlive === 0) this.dropletMesh.visible = false;
     }
 
     // 2. 更新所有使用中的水面擴散漣漪
-    for (let i = 0; i < this.MAX_RIPPLES; i++) {
-      const ripple = this.ripples[i];
-      if (!ripple.active) continue;
+    let ripplesAlive = 0;
+    if (this.rippleMesh.visible) {
+      for (let i = 0; i < this.MAX_RIPPLES; i++) {
+        const ripple = this.ripples[i];
+        if (!ripple.active) continue;
 
-      ripple.life -= clampedDelta;
-      if (ripple.life <= 0) {
-        ripple.active = false;
-        ripple.mesh.visible = false;
-        continue;
+        ripple.life -= clampedDelta;
+        if (ripple.life <= 0) {
+          ripple.active = false;
+          this.rippleMesh.setMatrixAt(i, _zeroMatrix);
+          continue;
+        }
+
+        const progress = 1 - Math.max(0, ripple.life / ripple.maxLife); // 0 -> 1
+        // 緩動向外擴散
+        const curScale = THREE.MathUtils.lerp(ripple.initialScale, ripple.targetScale, Math.pow(progress, 0.65));
+        _scratchScale.setScalar(curScale);
+        _scratchMatrix.compose(ripple.position, RIPPLE_QUAT, _scratchScale);
+        this.rippleMesh.setMatrixAt(i, _scratchMatrix);
+        // 正弦平滑淡出：顏色逐漸融入泳池水色
+        _scratchColor.copy(RIPPLE_COLOR).lerp(RIPPLE_FADE_COLOR, 1 - Math.sin((1 - progress) * Math.PI * 0.5));
+        this.rippleMesh.setColorAt(i, _scratchColor);
+        ripplesAlive++;
       }
-
-      const progress = 1 - Math.max(0, ripple.life / ripple.maxLife); // 0 -> 1
-      // 緩動向外擴散
-      const curScale = THREE.MathUtils.lerp(
-        ripple.initialScale,
-        ripple.targetScale,
-        Math.pow(progress, 0.65)
-      );
-      ripple.mesh.scale.set(curScale, curScale, curScale);
-
-      // 正弦平滑淡出
-      ripple.mesh.material.opacity = Math.sin((1 - progress) * Math.PI * 0.5) * 0.72;
+      this.rippleMesh.instanceMatrix.needsUpdate = true;
+      if (this.rippleMesh.instanceColor) this.rippleMesh.instanceColor.needsUpdate = true;
+      if (ripplesAlive === 0) this.rippleMesh.visible = false;
     }
 
     // 3. 游泳動態發射判定
@@ -375,13 +390,17 @@ export class WaterSplashVFX {
    * 重置並立即隱藏所有特效物件 (如換場景或角色死亡重生)
    */
   public reset() {
-    for (const droplet of this.droplets) {
-      droplet.active = false;
-      droplet.mesh.visible = false;
+    for (let i = 0; i < this.MAX_DROPLETS; i++) {
+      this.droplets[i].active = false;
+      this.dropletMesh.setMatrixAt(i, _zeroMatrix);
     }
-    for (const ripple of this.ripples) {
-      ripple.active = false;
-      ripple.mesh.visible = false;
+    for (let i = 0; i < this.MAX_RIPPLES; i++) {
+      this.ripples[i].active = false;
+      this.rippleMesh.setMatrixAt(i, _zeroMatrix);
     }
+    this.dropletMesh.instanceMatrix.needsUpdate = true;
+    this.rippleMesh.instanceMatrix.needsUpdate = true;
+    this.dropletMesh.visible = false;
+    this.rippleMesh.visible = false;
   }
 }

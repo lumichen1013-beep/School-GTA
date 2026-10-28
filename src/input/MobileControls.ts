@@ -56,12 +56,16 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
       'transform:translate(-50%,-50%);border-radius:50%;border:2px dashed rgba(52,211,153,0.75);' +
       'pointer-events:none;display:none;transition:border-color 0.12s;';
     joystickZone.appendChild(sneakRing);
+    // 狀態 (0 隱藏 / 1 潛行區內 / 2 潛行區外) 變化時才寫入 style，避免每次 touchmove 重寫
+    let sneakRingState = -1;
     const updateSneakRing = (active: boolean) => {
       const show = active && input.joystickSneakEnabled;
-      sneakRing.style.display = show ? 'block' : 'none';
-      if (show) {
-        const inSneak = input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS;
-        sneakRing.style.borderColor = inSneak ? 'rgba(52,211,153,0.9)' : 'rgba(255,255,255,0.35)';
+      const state = !show ? 0 : (input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS ? 1 : 2);
+      if (state === sneakRingState) return;
+      sneakRingState = state;
+      sneakRing.style.display = state === 0 ? 'none' : 'block';
+      if (state !== 0) {
+        sneakRing.style.borderColor = state === 1 ? 'rgba(52,211,153,0.9)' : 'rgba(255,255,255,0.35)';
       }
     };
 

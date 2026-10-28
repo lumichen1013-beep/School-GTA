@@ -293,6 +293,9 @@ export class Player {
   private outfitMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
   private outfitNodes: { mesh: THREE.Mesh; land: THREE.BufferGeometry; swim: THREE.BufferGeometry }[] = [];
   private isSwimOutfit: boolean = false;
+  // 半透明淡化特效 (閃身、狗熊哆嗦毛、草堆匿蹤) 作用的材質清單與原始不透明度/透明旗標 (建構後快取一次)
+  private fadeMaterials: { mat: THREE.Material; baseOpacity: number; baseTransparent: boolean }[] = [];
+  private currentFade: number = 1;
 
   // 頭頂技能名稱對話氣泡 (浮動微光膠囊框，0-GC 復用 Sprite)
   private skillBubble: SkillBubble;
@@ -400,6 +403,7 @@ export class Player {
     this.rightLeg = this.createOutfitNode((b) => buildLegParts(b, 1), 0.18, 0.35, 0);
 
     scene.add(this.mesh);
+    this.collectFadeMaterials();
 
     // 建立 0-GC 角色殘影物件池 (8 個 Group，常駐場景，避免每幀垃圾回收)
     this.afterimagePool = new AfterimagePool(scene, 8);
@@ -860,12 +864,7 @@ export class Player {
         this.isBearShaking = false;
         this.isDodging = false;
         this.mesh.rotation.z = 0;
-        this.mesh.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-            const m = (child as THREE.Mesh).material as THREE.Material;
-            if (m) m.opacity = 1.0;
-          }
-        });
+        this.setBodyFade(1);
       }
 
       if (this.isBearShaking) {
@@ -880,15 +879,7 @@ export class Player {
 
         // 紫色幻影閃爍
         const purpleFlicker = 0.45 + Math.sin(shakePhase) * 0.35;
-        this.mesh.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-            const m = (child as THREE.Mesh).material as THREE.Material;
-            if (m) {
-              m.transparent = true;
-              m.opacity = purpleFlicker;
-            }
-          }
-        });
+        this.setBodyFade(purpleFlicker);
 
         this.mesh.position.copy(this.position);
         this.updateSkillBubble(delta);
@@ -989,24 +980,9 @@ export class Player {
 
     // 刺客草堆掩體半透明隱蔽視覺表現
     if (this.isHidingInCover) {
-      this.mesh.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-          const m = (child as THREE.Mesh).material as THREE.Material;
-          if (m) {
-            m.transparent = true;
-            m.opacity = 0.45;
-          }
-        }
-      });
+      this.setBodyFade(0.45);
     } else if (!this.isDodging && !this.isBearShaking && this.hitCooldown <= 0) {
-      this.mesh.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-          const m = (child as THREE.Mesh).material as THREE.Material;
-          if (m && m.opacity < 0.99) {
-            m.opacity = 1.0;
-          }
-        }
-      });
+      this.setBodyFade(1);
     }
 
     // 3. 水平移動速度與擊飛拋物線物理 (Knockback & Launch-Flying)
@@ -1033,12 +1009,7 @@ export class Player {
         if (this.dodgeTimer <= 0) {
           this.isDodging = false;
           this.mesh.rotation.z = 0;
-          this.mesh.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-              const m = (child as THREE.Mesh).material as THREE.Material;
-              if (m) m.opacity = 1.0;
-            }
-          });
+          this.setBodyFade(1);
         } else {
           this.velocity.x = this.dodgeDir.x * this.dodgeSpeed;
           this.velocity.z = this.dodgeDir.z * this.dodgeSpeed;
@@ -1056,15 +1027,7 @@ export class Player {
 
           // 閃爍微光
           const flicker = 0.5 + Math.sin(this.dodgeTimer * 35.0) * 0.25;
-          this.mesh.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
-              const m = (child as THREE.Mesh).material as THREE.Material;
-              if (m) {
-                m.transparent = true;
-                m.opacity = flicker;
-              }
-            }
-          });
+          this.setBodyFade(flicker);
         }
       } else {
         this.velocity.x = _playerMoveDir.x * currentSpeed;
@@ -1544,6 +1507,36 @@ export class Player {
         this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, delta * 10);
         this.bodyMesh.position.y = 1.05;
         this.headMesh.position.y = 1.62;
+      }
+    }
+  }
+
+  // 快取角色身上所有網格材質 (去重) 與其原始不透明度/透明旗標，供淡化特效重複使用
+  private collectFadeMaterials() {
+    const seen = new Set<THREE.Material>();
+    this.mesh.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        if (!mat || seen.has(mat)) continue;
+        seen.add(mat);
+        this.fadeMaterials.push({ mat, baseOpacity: mat.opacity, baseTransparent: mat.transparent });
+      }
+    });
+  }
+
+  // 套用全身淡化 (1 = 原貌)：以原始不透明度等比縮放 (半透明網線維持相對透明度)，回到 1 時還原透明旗標
+  private setBodyFade(alpha: number) {
+    if (alpha === this.currentFade) return;
+    this.currentFade = alpha;
+    for (let i = 0; i < this.fadeMaterials.length; i++) {
+      const entry = this.fadeMaterials[i];
+      entry.mat.opacity = entry.baseOpacity * alpha;
+      const transparent = entry.baseTransparent || alpha < 1;
+      if (entry.mat.transparent !== transparent) {
+        entry.mat.transparent = transparent;
+        entry.mat.needsUpdate = true;
       }
     }
   }

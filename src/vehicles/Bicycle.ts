@@ -4,6 +4,7 @@ import { isBlockedXZ, depenetrateXZ, getSupportFloorY } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
+import { bakeNode, bakeStaticParts, disposeNonShared } from '../entities/npc/modelCache';
 
 export class Bicycle {
   public mesh: THREE.Group;
@@ -174,6 +175,17 @@ export class Bicycle {
 
     this.mesh.add(this.handlebars);
 
+    // 烘焙合併 (同顏色單車共用幾何體與頂點色材質)：輪胎 (含輪輻)、龍頭、頭部為獨立動畫節點，其餘車身零件合併為單一靜態網格
+    const colorKey = colorHex.toString(16);
+    bakeNode(this.rearWheel, 'bicycle|wheel');
+    bakeNode(this.frontWheel, 'bicycle|wheel');
+    bakeNode(this.handlebars, `bicycle|${colorKey}|handlebars`);
+    bakeNode(this.headGroup, `bicycle|${colorKey}|head`);
+    const staticParts = this.mesh.children.filter(
+      (c) => c !== this.rearWheel && c !== this.frontWheel && c !== this.handlebars && c !== this.headGroup
+    );
+    bakeStaticParts(this.mesh, staticParts, `bicycle|${colorKey}|body`);
+
     scene.add(this.mesh);
   }
 
@@ -229,19 +241,10 @@ export class Bicycle {
     soundManager.playBicycleBell();
   }
 
-  // 自場景移除並釋放幾何體與材質 (車主牽回或超量回收路邊單車時呼叫；騎乘中不得呼叫)
+  // 自場景移除並釋放非共用資源 (烘焙幾何體與材質由快取共用，不可釋放；車主牽回或超量回收路邊單車時呼叫；騎乘中不得呼叫)
   public dispose(scene: THREE.Scene) {
     scene.remove(this.mesh);
-    this.mesh.traverse((obj) => {
-      const m = obj as THREE.Mesh;
-      if (m.isMesh) {
-        if (m.geometry) m.geometry.dispose();
-        if (m.material) {
-          if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
-          else m.material.dispose();
-        }
-      }
-    });
+    disposeNonShared(this.mesh);
   }
 
   // 停妥靜止判定：無人騎乘、已停穩貼地且位置未被外力改變時，跳過整套碰撞與重力運算

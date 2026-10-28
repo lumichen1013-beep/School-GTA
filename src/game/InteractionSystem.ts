@@ -23,6 +23,10 @@ interface Interaction {
  */
 export class InteractionSystem {
   private readonly interactions: Interaction[];
+  // 上一幀顯示提示的互動項與競速提示快取 (切換顯示項時失效，確保提示文字重新寫入)
+  private lastPromptIt: Interaction | null = null;
+  private raceHudKey = -1;
+  private raceHudStanding = '';
 
   constructor(private readonly ctx: GameContext) {
     this.interactions = [...this.buildDetentionInteractions(), ...this.buildCampusInteractions()];
@@ -33,10 +37,24 @@ export class InteractionSystem {
     const world = this.ctx.currentWorldType;
     for (const it of this.interactions) {
       if (!it.prompt || (it.world && it.world !== world) || !it.when(pos)) continue;
+      if (it !== this.lastPromptIt) {
+        this.lastPromptIt = it;
+        this.raceHudKey = -1;
+      }
       it.prompt();
       return;
     }
+    this.lastPromptIt = null;
     this.ctx.hud.hidePrompt();
+  }
+
+  // 競速提示：計時 (0.1 秒)、檢查點或名次文字變化時才回傳 true
+  private raceHudChanged(timer: number, checkpointIdx: number, standing: string): boolean {
+    const key = Math.floor(timer * 10) * 1000 + checkpointIdx;
+    if (key === this.raceHudKey && standing === this.raceHudStanding) return false;
+    this.raceHudKey = key;
+    this.raceHudStanding = standing;
+    return true;
   }
 
   // E 鍵：執行第一個符合條件的互動動作
@@ -225,6 +243,8 @@ export class InteractionSystem {
         when: () => ctx.racingGame.isRacingTrack,
         prompt: () => {
           const rg = ctx.racingGame;
+          // 顯示內容 (0.1 秒計時、檢查點、名次) 有變化時才組字串
+          if (!this.raceHudChanged(rg.raceTimer, rg.raceCheckpointIdx, rg.trackStandingText)) return;
           this.showPrompt(`${rg.trackStandingText} | 操場計時: ${rg.raceTimer.toFixed(1)}s (檢查點 ${rg.raceCheckpointIdx + 1}/${ctx.world.trackCheckpoints.length})`, '⏱️');
         }
       },
@@ -233,6 +253,7 @@ export class InteractionSystem {
         when: () => ctx.racingGame.isSwimmingRace,
         prompt: () => {
           const rg = ctx.racingGame;
+          if (!this.raceHudChanged(rg.swimRaceTimer, rg.swimCheckpointIdx, rg.swimStandingText)) return;
           this.showPrompt(`${rg.swimStandingText} | 泳池計時: ${rg.swimRaceTimer.toFixed(1)}s (檢查點 ${rg.swimCheckpointIdx + 1}/${ctx.world.swimCheckpoints.length})`, '🏊');
         }
       },

@@ -26,7 +26,7 @@ interface BakeEntry {
 const bakedCache = new Map<string, BakedBucket[]>();
 const sharedMaterials = new Map<BucketKey, THREE.Material>();
 
-function markShared<T extends { userData: Record<string, unknown> }>(res: T): T {
+export function markShared<T extends { userData: Record<string, unknown> }>(res: T): T {
   res.userData.shared = true;
   return res;
 }

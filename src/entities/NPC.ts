@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, isBlockedXZ, depenetrateXZ, getSupportFloorY, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import type { Bicycle } from '../vehicles/Bicycle';
-import { bakeNode, bakeStaticParts, disposeNonShared, getHpBarMaterial, getHpBarResources } from './npc/modelCache';
+import { disposeNonShared, getHpBarMaterial, getHpBarResources, markShared } from './npc/modelCache';
 import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
-import { buildUmbrella } from './shared/umbrella';
+import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
 import { impactDust } from '../effects/ImpactDust';
 import { requestCameraShake } from '../effects/cameraShake';
@@ -55,6 +54,60 @@ const _bossImpactPoint = new THREE.Vector3();
 // 總教官硬直頭頂旋轉星星 (所有實例共用幾何與材質)
 let _stunStarGeo: THREE.OctahedronGeometry | null = null;
 let _stunStarMat: THREE.MeshBasicMaterial | null = null;
+
+// 頭頂 256×64 告示牌繪製 (圓角底框 + 置中文字)
+interface BadgeStyle {
+  bg: string;
+  border: string;
+  lineWidth: number;
+  x: number;
+  w: number;
+  radius: number;
+  font: string;
+}
+const BADGE_KO: BadgeStyle = { bg: 'rgba(231, 76, 60, 0.88)', border: '#ffffff', lineWidth: 3, x: 4, w: 248, radius: 12, font: 'bold 26px sans-serif' };
+const BADGE_PERMANENT_KO: BadgeStyle = { bg: 'rgba(30, 41, 59, 0.92)', border: '#38bdf8', lineWidth: 3, x: 8, w: 240, radius: 12, font: 'bold 26px sans-serif' };
+const BADGE_CAUTION: BadgeStyle = { bg: 'rgba(245, 158, 11, 0.92)', border: '#ffffff', lineWidth: 2.5, x: 50, w: 156, radius: 14, font: 'bold 36px sans-serif' };
+const BADGE_ALERT: BadgeStyle = { bg: 'rgba(239, 68, 68, 0.95)', border: '#ffffff', lineWidth: 3, x: 50, w: 156, radius: 14, font: 'bold 36px sans-serif' };
+const BADGE_STUN: BadgeStyle = { bg: 'rgba(234, 179, 8, 0.95)', border: '#ffffff', lineWidth: 3, x: 8, w: 240, radius: 12, font: 'bold 24px sans-serif' };
+
+function drawBadge(ctx: CanvasRenderingContext2D, style: BadgeStyle, text: string, textColor: string = '#ffffff') {
+  ctx.clearRect(0, 0, 256, 64);
+  ctx.fillStyle = style.bg;
+  ctx.beginPath();
+  ctx.roundRect(style.x, 4, style.w, 56, style.radius);
+  ctx.fill();
+  ctx.strokeStyle = style.border;
+  ctx.lineWidth = style.lineWidth;
+  ctx.stroke();
+  ctx.fillStyle = textColor;
+  ctx.font = style.font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 32);
+}
+
+// 固定內容告示牌 (❓ / ❗ / 永久擊昏 / 破盾硬直) 全體 NPC 共用一張貼圖，免除每隻 NPC 各自重繪與上傳
+const _sharedBadgeTextures = new Map<string, THREE.CanvasTexture>();
+function getSharedBadgeTexture(key: string, style: BadgeStyle, text: string, textColor?: string): THREE.CanvasTexture {
+  let tex = _sharedBadgeTextures.get(key);
+  if (!tex) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) drawBadge(ctx, style, text, textColor);
+    tex = markShared(new THREE.CanvasTexture(canvas));
+    _sharedBadgeTextures.set(key, tex);
+  }
+  return tex;
+}
+
+// 警戒狀態對應的告示牌代碼 (lastKoBadgeSec)：用於狀態未變時略過重設
+const ALERT_BADGE_CODE = { NORMAL: -1, CAUTION: -101, ALERT: -102 } as const;
+// 失去單車後步行數值 (學生步速依移動風格決定，徒步騎士固定採用一般步行/追逐速度)
+const BIKELESS_WALK_SPEED = 5.0;
+const BIKELESS_CHASE_SPEED = 10.0;
 
 // 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
 export interface AttackSpec {
@@ -155,7 +208,6 @@ export class NPC {
   public bossWindupTimer: number = 0;
   public bossIsCharging: boolean = false;
   public bossChargeTraveled: number = 0;
-  public bossChargeMaxDist: number = 24.0;
   public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
   public bossTelegraphGroup?: THREE.Group;
   private bossTelegraphMat?: THREE.MeshBasicMaterial;
@@ -224,7 +276,6 @@ export class NPC {
   private reclaimTimer: number = 0;
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
-  private bikeParts: THREE.Object3D[] = [];
   private bikeModelParts: THREE.Object3D[] = []; // 騎車姿態模型全部零件 (單車 + 坐姿騎士)
 
   private hpBarGroup: THREE.Group;
@@ -328,18 +379,20 @@ export class NPC {
 
     // 依角色建造不同 3D 外觀模型
     if (cfg.isCanine) {
-      this.buildDogModel();
+      this.buildModel(buildDogModel);
     } else if (role === 'BIKE_PATROL') {
       this.isOriginalBikePatrol = true;
-      this.buildBikePatrolModel();
+      this.buildModel(buildBikePatrolModel);
       // 記錄騎士身體(軀幹/頭/帽/臂/腿)與單車全部子物件，被搶車時一併移除
       this.bikeModelParts = this.mesh.children.slice();
     } else if (role === 'BANDIT') {
-      this.buildBanditModel();
+      this.buildModel(buildBanditModel);
     } else {
-      this.buildHumanoidModel();
+      this.buildModel(buildHumanoidModel);
       if (role === 'DETENTION_BOSS') {
-        this.bossTelegraphGroup = this.buildBossTelegraphMesh();
+        const rig = this.createRig();
+        this.bossTelegraphGroup = buildBossTelegraphMesh(rig);
+        this.readRig(rig);
         this.mesh.add(this.bossTelegraphGroup);
 
         const barrierGeo = new THREE.SphereGeometry(1.35, 16, 12);
@@ -392,19 +445,35 @@ export class NPC {
     }
   }
 
-  // 取得頭頂告示牌繪圖環境 (首次呼叫時建立畫布與貼圖並掛上 Sprite)
+  // 切換頭頂告示牌貼圖 (共用固定貼圖或本 NPC 專屬動態畫布)；首次掛上貼圖時才需重新編譯材質
+  private setBadgeTexture(tex: THREE.Texture) {
+    const mat = this.koBadgeSprite.material;
+    if (mat.map === tex) return;
+    const hadMap = !!mat.map;
+    mat.map = tex;
+    mat.opacity = 1;
+    if (!hadMap) mat.needsUpdate = true;
+  }
+
+  // 取得頭頂告示牌繪圖環境 (動態內容專用：首次呼叫時建立本 NPC 畫布與貼圖，並切換為該貼圖)
   private getBadgeContext(): CanvasRenderingContext2D | null {
     if (!this.koBadgeCanvas) {
       this.koBadgeCanvas = document.createElement('canvas');
       this.koBadgeCanvas.width = 256;
       this.koBadgeCanvas.height = 64;
       this.koBadgeTexture = new THREE.CanvasTexture(this.koBadgeCanvas);
-      const mat = this.koBadgeSprite.material;
-      mat.map = this.koBadgeTexture;
-      mat.opacity = 1;
-      mat.needsUpdate = true;
     }
+    this.setBadgeTexture(this.koBadgeTexture!);
     return this.koBadgeCanvas.getContext('2d');
+  }
+
+  // 繪製本 NPC 專屬動態告示牌並上傳貼圖
+  private drawDynamicBadge(style: BadgeStyle, text: string, textColor?: string): boolean {
+    const ctx = this.getBadgeContext();
+    if (!ctx) return false;
+    drawBadge(ctx, style, text, textColor);
+    this.koBadgeTexture!.needsUpdate = true;
+    return true;
   }
 
   // 更新昏迷休養倒數秒數告示牌 (加入 lastKoBadgeSec 快取節流，僅在秒數變更時重繪)
@@ -412,22 +481,7 @@ export class NPC {
     if (this.isPermanentlyKnockedOut) {
       if (this.lastKoBadgeSec === -999) return;
       this.lastKoBadgeSec = -999;
-      const ctx = this.getBadgeContext();
-      if (!ctx) return;
-      ctx.clearRect(0, 0, 256, 64);
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.92)';
-      ctx.beginPath();
-      ctx.roundRect(8, 4, 240, 56, 12);
-      ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('💫 永久擊昏', 128, 32);
-      this.koBadgeTexture!.needsUpdate = true;
+      this.setBadgeTexture(getSharedBadgeTexture('permanent-ko', BADGE_PERMANENT_KO, '💫 永久擊昏', '#38bdf8'));
       this.koBadgeSprite.visible = true;
       return;
     }
@@ -435,28 +489,7 @@ export class NPC {
     const sec = Math.ceil(Math.max(0, secondsLeft));
     if (sec === this.lastKoBadgeSec) return;
     this.lastKoBadgeSec = sec;
-
-    const ctx = this.getBadgeContext();
-    if (!ctx) return;
-    ctx.clearRect(0, 0, 256, 64);
-
-    // 繪製圓角半透明漸層紅色徽章
-    ctx.fillStyle = 'rgba(231, 76, 60, 0.88)';
-    ctx.beginPath();
-    ctx.roundRect(4, 4, 248, 56, 12);
-    ctx.fill();
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`💫 昏迷中 (${sec}s)`, 128, 32);
-
-    this.koBadgeTexture!.needsUpdate = true;
+    this.drawDynamicBadge(BADGE_KO, `💫 昏迷中 (${sec}s)`);
   }
 
   // 顯示自定義頭頂動態文字徽章 (如金鐘護體、破盾硬直等)
@@ -464,24 +497,9 @@ export class NPC {
     // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)
     const key = text + bgColor + borderColor;
     if (this.lastKoBadgeSec === -105 && this.lastStatusBadgeKey === key && this.koBadgeSprite.visible) return;
-    const ctx = this.getBadgeContext();
-    if (!ctx) return;
+    if (!this.drawDynamicBadge({ bg: bgColor, border: borderColor, lineWidth: 3, x: 8, w: 240, radius: 12, font: 'bold 22px sans-serif' }, text)) return;
     this.lastKoBadgeSec = -105;
     this.lastStatusBadgeKey = key;
-    ctx.clearRect(0, 0, 256, 64);
-    ctx.fillStyle = bgColor;
-    ctx.beginPath();
-    ctx.roundRect(8, 4, 240, 56, 12);
-    ctx.fill();
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 32);
-    this.koBadgeTexture!.needsUpdate = true;
     this.koBadgeSprite.visible = true;
   }
 
@@ -491,49 +509,20 @@ export class NPC {
     this.lastKoBadgeSec = -1;
   }
 
-  // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)
+  // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)；狀態與圖示皆未變時略過 (追捕/探照燈期間每幀呼叫)
   public setAlertState(state: 'NORMAL' | 'CAUTION' | 'ALERT') {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return;
+    if (state === this.alertState && this.lastKoBadgeSec === ALERT_BADGE_CODE[state]) return;
     this.alertState = state;
-    const ctx = this.getBadgeContext();
-    if (!ctx) return;
+    this.lastKoBadgeSec = ALERT_BADGE_CODE[state];
 
     if (state === 'NORMAL') {
       this.koBadgeSprite.visible = false;
-      this.lastKoBadgeSec = -1;
     } else if (state === 'CAUTION') {
-      this.lastKoBadgeSec = -101;
-      ctx.clearRect(0, 0, 256, 64);
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.92)';
-      ctx.beginPath();
-      ctx.roundRect(50, 4, 156, 56, 14);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('❓', 128, 32);
-      this.koBadgeTexture!.needsUpdate = true;
+      this.setBadgeTexture(getSharedBadgeTexture('caution', BADGE_CAUTION, '❓'));
       this.koBadgeSprite.visible = true;
-    } else if (state === 'ALERT') {
-      this.lastKoBadgeSec = -102;
-      ctx.clearRect(0, 0, 256, 64);
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
-      ctx.beginPath();
-      ctx.roundRect(50, 4, 156, 56, 14);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('❗', 128, 32);
-      this.koBadgeTexture!.needsUpdate = true;
+    } else {
+      this.setBadgeTexture(getSharedBadgeTexture('alert', BADGE_ALERT, '❗'));
       this.koBadgeSprite.visible = true;
     }
   }
@@ -558,18 +547,9 @@ export class NPC {
     this.updateKOBadge(999999);
 
     // 肢體鬆開平貼地面
-    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+    this.zeroLimbs();
 
-    if (this.cfg.isCanine) {
-      this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
-      this.mesh.position.y = this.baseFloorY + 0.2;
-    } else {
-      this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-      this.mesh.position.y = this.baseFloorY + 0.25;
-    }
+    this.applyDownPose(this.cfg.isCanine);
   }
 
   // 總教官撞柱硬直機制 (Stunned)
@@ -578,6 +558,7 @@ export class NPC {
   private static readonly BOSS_CHARGE_SPEED = 14.0;
   private static readonly BOSS_CHARGE_RADIUS = 0.65;
   private static readonly BOSS_SUBSTEP = 0.3;
+  private static readonly BOSS_CHARGE_MAX_DIST = 24.0;
 
   // 鎖定當前玩家方向進入 1.25 秒蓄力預警 (玩家可於預警期間側向閃躲)
   private startBossWindup(playerPos: THREE.Vector3) {
@@ -642,14 +623,13 @@ export class NPC {
   // 頭頂 3 顆環繞旋轉的暈眩星星 (首次硬直時才建立)
   private getStunStars(): THREE.Group {
     if (!this.bossStunStars) {
-      if (!_stunStarGeo) _stunStarGeo = new THREE.OctahedronGeometry(0.11, 0);
-      if (!_stunStarMat) _stunStarMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+      if (!_stunStarGeo) _stunStarGeo = markShared(new THREE.OctahedronGeometry(0.11, 0));
+      if (!_stunStarMat) _stunStarMat = markShared(new THREE.MeshBasicMaterial({ color: 0xfde047 }));
       const stars = new THREE.Group();
       for (let i = 0; i < 3; i++) {
         const star = new THREE.Mesh(_stunStarGeo, _stunStarMat);
         const ang = (i / 3) * Math.PI * 2;
         star.position.set(Math.cos(ang) * 0.42, 0, Math.sin(ang) * 0.42);
-        star.userData.shared = true;
         stars.add(star);
       }
       stars.position.set(0, 2.2, 0);
@@ -692,1026 +672,63 @@ export class NPC {
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
     this.getStunStars().visible = true;
 
-    // 顯示硬直星星
-    const ctx = this.getBadgeContext();
-    if (ctx) {
-      this.lastKoBadgeSec = -103;
-      ctx.clearRect(0, 0, 256, 64);
-      ctx.fillStyle = 'rgba(234, 179, 8, 0.95)';
-      ctx.beginPath();
-      ctx.roundRect(8, 4, 240, 56, 12);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('⚡ 破盾硬直！快繞背！', 128, 32);
-      this.koBadgeTexture!.needsUpdate = true;
-      this.koBadgeSprite.visible = true;
-    }
+    // 顯示破盾硬直告示牌 (固定內容，共用貼圖)
+    this.lastKoBadgeSec = -103;
+    this.setBadgeTexture(getSharedBadgeTexture('boss-stun', BADGE_STUN, '⚡ 破盾硬直！快繞背！'));
+    this.koBadgeSprite.visible = true;
   }
 
-  // 1. 建造校犬柴柴 / 特訓狼犬 3D 模型
-  private buildDogModel() {
-    const isWolf = this.role === 'DETENTION_WOLF';
-    if (isWolf) {
-      this.mesh.scale.set(1.15, 1.15, 1.15);
-    }
-
-    // 經典配色材質 (柴犬: 暖金棕配奶白 / 特訓狼犬: 鐵甲黑背毛配棕褐)
-    const bodyColor = isWolf ? 0x222831 : 0xc87a32;
-    const underColor = isWolf ? 0x8b5a2b : 0xfff6ea;
-    const collarColor = isWolf ? 0xc0392b : 0xe74c3c;
-
-    const shibaTanMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-    const shibaWhiteMat = new THREE.MeshLambertMaterial({ color: underColor });
-    const noseBlackMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
-    const innerEarMat = new THREE.MeshLambertMaterial({ color: isWolf ? 0x5a3e2b : 0xf5d5c5 });
-    const collarMat = new THREE.MeshLambertMaterial({ color: collarColor });
-    const goldMat = new THREE.MeshLambertMaterial({ color: isWolf ? 0x95a5a6 : 0xf1c40f });
-    const eyeMat = new THREE.MeshBasicMaterial({ color: isWolf ? 0xf1c40f : 0xffffff });
-    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-
-    // A. 身體主幹 (背部金棕毛色)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.44, 0.88), shibaTanMat);
-    body.position.set(0, 0.45, 0);
-    body.castShadow = true;
-    this.mesh.add(body);
-
-    // B. 胸前大片裏白毛 (Urajiro Chest Bib)
-    const chestBib = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.36, 0.24), shibaWhiteMat);
-    chestBib.position.set(0, 0.43, 0.36);
-    this.mesh.add(chestBib);
-
-    // C. 腹部白色毛皮 (White Underbelly)
-    const bellyWhite = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.60), shibaWhiteMat);
-    bellyWhite.position.set(0, 0.25, -0.05);
-    this.mesh.add(bellyWhite);
-
-    // D. 狗頭部 (Shiba Inu Head)
-    this.dogHead = new THREE.Group();
-    this.dogHead.position.set(0, 0.65, 0.48);
-    this.mesh.add(this.dogHead);
-
-    const headBase = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.38, 0.44), shibaTanMat);
-    headBase.castShadow = true;
-    this.dogHead.add(headBase);
-
-    // 柴柴圓鼓鼓的白腮幫子 (Urajiro White Cheeks)
-    const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.26), shibaWhiteMat);
-    cheekL.position.set(-0.17, -0.06, 0.10);
-    this.dogHead.add(cheekL);
-
-    const cheekR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.26), shibaWhiteMat);
-    cheekR.position.set(0.17, -0.06, 0.10);
-    this.dogHead.add(cheekR);
-
-    // 柴犬口鼻部 (White Muzzle)
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.19, 0.26), shibaWhiteMat);
-    snout.position.set(0, -0.08, 0.32);
-    snout.castShadow = true;
-    this.dogHead.add(snout);
-
-    // 黑鼻頭 (Black Nose Button)
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.06), noseBlackMat);
-    nose.position.set(0, 0.065, 0.12);
-    snout.add(nose);
-
-    // 經典黑嘴角線
-    const mouthLine = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.04), noseBlackMat);
-    mouthLine.position.set(0, -0.04, 0.12);
-    snout.add(mouthLine);
-
-    // 柴犬標誌性白麻糬眉毛 (Iconic White Dot Eyebrows)
-    const browGeo = new THREE.SphereGeometry(0.035, 8, 8);
-    const browL = new THREE.Mesh(browGeo, shibaWhiteMat);
-    browL.position.set(-0.10, 0.15, 0.22);
-    browL.scale.set(1.2, 0.8, 0.4);
-    this.dogHead.add(browL);
-
-    const browR = new THREE.Mesh(browGeo, shibaWhiteMat);
-    browR.position.set(0.10, 0.15, 0.22);
-    browR.scale.set(1.2, 0.8, 0.4);
-    this.dogHead.add(browR);
-
-    // 柴柴黑亮眼睛 (Eyes with White Specular)
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), eyeMat);
-    eyeL.position.set(-0.12, 0.07, 0.22);
-    const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), pupilMat);
-    pupilL.position.set(0, 0, 0.025);
-    eyeL.add(pupilL);
-    this.dogHead.add(eyeL);
-
-    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), eyeMat);
-    eyeR.position.set(0.12, 0.07, 0.22);
-    const pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), pupilMat);
-    pupilR.position.set(0, 0, 0.025);
-    eyeR.add(pupilR);
-    this.dogHead.add(eyeR);
-
-    // 柴犬直立三角形萌耳 (Erect Shiba Ears with Inner Lining)
-    const earLGroup = new THREE.Group();
-    earLGroup.position.set(-0.16, 0.24, -0.04);
-    earLGroup.rotation.z = -0.25;
-    const earLOuter = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.18, 4), shibaTanMat);
-    earLOuter.rotation.y = Math.PI / 4;
-    earLGroup.add(earLOuter);
-    const earLInner = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.13, 4), innerEarMat);
-    earLInner.position.set(0, -0.01, 0.02);
-    earLInner.rotation.y = Math.PI / 4;
-    earLGroup.add(earLInner);
-    this.dogHead.add(earLGroup);
-
-    const earRGroup = new THREE.Group();
-    earRGroup.position.set(0.16, 0.24, -0.04);
-    earRGroup.rotation.z = 0.25;
-    const earROuter = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.18, 4), shibaTanMat);
-    earROuter.rotation.y = Math.PI / 4;
-    earRGroup.add(earROuter);
-    const earRInner = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.13, 4), innerEarMat);
-    earRInner.position.set(0, -0.01, 0.02);
-    earRInner.rotation.y = Math.PI / 4;
-    earRGroup.add(earRInner);
-    this.dogHead.add(earRGroup);
-
-    // E. 日式紅色項圈與金色鈴鐺 (Red Collar & Gold Bell)
-    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.09, 0.44), collarMat);
-    collar.position.set(0, 0.52, 0.35);
-    this.mesh.add(collar);
-
-    const bell = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), goldMat);
-    bell.position.set(0, 0.46, 0.58);
-    this.mesh.add(bell);
-
-    // F. 柴犬經典高翹甜甜圈捲尾巴 (Iconic Curled Sickle Tail)
-    this.dogTail = new THREE.Group();
-    this.dogTail.position.set(0, 0.62, -0.42);
-    this.mesh.add(this.dogTail);
-
-    const tailTorus = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.055, 8, 16, Math.PI * 1.3), shibaTanMat);
-    tailTorus.rotation.y = Math.PI / 2;
-    tailTorus.rotation.x = 0.3;
-    tailTorus.position.set(0, 0.14, -0.05);
-    tailTorus.castShadow = true;
-    this.dogTail.add(tailTorus);
-
-    const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), shibaWhiteMat);
-    tailTip.position.set(0, 0.24, 0.08);
-    this.dogTail.add(tailTip);
-
-    // G. 四隻腳：上截金棕、下截白襪子爪爪 (White Socks Shiba Legs)
-    const createShibaLeg = (x: number, z: number): THREE.Group => {
-      const legGroup = new THREE.Group();
-      legGroup.position.set(x, 0.38, z); // 旋轉關節軸設在 Y = 0.38m
-
-      // 上截腿部 (Tan Upper Leg)
-      const upperLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.14), shibaTanMat);
-      upperLeg.position.set(0, -0.11, 0);
-      upperLeg.castShadow = true;
-      legGroup.add(upperLeg);
-
-      // 下截白襪子小爪子 (White Socks Paws)
-      const whiteSock = new THREE.Mesh(new THREE.BoxGeometry(0.142, 0.16, 0.142), shibaWhiteMat);
-      whiteSock.position.set(0, -0.30, 0);
-      whiteSock.castShadow = true;
-      legGroup.add(whiteSock);
-
-      this.mesh.add(legGroup);
-      return legGroup;
+  // 建立模型建構用 rig (帶入目前肢體參考，未被建構函式改寫的欄位維持原值)
+  private createRig(): NPCModelRig {
+    return {
+      mesh: this.mesh,
+      role: this.role,
+      studentOutfit: this.studentOutfit,
+      hasUmbrella: this.hasUmbrella,
+      humanoidParts: this.humanoidParts,
+      headMesh: this.headMesh,
+      leftArm: this.leftArm,
+      rightArm: this.rightArm,
+      leftLeg: this.leftLeg,
+      rightLeg: this.rightLeg,
+      dogFrontLeftLeg: this.dogFrontLeftLeg,
+      dogFrontRightLeg: this.dogFrontRightLeg,
+      dogBackLeftLeg: this.dogBackLeftLeg,
+      dogBackRightLeg: this.dogBackRightLeg,
+      dogTail: this.dogTail,
+      dogHead: this.dogHead,
+      bikeFrontWheel: this.bikeFrontWheel,
+      bikeRearWheel: this.bikeRearWheel,
+      umbrellaMesh: this.umbrellaMesh,
+      bossTelegraphMat: this.bossTelegraphMat
     };
-
-    this.dogFrontLeftLeg = createShibaLeg(-0.18, 0.32);
-    this.dogFrontRightLeg = createShibaLeg(0.18, 0.32);
-    this.dogBackLeftLeg = createShibaLeg(-0.18, -0.32);
-    this.dogBackRightLeg = createShibaLeg(0.18, -0.32);
-
-    // 烘焙合併：頭、尾、四腿各自保留動畫關節，其餘身體零件合併為單一靜態網格 (同品種共用幾何體)
-    const animatedParts: THREE.Object3D[] = [
-      this.dogHead, this.dogTail,
-      this.dogFrontLeftLeg, this.dogFrontRightLeg, this.dogBackLeftLeg, this.dogBackRightLeg
-    ];
-    bakeNode(this.dogHead, `${this.role}|head`);
-    bakeNode(this.dogTail, `${this.role}|tail`);
-    for (let i = 2; i < animatedParts.length; i++) bakeNode(animatedParts[i], `${this.role}|leg`);
-    bakeStaticParts(this.mesh, this.mesh.children.filter(c => !animatedParts.includes(c)), `${this.role}|body`);
   }
 
-  // 2. 建造騎單車糾察隊 3D 模型
-  private buildBikePatrolModel() {
-    const frameMat = new THREE.MeshLambertMaterial({ color: 0x3498db });
-    const rubberMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
-    const shirtMat = new THREE.MeshLambertMaterial({ color: this.studentOutfit.shirt });
-    const pantsMat = new THREE.MeshLambertMaterial({ color: this.studentOutfit.pants });
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xfad390 });
-    const armBandMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
-
-    // 單車前後輪
-    const wheelGeo = new THREE.TorusGeometry(0.38, 0.045, 8, 20);
-    this.bikeRearWheel = new THREE.Mesh(wheelGeo, rubberMat);
-    this.bikeRearWheel.position.set(0, 0.38, -0.75);
-    this.mesh.add(this.bikeRearWheel);
-
-    this.bikeFrontWheel = new THREE.Mesh(wheelGeo, rubberMat);
-    this.bikeFrontWheel.position.set(0, 0.38, 0.75);
-    this.mesh.add(this.bikeFrontWheel);
-
-    // 車架
-    const frameTube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.4, 8), frameMat);
-    frameTube.rotation.x = Math.PI / 2;
-    frameTube.position.set(0, 0.65, 0);
-    this.mesh.add(frameTube);
-
-    // 龍頭車把
-    const handlebar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.05, 0.05), frameMat);
-    handlebar.position.set(0, 0.95, 0.65);
-    this.mesh.add(handlebar);
-
-    // 糾察隊員 (騎坐在車上)
-    const riderTorso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.32), shirtMat);
-    riderTorso.position.set(0, 1.15, -0.15);
-    riderTorso.rotation.x = 0.25;
-    this.mesh.add(riderTorso);
-
-    // 紅色值星臂章
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.18), armBandMat);
-    band.position.set(-0.35, 1.3, -0.15);
-    this.mesh.add(band);
-
-    // 頭部
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.36, 0.35), skinMat);
-    head.position.set(0, 1.62, 0.0);
-    this.mesh.add(head);
-    this.headMesh = head;
-
-    // 帽子 (糾察隊白便帽)
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.44), shirtMat);
-    cap.position.set(0, 1.82, 0.04);
-    this.mesh.add(cap);
-
-    // 騎車手臂伸向前把手
-    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.65, 6), shirtMat);
-    armL.position.set(-0.25, 1.05, 0.25);
-    armL.rotation.x = 0.75;
-    this.mesh.add(armL);
-
-    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.65, 6), shirtMat);
-    armR.position.set(0.25, 1.05, 0.25);
-    armR.rotation.x = 0.75;
-    this.mesh.add(armR);
-
-    // 彎曲雙腿踩在腳踏板
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.2), pantsMat);
-    legL.position.set(-0.2, 0.65, -0.1);
-    legL.rotation.x = 0.5;
-    this.mesh.add(legL);
-
-    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.2), pantsMat);
-    legR.position.set(0.2, 0.65, -0.1);
-    legR.rotation.x = 0.5;
-    this.mesh.add(legR);
-
-    // 烘焙合併：前後輪 (會轉動) 與頭部 (會轉頭) 保留，車架與坐姿騎士合併為單一靜態網格
-    const outfitKey = `${this.studentOutfit.shirt}|${this.studentOutfit.pants}`;
-    bakeNode(this.bikeRearWheel, 'BIKE_PATROL|wheel');
-    bakeNode(this.bikeFrontWheel, 'BIKE_PATROL|wheel');
-    bakeNode(head, 'BIKE_PATROL|head');
-    const staticParts = [frameTube, handlebar, riderTorso, band, cap, armL, armR, legL, legR];
-    const body = bakeStaticParts(this.mesh, staticParts, `BIKE_PATROL|${outfitKey}|body`);
-    this.bikeParts = [this.bikeRearWheel, this.bikeFrontWheel, body];
+  // 寫回模型建構結果
+  private readRig(rig: NPCModelRig) {
+    this.humanoidParts = rig.humanoidParts;
+    this.headMesh = rig.headMesh;
+    this.leftArm = rig.leftArm;
+    this.rightArm = rig.rightArm;
+    this.leftLeg = rig.leftLeg;
+    this.rightLeg = rig.rightLeg;
+    this.dogFrontLeftLeg = rig.dogFrontLeftLeg;
+    this.dogFrontRightLeg = rig.dogFrontRightLeg;
+    this.dogBackLeftLeg = rig.dogBackLeftLeg;
+    this.dogBackRightLeg = rig.dogBackRightLeg;
+    this.dogTail = rig.dogTail;
+    this.dogHead = rig.dogHead;
+    this.bikeFrontWheel = rig.bikeFrontWheel;
+    this.bikeRearWheel = rig.bikeRearWheel;
+    this.umbrellaMesh = rig.umbrellaMesh;
+    this.bossTelegraphMat = rig.bossTelegraphMat;
   }
 
-  // 3. 建造普通人型 NPC 3D 模型 (生教、步巡糾察、普通學生)
-  private buildHumanoidModel() {
-    this.humanoidParts = [];
-    const addHumanoidPart = (part: THREE.Object3D) => {
-      this.mesh.add(part);
-      this.humanoidParts.push(part);
-    };
-
-    // 學生、糾察隊、單車巡邏同學 (徒步) 預設穿著學生服裝
-    let shirtColor = this.studentOutfit.shirt;
-    let pantsColor = this.studentOutfit.pants;
-
-    if (this.role === 'TEACHER') {
-      shirtColor = 0x2c3e50;
-      pantsColor = 0x34495e;
-    } else if (this.role === 'INSTRUCTOR') {
-      // 教官卡其色軍訓制服
-      shirtColor = 0xbeb698;
-      pantsColor = 0x82775c;
-    } else if (this.role === 'PE_TEACHER_BOSS') {
-      // 大如老師：熱血深紅運動夾克與黑色運動長褲
-      shirtColor = 0xc0392b;
-      pantsColor = 0x2c3e50;
-    } else if (this.role === 'DODGE_TEACHER') {
-      // 閃身步老師：神秘深紫武術長袍配墨黑勁裝
-      shirtColor = 0x582c87;
-      pantsColor = 0x1e272e;
-    } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官：高對比海軍藍警備制服與深灰長褲
-      shirtColor = 0x2980b9;
-      pantsColor = 0x34495e;
-    } else if (this.role === 'DETENTION_SENIOR') {
-      // 特訓資深學長：高可視度亮橘運動背心與休閒淺灰運動褲
-      shirtColor = 0xe67e22;
-      pantsColor = 0x718093;
-    } else if (this.role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：石墨炭灰重訓背心與深海軍藍短褲
-      shirtColor = 0x485460;
-      pantsColor = 0x2c3e50;
-    } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長：威嚴深海軍藍金邊將官大衣
-      shirtColor = 0x2c3a47;
-      pantsColor = 0x1e272e;
-    }
-
-    const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });
-    const pantsMat = new THREE.MeshLambertMaterial({ color: pantsColor });
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xfad390 });
-    const hairMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-
-    // 軀幹
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.35), shirtMat);
-    torso.position.y = 1.05;
-    torso.castShadow = true;
-    addHumanoidPart(torso);
-
-    // 角色專屬配飾 (臂章、反光背心、裁判哨)
-    if (this.role === 'INSPECTOR') {
-      const armBandMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), armBandMat);
-      band.position.set(-0.45, 1.25, 0);
-      addHumanoidPart(band);
-    } else if (this.role === 'TEACHER') {
-      // 生教組長螢光背心
-      const vestMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
-      const vest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.7, 0.38), vestMat);
-      vest.position.y = 1.05;
-      addHumanoidPart(vest);
-    } else if (this.role === 'PE_TEACHER_BOSS') {
-      // 體育組長胸前裁判金屬哨子與白色運動條紋
-      const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const stripeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
-      stripeL.position.set(-0.25, 1.05, 0);
-      addHumanoidPart(stripeL);
-      const stripeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.36), stripeMat);
-      stripeR.position.set(0.25, 1.05, 0);
-      addHumanoidPart(stripeR);
-
-      const whistleMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.85, roughness: 0.2 });
-      const whistle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.08), whistleMat);
-      whistle.position.set(0, 1.22, 0.2);
-      addHumanoidPart(whistle);
-    } else if (this.role === 'DODGE_TEACHER') {
-      // 閃身步老師：金色太極武術腰帶與身法束髮帶
-      const sashMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
-      const sash = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 0.38), sashMat);
-      sash.position.y = 0.72;
-      addHumanoidPart(sash);
-
-      const headBandMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa });
-      const headBand = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), headBandMat);
-      headBand.position.y = 1.76;
-      addHumanoidPart(headBand);
-    } else if (this.role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：粗獷體格與深褐牛皮健美舉重腰帶
-      torso.scale.set(1.28, 1.05, 1.25);
-      const beltMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.16, 0.42), beltMat);
-      belt.position.y = 0.75;
-      addHumanoidPart(belt);
-      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.44), new THREE.MeshLambertMaterial({ color: 0xbdc3c7 }));
-      buckle.position.set(0, 0.75, 0);
-      addHumanoidPart(buckle);
-    } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長：金色將官肩章與金屬哨鍊
-      const epL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1c40f }));
-      epL.position.set(-0.35, 1.44, 0);
-      addHumanoidPart(epL);
-      const epR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1c40f }));
-      epR.position.set(0.35, 1.44, 0);
-      addHumanoidPart(epR);
-
-      const bWhistle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), new THREE.MeshLambertMaterial({ color: 0xdcdde1 }));
-      bWhistle.position.set(0, 1.25, 0.2);
-      addHumanoidPart(bWhistle);
-    }
-
-    // 第二世界特訓院人形角色 (教官、資深學長、霸榜生、總教官)：
-    // 正面配備戰術防彈插板與發光巡邏手電筒 (前向光錐)，背面配備戰術大背包與無線電天線，徹底解決「分不出正面背面」問題
-    const isDetentionHuman = (
-      this.role === 'DETENTION_GUARD' ||
-      this.role === 'DETENTION_SENIOR' ||
-      this.role === 'DETENTION_HEAVY' ||
-      this.role === 'DETENTION_BOSS'
-    );
-
-    if (isDetentionHuman) {
-      // 1. 【正面 +Z 標誌】：戰術防彈胸板與金屬扣鎖
-      const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
-      const vestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.52, 0.06), vestMat);
-      vestPlate.position.set(0, 0.04, 0.185);
-      torso.add(vestPlate);
-
-      const buckleMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
-      const bL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.07), buckleMat);
-      bL.position.set(-0.16, 0.14, 0.19);
-      const bR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.07), buckleMat);
-      bR.position.set(0.16, 0.14, 0.19);
-      torso.add(bL, bR);
-
-      // 2. 【正面 +Z 戰術手電筒與前向光錐】：一眼看清巡邏視線朝向！
-      const torchGroup = new THREE.Group();
-      const torchBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.04, 0.16, 8),
-        new THREE.MeshLambertMaterial({ color: 0x111111 })
-      );
-      torchBody.rotation.x = Math.PI / 2;
-      torchGroup.add(torchBody);
-
-      const lensMat = new THREE.MeshBasicMaterial({ color: 0xfffae0 });
-      const torchLens = new THREE.Mesh(new THREE.CircleGeometry(0.04, 8), lensMat);
-      torchLens.position.set(0, 0, 0.081);
-      torchGroup.add(torchLens);
-
-      // 前向柔和半透明光錐 (朝向正面 +Z，遠距離或背對時均清晰可見視野朝向)
-      const beamMat = new THREE.MeshBasicMaterial({
-        color: 0xfffae0,
-        transparent: true,
-        opacity: 0.18,
-        depthWrite: false
-      });
-      const beamGeo = new THREE.ConeGeometry(0.48, 2.8, 8, 1, true);
-      beamGeo.rotateX(-Math.PI / 2);
-      beamGeo.translate(0, 0, 1.4);
-      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
-      torchGroup.add(beamMesh);
-
-      torchGroup.position.set(0.20, 0.16, 0.19);
-      torso.add(torchGroup);
-
-      // 3. 【背面 -Z 標誌】：戰術作戰背包與無線電鞭狀天線 (背面絕無視線特徵)
-      const packMat = new THREE.MeshLambertMaterial({ color: 0x151b22 });
-      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.54, 0.16), packMat);
-      pack.position.set(0, 0.02, -0.22);
-      torso.add(pack);
-
-      const antennaMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
-      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.60, 6), antennaMat);
-      antenna.position.set(0.20, 0.40, -0.20);
-      antenna.rotation.x = -0.15;
-      torso.add(antenna);
-    }
-
-    // 頭部
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), skinMat);
-    head.position.y = 1.62;
-    head.castShadow = true;
-    addHumanoidPart(head);
-    this.headMesh = head;
-
-    // 眼睛與五官 (正面 +Z 方向專屬標記)
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), eyeMat);
-    eyeL.position.set(-0.09, 0.03, 0.20);
-    head.add(eyeL);
-    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), eyeMat);
-    eyeR.position.set(0.09, 0.03, 0.20);
-    head.add(eyeR);
-
-    if (this.role === 'PE_TEACHER_BOSS') {
-      // 大如老師：熱血濃眉 (加強羽球教練神韻)
-      const browMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-      const browL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.02), browMat);
-      browL.position.set(-0.09, 0.068, 0.202);
-      browL.rotation.z = -0.15;
-      head.add(browL);
-
-      const browR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.02), browMat);
-      browR.position.set(0.09, 0.068, 0.202);
-      browR.rotation.z = 0.15;
-      head.add(browR);
-
-      // 大如老師：專屬招牌喜感立體蓬鬆爆炸頭 (Afro) 與運動吸汗頭帶
-      const afro = this.buildAfroHair();
-      head.add(afro);
-    } else {
-      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
-      hair.position.set(0, 0.16, 0);
-      head.add(hair);
-    }
-
-    // 教官大盤帽 (Military Cap)
-    if (this.role === 'INSTRUCTOR') {
-      const capMat = new THREE.MeshLambertMaterial({ color: 0x6e6650 });
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.22, 0.12, 12), capMat);
-      cap.position.set(0, 0.25, 0);
-      head.add(cap);
-
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.16), new THREE.MeshLambertMaterial({ color: 0x111111 }));
-      visor.position.set(0, 0.21, 0.14);
-      head.add(visor);
-    } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官防暴貝雷帽
-      const beret = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.24, 0.22, 0.12, 12),
-        new THREE.MeshLambertMaterial({ color: 0x11161d })
-      );
-      beret.position.set(0, 0.24, 0);
-      head.add(beret);
-
-      // 正面戰術防暴護目鏡 (亮琥珀金夜視感測光條，正面一眼可見)
-      const goggleMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-      const goggles = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.06), goggleMat);
-      goggles.position.set(0, 0.04, 0.20);
-      head.add(goggles);
-      const sensorMat = new THREE.MeshBasicMaterial({ color: 0xf39c12 });
-      const sensor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.07), sensorMat);
-      sensor.position.set(0, 0.04, 0.20);
-      head.add(sensor);
-    } else if (this.role === 'DETENTION_SENIOR') {
-      // 資深學長：正面運動吸汗頭帶
-      const headBandMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-      const headBand = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.08, 0.40), headBandMat);
-      headBand.position.set(0, 0.14, 0);
-      head.add(headBand);
-    } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長大盤帽與金徽章、金屬鐵面遮面
-      const bCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.26, 0.22, 0.14, 12),
-        new THREE.MeshLambertMaterial({ color: 0x11161d })
-      );
-      bCap.position.set(0, 0.26, 0);
-      head.add(bCap);
-
-      const bVisor = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.03, 0.18),
-        new THREE.MeshLambertMaterial({ color: 0x050505 })
-      );
-      bVisor.position.set(0, 0.22, 0.16);
-      bVisor.rotation.x = 0.2;
-      head.add(bVisor);
-
-      const bBadge = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, 0.08, 0.02),
-        new THREE.MeshLambertMaterial({ color: 0xf1c40f })
-      );
-      bBadge.position.set(0, 0.28, 0.22);
-      head.add(bBadge);
-
-      const bossMask = new THREE.Mesh(
-        new THREE.BoxGeometry(0.36, 0.12, 0.15),
-        new THREE.MeshLambertMaterial({ color: 0x7f8c8d })
-      );
-      bossMask.position.set(0, 0.04, 0.18);
-      head.add(bossMask);
-    }
-
-    // 手腳
-    const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
-    this.leftArm = new THREE.Mesh(armGeo, shirtMat);
-    this.leftArm.position.set(-0.45, 1.05, 0);
-    addHumanoidPart(this.leftArm);
-
-    this.rightArm = new THREE.Mesh(armGeo, shirtMat);
-    this.rightArm.position.set(0.45, 1.05, 0);
-    addHumanoidPart(this.rightArm);
-
-    // 重訓霸榜生增粗手臂
-    if (this.role === 'DETENTION_HEAVY') {
-      this.leftArm.scale.set(1.3, 1.0, 1.3);
-      this.rightArm.scale.set(1.3, 1.0, 1.3);
-    }
-
-    // 特訓教官手持防暴海綿盾 (左手) 與防暴警棍 (右手)
-    if (this.role === 'DETENTION_GUARD') {
-      const shieldMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
-      const shield = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.85, 0.52), shieldMat);
-      shield.position.set(-0.1, -0.05, 0.22);
-      this.leftArm.add(shield);
-
-      const shieldStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.53), new THREE.MeshBasicMaterial({ color: 0xf1c40f }));
-      shieldStripe.position.set(-0.1, -0.05, 0.22);
-      this.leftArm.add(shieldStripe);
-
-      const baton = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, 0.65, 8),
-        new THREE.MeshLambertMaterial({ color: 0x111111 })
-      );
-      baton.position.set(0, -0.22, 0.15);
-      this.rightArm.add(baton);
-    }
-
-    // 體育老師專屬羽球拍 3D 裝備 (Attached to right arm)
-    if (this.role === 'PE_TEACHER_BOSS') {
-      const racketGroup = new THREE.Group();
-      // 握把 (Grip)
-      const grip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8),
-        new THREE.MeshLambertMaterial({ color: 0xffffff })
-      );
-      grip.position.y = 0.12;
-      racketGroup.add(grip);
-      // 中桿 (Shaft)
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.42, 8),
-        new THREE.MeshLambertMaterial({ color: 0x2d3436 })
-      );
-      shaft.position.y = 0.45;
-      racketGroup.add(shaft);
-      // 拍框 (Frame)
-      const frame = new THREE.Mesh(
-        new THREE.TorusGeometry(0.16, 0.016, 8, 16),
-        new THREE.MeshLambertMaterial({ color: 0xe74c3c })
-      );
-      frame.position.y = 0.82;
-      racketGroup.add(frame);
-      // 拍線網面 (Strings)
-      const stringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
-      const strings = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), stringMat);
-      strings.position.y = 0.82;
-      racketGroup.add(strings);
-
-      racketGroup.position.set(0, -0.28, 0.12);
-      racketGroup.rotation.x = Math.PI / 3; // 正角度朝向前方+Z
-      this.rightArm.add(racketGroup);
-    }
-
-    // 下雨天 3D Low-Poly 雨傘裝備 (Attached to right arm)
-    if (this.hasUmbrella) {
-      this.umbrellaMesh = this.buildUmbrellaModel();
-      this.umbrellaMesh.position.set(0, -0.28, 0.10);
-      this.umbrellaMesh.rotation.set(Math.PI * 0.65, -0.12, 0.12);
-      this.rightArm.add(this.umbrellaMesh);
-    }
-
-    const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
-    this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
-    this.leftLeg.position.set(-0.18, 0.35, 0);
-    addHumanoidPart(this.leftLeg);
-
-    this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
-    this.rightLeg.position.set(0.18, 0.35, 0);
-    addHumanoidPart(this.rightLeg);
-
-    // 烘焙合併：頭與四肢保留各自動畫關節 (手持裝備併入手臂、雨傘保留可切換顯示)，
-    // 軀幹與配飾合併為單一靜態網格；同角色同服裝的 NPC 共用同一份幾何體
-    const lookKey = `${this.role}|${shirtColor}|${pantsColor}`;
-    const umbrella = this.umbrellaMesh;
-    bakeNode(head, `${lookKey}|head`);
-    bakeNode(this.leftArm, `${lookKey}|armL`);
-    bakeNode(this.rightArm, `${lookKey}|armR`, obj => obj === umbrella);
-    bakeNode(this.leftLeg, `${lookKey}|leg`);
-    bakeNode(this.rightLeg, `${lookKey}|leg`);
-    const animated: THREE.Object3D[] = [head, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
-    const body = bakeStaticParts(this.mesh, this.humanoidParts.filter(p => !animated.includes(p)), `${lookKey}|body`);
-    this.humanoidParts = [body, ...animated];
-  }
-
-  // 建造大如老師專屬 3D 經典蓬鬆喜感爆炸頭 (Afro) 與運動吸汗頭帶
-  private buildAfroHair(): THREE.Group {
-    const afro = new THREE.Group();
-    afro.name = 'daru_afro_hair';
-
-    // 爆炸頭深色捲髮材質 (flatShading 突顯多面體蓬鬆捲曲質感與光影立體層次)
-    const afroMat = new THREE.MeshLambertMaterial({
-      color: 0x161311,
-      flatShading: true
-    });
-    const afroMatHighlight = new THREE.MeshLambertMaterial({
-      color: 0x241d1a,
-      flatShading: true
-    });
-
-    // 爆炸頭多組交疊微偏的十二面體叢集，打造立體飽滿、圓潤且富有喜感的蓬鬆輪廓
-    const puffDefs: Array<{
-      x: number;
-      y: number;
-      z: number;
-      r: number;
-      detail?: number;
-      highlight?: boolean;
-      scale?: [number, number, number];
-    }> = [
-      // 1. 核心大髮量基座
-      { x: 0, y: 0.20, z: -0.04, r: 0.28, detail: 1, scale: [1.12, 0.98, 1.08] },
-
-      // 2. 頂部高聳髮冠 (Crown / Top dome)
-      { x: 0, y: 0.36, z: -0.05, r: 0.21, detail: 1 },
-      { x: -0.14, y: 0.33, z: -0.03, r: 0.19, detail: 1 },
-      { x: 0.14, y: 0.33, z: -0.03, r: 0.19, detail: 1 },
-      { x: 0, y: 0.33, z: 0.09, r: 0.17, detail: 1, highlight: true },
-      { x: 0, y: 0.30, z: -0.19, r: 0.19, detail: 1 },
-      { x: -0.12, y: 0.35, z: 0.05, r: 0.16, detail: 1 },
-      { x: 0.12, y: 0.35, z: 0.05, r: 0.16, detail: 1 },
-      { x: -0.11, y: 0.32, z: -0.15, r: 0.17, detail: 1 },
-      { x: 0.11, y: 0.32, z: -0.15, r: 0.17, detail: 1 },
-
-      // 3. 左側蓬鬆外擴 (Left Afro flank)
-      { x: -0.26, y: 0.22, z: -0.04, r: 0.21, detail: 1 },
-      { x: -0.29, y: 0.12, z: -0.06, r: 0.20, detail: 1, highlight: true },
-      { x: -0.24, y: 0.01, z: -0.06, r: 0.16, detail: 1 },
-      { x: -0.23, y: 0.18, z: 0.08, r: 0.17, detail: 1 },
-      { x: -0.23, y: 0.18, z: -0.18, r: 0.18, detail: 1 },
-      { x: -0.25, y: 0.07, z: 0.06, r: 0.15, detail: 1 },
-      { x: -0.25, y: 0.06, z: -0.16, r: 0.16, detail: 1 },
-
-      // 4. 右側蓬鬆外擴 (Right Afro flank)
-      { x: 0.26, y: 0.22, z: -0.04, r: 0.21, detail: 1 },
-      { x: 0.29, y: 0.12, z: -0.06, r: 0.20, detail: 1, highlight: true },
-      { x: 0.24, y: 0.01, z: -0.06, r: 0.16, detail: 1 },
-      { x: 0.23, y: 0.18, z: 0.08, r: 0.17, detail: 1 },
-      { x: 0.23, y: 0.18, z: -0.18, r: 0.18, detail: 1 },
-      { x: 0.25, y: 0.07, z: 0.06, r: 0.15, detail: 1 },
-      { x: 0.25, y: 0.06, z: -0.16, r: 0.16, detail: 1 },
-
-      // 5. 後腦勺與頸後濃密包覆 (Rear skull & nape)
-      { x: 0, y: 0.22, z: -0.23, r: 0.22, detail: 1 },
-      { x: 0, y: 0.11, z: -0.24, r: 0.21, detail: 1 },
-      { x: -0.14, y: 0.11, z: -0.21, r: 0.19, detail: 1 },
-      { x: 0.14, y: 0.11, z: -0.21, r: 0.19, detail: 1 },
-      { x: 0, y: -0.01, z: -0.21, r: 0.16, detail: 1 },
-      { x: -0.11, y: 0.00, z: -0.19, r: 0.15, detail: 1 },
-      { x: 0.11, y: 0.00, z: -0.19, r: 0.15, detail: 1 },
-
-      // 6. 前額瀏海與鬢角自然包覆 (Forehead & temple, 不遮擋眼睛)
-      { x: 0, y: 0.22, z: 0.15, r: 0.15, detail: 1 },
-      { x: -0.13, y: 0.19, z: 0.15, r: 0.14, detail: 1, highlight: true },
-      { x: 0.13, y: 0.19, z: 0.15, r: 0.14, detail: 1, highlight: true },
-      { x: -0.19, y: 0.10, z: 0.12, r: 0.13, detail: 1 },
-      { x: 0.19, y: 0.10, z: 0.12, r: 0.13, detail: 1 },
-
-      // 7. 外圍俏皮捲髮微突顆粒 (Accent curls / Textured perimeter frizz)
-      { x: -0.33, y: 0.25, z: -0.02, r: 0.11, detail: 0, highlight: true },
-      { x: 0.33, y: 0.25, z: -0.02, r: 0.11, detail: 0, highlight: true },
-      { x: 0, y: 0.44, z: -0.04, r: 0.12, detail: 0, highlight: true },
-      { x: -0.17, y: 0.41, z: -0.05, r: 0.10, detail: 0 },
-      { x: 0.17, y: 0.41, z: -0.05, r: 0.10, detail: 0 },
-      { x: -0.24, y: 0.33, z: 0.08, r: 0.10, detail: 0 },
-      { x: 0.24, y: 0.33, z: 0.08, r: 0.10, detail: 0 },
-      { x: 0, y: 0.39, z: 0.12, r: 0.10, detail: 0, highlight: true },
-      { x: 0, y: 0.35, z: -0.23, r: 0.11, detail: 0 },
-      { x: -0.20, y: 0.23, z: -0.22, r: 0.11, detail: 0 },
-      { x: 0.20, y: 0.23, z: -0.22, r: 0.11, detail: 0 },
-      { x: -0.32, y: 0.06, z: -0.07, r: 0.10, detail: 0 },
-      { x: 0.32, y: 0.06, z: -0.07, r: 0.10, detail: 0 },
-    ];
-
-    // 依材質將數十顆髮球烘焙合併為 2 個 Mesh (深色髮量 + 高光髮束)，大幅減少 Draw Call
-    const baseGeos: THREE.BufferGeometry[] = [];
-    const highlightGeos: THREE.BufferGeometry[] = [];
-    for (const p of puffDefs) {
-      const geo = new THREE.DodecahedronGeometry(p.r, p.detail ?? 1);
-      if (p.scale) {
-        geo.scale(p.scale[0], p.scale[1], p.scale[2]);
-      }
-      geo.translate(p.x, p.y, p.z);
-      (p.highlight ? highlightGeos : baseGeos).push(geo);
-    }
-    for (const [geos, mat] of [[baseGeos, afroMat], [highlightGeos, afroMatHighlight]] as const) {
-      if (geos.length === 0) continue;
-      const merged = mergeGeometries(geos, false);
-      for (const g of geos) g.dispose();
-      if (!merged) continue;
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = true;
-      afro.add(mesh);
-    }
-
-    // 8. 體育老師專屬經典運動吸汗頭帶 (Retro PE Sweatband)
-    const bandMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa });
-    const sweatband = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.06, 0.40), bandMat);
-    sweatband.position.set(0, 0.115, 0);
-    sweatband.castShadow = true;
-    afro.add(sweatband);
-
-    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xc0392b }); // 呼應紅色運動外套
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.406, 0.02, 0.406), stripeMat);
-    stripe.position.set(0, 0.115, 0);
-    afro.add(stripe);
-
-    // 正面額前金牌羽球標章 (Gold Sports Emblem)
-    const emblem = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.04, 0.015),
-      new THREE.MeshLambertMaterial({ color: 0xf1c40f })
-    );
-    emblem.position.set(0, 0.115, 0.205);
-    afro.add(emblem);
-
-    // 9. 喜感羽球教練彩蛋：插在爆炸頭側邊的羽毛球髮飾 (Badminton Shuttlecock tucked in afro)
-    const shuttlePin = new THREE.Group();
-    shuttlePin.name = 'afro_shuttlecock';
-    shuttlePin.position.set(0.31, 0.28, 0.06);
-    shuttlePin.rotation.set(-0.25, 0.2, -Math.PI / 4.2);
-
-    // 球頭 (軟木塞底座)
-    const corkMat = new THREE.MeshLambertMaterial({ color: 0xdfe4ea });
-    const cork = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), corkMat);
-    cork.position.set(0, -0.035, 0);
-    cork.castShadow = true;
-    shuttlePin.add(cork);
-
-    // 軟木塞紅膠帶
-    const tape = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.027, 0.027, 0.009, 8),
-      new THREE.MeshBasicMaterial({ color: 0xe74c3c })
-    );
-    tape.position.set(0, -0.025, 0);
-    shuttlePin.add(tape);
-
-    // 羽毛裙身
-    const featherMat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-    const skirt = new THREE.Mesh(
-      new THREE.ConeGeometry(0.055, 0.07, 8, 1, true),
-      featherMat
-    );
-    skirt.position.set(0, 0.015, 0);
-    skirt.rotation.x = Math.PI;
-    skirt.castShadow = true;
-    shuttlePin.add(skirt);
-
-    afro.add(shuttlePin);
-
-    return afro;
-  }
-
-  // 建造總教官狂暴衝撞 3D 地面紅色危險預警軌跡線 (Telegraph Danger Corridor)
-  private buildBossTelegraphMesh(): THREE.Group {
-    const group = new THREE.Group();
-    group.name = 'boss_telegraph';
-    group.visible = false;
-
-    // 地面警示紅毯 (2.4m 寬，22.0m 長，自腳下向前方 +Z 延伸)
-    const planeGeo = new THREE.PlaneGeometry(2.4, 22.0);
-    planeGeo.rotateX(-Math.PI / 2);
-    planeGeo.translate(0, 0.02, 11.0);
-
-    this.bossTelegraphMat = new THREE.MeshBasicMaterial({
-      color: 0xff1744,
-      transparent: true,
-      opacity: 0.38,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-    const groundPlane = new THREE.Mesh(planeGeo, this.bossTelegraphMat);
-    group.add(groundPlane);
-
-    // 左右兩側發光紅霓虹導軌邊界 (Left & Right Glowing Laser Rails)
-    const railMat = new THREE.MeshBasicMaterial({ color: 0xff3838, depthWrite: false });
-    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 22.0), railMat);
-    leftRail.position.set(-1.2, 0.03, 11.0);
-    group.add(leftRail);
-
-    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 22.0), railMat);
-    rightRail.position.set(1.2, 0.03, 11.0);
-    group.add(rightRail);
-
-    // 衝撞前進動態導向箭頭 (Forward Chevrons >>>)
-    const chevronMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false
-    });
-    for (let i = 1; i <= 6; i++) {
-      const zPos = i * 3.4;
-      // V 字型人字箭頭
-      const armL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.95), chevronMat);
-      armL.position.set(-0.35, 0.035, zPos);
-      armL.rotation.y = Math.PI / 4;
-      group.add(armL);
-
-      const armR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.95), chevronMat);
-      armR.position.set(0.35, 0.035, zPos);
-      armR.rotation.y = -Math.PI / 4;
-      group.add(armR);
-    }
-
-    // 衝撞落點危險警示橫桿 (End Impact Danger Barrier)
-    const endBarMat = new THREE.MeshBasicMaterial({ color: 0xff0033, depthWrite: false });
-    const endBar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.4), endBarMat);
-    endBar.position.set(0, 0.035, 22.0);
-    group.add(endBar);
-
-    // 腳底起點警示條
-    const startBarMat = new THREE.MeshBasicMaterial({ color: 0xffd32a, depthWrite: false });
-    const startBar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.05, 0.25), startBarMat);
-    startBar.position.set(0, 0.035, 0.35);
-    group.add(startBar);
-
-    return group;
-  }
-
-  // 建造 3D Low-Poly 雨傘模型 (傘中棒、握把、10 角多邊傘面、頂端金屬針)
-  private buildUmbrellaModel(): THREE.Group {
-    // 隨機豐富傘面顏色 (8 款經典色調：黑、海軍藍、黃、紅、綠、紫、珊瑚粉、雅灰)
-    const umbrellaColors = [
-      0x1e272e, // 紳士墨黑
-      0x1e3799, // 皇家海軍藍
-      0xf6b93b, // 活力亮黃
-      0xe55039, // 熱情朱紅
-      0x079992, // 森林翡翠綠
-      0x6a0dad, // 優雅薰衣紫
-      0xff6b6b, // 珊瑚粉橘
-      0x7f8c8d  // 簡約雅灰
-    ];
-    const canopyColor = umbrellaColors[Math.floor(Math.random() * umbrellaColors.length)];
-
-    const umbrella = buildUmbrella({
-      name: 'umbrella',
-      canopyColor,
-      shaftMetalness: 0.6,
-      handleColor: 0x111111,
-      tipMetalness: 0.8,
-      rigX: -0.16,
-      rigZ: -0.06
-    });
-    // 同色雨傘共用合併幾何體 (傘柄/傘骨/傘面/尖端合併)
-    bakeNode(umbrella, `umbrella|${canopyColor}`);
-    return umbrella;
-  }
-
-  // 建造校外強盜 3D 外觀 (蒙面黑衣、手持鋼刀/砍刀)
-  private buildBanditModel() {
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xdfb48c });
-    const maskMat = new THREE.MeshLambertMaterial({ color: 0x1e272e }); // 黑面罩
-    const shirtMat = new THREE.MeshLambertMaterial({ color: 0x2f3542 }); // 黑灰夾克
-    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e272e }); // 黑色長褲
-    const steelMat = new THREE.MeshStandardMaterial({ color: 0xdfe4ea, metalness: 0.85, roughness: 0.2 });
-    const hiltMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 });
-
-    // 軀幹
-    const bodyGeo = new THREE.BoxGeometry(0.64, 0.75, 0.34);
-    const body = new THREE.Mesh(bodyGeo, shirtMat);
-    body.position.y = 1.05;
-    body.castShadow = true;
-    this.mesh.add(body);
-
-    // 頭部與蒙面頭套
-    const headGeo = new THREE.BoxGeometry(0.38, 0.38, 0.38);
-    const head = new THREE.Mesh(headGeo, skinMat);
-    head.position.y = 1.62;
-    head.castShadow = true;
-    this.mesh.add(head);
-    this.headMesh = head;
-
-    // 黑色蒙面布 (覆蓋口鼻)
-    const mask = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.22, 0.39), maskMat);
-    mask.position.set(0, 1.54, 0.01);
-    this.mesh.add(mask);
-
-    // 兇惡紅瞳眼神
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff3838 });
-    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.02), eyeMat);
-    eyeL.position.set(-0.09, 1.67, 0.20);
-    this.mesh.add(eyeL);
-    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.02), eyeMat);
-    eyeR.position.set(0.09, 1.67, 0.20);
-    this.mesh.add(eyeR);
-
-    // 肢體
-    const armGeo = new THREE.BoxGeometry(0.2, 0.65, 0.2);
-    this.leftArm = new THREE.Mesh(armGeo, shirtMat);
-    this.leftArm.position.set(-0.44, 1.05, 0);
-    this.mesh.add(this.leftArm);
-
-    this.rightArm = new THREE.Mesh(armGeo, shirtMat);
-    this.rightArm.position.set(0.44, 1.05, 0);
-    this.mesh.add(this.rightArm);
-
-    // 右手手持砍刀武器 (Machete)
-    const macheteGroup = new THREE.Group();
-    macheteGroup.position.set(0, -0.32, 0.15);
-    const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.2, 8), hiltMat);
-    hilt.rotation.x = Math.PI / 2;
-    macheteGroup.add(hilt);
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.65, 0.12), steelMat);
-    blade.position.set(0, 0.32, 0.12);
-    blade.rotation.x = 0.2;
-    blade.castShadow = true;
-    macheteGroup.add(blade);
-    this.rightArm.add(macheteGroup);
-
-    const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
-    this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
-    this.leftLeg.position.set(-0.18, 0.35, 0);
-    this.mesh.add(this.leftLeg);
-
-    this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
-    this.rightLeg.position.set(0.18, 0.35, 0);
-    this.mesh.add(this.rightLeg);
-
-    // 烘焙合併：頭與四肢保留動畫關節 (砍刀併入右臂)，軀幹、面罩與紅瞳合併為靜態網格
-    bakeNode(head, 'BANDIT|head');
-    bakeNode(this.leftArm, 'BANDIT|armL');
-    bakeNode(this.rightArm, 'BANDIT|armR');
-    bakeNode(this.leftLeg, 'BANDIT|leg');
-    bakeNode(this.rightLeg, 'BANDIT|leg');
-    const animated: THREE.Object3D[] = [head, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
-    bakeStaticParts(this.mesh, this.mesh.children.filter(c => !animated.includes(c)), 'BANDIT|body');
+  // 執行模型建構函式 (實作位於 npc/models.ts) 並套用結果
+  private buildModel(build: (rig: NPCModelRig) => void) {
+    const rig = this.createRig();
+    build(rig);
+    this.readRig(rig);
   }
 
   public getRoleTitle(): string {
@@ -1751,14 +768,10 @@ export class NPC {
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
 
-    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+    this.zeroLimbs();
 
     // 倒地姿勢與擊昏圖示
-    this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-    this.mesh.position.y = this.baseFloorY + 0.25;
+    this.applyDownPose(false);
     if (this.koBadgeSprite) {
       this.koBadgeSprite.visible = true;
       this.updateKOBadge(this.reviveTimer);
@@ -1796,12 +809,8 @@ export class NPC {
       if (this.hpBarBgMesh) this.hpBarBgMesh.visible = false;
       if (this.hpBarMesh) this.hpBarMesh.visible = false;
       if (this.koBadgeSprite) this.koBadgeSprite.visible = true;
-      if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-      if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-      if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-      if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
-      this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-      this.mesh.position.y = this.baseFloorY + 0.25;
+      this.zeroLimbs();
+      this.applyDownPose(false);
       return true; // 擊倒KO
     }
     return false;
@@ -1882,19 +891,10 @@ export class NPC {
       this.koBadgeSprite.visible = true;
 
       // 肢體鬆開平貼地面
-      if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-      if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-      if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-      if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+      this.zeroLimbs();
 
       // 倒地姿勢與高度 (依所在樓層基準貼地)
-      if (this.role === 'DOG' || this.role === 'BIKE_PATROL') {
-        this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
-        this.mesh.position.y = this.baseFloorY + 0.2;
-      } else {
-        this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-        this.mesh.position.y = this.baseFloorY + 0.25;
-      }
+      this.applyDownPose(this.role === 'DOG' || this.role === 'BIKE_PATROL');
       return true;
     }
 
@@ -1968,10 +968,6 @@ export class NPC {
   // 失去自行車 (遭到玩家搶奪，妥善卸除並釋放單車零件與幾何體)
   public loseBike() {
     if (this.isPaused) this.cancelPause();
-    for (let i = 0; i < this.bikeParts.length; i++) {
-      this.mesh.remove(this.bikeParts[i]);
-    }
-    this.bikeParts.length = 0;
     // 移除坐姿騎士身體與單車 (共用的烘焙幾何體與材質由快取持有，不釋放)
     for (const part of this.bikeModelParts) {
       this.mesh.remove(part);
@@ -1982,20 +978,20 @@ export class NPC {
     this.bikeRearWheel = undefined;
     this.role = 'STUDENT';
     // 重建站立步行人形模型，並還原姿態
-    this.buildHumanoidModel();
+    this.buildModel(buildHumanoidModel);
     this.position.y = this.baseFloorY;
     this.isKnockedFlying = false;
     this.knockVelocity.set(0, 0, 0);
     this.mesh.rotation.set(0, this.rotationY, 0);
     this.mesh.position.set(this.position.x, this.baseFloorY, this.position.z);
-    this.dynamicSpeed = 5.0;
+    this.dynamicSpeed = BIKELESS_WALK_SPEED;
     this.isChasing = false;
     this.isBurstSprinting = false;
     this.attackAnimTimer = 0;
-    this.maxHp = 112;
+    this.maxHp = this.cfg.maxHp;
     this.hp = Math.min(this.hp, this.maxHp);
-    this.speed = 5.0;
-    this.chaseSpeed = 10.0;
+    this.speed = BIKELESS_WALK_SPEED;
+    this.chaseSpeed = BIKELESS_CHASE_SPEED;
     this.isKnockedDown = true;
     this.reviveTimer = 3.0;
   }
@@ -2038,17 +1034,18 @@ export class NPC {
 
     // 設定角色為 BIKE_PATROL 並重新組裝模型
     this.role = 'BIKE_PATROL';
-    this.buildBikePatrolModel();
+    this.buildModel(buildBikePatrolModel);
     this.bikeModelParts = this.mesh.children.filter(c => c !== this.hpBarGroup && c !== this.koBadgeSprite);
 
-    // 恢復火柴人自行車巡邏數值 (速度統一為 15.0)
-    this.maxHp = 225;
-    this.hp = 225;
-    this.speed = 15.0;
-    this.chaseSpeed = 15.0;
-    this.attackPower = 26;
-    this.dynamicSpeed = 15.0;
-    this.attackRange = 2.4;
+    // 恢復火柴人自行車巡邏數值 (取自 ROLE_CONFIG.BIKE_PATROL)
+    const cfg = this.cfg;
+    this.maxHp = cfg.maxHp;
+    this.hp = cfg.maxHp;
+    this.speed = cfg.baseSpeed;
+    this.chaseSpeed = cfg.chaseSpeed;
+    this.attackPower = cfg.attackPower;
+    this.dynamicSpeed = cfg.baseSpeed;
+    this.attackRange = cfg.attackRange;
 
     // 旋轉與姿勢回正
     this.mesh.rotation.set(0, this.rotationY, 0);
@@ -2056,6 +1053,11 @@ export class NPC {
 
     // 播放清脆自行車鈴聲
     soundManager.playBicycleBell();
+  }
+
+  // 全體 NPC 共用特效的每幀更新 (總教官撞擊碎石)；由主迴圈呼叫一次，與 NPC 是否在場景無關
+  public static updateSharedEffects(delta: number) {
+    impactDust.update(delta);
   }
 
   // 建立標準 3D 羽球模型 (共享幾何體與材質 + 物件池復用 0-GC)
@@ -2272,6 +1274,34 @@ export class NPC {
   }
 
   // 重置 NPC 所有關節姿態至自然站立基準 (0-GC)
+  // 人形四肢歸零 (倒地、定格、重置姿勢共用)
+  private zeroLimbs() {
+    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
+    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
+    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+  }
+
+  // 倒地姿勢與貼地高度 (依所在樓層基準)：sideways 為側躺 (犬類、單車)，否則仰躺
+  private applyDownPose(sideways: boolean) {
+    if (sideways) {
+      this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
+      this.mesh.position.y = this.baseFloorY + 0.2;
+    } else {
+      this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
+      this.mesh.position.y = this.baseFloorY + 0.25;
+    }
+  }
+
+  // 頭頂血條水平朝向玩家
+  private faceHpBar(playerPos: THREE.Vector3) {
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    if (dx * dx + dz * dz > 0.01) {
+      this.hpBarGroup.rotation.y = Math.atan2(dx, dz) - this.rotationY;
+    }
+  }
+
   public resetPose() {
     if (this.headMesh) {
       this.headMesh.rotation.set(0, 0, 0);
@@ -2280,10 +1310,7 @@ export class NPC {
       this.dogHead.rotation.set(0, 0, 0);
       this.dogHead.position.set(0, 0.65, 0.48);
     }
-    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+    this.zeroLimbs();
     if (this.dogFrontLeftLeg) this.dogFrontLeftLeg.rotation.set(0, 0, 0);
     if (this.dogFrontRightLeg) this.dogFrontRightLeg.rotation.set(0, 0, 0);
     if (this.dogBackLeftLeg) this.dogBackLeftLeg.rotation.set(0, 0, 0);
@@ -3053,10 +2080,9 @@ export class NPC {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.seesPlayerNow = false;
     this.lastColliders = colliders;
-    if (this.role === 'DETENTION_BOSS') impactDust.update(delta);
 
-    // 依 NPC 所屬世界套用對應室內區域 (少年院守衛不可誤用天天國中的室內範圍)
-    const isOutdoor = !IndoorManager.isIndoors(this.position, this.cfg.isDetention ? 'DETENTION' : 'CAMPUS');
+    // 依 NPC 所屬世界套用對應室內區域 (少年院守衛不可誤用天天國中的室內範圍)；室內外僅影響雨天行為，晴天略過查詢
+    const isOutdoor = isRaining && !IndoorManager.isIndoors(this.position, this.cfg.isDetention ? 'DETENTION' : 'CAMPUS');
     const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
 
     // 傘的顯示與收納狀態更新 (室內、倒地、追捕或雨停時自動收傘)
@@ -3186,10 +2212,7 @@ export class NPC {
     // 全校廣播定格發呆 (聽廣播立正站好，中斷一切追擊與攻擊動作)
     if (this.freezeTimer > 0) {
       this.freezeTimer -= delta;
-      if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
-      if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
-      if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
-      if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+      this.zeroLimbs();
       return;
     }
 
@@ -3264,13 +2287,7 @@ export class NPC {
           this.hpBarMesh.visible = false;
           this.koBadgeSprite.visible = true;
 
-          if (this.role === 'DOG' || this.role === 'BIKE_PATROL') {
-            this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
-            this.mesh.position.y = this.baseFloorY + 0.2;
-          } else {
-            this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-            this.mesh.position.y = this.baseFloorY + 0.25;
-          }
+          this.applyDownPose(this.role === 'DOG' || this.role === 'BIKE_PATROL');
         } else {
           // 存活落地：站穩回正
           this.mesh.rotation.set(0, this.rotationY, 0);
@@ -3349,24 +2366,13 @@ export class NPC {
         }
       } else {
         // 維持倒地姿勢與高度
-        if (this.role === 'DOG' || this.role === 'BIKE_PATROL') {
-          this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
-          this.mesh.position.y = this.baseFloorY + 0.2;
-        } else {
-          this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
-          this.mesh.position.y = this.baseFloorY + 0.25;
-        }
+        this.applyDownPose(this.role === 'DOG' || this.role === 'BIKE_PATROL');
       }
       this.mesh.position.x = this.position.x;
       this.mesh.position.z = this.position.z;
 
       // 血條與告示牌面朝玩家視角 (0-GC 純純量計算)
-      const dx = playerPos.x - this.position.x;
-      const dz = playerPos.z - this.position.z;
-      if (dx * dx + dz * dz > 0.01) {
-        const ang = Math.atan2(dx, dz);
-        this.hpBarGroup.rotation.y = ang - this.rotationY;
-      }
+      this.faceHpBar(playerPos);
       return;
     }
 
@@ -3479,7 +2485,7 @@ export class NPC {
     // 總教官狂暴衝鋒判定 (狂暴衝刺 14 m/s + 撞柱重度眩暈 + 距離上限)
     if (this.bossIsCharging && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
       // 子步掃掠移動 (每步 ≤0.3m)，撞上身體高度範圍內的阻擋物時停在接觸面，避免嵌牆或高速穿牆
-      const stepDist = Math.min(NPC.BOSS_CHARGE_SPEED * delta, this.bossChargeMaxDist - this.bossChargeTraveled);
+      const stepDist = Math.min(NPC.BOSS_CHARGE_SPEED * delta, NPC.BOSS_CHARGE_MAX_DIST - this.bossChargeTraveled);
       const hitWall = this.moveBossSwept(colliders, this.bossChargeDir, Math.max(0, stepDist));
       this.bossChargeTraveled += stepDist;
       this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
@@ -3509,7 +2515,7 @@ export class NPC {
         if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
       }
 
-      if (!hitObstacle && this.bossChargeTraveled >= this.bossChargeMaxDist) {
+      if (!hitObstacle && this.bossChargeTraveled >= NPC.BOSS_CHARGE_MAX_DIST) {
         // 超過衝撞最大距離 (24m)，煞車收招
         this.bossIsCharging = false;
         this.pauseTimer = 0.8;
@@ -3632,12 +2638,7 @@ export class NPC {
         }
 
         // 頭頂 3D 浮動血條永遠面朝視角/玩家
-        const dx = playerPos.x - this.position.x;
-        const dz = playerPos.z - this.position.z;
-        if (dx * dx + dz * dz > 0.01) {
-          const ang = Math.atan2(dx, dz);
-          this.hpBarGroup.rotation.y = ang - this.rotationY;
-        }
+        this.faceHpBar(playerPos);
         return;
       }
 
@@ -3649,12 +2650,7 @@ export class NPC {
         const canPause = isDetention ? true : ((!isRaining || !isOutdoorHumanoid || this.hasUmbrella) && Math.random() < this.pauseChance);
         if (canPause) {
           this.enterPauseState();
-          const dx = playerPos.x - this.position.x;
-          const dz = playerPos.z - this.position.z;
-          if (dx * dx + dz * dz > 0.01) {
-            const ang = Math.atan2(dx, dz);
-            this.hpBarGroup.rotation.y = ang - this.rotationY;
-          }
+          this.faceHpBar(playerPos);
           return;
         } else {
           this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
@@ -3905,12 +2901,7 @@ export class NPC {
     }
 
     // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家 (0-GC 純量計算)
-    const dx = playerPos.x - this.position.x;
-    const dz = playerPos.z - this.position.z;
-    if (dx * dx + dz * dz > 0.01) {
-      const ang = Math.atan2(dx, dz);
-      this.hpBarGroup.rotation.y = ang - this.rotationY;
-    }
+    this.faceHpBar(playerPos);
 
     // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC)
     if (isRaining && isOutdoorHumanoid && !this.isKnockedDown && !this.isChasing) {
