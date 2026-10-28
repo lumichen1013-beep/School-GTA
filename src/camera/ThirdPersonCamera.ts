@@ -32,8 +32,17 @@ export class ThirdPersonCamera {
 
   private isVehicleMode: boolean = false;
 
+  // 羽球比賽轉播視角：拉遠拉高、視線前移至球網方向，讓角色落在畫面下方不擋球
+  public isMatchView: boolean = false;
+  private matchBlend: number = 0;
+  private matchLookAt: THREE.Vector3 = new THREE.Vector3();
+  private static readonly MATCH_DISTANCE = 5.5;
+  private static readonly MATCH_PITCH = 0.4;
+  private static readonly MATCH_LOOK_AHEAD = 3.0;
+
   public updateRotation(deltaX: number, deltaY: number) {
     if (this.isCinematicExecution && this.cinematicTimer > 0) return; // 特寫運鏡期間鎖定自由視角旋轉
+    if (this.isMatchView) return; // 羽球比賽轉播視角鎖定朝向球場
     this.yaw -= deltaX * this.sensitivityX;
     this.pitch += deltaY * this.sensitivityY;
 
@@ -206,11 +215,20 @@ export class ThirdPersonCamera {
     // 在電梯車廂內設定特寫目標距離 1.75m，防止後腦杓剪裁與穿頂
     // 在狹窄的樓梯間內使用緊湊跟隨距離 (1.85m)，提供最佳爬樓梯與折返轉角視野，防止鏡頭推入外牆！
     // 在走廊與教室/演藝廳內使用 2.8m，室外則保持 4.2m (步行) / 7.5m (載具)
-    const effectiveTargetDistance = inElevator
+    let effectiveTargetDistance = inElevator
       ? 1.75
       : (inStairwell
         ? 1.85
         : (isIndoors ? Math.min(this.targetDistance, 2.8) : this.targetDistance));
+
+    // 羽球比賽轉播視角：鏡頭轉回玩家正後方 (yaw=0 朝 -Z 球網)、抬高俯角並拉遠，覆蓋室內 2.8m 限制
+    this.matchBlend = THREE.MathUtils.lerp(this.matchBlend, this.isMatchView ? 1 : 0, Math.min(delta * 3.0, 1.0));
+    if (this.isMatchView) {
+      const yawDiff = Math.atan2(Math.sin(0 - this.yaw), Math.cos(0 - this.yaw));
+      this.yaw += yawDiff * Math.min(delta * 4.0, 1.0);
+      this.pitch = THREE.MathUtils.lerp(this.pitch, ThirdPersonCamera.MATCH_PITCH, Math.min(delta * 4.0, 1.0));
+      effectiveTargetDistance = ThirdPersonCamera.MATCH_DISTANCE;
+    }
 
     this.distance = THREE.MathUtils.lerp(this.distance, effectiveTargetDistance, delta * 6.0);
 
@@ -336,7 +354,14 @@ export class ThirdPersonCamera {
     // 6. 鏡頭位置與視線平滑插值 (Smooth Camera Lag)
     const lerpFactor = Math.min(delta * 14.0, 1.0);
     this.currentPosition.lerp(actualPosition, lerpFactor);
-    this.currentLookAt.lerp(focusPoint, lerpFactor);
+    // 比賽視角時視線焦點往鏡頭前方 (球網方向) 推移，角色落在畫面下方
+    const lookAhead = ThirdPersonCamera.MATCH_LOOK_AHEAD * this.matchBlend;
+    this.matchLookAt.set(
+      focusPoint.x - Math.sin(this.yaw) * lookAhead,
+      focusPoint.y,
+      focusPoint.z - Math.cos(this.yaw) * lookAhead
+    );
+    this.currentLookAt.lerp(this.matchLookAt, lerpFactor);
 
     // 7. 插值後再次確認不穿透樓梯間外牆、電梯車廂與室內天花板
     const curCamInElevator = inElevator || (

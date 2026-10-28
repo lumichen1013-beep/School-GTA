@@ -2642,17 +2642,12 @@ class SchoolGTASandbox {
       if (npc.isBossWindingUp || npc.bossIsCharging || npc.isBossStunned) continue;
 
       const distToPlayer = npc.position.distanceTo(targetPosition);
-      const isWithin2m = distToPlayer <= 2.0;
       const attackDist = (this.currentWorldType === 'DETENTION') ? 2.0 : Math.max(1.8, npc.attackRange);
 
-      // 第一世界：靠近 2m 或追捕時攻擊；第二世界：處於追捕警戒且進入攻擊距離時發動攻擊
-      const shouldAttack = !isSpawnGraceActive && (npc.isChasing || (this.currentWorldType === 'CAMPUS' && isWithin2m)) && distToPlayer <= attackDist;
+      // 兩個世界皆僅在追捕狀態 (通緝或被激怒) 且進入攻擊距離時發動攻擊，第一世界 NPC 不會無故主動攻擊
+      const shouldAttack = !isSpawnGraceActive && npc.isChasing && distToPlayer <= attackDist;
 
       if (shouldAttack && !this.player.isDead && npc.attackCooldown <= 0) {
-        if (!npc.isChasing) {
-          npc.isChasing = true;
-          npc.lastKnownPos.copy(targetPosition);
-        }
         if (this.player.isDodging) {
           npc.attackCooldown = 0.85;
           npc.triggerAttackAnimation(delta);
@@ -2680,7 +2675,7 @@ class SchoolGTASandbox {
           this.cameraCtrl.setMode(false);
           this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下火柴人自行車！`, 2500);
         } else {
-          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}近身 2 米主動重擊！`, 1500);
+          this.wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
         }
 
         this.wantedSystem.notifyAttacked();
@@ -2698,6 +2693,8 @@ class SchoolGTASandbox {
     this.wantedSystem.update(delta, isAnyChasing);
 
     // 11. 更新攝影機 (使用 rawDelta 維持 60fps 絲滑運鏡與慢動作特寫)
+    // 羽球比賽倒數與進行中切換轉播視角，結束/中止後自動回復一般跟隨
+    this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
     this.cameraCtrl.update(targetPosition, rawDelta, this.activeColliders);
 
     // 12. 更新生態探索園區 (僅限天天國中)

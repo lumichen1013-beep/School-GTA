@@ -453,7 +453,8 @@ export class NPC {
     }
 
     // 頭頂 3D 浮動血條與昏迷倒數告示牌組 (面朝攝影機視角，清晰易辨)
-    const hpY = (role === 'DOG' || role === 'DETENTION_WOLF') ? 1.05 : 2.05;
+    // 大如老師爆炸頭頂約 2.19m，血條需抬高至髮頂上方避免被頭髮遮擋
+    const hpY = (role === 'DOG' || role === 'DETENTION_WOLF') ? 1.05 : (role === 'PE_TEACHER_BOSS' ? 2.4 : 2.05);
     this.hpBarGroup = new THREE.Group();
     this.hpBarGroup.position.set(0, hpY, 0);
 

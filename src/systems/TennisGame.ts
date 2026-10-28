@@ -27,6 +27,13 @@ export class TennisGame {
   public coachFootworkTimer: number = 0;
   public coachCurrentAction: 'READY' | 'POSITIONING_SERVE' | 'SERVING' | 'RECOVERING' | 'CHASING' = 'READY';
 
+  // 真實羽球來回制：玩家每次回擊時擲骰決定大如老師是否接得到 (70% 回擊 / 30% 失誤)
+  public coachReturnChance: number = 0.7;
+  private coachWillReturn: boolean = true;
+  public rallyCount: number = 0;
+  private shotSpeed: number = 11.5;
+  private shotArc: number = 0.8;
+
   public openDialog(hud: HUD, onStart: () => void) {
     if (document.pointerLockElement) {
       document.exitPointerLock();
@@ -52,6 +59,8 @@ export class TennisGame {
     this.peCoachRef = peCoach;
     this.coachFootworkTimer = 0;
     this.coachCurrentAction = 'READY';
+    this.coachWillReturn = true;
+    this.rallyCount = 0;
 
     // 清空場上既有球體並處置資源
     for (const sc of this.shuttlecocks) {
@@ -240,7 +249,8 @@ export class TennisGame {
           // 狀態 A：玩家已擊球回擊，教練全力飛奔迎球撲救 (CHASING)
           // ==========================================
           this.coachCurrentAction = 'CHASING';
-          this.coachMoveSpeed = 8.8; // 撲救高速衝刺步法
+          // 撲救高速衝刺步法；判定失誤的這一拍起步慢半拍，追不上落點
+          this.coachMoveSpeed = this.coachWillReturn ? 8.8 : 4.2;
 
           // 預測羽球落點或攔截點：羽球朝 -Z 方向飛向教練半場
           let predX = activeShuttle.position.x;
@@ -285,51 +295,9 @@ export class TennisGame {
             this.serveTimer = 2.4;
             peCoach.shuttlecockCooldown = 0;
 
-            // 體育老師智慧球路多樣性系統 (4 大變速變線球路，動態判斷玩家站位，拒絕單一餵球)
-            const playerDistFromNet = playerPos.z - 37.0; // 網子在 Z=37.0
-            const rand = Math.random();
-
-            let targetX = 77.0;
-            let targetZ = 44.0;
-            let shotSpeed = 11.5;
-            let shotArc = 0.8;
-
-            if (playerDistFromNet > 6.2 || (rand < 0.28 && playerDistFromNet > 4.5)) {
-              // 1. 網前放小球 (Drop Shot)：玩家退太後時，向上拋過網口急墜！
-              targetX = 75.0 + Math.random() * 4.0; // 75.0 ~ 79.0
-              targetZ = 40.2 + Math.random() * 1.5; // 40.2 ~ 41.7 (近網前)
-              shotSpeed = 10.2;
-              shotArc = 2.4; // 充足向上拋物線，高挑越過球網急墜
-              wantedSystem.showBanner('🏸 大如老師使出【網前放小球】！快前衝接球！', 1600);
-            } else if (playerDistFromNet < 5.0 || (rand >= 0.28 && rand < 0.52)) {
-              // 2. 後場高遠球 (Deep Lob)：玩家靠太近時，高拋底線死角！
-              targetX = Math.random() < 0.5 ? (73.8 + Math.random() * 1.2) : (79.0 + Math.random() * 1.2);
-              targetZ = 46.5 + Math.random() * 1.2; // 46.5 ~ 47.7 (底線深區)
-              shotSpeed = 12.2;
-              shotArc = 2.8; // 高挑彩虹向上拋物線
-              wantedSystem.showBanner('🏸 大如老師打出【後場底線高遠球】！迅速後撤回擊！', 1600);
-            } else if (rand >= 0.52 && rand < 0.80) {
-              // 3. 大對角斜線抽球 (Cross-Court Drive)：逼迫大跨步側移！
-              if (playerPos.x < 77.0) {
-                targetX = 79.6 + Math.random() * 1.2; // 逼打右側線
-              } else {
-                targetX = 73.2 + Math.random() * 1.2; // 逼打左側線
-              }
-              targetZ = 43.5 + Math.random() * 1.8;
-              shotSpeed = 12.0;
-              shotArc = 2.2; // 向上拋物線越網
-              wantedSystem.showBanner('🏸 大如老師大角度【大對角斜線變線】！側步跨救！', 1600);
-            } else {
-              // 4. 凌空暴扣殺球 (Thunder Smash)：高點下壓殺球，同樣具備向上起弧越網！
-              targetX = THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 2.2, 74.0, 80.0);
-              targetZ = 43.0 + Math.random() * 1.5;
-              shotSpeed = 13.5;
-              shotArc = 1.9; // 向上拋物線過網後俯衝
-              wantedSystem.showBanner('⚡ 大如老師凌空起跳【雷霆暴扣殺球】！看準時機揮拍！', 1600);
-            }
-
-            _scratchServeTarget.set(targetX, 12.0, targetZ);
-            const proj = peCoach.tryShootShuttlecock(_scratchServeTarget, scene, 2.2, shotSpeed, shotArc);
+            this.rallyCount = 0;
+            this.pickCoachShot(playerPos, wantedSystem, true);
+            const proj = peCoach.tryShootShuttlecock(_scratchServeTarget, scene, 2.2, this.shotSpeed, this.shotArc);
             if (proj) {
               this.shuttlecocks.push(proj);
             }
@@ -407,36 +375,34 @@ export class TennisGame {
       }
       sc.life -= delta;
 
-      // 出界判定
+      // 出界判定：飛向玩家時出界算教練失分前的玩家漏接 (教練得分)；玩家回擊出界則教練得分
       if (
         sc.position.x < 62.8 || sc.position.x > 85.2 ||
         sc.position.z < 22.8 || sc.position.z > 53.2 ||
         sc.position.y < 11.5 || sc.position.y > 17.5
       ) {
-        if (!sc.hasHitOrMissed && !sc.isReturned && this.tennisState === 'PLAYING') {
-          sc.hasHitOrMissed = true;
-          this.coachScore += 1;
-          this.updateScoreboard();
-          soundManager.playWhistle();
-          if (this.coachScore >= 5) {
-            this.endMatch(false, wantedSystem, hud, scene, onRewardCash, player);
-          } else {
-            this.serveTimer = 2.0;
-          }
-        }
         NPC.disposeProjectile(sc, scene);
         this.shuttlecocks.splice(i, 1);
+        if (this.tennisState === 'PLAYING') {
+          if (sc.isReturned && !this.coachWillReturn) {
+            wantedSystem.showBanner('🏸 大如老師救球不及！玩家漂亮得分！', 1600);
+            this.awardPoint(true, wantedSystem, hud, scene, onRewardCash, player);
+          } else {
+            this.awardPoint(false, wantedSystem, hud, scene, onRewardCash, player);
+          }
+        }
         continue;
       }
 
-      // 玩家打擊回擊羽球判定
+      // 玩家打擊回擊羽球判定 (回擊不直接得分，球飛回教練半場繼續來回)
       if (this.tennisState === 'PLAYING' && !sc.isReturned && !sc.hasHitOrMissed && sc.position.distanceTo(playerPos) < 3.0) {
         if (player.isAttacking || input.mouseButtons.left) {
           sc.isReturned = true;
           sc.hasHitOrMissed = true;
+          this.rallyCount += 1;
+          // 回擊瞬間擲骰：決定大如老師這一拍接不接得到
+          this.coachWillReturn = Math.random() < this.coachReturnChance;
           soundManager.playBadmintonHit();
-          this.playerScore += 1;
-          this.updateScoreboard();
           if (peCoach) {
             // 玩家擊球回擊：計算向上的彩虹高遠拋物線，巧妙打向教練半場的不同戰術落點 (左右大角、前場小球或底線)
             let returnX = 77.0;
@@ -481,31 +447,42 @@ export class TennisGame {
             _scratchLookTarget.copy(sc.position).add(sc.velocity);
             sc.mesh.lookAt(_scratchLookTarget);
           }
-          if (this.playerScore >= 5) {
-            this.endMatch(true, wantedSystem, hud, scene, onRewardCash, player);
-            continue;
-          } else {
-            this.serveTimer = 2.0;
-          }
           continue;
         }
       }
 
-      // 成功回擊給教練：球飛回教練半場
-      if (sc.isReturned && peCoach) {
+      // 球飛回教練半場：依擲骰結果由大如老師回擊或失誤漏接
+      if (sc.isReturned && peCoach && this.tennisState === 'PLAYING') {
         const distToCoach = sc.position.distanceTo(peCoach.position);
         const isLanded = sc.position.y <= 12.18 && sc.position.z <= 37.0;
-        if (distToCoach < 2.5 || sc.position.z <= 27.2 || isLanded) {
+        // 下墜至擊球高度以下即視為進入教練擊球點，確保 70% 回擊率不因跑位距離失準
+        const isInStrikeZone = sc.position.z <= 37.0 && sc.velocity.y < 0 && sc.position.y <= 13.6;
+
+        if (this.coachWillReturn && (distToCoach < 2.5 || sc.position.z <= 27.2 || isInStrikeZone || isLanded)) {
           soundManager.playBadmintonHit();
-          peCoach.triggerAttackAnimation();
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
-          this.serveTimer = 2.0;
-          if (distToCoach < 2.5) {
-            wantedSystem.showBanner('🏸 大如老師飛身撲救截擊！精采來回！', 1600);
+          // 大如老師回擊：沿用發球的 4 大球路，球回到玩家半場可再次擊球
+          peCoach.shuttlecockCooldown = 0;
+          this.pickCoachShot(playerPos, wantedSystem, false);
+          const proj = peCoach.tryShootShuttlecock(_scratchServeTarget, scene, 0, this.shotSpeed, this.shotArc);
+          if (proj) {
+            this.shuttlecocks.push(proj);
+            if (this.rallyCount >= 2) {
+              wantedSystem.showBanner(`🏸 大如老師飛身回擊！精采來回 ${this.rallyCount} 拍！`, 1200);
+            }
           } else {
-            wantedSystem.showBanner('🏸 大如老師救球不及！玩家漂亮得分！', 1600);
+            this.awardPoint(true, wantedSystem, hud, scene, onRewardCash, player);
           }
+          continue;
+        }
+
+        if (!this.coachWillReturn && (isLanded || sc.position.z <= 27.2)) {
+          NPC.disposeProjectile(sc, scene);
+          this.shuttlecocks.splice(i, 1);
+          soundManager.playWhistle();
+          wantedSystem.showBanner('🏸 大如老師救球不及！玩家漂亮得分！', 1600);
+          this.awardPoint(true, wantedSystem, hud, scene, onRewardCash, player);
           continue;
         }
       }
@@ -520,19 +497,12 @@ export class TennisGame {
         if (isHit || isPast || isLanded) {
           sc.hasHitOrMissed = true;
           soundManager.playPunch();
-          soundManager.playWhistle();
           if (isHit) {
             player.takeDamage(2, '羽球衝擊');
           }
-          this.coachScore += 1;
-          this.updateScoreboard();
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
-          if (this.coachScore >= 5) {
-            this.endMatch(false, wantedSystem, hud, scene, onRewardCash, player);
-          } else {
-            this.serveTimer = 2.0;
-          }
+          this.awardPoint(false, wantedSystem, hud, scene, onRewardCash, player);
           continue;
         }
       }
@@ -541,7 +511,92 @@ export class TennisGame {
       if (sc.life <= 0) {
         NPC.disposeProjectile(sc, scene);
         this.shuttlecocks.splice(i, 1);
+        // 死球：依羽球所在半場判定失分方，避免來回卡住不計分
+        if (this.tennisState === 'PLAYING') {
+          this.awardPoint(sc.position.z < 37.0, wantedSystem, hud, scene, onRewardCash, player);
+        }
       }
     }
+  }
+
+  // 每球結算：加分、更新記分板，先拿 5 分者獲勝，否則 2 秒後重新發球
+  private awardPoint(
+    toPlayer: boolean,
+    wantedSystem: WantedSystem,
+    hud: HUD,
+    scene: THREE.Scene,
+    onRewardCash: (amount: number) => void,
+    player: Player
+  ) {
+    if (toPlayer) {
+      this.playerScore += 1;
+    } else {
+      this.coachScore += 1;
+    }
+    this.rallyCount = 0;
+    this.updateScoreboard();
+    soundManager.playWhistle();
+    if (this.playerScore >= 5) {
+      this.endMatch(true, wantedSystem, hud, scene, onRewardCash, player);
+    } else if (this.coachScore >= 5) {
+      this.endMatch(false, wantedSystem, hud, scene, onRewardCash, player);
+    } else {
+      this.serveTimer = 2.0;
+    }
+  }
+
+  // 體育老師智慧球路多樣性系統 (4 大變速變線球路，動態判斷玩家站位，拒絕單一餵球)
+  // 發球與來回回擊共用；結果寫入 _scratchServeTarget / shotSpeed / shotArc (0-GC)
+  private pickCoachShot(playerPos: THREE.Vector3, wantedSystem: WantedSystem, showBanner: boolean) {
+    const playerDistFromNet = playerPos.z - 37.0; // 網子在 Z=37.0
+    const rand = Math.random();
+
+    let targetX = 77.0;
+    let targetZ = 44.0;
+    let shotSpeed = 11.5;
+    let shotArc = 0.8;
+    let banner = '';
+
+    if (playerDistFromNet > 6.2 || (rand < 0.28 && playerDistFromNet > 4.5)) {
+      // 1. 網前放小球 (Drop Shot)：玩家退太後時，向上拋過網口急墜！
+      targetX = 75.0 + Math.random() * 4.0; // 75.0 ~ 79.0
+      targetZ = 40.2 + Math.random() * 1.5; // 40.2 ~ 41.7 (近網前)
+      shotSpeed = 10.2;
+      shotArc = 2.4; // 充足向上拋物線，高挑越過球網急墜
+      banner = '🏸 大如老師使出【網前放小球】！快前衝接球！';
+    } else if (playerDistFromNet < 5.0 || (rand >= 0.28 && rand < 0.52)) {
+      // 2. 後場高遠球 (Deep Lob)：玩家靠太近時，高拋底線死角！
+      targetX = Math.random() < 0.5 ? (73.8 + Math.random() * 1.2) : (79.0 + Math.random() * 1.2);
+      targetZ = 46.5 + Math.random() * 1.2; // 46.5 ~ 47.7 (底線深區)
+      shotSpeed = 12.2;
+      shotArc = 2.8; // 高挑彩虹向上拋物線
+      banner = '🏸 大如老師打出【後場底線高遠球】！迅速後撤回擊！';
+    } else if (rand >= 0.52 && rand < 0.80) {
+      // 3. 大對角斜線抽球 (Cross-Court Drive)：逼迫大跨步側移！
+      if (playerPos.x < 77.0) {
+        targetX = 79.6 + Math.random() * 1.2; // 逼打右側線
+      } else {
+        targetX = 73.2 + Math.random() * 1.2; // 逼打左側線
+      }
+      targetZ = 43.5 + Math.random() * 1.8;
+      shotSpeed = 12.0;
+      shotArc = 2.2; // 向上拋物線越網
+      banner = '🏸 大如老師大角度【大對角斜線變線】！側步跨救！';
+    } else {
+      // 4. 凌空暴扣殺球 (Thunder Smash)：高點下壓殺球，同樣具備向上起弧越網！
+      targetX = THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 2.2, 74.0, 80.0);
+      targetZ = 43.0 + Math.random() * 1.5;
+      shotSpeed = 13.5;
+      shotArc = 1.9; // 向上拋物線過網後俯衝
+      banner = '⚡ 大如老師凌空起跳【雷霆暴扣殺球】！看準時機揮拍！';
+    }
+
+    // 僅發球時顯示球路名稱，來回中不連發橫幅洗版
+    if (showBanner) {
+      wantedSystem.showBanner(banner, 1600);
+    }
+    _scratchServeTarget.set(targetX, 12.0, targetZ);
+    this.shotSpeed = shotSpeed;
+    this.shotArc = shotArc;
   }
 }
