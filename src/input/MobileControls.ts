@@ -1,4 +1,5 @@
 import { InputManager } from '../core/InputManager';
+import { JOYSTICK_SNEAK_RADIUS } from '../entities/Player';
 
 export interface MobileControlHandlers {
   onAttackRelease: () => void;
@@ -46,6 +47,22 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
     let zoneRect: DOMRect | null = null;
     const maxRadius = 45;
 
+    // 潛行範圍提示環 (半徑 80%)：特訓院中按住搖桿時顯示，推桿在環內為潛行 (綠)，超出改為步行 (淡白)
+    const sneakRing = document.createElement('div');
+    const ringSize = Math.round(maxRadius * 2 * JOYSTICK_SNEAK_RADIUS);
+    sneakRing.style.cssText = `position:absolute;left:50%;top:50%;width:${ringSize}px;height:${ringSize}px;` +
+      'transform:translate(-50%,-50%);border-radius:50%;border:2px dashed rgba(52,211,153,0.75);' +
+      'pointer-events:none;display:none;transition:border-color 0.12s;';
+    joystickZone.appendChild(sneakRing);
+    const updateSneakRing = (active: boolean) => {
+      const show = active && input.joystickSneakEnabled;
+      sneakRing.style.display = show ? 'block' : 'none';
+      if (show) {
+        const inSneak = input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS;
+        sneakRing.style.borderColor = inSneak ? 'rgba(52,211,153,0.9)' : 'rgba(255,255,255,0.35)';
+      }
+    };
+
     const handleMove = (clientX: number, clientY: number) => {
       if (!zoneRect) return;
       const centerX = zoneRect.left + zoneRect.width / 2;
@@ -62,6 +79,7 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
 
       joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       input.setVirtualAxis(dx / maxRadius, dy / maxRadius);
+      updateSneakRing(true);
     };
 
     const handleEnd = () => {
@@ -69,6 +87,7 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
       zoneRect = null;
       joystickThumb.style.transform = 'translate(-50%, -50%)';
       input.setVirtualAxis(0, 0);
+      updateSneakRing(false);
     };
 
     joystickZone.addEventListener('touchstart', (e) => {

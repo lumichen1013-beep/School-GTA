@@ -2709,7 +2709,8 @@ export class NPC {
     isSpawnGraceActive: boolean = false,
     isPlayerSneaking: boolean = false,
     isPlayerSprinting: boolean = false,
-    isPlayerHiding: boolean = false
+    isPlayerHiding: boolean = false,
+    isPlayerMoving: boolean = true
   ) {
     if (isPlayerDead || this.isPermanentlyKnockedOut) {
       this.resetAggro();
@@ -2805,7 +2806,7 @@ export class NPC {
           this.cautionTimer = 3.5;
           // 轉身看向聲響方位
           this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
-        } else if (!isPlayerSneaking && distSq < 12.25) { // 正常走動 3.5m 內
+        } else if (!isPlayerSneaking && isPlayerMoving && distSq < 12.25) { // 正常走動 3.5m 內 (靜止不動不產生腳步聲)
           this.setAlertState('CAUTION');
           this.cautionTimer = 2.5;
           this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
@@ -3046,7 +3047,8 @@ export class NPC {
     isSpawnGraceActive: boolean = false,
     isPlayerSneaking: boolean = false,
     isPlayerSprinting: boolean = false,
-    isPlayerHiding: boolean = false
+    isPlayerHiding: boolean = false,
+    isPlayerMoving: boolean = true
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.seesPlayerNow = false;
@@ -3542,7 +3544,8 @@ export class NPC {
       isSpawnGraceActive,
       isPlayerSneaking,
       isPlayerSprinting,
-      isPlayerHiding
+      isPlayerHiding,
+      isPlayerMoving
     );
 
     // 3. 移動目標判定與「忽快忽慢」追捕節奏 (Burst Sprinting vs Fatigue Recovery)
