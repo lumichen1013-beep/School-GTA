@@ -193,6 +193,9 @@ export class NPC {
 
   // 單車糾察隊與單車組件追蹤
   public isOriginalBikePatrol: boolean = false;
+  // 第一世界學生服裝 (生成時隨機決定並保留，搶車/復活重建模型時維持同一套)：米白襯衫配深綠長褲制服，或藍紫色運動服
+  private readonly studentOutfit: { shirt: number; pants: number } =
+    Math.random() < 0.5 ? { shirt: 0xf3ead3, pants: 0x2f4a36 } : { shirt: 0x5a4fcf, pants: 0x4a3fb8 };
   // 被玩家搶走的自行車 (車主綁定)：復活後步行回到愛車旁牽回，避免憑空變出新車導致單車堆積
   public ownedBike: Bicycle | null = null;
   public isReclaimingBike: boolean = false;
@@ -923,8 +926,8 @@ export class NPC {
   private buildBikePatrolModel() {
     const frameMat = new THREE.MeshLambertMaterial({ color: 0x3498db });
     const rubberMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
-    const shirtMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1b263b });
+    const shirtMat = new THREE.MeshLambertMaterial({ color: this.studentOutfit.shirt });
+    const pantsMat = new THREE.MeshLambertMaterial({ color: this.studentOutfit.pants });
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xfad390 });
     const armBandMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
 
@@ -1005,13 +1008,11 @@ export class NPC {
       this.humanoidParts.push(part);
     };
 
-    let shirtColor = 0xf8f9fa;
-    let pantsColor = 0x1b263b;
+    // 學生、糾察隊、單車巡邏同學 (徒步) 預設穿著學生服裝
+    let shirtColor = this.studentOutfit.shirt;
+    let pantsColor = this.studentOutfit.pants;
 
-    if (this.role === 'INSPECTOR') {
-      shirtColor = 0xffffff;
-      pantsColor = 0x1b263b;
-    } else if (this.role === 'TEACHER') {
+    if (this.role === 'TEACHER') {
       shirtColor = 0x2c3e50;
       pantsColor = 0x34495e;
     } else if (this.role === 'INSTRUCTOR') {
