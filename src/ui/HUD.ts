@@ -64,6 +64,9 @@ export interface DetentionRadarData {
 export class HUD {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  // 小地圖/雷達固定以 120 單位邏輯座標繪製，實際像素依 CSS 尺寸 × DPR 縮放 (放大後顯示同範圍、圖示等比放大且清晰)
+  private static readonly MINIMAP_LOGICAL_SIZE = 120;
+  private minimapPixelScale: number = 1;
 
   private hpBar: HTMLElement | null;
   private hpNum: HTMLElement | null;
@@ -295,11 +298,30 @@ export class HUD {
       const syncHudTopBottom = () => {
         const bottom = Math.round(hudTopEl.getBoundingClientRect().bottom);
         if (bottom > 0) document.documentElement.style.setProperty('--hud-top-bottom', `${bottom}px`);
+        // 左上雷達區塊底緣：任務膠囊 (桌面/橫屏) 緊貼其下方
+        const leftEl = document.getElementById('hud-top-left');
+        const leftBottom = leftEl ? Math.round(leftEl.getBoundingClientRect().bottom) : 0;
+        if (leftBottom > 0) document.documentElement.style.setProperty('--hud-left-bottom', `${leftBottom}px`);
       };
       new ResizeObserver(syncHudTopBottom).observe(hudTopEl);
       window.addEventListener('resize', syncHudTopBottom);
       syncHudTopBottom();
     }
+
+    // 雷達畫布像素尺寸跟隨 CSS 尺寸 × DPR (上限 2)，僅於尺寸變動時重設，無每幀成本
+    const syncMinimapResolution = () => {
+      const cssSize = this.canvas.clientWidth;
+      if (cssSize <= 0) return;
+      const px = Math.round(cssSize * Math.min(window.devicePixelRatio || 1, 2));
+      if (this.canvas.width !== px) {
+        this.canvas.width = px;
+        this.canvas.height = px;
+      }
+      this.minimapPixelScale = px / HUD.MINIMAP_LOGICAL_SIZE;
+    };
+    if ('ResizeObserver' in window) new ResizeObserver(syncMinimapResolution).observe(this.canvas);
+    window.addEventListener('resize', syncMinimapResolution);
+    syncMinimapResolution();
 
     // 快捷鍵指南：點擊面板切換展開 / 收合
     const controlsPanelEl = document.getElementById('controls-panel');
@@ -1351,12 +1373,13 @@ export class HUD {
     this.minimapDeltaAccumulator = this.minimapDeltaAccumulator % 0.04;
 
     const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = HUD.MINIMAP_LOGICAL_SIZE;
+    const h = HUD.MINIMAP_LOGICAL_SIZE;
     const centerX = w / 2;
     const centerY = h / 2;
-    const mapScale = 1.35; // 縮放比
+    const mapScale = 1.35; // 縮放比 (邏輯單位/公尺，顯示半徑約 44m)
 
+    ctx.setTransform(this.minimapPixelScale, 0, 0, this.minimapPixelScale, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
     if (currentWorld === 'DETENTION') {

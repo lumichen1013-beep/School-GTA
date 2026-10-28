@@ -101,8 +101,9 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 .minimap-wrapper {
   position: relative;
-  width: 110px;
-  height: 110px;
+  /* 雷達為核心 HUD 元素：桌面 176px，手機直向 112px、橫向 100px (見下方媒體查詢) */
+  width: 176px;
+  height: 176px;
   border-radius: 50%;
   background: rgba(10, 16, 26, 0.90);
   border: 2.5px solid rgba(255, 204, 0, 0.45);
@@ -120,10 +121,10 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 }
 .minimap-expand-badge {
   position: absolute;
-  bottom: 6px;
-  right: 6px;
-  width: 22px;
-  height: 22px;
+  bottom: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: rgba(15, 23, 42, 0.85);
   border: 1px solid rgba(56, 189, 248, 0.7);
@@ -502,7 +503,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 /* 專屬任務看板 (Quest / Mission Tracker Panel) - 頂級毛玻璃手遊風格看板 */
 #quest-tracker-panel {
   position: absolute;
-  top: 140px;
+  top: calc(var(--hud-left-bottom, 214px) + 10px);
   left: max(18px, env(safe-area-inset-left, 18px));
   width: 236px;
   max-width: 90vw;
@@ -2408,8 +2409,9 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
+/* 桌面版僅保留一排記過徽章 (標題行意義不大，已隱藏)；手機版改顯示單行狀態標籤 */
 .demerit-header {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 6px;
   font-size: 13px;
@@ -2722,9 +2724,15 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     gap: 8px !important;
   }
   .minimap-wrapper {
-    width: 74px !important;
-    height: 74px !important;
+    width: 112px !important;
+    height: 112px !important;
     border-width: 2px !important;
+  }
+  .minimap-expand-badge {
+    bottom: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
   }
   .hud-title-zone {
     padding: 4px 8px !important;
@@ -2797,6 +2805,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     display: none !important;
   }
   .demerit-header {
+    display: flex !important;
     gap: 4px !important;
     font-size: 11px !important;
     white-space: nowrap !important;
@@ -3111,9 +3120,9 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 /* 手機橫屏模式 (高度 <= 520px) 極致緊湊優化 */
 @media (max-height: 520px) {
-  /* 橫屏：任務膠囊移至左上地點/體力區塊下方 (區塊高 93 + 間距 6)，中央頂部留給橫幅與比分板，右側留給狀態列 */
+  /* 橫屏：任務膠囊移至左上雷達/體力區塊下方 (依 --hud-left-bottom 實際底緣 + 間距 6)，中央頂部留給橫幅與比分板，右側留給狀態列 */
   #quest-tracker-panel {
-    top: calc(var(--hud-top-bottom, 107px) + 6px) !important;
+    top: calc(var(--hud-left-bottom, 120px) + 6px) !important;
     left: max(8px, env(safe-area-inset-left, 8px)) !important;
     transform: none !important;
     min-width: 130px !important;
@@ -3150,8 +3159,8 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     border-radius: 14px !important;
   }
   .minimap-wrapper {
-    width: 60px !important;
-    height: 60px !important;
+    width: 100px !important;
+    height: 100px !important;
   }
   .bars-container {
     width: 90px !important;

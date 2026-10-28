@@ -339,7 +339,6 @@ class SchoolGTASandbox implements GameContext {
     }
     this.basketballGame.basketballMesh.visible = false;
     this.racingGame.abortAll();
-    this.tennisGame.endMatch(false, this.wantedSystem, this.hud, this.engine.scene, () => {});
 
     for (const b of this.bicycles) {
       b.mesh.visible = false;
