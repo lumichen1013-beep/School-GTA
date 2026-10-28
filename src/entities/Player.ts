@@ -463,6 +463,69 @@ export class Player {
     this.bearBlinkCount++;
   }
 
+  // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位 ~5.0m，面向 BOSS)
+  public leapAwayFrom(targetPos: THREE.Vector3, colliders: CollidableBox[] = [], jumpDist: number = 5.0) {
+    if (this.isDead) return;
+
+    // 計算遠離 target 的方向
+    const awayDir = new THREE.Vector3().subVectors(this.position, targetPos).setY(0);
+    if (awayDir.lengthSq() < 0.001) {
+      awayDir.set(0, 0, 1);
+    } else {
+      awayDir.normalize();
+    }
+
+    // 落地時面向 BOSS: 朝向 targetPos
+    const toBoss = new THREE.Vector3().subVectors(targetPos, this.position).setY(0).normalize();
+    this.rotationY = Math.atan2(toBoss.x, toBoss.z);
+    this.mesh.rotation.y = this.rotationY;
+
+    // 步進防穿牆位移 (最高 jumpDist，約 4.8m ~ 5.2m)
+    const step = 0.2;
+    const steps = Math.floor(jumpDist / step);
+    const halfWidth = 0.4;
+    const height = 1.8;
+    let currentX = this.position.x;
+    let currentZ = this.position.z;
+
+    for (let s = 0; s < steps; s++) {
+      const nextX = currentX + awayDir.x * step;
+      const nextZ = currentZ + awayDir.z * step;
+      let blocked = false;
+
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
+        if (box.isFloorOnly) continue;
+        if (
+          nextX + halfWidth > box.min.x &&
+          nextX - halfWidth < box.max.x &&
+          nextZ + halfWidth > box.min.z &&
+          nextZ - halfWidth < box.max.z &&
+          this.position.y + height > box.min.y &&
+          this.position.y + 0.3 < box.max.y
+        ) {
+          blocked = true;
+          break;
+        }
+      }
+
+      if (blocked) break;
+      currentX = nextX;
+      currentZ = nextZ;
+    }
+
+    this.position.x = currentX;
+    this.position.z = currentZ;
+    this.mesh.position.copy(this.position);
+
+    // 向上後跳騰空拋物線初速度
+    this.velocity.y = 5.5;
+
+    // 留下身法殘影與音效
+    this.spawnAfterimage(0x38bdf8, 0.45);
+    soundManager.playDodge(false);
+  }
+
   // 尋找瞬移安全目標點 (0-GC，檢測障礙物碰撞與地面高度，絕不穿牆)
   private findSafeTeleportPos(centerX: number, centerZ: number, currentY: number, colliders: CollidableBox[]): THREE.Vector3 {
     const halfWidth = 0.45;

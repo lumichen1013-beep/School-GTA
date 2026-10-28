@@ -4,6 +4,7 @@ export class WantedSystem {
   public stars: number = 0; // 0 ~ 5 級記過懲戒
   public escapeTimer: number = 0;
   public isEvading: boolean = false;
+  public currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   private isSpottedThisFrame: boolean = false;
   private bannerTimeout: number = 0;
   public onWantedCleared?: () => void;
@@ -12,8 +13,18 @@ export class WantedSystem {
     this.updateHUDStars();
   }
 
-  // 獲取當前記過處分等級稱號
+  // 獲取當前記過處分或特訓院警戒等級稱號
   public getDemeritLevelTitle(level: number): string {
+    if (this.currentWorld === 'DETENTION') {
+      switch (level) {
+        case 1: return '一級戒備 (警衛注意)';
+        case 2: return '二級戒備 (哨戒搜索)';
+        case 3: return '三級戒備 (警戒升級)';
+        case 4: return '四級戒備 (區域封鎖)';
+        case 5: return '五級戒備 (全院圍剿追捕)';
+        default: return '隱蔽安全';
+      }
+    }
     switch (level) {
       case 1: return '警告 1 次';
       case 2: return '記小過 1 次';
@@ -33,7 +44,11 @@ export class WantedSystem {
     if (this.stars > oldStars) {
       soundManager.playAlert();
       const title = this.getDemeritLevelTitle(this.stars);
-      this.showBanner(`📋 記過處分登記：【${title}】！[${reason}]`);
+      if (this.currentWorld === 'DETENTION') {
+        this.showBanner(`🚨 院內警戒升級：【${title}】！[${reason}]`);
+      } else {
+        this.showBanner(`📋 記過處分登記：【${title}】！[${reason}]`);
+      }
     }
 
     this.updateHUDStars();
@@ -72,7 +87,11 @@ export class WantedSystem {
         if (this.escapeTimer <= 0) {
           // 成功躲避 5 秒：全面銷過！
           soundManager.playBroadcastChime();
-          this.showBanner('🕊️ 處分銷除：成功避開生教與教官視線，記過處分已撤銷！', 3500);
+          if (this.currentWorld === 'DETENTION') {
+            this.showBanner('🕊️ 警戒解除：成功避開巡邏守衛視線，院內戒備已撤除！', 3500);
+          } else {
+            this.showBanner('🕊️ 處分銷除：成功避開生教與教官視線，記過處分已撤銷！', 3500);
+          }
           this.clearWanted();
           return;
         }
@@ -123,7 +142,7 @@ export class WantedSystem {
     const statusTitleEl = document.getElementById('demerit-status-title');
     if (statusTitleEl) {
       if (this.stars === 0) {
-        statusTitleEl.textContent = '操行良好';
+        statusTitleEl.textContent = this.currentWorld === 'DETENTION' ? '隱蔽安全' : '操行良好';
         statusTitleEl.style.color = '#2ecc71';
       } else {
         statusTitleEl.textContent = this.getDemeritLevelTitle(this.stars);

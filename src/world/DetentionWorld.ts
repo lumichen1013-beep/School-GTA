@@ -71,6 +71,15 @@ export class DetentionWorld {
 
   // 少年院關鍵點位 (改為潛龍諜影潛行迷宮配置)
   public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 起點：北側牢房後方通風口 (空曠安全區)
+  public currentCheckpointPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 當前重生/存檔點
+  public currentCheckpointName: string = 'A 區 牢房起點'; // 存檔點名稱
+
+  // 更新檢查點 / 存檔點
+  public setCheckpoint(pos: THREE.Vector3, name: string) {
+    this.currentCheckpointPos.copy(pos);
+    this.spawnPos.copy(pos);
+    this.currentCheckpointName = name;
+  }
   public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
   public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(-48, 0, -8); // 西側體能區：臥推訓練
@@ -755,6 +764,15 @@ export class DetentionWorld {
     concreteGeos.push(northCheckWall);
     this.addCollider(-10.4, -9.6, -90, -78, 0, 3.8);
 
+    // 新增：北走廊暗殺拐角 L 型隔牆 (形成隱密通風暗道與雙轉角，避開巡邏視線)
+    const alleyWall1 = new THREE.BoxGeometry(0.6, 3.8, 12);
+    alleyWall1.translate(-34, 1.9, -82);
+    const alleyWall2 = new THREE.BoxGeometry(10, 3.8, 0.6);
+    alleyWall2.translate(-29, 1.9, -76);
+    concreteGeos.push(alleyWall1, alleyWall2);
+    this.addCollider(-34.4, -33.6, -88, -76, 0, 3.8);
+    this.addCollider(-34, -24, -76.4, -75.6, 0, 3.8);
+
     // 中央安全崗亭 (存放藍色門禁卡 A，X = 5, Z = -60)
     const boothWallW = new THREE.BoxGeometry(0.5, 3.2, 4);
     boothWallW.translate(2, 1.6, -60);
@@ -767,13 +785,22 @@ export class DetentionWorld {
     this.addCollider(7.7, 8.3, -62, -58, 0, 3.2);
     this.addCollider(1.7, 8.3, -62.3, -61.7, 0, 3.2);
 
+    // 新增：中央庭院 S 彎戰術隔牆 (掩護崗亭側面，形成多重暗角掩護)
+    const courtL1 = new THREE.BoxGeometry(0.6, 3.8, 14);
+    courtL1.translate(-10, 1.9, -63);
+    const courtL2 = new THREE.BoxGeometry(7, 3.8, 0.6);
+    courtL2.translate(-6.5, 1.9, -70);
+    concreteGeos.push(courtL1, courtL2);
+    this.addCollider(-10.4, -9.6, -70, -56, 0, 3.8);
+    this.addCollider(-10, -3, -70.4, -69.6, 0, 3.8);
+
     // 東側巡邏盲區阻隔壁 (X = 14, Z: -55 ~ -45)
     const eastCourtyardWall = new THREE.BoxGeometry(0.6, 3.8, 10);
     eastCourtyardWall.translate(14, 1.9, -50);
     concreteGeos.push(eastCourtyardWall);
     this.addCollider(13.6, 14.4, -55, -45, 0, 3.8);
 
-    // 南前庭防暴折返隔板 (Z = -38, X: -25 ~ -6 與 X: 6 ~ 25，留出中央寬闊通路 X: -6 ~ 6 直通閘門 1)
+    // 南前庭防暴折返隔板 (Z = -38, X: -25 ~ -6 與 X: 6 ~ 25，留出中央寬闊通路 X: -6 ~ 6)
     const southChicaneW = new THREE.BoxGeometry(19, 3.8, 0.6);
     southChicaneW.translate(-15.5, 1.9, -38);
     const southChicaneE = new THREE.BoxGeometry(19, 3.8, 0.6);
@@ -781,6 +808,12 @@ export class DetentionWorld {
     concreteGeos.push(southChicaneW, southChicaneE);
     this.addCollider(-25, -6, -38.4, -37.6, 0, 3.8);
     this.addCollider(6, 25, -38.4, -37.6, 0, 3.8);
+
+    // 新增：南前庭閘門前防暴 S 型交錯隔板 (Z = -33.5，強制雙 90° 迂迴轉角抵達閘門 1)
+    const chicaneZ33 = new THREE.BoxGeometry(10, 3.8, 0.6);
+    chicaneZ33.translate(0, 1.9, -33.5);
+    concreteGeos.push(chicaneZ33);
+    this.addCollider(-5, 5, -33.9, -33.1, 0, 3.8);
 
     // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
     const gateA_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
@@ -813,15 +846,25 @@ export class DetentionWorld {
     this.group.add(terminalA);
 
     // --- 【B 區：操場重裝軍規貨櫃與掩體迷宮 (Z: -28 ~ 35)】---
-    // 10 座高規格海運集裝箱貨櫃 (長 10m, 寬 2.8m, 高 3.2m) 整齊佈局，提供 7~10m 寬敞巡邏動線
+    // 豐富化海運集裝箱貨櫃矩陣 (18 座軍規貨櫃 + 轉角暗道，營造多重盲角與潛行挑戰)
     const containers = [
       // 第一排 (Z = -18)
       { x: -22, z: -18, isZ: false, color: 0x2b4c7e },
       { x: 22, z: -18, isZ: false, color: 0x8b3a3a },
+      // Gate 1 正前方中央遮擋貨櫃 (強迫分流至東西通道)
+      { x: 0, z: -21, isZ: false, color: 0x3d405b },
 
       // 第二排 (Z = -6)
       { x: -12, z: -6, isZ: true, color: 0x5c677d },
       { x: 12, z: -6, isZ: true, color: 0x2d6a4f },
+      // 西側外廊平行貨櫃 (形成長達 18m 狹長潛行暗道)
+      { x: -28, z: -6, isZ: true, color: 0x2b4c7e },
+      // 東側外廊平行貨櫃
+      { x: 28, z: -6, isZ: true, color: 0x8b3a3a },
+
+      // 中央轉角連通掩體 (Z = 1)
+      { x: -6, z: 1, isZ: false, color: 0x5c677d },
+      { x: 6, z: 1, isZ: false, color: 0x2d6a4f },
 
       // 第三排 (Z = 8)
       { x: -22, z: 8, isZ: false, color: 0x3d405b },
@@ -831,9 +874,16 @@ export class DetentionWorld {
       // 第四排 (Z = 20)
       { x: -12, z: 20, isZ: true, color: 0x2d6a4f },
       { x: 12, z: 20, isZ: true, color: 0x5c677d },
+      // 西南潛行貨櫃
+      { x: -26, z: 20, isZ: true, color: 0x3d405b },
+      // Keycard B 側翼包圍貨櫃 (形成死角藏匿口袋)
+      { x: 24, z: 20, isZ: false, color: 0x2b4c7e },
 
       // 東側藏寶盲區 (Z = 14, 掩護 Keycard B)
-      { x: 30, z: 14, isZ: true, color: 0x3d405b }
+      { x: 30, z: 14, isZ: true, color: 0x3d405b },
+
+      // Gate 2 正前方中央 S 型屏障貨櫃 (Z = 27)
+      { x: 0, z: 27, isZ: false, color: 0x8b3a3a }
     ];
 
     for (const c of containers) {
@@ -851,7 +901,11 @@ export class DetentionWorld {
       { x: -22, z: -2, isZ: false },
       { x: 22, z: -2, isZ: false },
       { x: -6, z: 14, isZ: true },
-      { x: 6, z: 14, isZ: true }
+      { x: 6, z: 14, isZ: true },
+      { x: -16, z: -14, isZ: true },
+      { x: 16, z: -14, isZ: true },
+      { x: -18, z: 26, isZ: false },
+      { x: 18, z: 26, isZ: false }
     ];
     for (const jb of jerseyBarriers) {
       const jbW = jb.isZ ? 0.6 : 3.6;
@@ -911,6 +965,33 @@ export class DetentionWorld {
       conduitGeo.translate(gp.x + 1.8, 2.75, gp.z);
       darkSteelGeos.push(conduitGeo);
     }
+
+    // 新增：C 區兩側戰術防爆側翼壁與 90° 轉角拐角掩體 (便於躲避 Boss 橫向衝撞)
+    const arenaWallW = new THREE.BoxGeometry(0.8, 3.2, 20);
+    arenaWallW.translate(-22, 1.6, 56);
+    const arenaWingW = new THREE.BoxGeometry(6, 3.2, 0.8);
+    arenaWingW.translate(-19, 1.6, 46);
+    const arenaWallE = new THREE.BoxGeometry(0.8, 3.2, 20);
+    arenaWallE.translate(22, 1.6, 56);
+    const arenaWingE = new THREE.BoxGeometry(6, 3.2, 0.8);
+    arenaWingE.translate(19, 1.6, 46);
+    concreteGeos.push(arenaWallW, arenaWingW, arenaWallE, arenaWingE);
+    this.addCollider(-22.4, -21.6, 46, 66, 0, 3.2);
+    this.addCollider(-22, -16, 45.6, 46.4, 0, 3.2);
+    this.addCollider(21.6, 22.4, 46, 66, 0, 3.2);
+    this.addCollider(16, 22, 45.6, 46.4, 0, 3.2);
+
+    // 新增：南大門前哨戰術防爆 S 彎工事 (Z = 82 與 Z = 87)
+    const southChicaneL = new THREE.BoxGeometry(12, 3.2, 0.8);
+    southChicaneL.translate(-10, 1.6, 82);
+    const southChicaneR = new THREE.BoxGeometry(12, 3.2, 0.8);
+    southChicaneR.translate(10, 1.6, 82);
+    const southCenterBaffle = new THREE.BoxGeometry(10, 3.2, 0.8);
+    southCenterBaffle.translate(0, 1.6, 87);
+    concreteGeos.push(southChicaneL, southChicaneR, southCenterBaffle);
+    this.addCollider(-16, -4, 81.6, 82.4, 0, 3.2);
+    this.addCollider(4, 16, 81.6, 82.4, 0, 3.2);
+    this.addCollider(-5, 5, 86.6, 87.4, 0, 3.2);
 
     // ==========================================
     // 8.6 刺客教條經典藏匿點矩陣 (Assassin's Creed Interactive Hiding Spots - 18 處)

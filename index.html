@@ -106,7 +106,37 @@
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65), 0 0 12px rgba(255, 204, 0, 0.2);
       overflow: hidden;
       flex-shrink: 0;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .minimap-wrapper:hover {
+      transform: scale(1.06);
+      border-color: #38bdf8;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.6);
+    }
+    .minimap-expand-badge {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.7);
+      color: #38bdf8;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      transition: background 0.2s, transform 0.2s;
+    }
+    .minimap-wrapper:hover .minimap-expand-badge {
+      background: #38bdf8;
+      color: #0f172a;
+      transform: scale(1.15);
     }
 
     #minimap-canvas {
@@ -1956,6 +1986,171 @@
       backdrop-filter: blur(8px);
     }
 
+    /* 畫面中央醒目提示 (Center Mission Directive Toast) */
+    .mission-center-prompt {
+      position: fixed;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      background: rgba(4, 13, 24, 0.94);
+      border: 2.5px solid #38bdf8;
+      border-radius: 20px;
+      padding: 26px 48px;
+      color: #fff;
+      text-align: center;
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.88), 0 0 40px rgba(56, 189, 248, 0.45);
+      backdrop-filter: blur(12px);
+      transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .mission-center-prompt.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .mission-center-prompt.fade-out {
+      opacity: 0;
+      transform: translate(-50%, -55%) scale(0.96);
+      transition: opacity 1.8s ease-out, transform 1.8s ease-out;
+    }
+    .mission-center-badge {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #f59e0b;
+      letter-spacing: 3px;
+      margin-bottom: 8px;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+    }
+    .mission-center-text {
+      font-size: clamp(24px, 4.2vw, 34px);
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: 2px;
+      text-shadow: 0 0 20px rgba(56, 189, 248, 0.9), 0 2px 8px rgba(0, 0, 0, 0.9);
+      margin-bottom: 6px;
+    }
+    .mission-center-sub {
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 2px;
+    }
+
+    /* 全螢幕大地圖視窗 (Full Map Modal) */
+    .fullmap-modal-card {
+      background: #090e17;
+      border: 2px solid #38bdf8;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(56, 189, 248, 0.3);
+      border-radius: 18px;
+      width: 760px;
+      max-width: 95vw;
+      max-height: 94vh;
+      overflow-y: auto;
+      padding: 20px 24px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      animation: modalSlide 0.25s ease;
+      position: relative;
+    }
+    .fullmap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+      padding-bottom: 10px;
+    }
+    .fullmap-title {
+      font-size: 20px;
+      font-weight: 900;
+      color: #38bdf8;
+      letter-spacing: 1px;
+    }
+    .fullmap-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      letter-spacing: 2px;
+    }
+    .fullmap-header-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .fullmap-badge {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+    .fullmap-coords {
+      font-family: monospace;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .fullmap-body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .fullmap-canvas-wrap {
+      width: 100%;
+      max-width: 660px;
+      aspect-ratio: 1 / 1;
+      background: #02060b;
+      border: 1.5px solid rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+      position: relative;
+    }
+    #fullmap-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .fullmap-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 10px;
+    }
+    .fullmap-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .legend-dot.player { background: #facc15; box-shadow: 0 0 6px #facc15; }
+    .legend-dot.checkpoint { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .legend-dot.keycard { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+    .legend-dot.gate { background: #ef4444; }
+    .legend-dot.enemy { background: #f87171; }
+    .legend-dot.hiding { background: #eab308; }
+    .fullmap-hotkey-hint {
+      font-size: 11.5px;
+      color: #64748b;
+      text-align: right;
+    }
+
     /* 遊戲內空間傳送 Modal */
     .world-modal-card {
       background: #0f172a;
@@ -2912,9 +3107,10 @@
       <div class="hud-top-left" id="hud-top-left">
         <div class="radar-container">
           <!-- Circular Minimap -->
-          <div class="minimap-wrapper">
+          <div class="minimap-wrapper" id="minimap-wrapper" title="點擊展開全域大地圖 (Click to Open Full Map)">
             <canvas id="minimap-canvas" width="120" height="120"></canvas>
             <div class="radar-center-ring"></div>
+            <div class="minimap-expand-badge" id="minimap-expand-btn">⛶</div>
           </div>
 
           <!-- Player Location & Health / Stamina Status Block -->
@@ -3294,7 +3490,7 @@
       <div class="controls-panel">
         <div class="controls-panel-title">🎮 鍵盤快捷鍵指南</div>
         <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
-        <div><span class="key-badge">滑鼠右鍵</span> 按住靜音慢步 (手機搖桿推半程&lt;0.5)</div>
+        <div><span class="key-badge">滑鼠右鍵</span> 按住潛行 (手機搖桿推半程&lt;0.5)</div>
         <div><span class="key-badge">左鍵</span><span class="key-badge">F</span> 揮擊武器 / 背後暗殺 (合併按鍵)</div>
         <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
         <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
@@ -3395,6 +3591,39 @@
       <div class="dodge-dialog-actions">
         <button class="dodge-btn-learn" id="dodge-btn-learn">🥋 學習【閃身步】(NT$ 1000)</button>
         <button class="dodge-btn-cancel" id="dodge-btn-cancel">稍後再來 (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全螢幕大地圖視窗 (Full Map Modal) -->
+  <div id="fullmap-modal" class="modal-backdrop" style="display: none;">
+    <div class="fullmap-modal-card">
+      <div class="fullmap-header">
+        <div class="fullmap-title-group">
+          <div class="fullmap-title" id="fullmap-title">🗺️ 全域態勢戰術大地圖</div>
+          <div class="fullmap-subtitle" id="fullmap-subtitle">GLOBAL TACTICAL OVERVIEW MAP</div>
+        </div>
+        <div class="fullmap-header-meta">
+          <div class="fullmap-badge" id="fullmap-world-badge">第七少年特訓院</div>
+          <div class="fullmap-coords" id="fullmap-coords">坐標：X: 0.0, Z: 0.0</div>
+          <button class="commissary-close" id="fullmap-close-btn" title="關閉大地圖 (ESC)">&times;</button>
+        </div>
+      </div>
+      <div class="fullmap-body">
+        <div class="fullmap-canvas-wrap">
+          <canvas id="fullmap-canvas" width="700" height="700"></canvas>
+        </div>
+      </div>
+      <div class="fullmap-footer">
+        <div class="fullmap-legend">
+          <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+          <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
+          <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
+          <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
+          <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
+          <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
+        </div>
+        <div class="fullmap-hotkey-hint">⌨️ 按 [ESC] 鍵、點擊右上角關閉或再次點擊小地圖即可返回遊戲</div>
       </div>
     </div>
   </div>
@@ -3530,6 +3759,13 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- 劇情動畫結束提示文字 (Mission Center Directive Toast) -->
+  <div id="mission-center-prompt" class="mission-center-prompt">
+    <div class="mission-center-badge">✦ 任務提示 · MISSION DIRECTIVE ✦</div>
+    <div class="mission-center-text" id="mission-center-text">尋找門禁卡進入下一個區域吧</div>
+    <div class="mission-center-sub" id="mission-center-sub">COLLECT KEYCARD TO ACCESS NEXT ZONE</div>
   </div>
 
   <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援) -->

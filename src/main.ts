@@ -66,6 +66,8 @@ class SchoolGTASandbox {
   private bulletTimeScale: number = 0.15;
   private wasBossWindingUp: boolean = false;
   private wasBossStunned: boolean = false;
+  private bossJumpDelayTimer: number = 0;
+  private bossJumpTargetPos: THREE.Vector3 = new THREE.Vector3();
 
   public get activeColliders(): CollidableBox[] {
     return this.currentWorldType === 'CAMPUS' ? this.world.colliders : this.detentionWorld.colliders;
@@ -152,7 +154,9 @@ class SchoolGTASandbox {
     keycardBPos: new THREE.Vector3(),
     masterKeycardPos: null,
     alertLevel: 'NORMAL',
-    alertTimer: 0
+    alertTimer: 0,
+    checkpointPos: new THREE.Vector3(),
+    checkpointName: 'A區安全崗亭'
   };
 
   constructor() {
@@ -204,7 +208,8 @@ class SchoolGTASandbox {
         this.player.hp = 150;
       }
       this.detentionSpawnGraceTimer = 5.0;
-      this.wantedSystem.showBanner('🛡️【第一天特訓開始】5 秒內教官與學長暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
+      this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
+      this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
     };
     await new Promise(r => requestAnimationFrame(r));
 
@@ -423,6 +428,9 @@ class SchoolGTASandbox {
     }
 
     this.currentWorldType = targetWorld;
+    if (this.wantedSystem) {
+      this.wantedSystem.currentWorld = targetWorld;
+    }
     if (this.weatherSystem) {
       this.weatherSystem.currentWorld = targetWorld;
     }
@@ -564,8 +572,15 @@ class SchoolGTASandbox {
         this.player.rotationY = 0;
         this.cameraCtrl.resetBehind(this.player.position, 0);
         this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
+        this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
       }
     }
+  }
+
+  private setDetentionCheckpoint(pos: THREE.Vector3, name: string) {
+    this.detentionWorld.setCheckpoint(pos, name);
+    this.wantedSystem.showBanner(`🚩 存檔點已更新：【${name}】！死亡後將在此處重生。`, 3500);
+    soundManager.playBroadcastChime();
   }
 
   private setupInteractions() {
@@ -582,6 +597,7 @@ class SchoolGTASandbox {
           this.detentionWorld.hasPickedKeycardA = true;
           this.detentionWorld.keycardAMeshGroup.visible = false;
           this.wantedSystem.showBanner('💳 獲得【藍色門禁卡 A】！可用於開啟管制閘門 1！', 4000);
+          this.setDetentionCheckpoint(new THREE.Vector3(5, 0, -60), 'A區安全崗亭');
           soundManager.playPunch();
           return;
         }
@@ -591,6 +607,7 @@ class SchoolGTASandbox {
           this.detentionWorld.hasPickedKeycardB = true;
           this.detentionWorld.keycardBMeshGroup.visible = false;
           this.wantedSystem.showBanner('💳 獲得【黃色門禁卡 B】！可用於開啟管制閘門 2！', 4000);
+          this.setDetentionCheckpoint(new THREE.Vector3(24, 0, 14), 'B區貨櫃掩體');
           soundManager.playPunch();
           return;
         }
@@ -604,6 +621,7 @@ class SchoolGTASandbox {
           this.detentionWorld.hasPickedMasterKeycard = true;
           this.detentionWorld.masterKeycardMeshGroup.visible = false;
           this.wantedSystem.showBanner('🔑 獲得【萬能逃脫鑰匙卡】！快前往南大門開啟大門撤離！', 5000);
+          this.setDetentionCheckpoint(new THREE.Vector3(0, 0, 68), 'C區決戰勝利點');
           soundManager.playSchoolBell();
           return;
         }
@@ -612,6 +630,7 @@ class SchoolGTASandbox {
           if (this.hasKeycardA) {
             this.detentionWorld.openGateA();
             this.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區貨櫃掩體迷宮！', 3500);
+            this.setDetentionCheckpoint(new THREE.Vector3(0, 0, -22), 'B區門前安全區');
             soundManager.playSchoolBell();
           } else {
             this.wantedSystem.showBanner('🔒 門禁鎖死！需要【藍色門禁卡 A】才能開啟閘門 1！', 3000);
@@ -623,6 +642,7 @@ class SchoolGTASandbox {
           if (this.hasKeycardB) {
             this.detentionWorld.openGateB();
             this.wantedSystem.showBanner('🔓 管制閘門 2 已開啟！進入 C 區終極哨戒門庭！', 3500);
+            this.setDetentionCheckpoint(new THREE.Vector3(0, 0, 42), 'C區決戰前哨');
             soundManager.playSchoolBell();
           } else {
             this.wantedSystem.showBanner('🔒 門禁鎖死！需要【黃色門禁卡 B】才能開啟閘門 2！', 3000);
@@ -634,9 +654,10 @@ class SchoolGTASandbox {
           if (this.hasMasterKeycard) {
             this.detentionWorld.openSouthGate();
             this.wantedSystem.showBanner('🚪 南側絕境大門全面解鎖升起！快衝出大門逃出生天！', 5000);
+            this.setDetentionCheckpoint(new THREE.Vector3(-7.5, 0, 91), '南大門逃脫點');
             soundManager.playSchoolBell();
           } else {
-            this.wantedSystem.showBanner('🔒 終極防暴大門鎖死！需要擊破小 Boss 取得【萬能逃脫鑰匙卡】！', 3500);
+            this.wantedSystem.showBanner('🔒 終極防暴大門鎖死！需要擊破特訓總教官取得【萬能逃脫鑰匙卡】！', 3500);
           }
           return;
         }
@@ -1025,26 +1046,54 @@ class SchoolGTASandbox {
       if (!this.isGameRunning) return;
       if (e.code === 'Digit1') {
         this.player.setWeapon('FIST');
-        this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+        this.wantedSystem.showBanner(
+          this.currentWorldType === 'DETENTION'
+            ? '🥊 切換模式：徒手潛入 (支援背後暗殺)'
+            : '🥊 切換武器：徒手拳擊 (ATK 25)',
+          1500
+        );
       } else if (e.code === 'Digit2') {
         if (this.player.hasNormalBat) {
           this.player.setWeapon('NORMAL_BAT');
-          this.wantedSystem.showBanner('🏏 切換武器：普通木質棒球棍 (ATK 55)', 1500);
+          this.wantedSystem.showBanner(
+            this.currentWorldType === 'DETENTION'
+              ? '🏏 切換裝備：特訓防暴警棍 (ATK 55)'
+              : '🏏 切換武器：普通木質棒球棍 (ATK 55)',
+            1500
+          );
         } else {
-          this.wantedSystem.showBanner(`🔒 普通球棒未解鎖！需擊敗 5 位普通同學 (目前進度: ${this.studentDefeatedCount}/5)`, 2500);
+          this.wantedSystem.showBanner(
+            this.currentWorldType === 'DETENTION'
+              ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
+              : `🔒 普通球棒未解鎖！需擊敗 5 位普通同學 (目前進度: ${this.studentDefeatedCount}/5)`,
+            2500
+          );
         }
       } else if (e.code === 'Digit3') {
         if (this.player.hasSpecialBat) {
           this.player.setWeapon('SPECIAL_BAT');
-          this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+          this.wantedSystem.showBanner(
+            this.currentWorldType === 'DETENTION'
+              ? '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 120)'
+              : '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)',
+            1500
+          );
         } else {
-          this.wantedSystem.showBanner(`🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`, 2500);
+          this.wantedSystem.showBanner(
+            this.currentWorldType === 'DETENTION'
+              ? '⚠️ 特訓院管制區：重型管制武器已遭沒收封存！'
+              : `🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`,
+            2500
+          );
         }
       } else if (e.code === 'KeyJ') {
         this.hud.toggleQuestTracker();
       } else if (e.code === 'KeyP') {
         this.weatherSystem.cycleWeather(true);
       } else if (e.code === 'Escape') {
+        if (this.hud.isFullMapOpen) {
+          this.hud.closeFullMap();
+        }
         if (this.hud.isCommissaryOpen) {
           this.hud.closeCommissary();
         }
@@ -1197,8 +1246,8 @@ class SchoolGTASandbox {
         : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
 
       const qteSub = isFinalBlow
-        ? '徹底擊潰鐵面總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總教官狂怒轉為攻擊模式！)`;
+        ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
+        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總教官倒地癱瘓 2 秒！)`;
 
       this.hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
 
@@ -1209,44 +1258,27 @@ class SchoolGTASandbox {
         this.detentionWorld.spawnMasterKeycard(target.position);
         this.wantedSystem.showBanner(
           isFromHiding
-            ? `🗡️【刺客教條·致命草車突襲】一擊終結總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-            : '🏆 狂賀！第三次終極暗殺擊破總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+            ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
+            : '🏆 狂賀！第三次終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
           5000
         );
         soundManager.playSchoolBell();
       } else {
-        // 暗殺成功後：總教官立即轉身解除發呆，狂怒轉為攻擊模式 (Combat Attack Mode)！
-        const dirToPlayer = _scratchImpactDir.subVectors(this.player.position, target.position).setY(0);
-        if (dirToPlayer.lengthSq() > 0.01) {
-          dirToPlayer.normalize();
-          target.rotationY = Math.atan2(dirToPlayer.x, dirToPlayer.z);
-          target.mesh.rotation.y = target.rotationY;
-        }
-
-        target.isPaused = false;
-        target.pauseTimer = 0;
-        target.isBossStunned = false;
-        target.bossStunTimer = 0;
-        target.setAlertState('ALERT');
-        target.isChasing = true;
-        target.lostSightTimer = 0;
-        target.lastKnownPos.copy(this.player.position);
-        target.attackCooldown = 0.5; // 0.5 秒後發動攻擊
-        target.bossChargeCooldown = 2.0; // 2 秒後準備發動狂暴衝撞
-
-        // 啟動 3 秒金鐘護盾無敵時間 (防止玩家連點秒殺，此期間總教官仍在主動攻擊追殺玩家)
-        target.bossInvulnerableTimer = 3.0;
-        target.isBossInvulnerable = true;
-
-        soundManager.playWhistle();
+        // 暗殺 BOSS 後，BOSS 倒地癱瘓 2 秒不能動
+        target.knockdownBoss(2.0);
 
         this.wantedSystem.showBanner(
           isFromHiding
-            ? `🗡️【草堆突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官狂怒轉為攻擊模式！金鐘護盾 3 秒！快閃避！`
-            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官狂怒轉為攻擊模式！金鐘護盾 3 秒！快閃避！`,
+            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`
+            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`,
           3000
         );
       }
+
+      // 暗殺動畫播畢後玩家朝遠離 BOSS 方向後跳/跳離 4 個身位（約 4.8~5.2m），落地時面向 BOSS
+      this.bossJumpDelayTimer = bulletDuration;
+      this.bossJumpTargetPos.copy(target.position);
+
       this.nearbyCqcTarget = null;
       this.hud.updateCqcPrompt(false);
       return;
@@ -1256,7 +1288,7 @@ class SchoolGTASandbox {
     this.detentionTakedownCount++;
     soundManager.playPunch();
     if (isFromHiding) {
-      this.wantedSystem.showBanner(`🗡️【刺客教條·草堆暗殺】將 ${target.getRoleTitle()} 拖入${coverName}無聲刺殺！無人察覺！`, 2500);
+      this.wantedSystem.showBanner(`🗡️【刺客教條·掩體暗殺】將 ${target.getRoleTitle()} 拖入${coverName}無聲刺殺！無人察覺！`, 2500);
     } else {
       this.wantedSystem.showBanner(`🥷 潛行擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷)`, 2000);
     }
@@ -1384,13 +1416,21 @@ class SchoolGTASandbox {
 
     this.hud.hidePrompt();
     this.waterSplashVFX.reset();
-    const deathDest = this.currentWorldType === 'CAMPUS' ? '保健室' : '特訓醫務所';
+    const deathDest = this.currentWorldType === 'CAMPUS' ? '保健室' : `【${this.detentionWorld.currentCheckpointName}】`;
     this.wantedSystem.showBanner(`${reason} 已失去意識送往${deathDest} (3秒後滿血復甦)...`, 4000);
     bgmManager.duckVolume(3.2);
 
     this.wantedSystem.clearWanted();
     for (const n of this.npcs) {
       n.resetAggro();
+    }
+    if (this.currentWorldType === 'DETENTION') {
+      for (const n of this.detentionNPCs) {
+        n.resetToInitialState();
+      }
+      this.detentionAlertTimer = 0;
+      this.detentionAlertCount = 0;
+      this.hud.updateMgsAlert(0);
     }
 
     const respawnPos = this.currentWorldType === 'CAMPUS' ? new THREE.Vector3(0, 0, 15) : this.detentionWorld.spawnPos.clone();
@@ -1403,6 +1443,12 @@ class SchoolGTASandbox {
         this.player.hasNormalBat = true;
         this.player.setWeapon('NORMAL_BAT');
         this.detentionSpawnGraceTimer = 5.0;
+        for (const n of this.detentionNPCs) {
+          n.resetToInitialState();
+        }
+        this.detentionAlertTimer = 0;
+        this.detentionAlertCount = 0;
+        this.hud.updateMgsAlert(0);
       }
       this.wantedSystem.clearWanted();
       for (const n of this.npcs) {
@@ -1411,7 +1457,7 @@ class SchoolGTASandbox {
       this.isHandlingDeath = false;
       const recoverMsg = this.currentWorldType === 'CAMPUS'
         ? '已在保健室休養恢復，全校警報全面解除'
-        : '🛡️ 已在特訓營舍醫務所復甦！獲得 5 秒休整保護，教官與學長暫不發動攻擊！';
+        : `🛡️ 已在【${this.detentionWorld.currentCheckpointName}】復甦！獲得 5 秒隱蔽保護，守衛警戒已重置！`;
       this.wantedSystem.showBanner(recoverMsg, 4000);
     }, 3000);
   }
@@ -1726,28 +1772,47 @@ class SchoolGTASandbox {
   }
 
   public cycleWeapon() {
+    const isDetention = this.currentWorldType === 'DETENTION';
     const current = this.player.currentWeapon;
     if (current === 'FIST') {
       if (this.player.hasNormalBat) {
         this.player.setWeapon('NORMAL_BAT');
-        this.wantedSystem.showBanner('🏏 切換武器：普通木質棒球棍 (ATK 55)', 1500);
+        this.wantedSystem.showBanner(
+          isDetention ? '🏏 切換裝備：特訓防暴警棍 (ATK 55)' : '🏏 切換武器：普通木質棒球棍 (ATK 55)',
+          1500
+        );
       } else if (this.player.hasSpecialBat) {
         this.player.setWeapon('SPECIAL_BAT');
-        this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+        this.wantedSystem.showBanner(
+          isDetention ? '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 120)' : '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)',
+          1500
+        );
       } else {
-        this.wantedSystem.showBanner(`🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`, 1500);
+        this.wantedSystem.showBanner(
+          isDetention ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！' : `🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`,
+          1500
+        );
       }
     } else if (current === 'NORMAL_BAT') {
       if (this.player.hasSpecialBat) {
         this.player.setWeapon('SPECIAL_BAT');
-        this.wantedSystem.showBanner('⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', 1500);
+        this.wantedSystem.showBanner(
+          isDetention ? '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 120)' : '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)',
+          1500
+        );
       } else {
         this.player.setWeapon('FIST');
-        this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+        this.wantedSystem.showBanner(
+          isDetention ? '🥊 切換模式：徒手潛入 (支援背後暗殺)' : '🥊 切換武器：徒手拳擊 (ATK 25)',
+          1500
+        );
       }
     } else {
       this.player.setWeapon('FIST');
-      this.wantedSystem.showBanner('🥊 切換武器：徒手拳擊 (ATK 25)', 1500);
+      this.wantedSystem.showBanner(
+        isDetention ? '🥊 切換模式：徒手潛入 (支援背後暗殺)' : '🥊 切換武器：徒手拳擊 (ATK 25)',
+        1500
+      );
     }
   }
 
@@ -1873,6 +1938,16 @@ class SchoolGTASandbox {
       simDelta = rawDelta * currentScale;
     }
     const delta = simDelta;
+
+    // 暗殺動畫播畢後玩家朝遠離 BOSS 方向後跳/跳離 4 個身位（約 4.8~5.2m），落地時面向 BOSS
+    if (this.bossJumpDelayTimer > 0) {
+      this.bossJumpDelayTimer -= rawDelta;
+      if (this.bossJumpDelayTimer <= 0) {
+        this.bossJumpDelayTimer = 0;
+        this.player.leapAwayFrom(this.bossJumpTargetPos, this.activeColliders, 5.0);
+        this.cameraCtrl.resetBehind(this.player.position, this.player.rotationY);
+      }
+    }
 
     // -1. 少年院開場電影級劇情動畫更新與 Space 跳過
     if (this.detentionCutscene && this.detentionCutscene.isActive) {
@@ -2400,7 +2475,7 @@ class SchoolGTASandbox {
       isSpawnGraceActive = true;
       if (this.detentionSpawnGraceTimer <= 0) {
         this.detentionSpawnGraceTimer = 0;
-        this.wantedSystem.showBanner('⚡ 5 秒休整時間結束！特訓教官與學長已開始主動搜尋目標！', 3000);
+        this.wantedSystem.showBanner('⚡ 5 秒隱蔽保護結束！特訓院守衛已恢復正常巡邏警戒！', 3000);
       }
     }
 
@@ -2711,6 +2786,8 @@ class SchoolGTASandbox {
       radar.masterKeycardPos = this.detentionWorld.masterKeycardPos;
       radar.alertLevel = radarAlert;
       radar.alertTimer = this.detentionAlertTimer;
+      radar.checkpointPos = this.detentionWorld.currentCheckpointPos;
+      radar.checkpointName = this.detentionWorld.currentCheckpointName;
       detentionRadarData = radar;
     }
 

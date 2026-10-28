@@ -103,6 +103,8 @@ const _shuttlecockPool: THREE.Group[] = [];
 export class NPC {
   public mesh: THREE.Group;
   public position: THREE.Vector3;
+  public readonly initialPosition: THREE.Vector3;
+  public readonly initialRotationY: number = 0;
   public baseFloorY: number = 0; // 支援多樓層 (1F: 0, 2F: 6.0, 3F: 12.0)
   public role: NPCRole;
   public velocity: THREE.Vector3 = new THREE.Vector3();
@@ -254,6 +256,7 @@ export class NPC {
     movementStyle?: NPCMovementStyle
   ) {
     this.position = startPos.clone();
+    this.initialPosition = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
     this.role = role;
     this.patrolWaypoints = waypoints.length > 0 ? waypoints : [startPos.clone(), new THREE.Vector3(startPos.x + 8, startPos.y, startPos.z)];
@@ -1554,7 +1557,41 @@ export class NPC {
       case 'DOG': return '校犬柴柴';
       case 'BIKE_PATROL': return '火柴人自行車騎士';
       case 'INSPECTOR': return '風紀糾察';
+      case 'DETENTION_GUARD': return '特訓院守衛';
+      case 'DETENTION_SENIOR': return '特訓資深守衛';
+      case 'DETENTION_HEAVY': return '特訓重裝守衛';
+      case 'DETENTION_WOLF': return '特訓警戒犬';
+      case 'DETENTION_BOSS': return '特訓總教官';
       case 'STUDENT': default: return '同學';
+    }
+  }
+
+  // 第二世界 BOSS 被暗殺後專用倒地癱瘓 (倒地癱瘓 duration 秒，不能動，時間到後起身，不回滿血)
+  public knockdownBoss(duration: number = 2.0) {
+    if (this.role !== 'DETENTION_BOSS') return;
+    this.isKnockedDown = true;
+    this.isPermanentlyKnockedOut = false;
+    this.reviveTimer = duration;
+    this.isBossStunned = true;
+    this.bossStunTimer = duration;
+    this.bossIsCharging = false;
+    this.isBossWindingUp = false;
+    this.bossWindupTimer = 0;
+    this.isChasing = false;
+    this.isBurstSprinting = false;
+    this.dynamicSpeed = this.speed;
+
+    if (this.leftArm) this.leftArm.rotation.set(0, 0, 0);
+    if (this.rightArm) this.rightArm.rotation.set(0, 0, 0);
+    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+
+    // 倒地姿勢與擊昏圖示
+    this.mesh.rotation.set(-Math.PI / 2, 0, this.rotationY);
+    this.mesh.position.y = this.baseFloorY + 0.25;
+    if (this.koBadgeSprite) {
+      this.koBadgeSprite.visible = true;
+      this.updateKOBadge(this.reviveTimer);
     }
   }
 
@@ -2238,6 +2275,56 @@ export class NPC {
       this.bossIsCharging = false;
       if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
     }
+  }
+
+  // 玩家死亡重生時完整重置 NPC 至初始狀態 (位置、警戒狀態、巡邏狀態、HP 與肢體)
+  public resetToInitialState() {
+    this.position.copy(this.initialPosition);
+    this.mesh.position.copy(this.initialPosition);
+    this.velocity.set(0, 0, 0);
+    this.rotationY = this.initialRotationY;
+    this.mesh.rotation.y = this.initialRotationY;
+    this.isChasing = false;
+    this.isBurstSprinting = false;
+    this.dynamicSpeed = this.speed;
+    this.chasePacingTimer = 1.5;
+    this.lostSightTimer = 0;
+    this.alertState = 'NORMAL';
+    this.cautionTimer = 0;
+    this.currentWaypointIdx = 0;
+    this.stuckCheckTimer = 0;
+    this.isPaused = false;
+    this.pauseTimer = 0;
+    this.isKnockedFlying = false;
+    this.hitCooldown = 0;
+    this.attackCooldown = 0;
+    this.freezeTimer = 0;
+    this.lastRecordedPos.copy(this.initialPosition);
+
+    // 生命值與倒地狀態復原
+    this.hp = this.maxHp;
+    this.isKnockedDown = false;
+    this.isPermanentlyKnockedOut = false;
+    this.reviveTimer = 0;
+    this.mesh.visible = true;
+
+    // Boss 專屬狀態重置
+    if (this.role === 'DETENTION_BOSS') {
+      this.isBossStunned = false;
+      this.bossStunTimer = 0;
+      this.bossInvulnerableTimer = 0;
+      this.isBossInvulnerable = false;
+      this.isBossWindingUp = false;
+      this.bossWindupTimer = 0;
+      this.bossIsCharging = false;
+      this.bossChargeTraveled = 0;
+      this.bossShieldCharges = 3;
+      if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
+      if (this.bossBarrierMesh) this.bossBarrierMesh.visible = true;
+    }
+
+    this.resetPose();
+    this.updateHpBar();
   }
 
   // 觸發全校廣播立正定格發呆
@@ -3255,27 +3342,47 @@ export class NPC {
       }
 
       if (this.reviveTimer <= 0) {
-        // 滿血復活！
-        this.isKnockedDown = false;
-        this.hp = this.maxHp;
-        this.hpBarMesh.scale.x = 1.0;
-        (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
-        this.hpBarBgMesh.visible = true;
-        this.hpBarMesh.visible = true;
-        this.koBadgeSprite.visible = false;
-        this.lastKoBadgeSec = -1;
-
-        if (this.isOriginalBikePatrol && this.role !== 'BIKE_PATROL') {
-          this.restoreBikePatrol();
-        } else {
-          // 重新站立回正
-          this.mesh.rotation.x = 0;
-          this.mesh.rotation.z = 0;
+        if (this.role === 'DETENTION_BOSS') {
+          // 特訓總教官暗殺倒地癱瘓結束：起身恢復戰鬥，保留剩餘血量不回滿血！
+          this.isKnockedDown = false;
+          this.isBossStunned = false;
+          this.bossStunTimer = 0;
+          this.koBadgeSprite.visible = false;
+          this.lastKoBadgeSec = -1;
+          this.mesh.rotation.set(0, this.rotationY, 0);
           this.mesh.position.y = this.baseFloorY;
-          this.isChasing = false;
+          this.alertState = 'ALERT';
+          this.isChasing = true;
           this.isBurstSprinting = false;
-          this.dynamicSpeed = this.speed;
+          this.dynamicSpeed = this.speed * 1.25;
           this.lostSightTimer = 0;
+          this.attackCooldown = 0.5;
+          this.bossChargeCooldown = 2.0;
+          this.bossInvulnerableTimer = 3.0;
+          this.isBossInvulnerable = true;
+        } else {
+          // 滿血復活！
+          this.isKnockedDown = false;
+          this.hp = this.maxHp;
+          this.hpBarMesh.scale.x = 1.0;
+          (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
+          this.hpBarBgMesh.visible = true;
+          this.hpBarMesh.visible = true;
+          this.koBadgeSprite.visible = false;
+          this.lastKoBadgeSec = -1;
+
+          if (this.isOriginalBikePatrol && this.role !== 'BIKE_PATROL') {
+            this.restoreBikePatrol();
+          } else {
+            // 重新站立回正
+            this.mesh.rotation.x = 0;
+            this.mesh.rotation.z = 0;
+            this.mesh.position.y = this.baseFloorY;
+            this.isChasing = false;
+            this.isBurstSprinting = false;
+            this.dynamicSpeed = this.speed;
+            this.lostSightTimer = 0;
+          }
         }
       } else {
         // 維持倒地姿勢與高度

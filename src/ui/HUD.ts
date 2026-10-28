@@ -56,6 +56,8 @@ export interface DetentionRadarData {
   masterKeycardPos: THREE.Vector3 | null;
   alertLevel: 'NORMAL' | 'CAUTION' | 'ALERT';
   alertTimer: number;
+  checkpointPos?: THREE.Vector3;
+  checkpointName?: string;
 }
 
 export class HUD {
@@ -149,6 +151,23 @@ export class HUD {
   public isWorldModalOpen: boolean = false;
   private onWorldSwitchCallback?: (targetWorld: 'CAMPUS' | 'DETENTION') => void;
 
+  // 任務提示中心字幕 (Center Mission Directive Toast)
+  private missionCenterPromptEl: HTMLElement | null;
+  private missionCenterTextEl: HTMLElement | null;
+  private missionCenterSubEl: HTMLElement | null;
+  private missionCenterTimer: any = null;
+
+  // 全螢幕大地圖視窗 (Full Map Modal)
+  private fullmapModalEl: HTMLElement | null;
+  private fullmapCanvas: HTMLCanvasElement | null;
+  private fullmapCtx: CanvasRenderingContext2D | null = null;
+  private fullmapCloseBtnEl: HTMLElement | null;
+  private fullmapTitleEl: HTMLElement | null;
+  private fullmapCoordsEl: HTMLElement | null;
+  private fullmapWorldBadgeEl: HTMLElement | null;
+  private minimapWrapperEl: HTMLElement | null;
+  public isFullMapOpen: boolean = false;
+
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
@@ -213,6 +232,45 @@ export class HUD {
       this.modalBtnDetentionEl.addEventListener('click', () => {
         if (this.onWorldSwitchCallback) this.onWorldSwitchCallback('DETENTION');
         this.closeWorldModal();
+      });
+    }
+
+    // 初始化任務中央醒目提示元素
+    this.missionCenterPromptEl = document.getElementById('mission-center-prompt');
+    this.missionCenterTextEl = document.getElementById('mission-center-text');
+    this.missionCenterSubEl = document.getElementById('mission-center-sub');
+
+    // 初始化全螢幕大地圖元素與事件
+    this.fullmapModalEl = document.getElementById('fullmap-modal');
+    this.fullmapCanvas = document.getElementById('fullmap-canvas') as HTMLCanvasElement;
+    if (this.fullmapCanvas) {
+      this.fullmapCtx = this.fullmapCanvas.getContext('2d');
+    }
+    this.fullmapCloseBtnEl = document.getElementById('fullmap-close-btn');
+    this.fullmapTitleEl = document.getElementById('fullmap-title');
+    this.fullmapCoordsEl = document.getElementById('fullmap-coords');
+    this.fullmapWorldBadgeEl = document.getElementById('fullmap-world-badge');
+    this.minimapWrapperEl = document.getElementById('minimap-wrapper');
+
+    if (this.minimapWrapperEl) {
+      this.minimapWrapperEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleFullMap();
+      });
+    }
+
+    if (this.fullmapCloseBtnEl) {
+      this.fullmapCloseBtnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeFullMap();
+      });
+    }
+
+    if (this.fullmapModalEl) {
+      this.fullmapModalEl.addEventListener('click', (e) => {
+        if (e.target === this.fullmapModalEl) {
+          this.closeFullMap();
+        }
       });
     }
 
@@ -583,6 +641,61 @@ export class HUD {
       this.promptKey.textContent = displayKey;
       this.promptText.textContent = displayText;
       this.actionPrompt.style.display = 'block';
+    }
+  }
+
+  // 顯示畫面中央任務醒目字體提示 (停留片刻後平滑淡出)
+  public showCenterPrompt(title: string, subtitle: string = 'SECTOR CLEARANCE DIRECTIVE', duration: number = 3500) {
+    if (!this.missionCenterPromptEl) return;
+    if (this.missionCenterTextEl) {
+      this.missionCenterTextEl.textContent = title;
+    }
+    if (this.missionCenterSubEl) {
+      this.missionCenterSubEl.textContent = subtitle;
+    }
+    if (this.missionCenterTimer) {
+      clearTimeout(this.missionCenterTimer);
+      this.missionCenterTimer = null;
+    }
+
+    this.missionCenterPromptEl.classList.remove('fade-out');
+    this.missionCenterPromptEl.classList.add('show');
+
+    this.missionCenterTimer = setTimeout(() => {
+      if (this.missionCenterPromptEl) {
+        this.missionCenterPromptEl.classList.remove('show');
+        this.missionCenterPromptEl.classList.add('fade-out');
+        setTimeout(() => {
+          if (this.missionCenterPromptEl) {
+            this.missionCenterPromptEl.classList.remove('fade-out');
+          }
+        }, 1800);
+      }
+    }, duration);
+  }
+
+  // 開啟全螢幕大地圖
+  public openFullMap() {
+    this.isFullMapOpen = true;
+    if (this.fullmapModalEl) {
+      this.fullmapModalEl.style.display = 'flex';
+    }
+  }
+
+  // 關閉全螢幕大地圖
+  public closeFullMap() {
+    this.isFullMapOpen = false;
+    if (this.fullmapModalEl) {
+      this.fullmapModalEl.style.display = 'none';
+    }
+  }
+
+  // 切換全螢幕大地圖
+  public toggleFullMap() {
+    if (this.isFullMapOpen) {
+      this.closeFullMap();
+    } else {
+      this.openFullMap();
     }
   }
 
@@ -1240,6 +1353,11 @@ export class HUD {
     // 3. 繪製 3D 雷達小地圖 (Minimap / MGS Soliton Radar，25fps 節流控制)
     this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta, currentWorld, detentionData);
 
+    // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
+    if (this.isFullMapOpen) {
+      this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
+    }
+
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
     if (this.pursuitVignetteEl) {
       if (this.lastBeingChased !== isBeingChased || this.lastHighDanger !== isHighDanger) {
@@ -1367,7 +1485,7 @@ export class HUD {
 
       ctx.save();
       ctx.translate(centerX, centerY);
-      ctx.rotate(playerRotY);
+      // 小地圖方位鎖定固定 (固定北方朝上，不隨玩家面向旋轉)
 
       // 繪製戰術迷宮矩形
       const drawTacticalBox = (bx: number, bz: number, bw: number, bd: number, color: string = '#10b981') => {
@@ -1389,12 +1507,17 @@ export class HUD {
       drawTacticalBox(-40, -60, 50, 30, '#10b981');
       drawTacticalBox(50, -60, 50, 30, '#10b981');
 
-      // A 區走廊迷宮隔牆與安全崗亭
+      // A 區走廊迷宮隔牆、安全崗亭與新增戰術拐角隔牆
       drawTacticalBox(-10, -84, 0.6, 12, '#34d399'); // 北走廊屏障
+      drawTacticalBox(-34, -82, 0.6, 12, '#34d399'); // 北走廊暗殺 L 牆
+      drawTacticalBox(-29, -76, 10, 0.6, '#34d399'); // 北走廊拐角翼壁
+      drawTacticalBox(-10, -63, 0.6, 14, '#34d399'); // 庭院 S 彎戰術隔牆
+      drawTacticalBox(-6.5, -70, 7, 0.6, '#34d399'); // 庭院側翼折板
       drawTacticalBox(5, -60, 6.5, 4, '#38bdf8');   // 中央安全崗亭 (Keycard A)
       drawTacticalBox(14, -50, 0.6, 10, '#34d399');  // 東側巡邏盲區阻隔壁
       drawTacticalBox(-15.5, -38, 19, 0.6, '#34d399'); // 南前庭西折返隔板
       drawTacticalBox(15.5, -38, 19, 0.6, '#34d399');  // 南前庭東折返隔板
+      drawTacticalBox(0, -33.5, 10, 0.6, '#34d399');  // 閘門 1 前防暴 S 型交錯隔板
 
       // 管制閘門 1 (Z = -28)
       const gate1Color = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
@@ -1402,13 +1525,14 @@ export class HUD {
       drawTacticalBox(46.75, -28, 86.5, 1.5, '#34d399');
       drawTacticalBox(0, -28, 7.2, 1.2, gate1Color);
 
-      // B 區貨櫃迷宮群 (10 座高規格集裝箱)
+      // B 區貨櫃迷宮群 (18 座軍規重裝海運集裝箱)
       const conts = [
-        [-22, -18, 10, 2.8], [22, -18, 10, 2.8],
-        [-12, -6, 2.8, 10], [12, -6, 2.8, 10],
+        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
+        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
+        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
         [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
-        [-12, 20, 2.8, 10], [12, 20, 2.8, 10],
-        [30, 14, 2.8, 10]
+        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
+        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
       ];
       for (const [cx, cz, cw, cd] of conts) {
         drawTacticalBox(cx, cz, cw, cd, '#059669');
@@ -1420,11 +1544,18 @@ export class HUD {
       drawTacticalBox(46.75, 35, 86.5, 1.5, '#34d399');
       drawTacticalBox(0, 35, 7.2, 1.2, gate2Color);
 
-      // C 區：4 座發電機掩體柱
+      // C 區：4 座發電機掩體柱、防爆翼壁與南大門工事
       drawTacticalBox(-16, 52, 3.4, 3.4, '#eab308');
       drawTacticalBox(16, 52, 3.4, 3.4, '#eab308');
       drawTacticalBox(-16, 74, 3.4, 3.4, '#eab308');
       drawTacticalBox(16, 74, 3.4, 3.4, '#eab308');
+      drawTacticalBox(-22, 56, 0.8, 20, '#eab308');
+      drawTacticalBox(22, 56, 0.8, 20, '#eab308');
+      drawTacticalBox(-19, 46, 6, 0.8, '#eab308');
+      drawTacticalBox(19, 46, 6, 0.8, '#eab308');
+      drawTacticalBox(-10, 82, 12, 0.8, '#eab308');
+      drawTacticalBox(10, 82, 12, 0.8, '#eab308');
+      drawTacticalBox(0, 87, 10, 0.8, '#eab308');
 
       // 南側脫逃大門 (Z = 95)
       const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
@@ -1458,7 +1589,6 @@ export class HUD {
           // 直立文字標籤
           ctx.save();
           ctx.translate(kx, kz);
-          ctx.rotate(-playerRotY);
           ctx.font = 'bold 9px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#38bdf8';
@@ -1490,7 +1620,6 @@ export class HUD {
           // 直立文字標籤
           ctx.save();
           ctx.translate(kx, kz);
-          ctx.rotate(-playerRotY);
           ctx.font = 'bold 9px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#facc15';
@@ -1522,11 +1651,37 @@ export class HUD {
           // 直立文字標籤
           ctx.save();
           ctx.translate(kx, kz);
-          ctx.rotate(-playerRotY);
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#ffd700';
           ctx.fillText('★MASTER KEY', 0, -10);
+          ctx.restore();
+        }
+
+        // 4. 重生存檔點 (綠色旗幟標記)
+        if (detentionData.checkpointPos) {
+          const cpx = (detentionData.checkpointPos.x - playerPos.x) * mapScale;
+          const cpz = (detentionData.checkpointPos.z - playerPos.z) * mapScale;
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.75)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(cpx, cpz, 6.0 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(cpx, cpz, 3.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(cpx, cpz);
+          ctx.font = 'bold 8.5px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#22c55e';
+          ctx.fillText('🚩CP', 0, -8);
           ctx.restore();
         }
       }
@@ -1591,7 +1746,6 @@ export class HUD {
         if (isBoss && detentionData && !detentionData.hasMasterKeycard && !detentionData.masterKeycardPos) {
           ctx.save();
           ctx.translate(nx, nz);
-          ctx.rotate(-playerRotY);
           ctx.font = 'bold 9px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#ff4444';
@@ -1602,17 +1756,22 @@ export class HUD {
 
       ctx.restore();
 
-      // 玩家中央圖示
+      // 玩家中央圖示 (地圖方位鎖定固定，以箭頭旋轉指出當前朝向)
       ctx.save();
       ctx.translate(centerX, centerY);
+      ctx.rotate(playerRotY);
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
-      ctx.moveTo(0, -7);
+      ctx.moveTo(0, -8);
       ctx.lineTo(5, 6);
       ctx.lineTo(0, 3);
       ctx.lineTo(-5, 6);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
 
       // 潛行模式指示 (外圍柔和虛線圈)
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
@@ -2032,5 +2191,490 @@ export class HUD {
       escEl.textContent = isEscapeComplete ? '已逃脫' : '未完成';
       escEl.className = isEscapeComplete ? 'q-status completed' : 'q-status';
     }
+  }
+
+  // 繪製全螢幕全域態勢戰術大地圖 (Full Map Modal Canvas)
+  private renderFullMap(
+    playerPos: THREE.Vector3,
+    playerRotY: number,
+    npcs: NPC[],
+    bicycles: Bicycle[],
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
+    detentionData?: DetentionRadarData
+  ) {
+    if (!this.fullmapCanvas || !this.fullmapCtx) return;
+    const ctx = this.fullmapCtx;
+    const w = this.fullmapCanvas.width;
+    const h = this.fullmapCanvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = 3.15; // 縮放比：全地圖 200m 映射到約 630px
+
+    // 更新抬頭元資訊
+    if (this.fullmapCoordsEl) {
+      this.fullmapCoordsEl.textContent = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
+    }
+    if (this.fullmapWorldBadgeEl) {
+      this.fullmapWorldBadgeEl.textContent = currentWorld === 'DETENTION' ? '⛓️ 第七少年特訓院' : '🏫 天天國中';
+    }
+    if (this.fullmapTitleEl) {
+      this.fullmapTitleEl.textContent = currentWorld === 'DETENTION' ? '🗺️ 第七少年特訓院 · 戰術全域態勢圖' : '🗺️ 天天國中 · 全校導覽全景地圖';
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    const now = performance.now();
+    const pulse = 1.0 + 0.3 * Math.sin(now * 0.008);
+
+    if (currentWorld === 'DETENTION') {
+      // 1. 深邃軍規情報雷達底色
+      ctx.fillStyle = '#02100b';
+      ctx.fillRect(0, 0, w, h);
+
+      // 戰略網格 (Grid Lines 每 20m 一條)
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.12)';
+      ctx.lineWidth = 1;
+      for (let g = -100; g <= 100; g += 20) {
+        const gx = cx + g * scale;
+        const gy = cy + g * scale;
+        ctx.beginPath();
+        ctx.moveTo(gx, cy - 100 * scale);
+        ctx.lineTo(gx, cy + 100 * scale);
+        ctx.moveTo(cx - 100 * scale, gy);
+        ctx.lineTo(cx + 100 * scale, gy);
+        ctx.stroke();
+      }
+
+      // 同心圓環
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.18)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 35 * scale, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 70 * scale, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 95 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 輔助函式：全圖坐標系轉換 (以世界原點 (0,0) 為中心，北方朝上 -Z)
+      const toScreenX = (wx: number) => cx + wx * scale;
+      const toScreenY = (wz: number) => cy + wz * scale;
+
+      const drawBox = (bx: number, bz: number, bw: number, bd: number, fill: string, stroke: string) => {
+        const sx = toScreenX(bx - bw / 2);
+        const sy = toScreenY(bz - bd / 2);
+        ctx.fillStyle = fill;
+        ctx.fillRect(sx, sy, bw * scale, bd * scale);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(sx, sy, bw * scale, bd * scale);
+      };
+
+      // 外圍高壓電鐵絲網圍牆 (X: -95 ~ 95, Z: -95 ~ 95)
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(toScreenX(-95), toScreenY(-95), 190 * scale, 190 * scale);
+
+      // 四角瞭望塔
+      const towers = [
+        { x: -78, z: -78 }, { x: 78, z: -78 },
+        { x: -78, z: 78 }, { x: 78, z: 78 }
+      ];
+      for (const tw of towers) {
+        drawBox(tw.x, tw.z, 7, 7, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('瞭望塔', toScreenX(tw.x), toScreenY(tw.z) + 3);
+      }
+
+      // 中央高空探照燈塔
+      drawBox(0, 10, 4, 4, 'rgba(250, 204, 21, 0.3)', '#facc15');
+
+      // A 區建築：生活營舍與食堂
+      drawBox(-40, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
+      drawBox(50, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('第一集訓營舍', toScreenX(-40), toScreenY(-60));
+      ctx.fillText('特訓食堂與補給站', toScreenX(50), toScreenY(-60));
+
+      // A 區迷宮隔牆與新增戰術拐角牆
+      drawBox(-10, -84, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(-34, -82, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(-29, -76, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(-10, -63, 0.6, 14, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(-6.5, -70, 7, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(5, -60, 6.5, 4, 'rgba(56, 189, 248, 0.35)', '#38bdf8');
+      drawBox(14, -50, 0.6, 10, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(-15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      drawBox(0, -33.5, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+
+      // 管制閘門 1 (Z = -28)
+      const gate1Col = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
+      drawBox(-50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      drawBox(50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      drawBox(0, -28, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
+      ctx.fillStyle = gate1Col;
+      ctx.font = 'bold 9.5px sans-serif';
+      ctx.fillText(detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
+
+      // B 區貨櫃迷宮群 (18 座軍規貨櫃)
+      const fullConts = [
+        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
+        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
+        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
+        [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
+        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
+        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
+      ];
+      for (const [cx, cz, cw, cd] of fullConts) {
+        drawBox(cx, cz, cw, cd, 'rgba(5, 150, 105, 0.45)', '#059669');
+      }
+
+      // 管制閘門 2 (Z = 35)
+      const gate2Col = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
+      drawBox(-50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      drawBox(50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      drawBox(0, 35, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
+      ctx.fillStyle = gate2Col;
+      ctx.font = 'bold 9.5px sans-serif';
+      ctx.fillText(detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
+
+      // C 區：教官總部與實習工廠
+      drawBox(-52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
+      drawBox(52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('實習機械工廠', toScreenX(-52.5), toScreenY(50));
+      ctx.fillText('教官總部指揮所', toScreenX(52.5), toScreenY(50));
+
+      // C 區防爆側翼壁與發電機柱
+      drawBox(-22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      drawBox(-19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      drawBox(22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      drawBox(19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      const gens = [[-16, 52], [16, 52], [-16, 74], [16, 74]];
+      for (const [gx, gz] of gens) {
+        drawBox(gx, gz, 3.4, 3.4, 'rgba(234, 179, 8, 0.4)', '#eab308');
+      }
+      drawBox(-10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      drawBox(10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
+      drawBox(0, 87, 10, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
+
+      // 南側脫逃大門 (Z = 95)
+      const southCol = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
+      drawBox(0, 95, 20.4, 2.0, detentionData?.isSouthGateOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.5)', southCol);
+      ctx.fillStyle = southCol;
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
+
+      // 鑰匙卡標記
+      if (detentionData) {
+        // Keycard A
+        if (!detentionData.hasKeycardA) {
+          const kx = toScreenX(detentionData.keycardAPos.x);
+          const ky = toScreenY(detentionData.keycardAPos.z);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText('🔑 KEY A', kx, ky - 10);
+        }
+        // Keycard B
+        if (!detentionData.hasKeycardB) {
+          const kx = toScreenX(detentionData.keycardBPos.x);
+          const ky = toScreenY(detentionData.keycardBPos.z);
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#facc15';
+          ctx.beginPath();
+          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText('🔑 KEY B', kx, ky - 10);
+        }
+        // Master Keycard
+        if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
+          const kx = toScreenX(detentionData.masterKeycardPos.x);
+          const ky = toScreenY(detentionData.masterKeycardPos.z);
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(kx, ky, 10 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(kx, ky, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 10.5px sans-serif';
+          ctx.fillText('★ MASTER KEY', kx, ky - 12);
+        }
+      }
+
+      // 重生存檔點標記 (當前活躍重生點)
+      if (detentionData?.checkpointPos) {
+        const cpx = toScreenX(detentionData.checkpointPos.x);
+        const cpy = toScreenY(detentionData.checkpointPos.z);
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cpx, cpy, 9 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(cpx, cpy, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 9.5px sans-serif';
+        ctx.fillText(`🚩 重生點 [${detentionData.checkpointName || '存檔點'}]`, cpx, cpy + 16);
+      }
+
+      // 繪製敵方 NPC 及其 90° 視野錐
+      for (const npc of npcs) {
+        const nx = toScreenX(npc.position.x);
+        const ny = toScreenY(npc.position.z);
+
+        if (npc.isPermanentlyKnockedOut || (npc.hp <= 0 && npc.isKnockedDown)) {
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(nx - 4, ny - 4);
+          ctx.lineTo(nx + 4, ny + 4);
+          ctx.moveTo(nx + 4, ny - 4);
+          ctx.lineTo(nx - 4, ny + 4);
+          ctx.stroke();
+          continue;
+        }
+
+        const isBoss = npc.role === 'DETENTION_BOSS';
+        const alertState = npc.alertState || 'NORMAL';
+        let dotColor = '#22c55e';
+        let coneColor = 'rgba(34, 197, 94, 0.22)';
+        if (alertState === 'ALERT' || npc.isChasing) {
+          dotColor = '#ef4444';
+          coneColor = 'rgba(239, 68, 68, 0.35)';
+        } else if (alertState === 'CAUTION') {
+          dotColor = '#f59e0b';
+          coneColor = 'rgba(245, 158, 11, 0.28)';
+        } else if (isBoss) {
+          dotColor = '#ff2222';
+          coneColor = 'rgba(255, 34, 34, 0.25)';
+        }
+
+        const ang = npc.rotationY;
+        const coneDist = (isBoss ? 24 : 18) * scale;
+        const fovHalf = Math.PI / 4;
+
+        ctx.fillStyle = coneColor;
+        ctx.beginPath();
+        ctx.moveTo(nx, ny);
+        ctx.arc(nx, ny, coneDist, ang - fovHalf + Math.PI / 2, ang + fovHalf + Math.PI / 2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(nx, ny, isBoss ? 7 : 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        if (isBoss) {
+          ctx.fillStyle = '#ff4444';
+          ctx.font = 'bold 9.5px sans-serif';
+          ctx.fillText('★ 鐵面總長 (BOSS)', nx, ny - 10);
+        }
+      }
+
+      // 玩家圖示 (亮黃光芒 + 面向箭頭 + 脈衝雷達圈)
+      const px = toScreenX(playerPos.x);
+      const py = toScreenY(playerPos.z);
+
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, 11 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(playerRotY);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(0, -9);
+      ctx.lineTo(6, 7);
+      ctx.lineTo(0, 3.5);
+      ctx.lineTo(-6, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#facc15';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('YOU (主角)', px, py - 14);
+
+      // 指北針圖標 (Compass North)
+      ctx.save();
+      ctx.translate(w - 38, 42);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.moveTo(0, 14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText('N', 0, -17);
+      ctx.restore();
+
+      return;
+    }
+
+    // ==========================================
+    // 天天國中 Campus World 大地圖
+    // ==========================================
+    ctx.fillStyle = '#0b1320';
+    ctx.fillRect(0, 0, w, h);
+
+    const toScreenX = (wx: number) => cx + wx * scale;
+    const toScreenY = (wz: number) => cy + wz * scale;
+
+    const drawBuilding = (bx: number, bz: number, bw: number, bd: number, color: string, label?: string) => {
+      const sx = toScreenX(bx - bw / 2);
+      const sy = toScreenY(bz - bd / 2);
+      ctx.fillStyle = color;
+      ctx.fillRect(sx, sy, bw * scale, bd * scale);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(sx, sy, bw * scale, bd * scale);
+      if (label) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, toScreenX(bx), toScreenY(bz) + 3);
+      }
+    };
+
+    // 生態探索區、泳池、教學大樓、合作社、司令台
+    drawBuilding(-70, -90.5, 50, 27, '#14532d', '自然生態探索園區');
+    drawBuilding(75, -35, 20, 32, '#0284c7', '標準游泳館');
+    drawBuilding(40, -30, 48, 18, '#334155', '教學大樓 A 棟');
+    drawBuilding(40, 45, 48, 18, '#334155', '教學大樓 B 棟 (活動中心)');
+    drawBuilding(-15, -60, 18, 14, '#b45309', '天天合作社');
+    drawBuilding(-50, -55, 24, 8, '#0369a1', '自行車棚');
+    drawBuilding(-45, -8, 16, 10, '#475569', '司令台');
+
+    // 操場跑道
+    const tCenterX = toScreenX(-55);
+    const tCenterZ = toScreenY(30);
+    const sHalf = 16 * scale;
+    const rOuter = 26 * scale;
+    const rInner = 16 * scale;
+
+    ctx.strokeStyle = '#991b1b';
+    ctx.lineWidth = 9 * scale;
+    ctx.beginPath();
+    ctx.moveTo(tCenterX + rOuter - 4 * scale, tCenterZ - sHalf);
+    ctx.lineTo(tCenterX + rOuter - 4 * scale, tCenterZ + sHalf);
+    ctx.arc(tCenterX, tCenterZ + sHalf, rOuter - 4 * scale, 0, Math.PI, false);
+    ctx.lineTo(tCenterX - (rOuter - 4 * scale), tCenterZ - sHalf);
+    ctx.arc(tCenterX, tCenterZ - sHalf, rOuter - 4 * scale, Math.PI, Math.PI * 2, false);
+    ctx.stroke();
+
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.moveTo(tCenterX + rInner, tCenterZ - sHalf);
+    ctx.lineTo(tCenterX + rInner, tCenterZ + sHalf);
+    ctx.arc(tCenterX, tCenterZ + sHalf, rInner, 0, Math.PI, false);
+    ctx.lineTo(tCenterX - rInner, tCenterZ - sHalf);
+    ctx.arc(tCenterX, tCenterZ - sHalf, rInner, Math.PI, Math.PI * 2, false);
+    ctx.fill();
+
+    // 自行車
+    for (const bike of bicycles) {
+      const bx = toScreenX(bike.position.x);
+      const bz = toScreenY(bike.position.z);
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(bx, bz, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // NPC
+    for (const npc of npcs) {
+      const nx = toScreenX(npc.position.x);
+      const nz = toScreenY(npc.position.z);
+      let dotColor = '#cbd5e1';
+      if (npc.role === 'TEACHER') dotColor = '#dc2626';
+      else if (npc.role === 'INSTRUCTOR') dotColor = '#b91c1c';
+      else if (npc.role === 'DOG') dotColor = '#f59e0b';
+      else if (npc.role === 'BIKE_PATROL') dotColor = '#8b5cf6';
+
+      ctx.fillStyle = dotColor;
+      ctx.beginPath();
+      ctx.arc(nx, nz, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 玩家
+    const px = toScreenX(playerPos.x);
+    const py = toScreenY(playerPos.z);
+
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 10 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(playerRotY);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(5, 6);
+    ctx.lineTo(0, 3);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#facc15';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOU (主角)', px, py - 12);
   }
 }
