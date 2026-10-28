@@ -591,6 +591,7 @@ class SchoolGTASandbox implements GameContext {
     if (this.detentionCutscene.isActive) {
       if (this.input.jump) {
         this.detentionCutscene.skip();
+        this.input.consumeJump();
       } else {
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);

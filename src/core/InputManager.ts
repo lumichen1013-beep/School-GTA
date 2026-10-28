@@ -147,11 +147,21 @@ export class InputManager {
   // 手機全螢幕觸控滑動旋轉視角 (右半螢幕滑動)
   private initTouchControls() {
     window.addEventListener('touchstart', (e) => {
+      // 視角手指已不在螢幕上 (其 touchend 被 UI 的 stopPropagation 攔截而未清除)：釋放，避免視角永久鎖死
+      if (this.touchLookId !== null) {
+        let stillDown = false;
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].identifier === this.touchLookId) { stillDown = true; break; }
+        }
+        if (!stillDown) this.resetTouchLook();
+      }
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         const target = touch.target as HTMLElement;
-        // 如果點在操作按鈕、搖桿或 UI 面板上，不觸發視角旋轉
+        // 如果點在操作按鈕、搖桿、UI 面板、開始畫面或開場動畫 (跳過鈕) 上，不觸發視角旋轉
         if (
+          target.closest('#start-screen') ||
+          target.closest('#cutscene-overlay') ||
           target.closest('#touch-joystick-zone') ||
           target.closest('#mobile-action-buttons') ||
           target.closest('.mobile-btn') ||
@@ -207,6 +217,12 @@ export class InputManager {
     window.addEventListener('touchcancel', clearLookTouch, { passive: false });
     window.addEventListener('orientationchange', () => this.resetTouchLook());
     window.addEventListener('resize', () => this.resetTouchLook());
+  }
+
+  // 消耗跳躍輸入 (空白鍵跳過開場時避免同一按鍵讓主角跳起)：需放開再按才會再次觸發
+  public consumeJump() {
+    this.keys['Space'] = false;
+    this.virtualJump = false;
   }
 
   public resetTouchLook() {
