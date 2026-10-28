@@ -228,8 +228,8 @@ export class CampusWorld {
     // 樂群樓 B 棟：Z 從 55 到 89
     this.buildWalkableSchoolBuilding(38, 0, 72, '樂群樓 (一二年級部)', false);
 
-    // 5. 兩棟大樓之間的空中走廊天橋連結 (連接敬業樓與樂群樓 2F & 3F)
-    this.buildConnectingSkybridge(38, 0, 45);
+    // 5. 兩棟大樓之間的空中走廊天橋連結 (連接敬業樓與樂群樓 2F & 3F)，X 需對齊走廊中心線 31.0 (走廊 X: 28.0 ~ 34.0)
+    this.buildConnectingSkybridge(31, 0, 45);
 
     // 6. 天天福利社與熱食休息區
     this.buildCafeteria(-15, 0, -60);
