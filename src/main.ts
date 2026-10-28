@@ -103,15 +103,76 @@ class SchoolGTASandbox {
   private isHandlingDeath: boolean = false;
   private swimSplashTimer: number = 0;
 
-  // 校園惡搞廣播彩蛋狀態
+  // 校園惡搞廣播彩蛋狀態 (洗牌循環輪播，避免連續重複)
   private broadcastCooldown: number = 0;
+  private broadcastPlaylist: number[] = [];
+  private lastAnnouncementIndex: number = -1;
   private readonly announcements: string[] = [
+    // 經典校園惡搞廣播
     '📢【全校緊急廣播】三年二班葉大雄，你媽拿便當來校門口了，還帶了你忘記穿的衛生褲！',
     '📢【訓導處通告】報告主任教官！你的假髮被風吹掉在司令台單槓上了，請速去撿！',
     '📢【生教組廣播】請全體糾察隊立刻到福利社集合，今天大肉包買一送一，限時搶購！',
     '📢【校長室特別通知】各位同學請注意！全體立正站好發呆 4 秒鐘，不准亂動！',
-    '📢【廣播台突發】恭喜三年甲班全體同學獲得「不用掃廁所一週」特權！'
+    '📢【廣播台突發】恭喜三年甲班全體同學獲得「不用掃廁所一週」特權！',
+    '📢【教官室廣播】操場上那個翻牆出去買手搖杯的同學，記得幫教官也買一杯半糖微冰珍珠奶茶，不然記大過！',
+    '📢【合作社特急廣播】福利社大阿姨宣布：只要大喊三聲「校長最帥」，肉包豆漿一律免費招待！',
+
+    // 【大如老師】專屬惡搞廣播
+    '📢【4F羽球館緊急廣播】大如老師暴扣殺球把體育館天花板打穿了！請工友速帶梯子與水泥前往救援！',
+    '📢【體育組尋物廣播】大如老師正在全校尋找他的純金羽球拍，撿到者可免測 1600 公尺並獲贈簽名羽球一顆！',
+    '📢【學務處防空廣播】請全校師生注意防空警報！那不是空襲，那是大如老師在 4F 連續殺球破音障的音爆巨響！',
+    '📢【教務處公告】大如老師宣佈：今天只要羽球回擊能接到他三記反手暴扣，本學期體育成績直接給 100 分！',
+    '📢【保健室特急通報】請大如老師暫停指導「凌空三百六十度迴旋殺球」，已有三位體育股長扭到腰在冰敷！',
+
+    // 【小太陽】專屬惡搞廣播
+    '📢【健康中心廣播】小太陽同學請克制你的笑容！你的笑容太過耀眼，已經導致整排三年級同學集體雪盲送醫！',
+    '📢【總務處節能公告】因校園電費超標，即日起全校停用日光燈，晚自習全面由「小太陽」同學到各班輪流發光照明！',
+    '📢【熱血廣播站】呼叫小太陽！外面下大暴雨操場積水了，請你立刻到司令台散發熱情把整個操場曬乾！',
+    '📢【生教組急尋】尋找小太陽同學！走廊監視器回報你走路自帶聖光，糾察隊以為有外星幽浮入侵全體拔腿狂奔！',
+    '📢【全校氣象廣播】今日校園紫外線指數嚴重超標！經查原因並非太陽，而是「小太陽」同學今天心情太好在走廊燦笑！',
+
+    // 【丫翔】專屬惡搞廣播
+    '📢【生教組嚴正通告】三年七班丫翔同學！請不要再騎著你的 Ubike 在演藝大樓走廊嘗試「水溝蓋甩尾過彎」！',
+    '📢【訓導處廣播】丫翔！你的外送珍奶和超大雞排已經送到校門口了，再不來拿就要被教官當場沒收吃掉了！',
+    '📢【福利社廣播尋人】丫翔同學！你剛才拿五塊錢硬要買兩包科學麵，阿姨說少一塊請你速來補齊，不然沒收悠遊卡！',
+    '📢【全校通緝廣播】糾察隊全體注意！丫翔又把司令台的麥克風偷拔下來當手電筒了，看到請立刻展開校園圍捕！',
+    '📢【圖書館特急通告】丫翔同學！請不要在自習室用下巴頂著課本假裝在用功，你口水已經把整本國文課本浸濕了！',
+
+    // 【高級機器】專屬惡搞廣播
+    '📢【校園資安快報】警報！實驗室「高級機器」發生邏輯錯誤，目前正失控在福利社瘋狂搶購所有茶葉蛋！',
+    '📢【生化科技室公告】高級機器已成功黑進全校鐘聲系統，下課鐘聲將全面改為動感電音重低音，全體搖起來！',
+    '📢【教務處廣播】報告校長！高級機器在幫全校算成績時當機，導致全校同學微積分與操行成績全部自動登錄為 999 分！',
+    '📢【總務處廣播】誰把「高級機器」的充電插頭拔掉拿去充手機了？它現在電量剩 2%，正用哭腔在操場狂奔找插座！',
+    '📢【實驗室通報】高級機器正在走廊自主升級 AI 核心，路過同學請勿向它投餵營養午餐的青豆與苦瓜！',
+
+    // 【跨界夢幻聯動】角色大亂鬥廣播
+    '📢【操場重磅決鬥廣播】今晚放學後：大如老師將與「高級機器」進行羽球世紀大對決！由小太陽現場打光、丫翔負責賣爆米花！',
+    '📢【學務處突發廣播】丫翔把小太陽借來當閃光彈，結果被大如老師一拍子打飛進了高級機器的散熱孔裡！',
+    '📢【全校狂歡廣播】小太陽發光充電、高級機器高速運算、大如老師揮拍加持、丫翔帶頭起鬨——全校今天提早三小時放學！',
+    '📢【福利社爭霸廣播】丫翔騎車載著小太陽衝進合作社，跟高級機器搶最後一顆包子，最後被大如老師用羽球拍雙殺！'
   ];
+
+  /**
+   * 取得下一則校園惡搞廣播台詞（採用洗牌循環佇列演算法，保證每次輪播不重複，完整體驗所有搞笑句子）
+   */
+  private getNextAnnouncement(): string {
+    if (this.broadcastPlaylist.length === 0) {
+      const indices = Array.from({ length: this.announcements.length }, (_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      // 避免跨循環時最後一句與新循環第一句重複
+      if (indices.length > 1 && indices[indices.length - 1] === this.lastAnnouncementIndex) {
+        const swapIdx = Math.floor(Math.random() * (indices.length - 1));
+        [indices[indices.length - 1], indices[swapIdx]] = [indices[swapIdx], indices[indices.length - 1]];
+      }
+      this.broadcastPlaylist = indices;
+    }
+    const nextIdx = this.broadcastPlaylist.pop()!;
+    this.lastAnnouncementIndex = nextIdx;
+    return this.announcements[nextIdx];
+  }
 
   // 演藝大樓電梯平滑過場與自動走出狀態
   private elevatorTransition: {
@@ -829,13 +890,13 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 7. 廣播台惡搞
+      // 7. 廣播台惡搞 (洗牌循環輪播，每句都充滿驚喜與校園彩蛋)
       if (this.player.position.distanceTo(this.world.broadcastStationPos) < 2.5) {
         if (this.broadcastCooldown <= 0) {
-          this.broadcastCooldown = 20.0;
+          this.broadcastCooldown = 15.0;
           soundManager.playBroadcastChime();
-          const announcement = this.announcements[Math.floor(Math.random() * this.announcements.length)];
-          this.wantedSystem.showBanner(announcement, 5500);
+          const announcement = this.getNextAnnouncement();
+          this.wantedSystem.showBanner(announcement, 6000);
           for (const npc of this.npcs) {
             npc.freeze(4.0);
           }

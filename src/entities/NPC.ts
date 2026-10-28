@@ -1191,9 +1191,27 @@ export class NPC {
     eyeR.position.set(0.09, 0.03, 0.20);
     head.add(eyeR);
 
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
-    hair.position.set(0, 0.16, 0);
-    head.add(hair);
+    if (this.role === 'PE_TEACHER_BOSS') {
+      // 大如老師：熱血濃眉 (加強羽球教練神韻)
+      const browMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+      const browL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.02), browMat);
+      browL.position.set(-0.09, 0.068, 0.202);
+      browL.rotation.z = -0.15;
+      head.add(browL);
+
+      const browR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.02), browMat);
+      browR.position.set(0.09, 0.068, 0.202);
+      browR.rotation.z = 0.15;
+      head.add(browR);
+
+      // 大如老師：專屬招牌喜感立體蓬鬆爆炸頭 (Afro) 與運動吸汗頭帶
+      const afro = this.buildAfroHair();
+      head.add(afro);
+    } else {
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), hairMat);
+      hair.position.set(0, 0.16, 0);
+      head.add(hair);
+    }
 
     // 教官大盤帽 (Military Cap)
     if (this.role === 'INSTRUCTOR') {
@@ -1347,6 +1365,164 @@ export class NPC {
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
     addHumanoidPart(this.rightLeg);
+  }
+
+  // 建造大如老師專屬 3D 經典蓬鬆喜感爆炸頭 (Afro) 與運動吸汗頭帶
+  private buildAfroHair(): THREE.Group {
+    const afro = new THREE.Group();
+    afro.name = 'daru_afro_hair';
+
+    // 爆炸頭深色捲髮材質 (flatShading 突顯多面體蓬鬆捲曲質感與光影立體層次)
+    const afroMat = new THREE.MeshLambertMaterial({
+      color: 0x161311,
+      flatShading: true
+    });
+    const afroMatHighlight = new THREE.MeshLambertMaterial({
+      color: 0x241d1a,
+      flatShading: true
+    });
+
+    // 爆炸頭多組交疊微偏的十二面體叢集，打造立體飽滿、圓潤且富有喜感的蓬鬆輪廓
+    const puffDefs: Array<{
+      x: number;
+      y: number;
+      z: number;
+      r: number;
+      detail?: number;
+      highlight?: boolean;
+      scale?: [number, number, number];
+    }> = [
+      // 1. 核心大髮量基座
+      { x: 0, y: 0.20, z: -0.04, r: 0.28, detail: 1, scale: [1.12, 0.98, 1.08] },
+
+      // 2. 頂部高聳髮冠 (Crown / Top dome)
+      { x: 0, y: 0.36, z: -0.05, r: 0.21, detail: 1 },
+      { x: -0.14, y: 0.33, z: -0.03, r: 0.19, detail: 1 },
+      { x: 0.14, y: 0.33, z: -0.03, r: 0.19, detail: 1 },
+      { x: 0, y: 0.33, z: 0.09, r: 0.17, detail: 1, highlight: true },
+      { x: 0, y: 0.30, z: -0.19, r: 0.19, detail: 1 },
+      { x: -0.12, y: 0.35, z: 0.05, r: 0.16, detail: 1 },
+      { x: 0.12, y: 0.35, z: 0.05, r: 0.16, detail: 1 },
+      { x: -0.11, y: 0.32, z: -0.15, r: 0.17, detail: 1 },
+      { x: 0.11, y: 0.32, z: -0.15, r: 0.17, detail: 1 },
+
+      // 3. 左側蓬鬆外擴 (Left Afro flank)
+      { x: -0.26, y: 0.22, z: -0.04, r: 0.21, detail: 1 },
+      { x: -0.29, y: 0.12, z: -0.06, r: 0.20, detail: 1, highlight: true },
+      { x: -0.24, y: 0.01, z: -0.06, r: 0.16, detail: 1 },
+      { x: -0.23, y: 0.18, z: 0.08, r: 0.17, detail: 1 },
+      { x: -0.23, y: 0.18, z: -0.18, r: 0.18, detail: 1 },
+      { x: -0.25, y: 0.07, z: 0.06, r: 0.15, detail: 1 },
+      { x: -0.25, y: 0.06, z: -0.16, r: 0.16, detail: 1 },
+
+      // 4. 右側蓬鬆外擴 (Right Afro flank)
+      { x: 0.26, y: 0.22, z: -0.04, r: 0.21, detail: 1 },
+      { x: 0.29, y: 0.12, z: -0.06, r: 0.20, detail: 1, highlight: true },
+      { x: 0.24, y: 0.01, z: -0.06, r: 0.16, detail: 1 },
+      { x: 0.23, y: 0.18, z: 0.08, r: 0.17, detail: 1 },
+      { x: 0.23, y: 0.18, z: -0.18, r: 0.18, detail: 1 },
+      { x: 0.25, y: 0.07, z: 0.06, r: 0.15, detail: 1 },
+      { x: 0.25, y: 0.06, z: -0.16, r: 0.16, detail: 1 },
+
+      // 5. 後腦勺與頸後濃密包覆 (Rear skull & nape)
+      { x: 0, y: 0.22, z: -0.23, r: 0.22, detail: 1 },
+      { x: 0, y: 0.11, z: -0.24, r: 0.21, detail: 1 },
+      { x: -0.14, y: 0.11, z: -0.21, r: 0.19, detail: 1 },
+      { x: 0.14, y: 0.11, z: -0.21, r: 0.19, detail: 1 },
+      { x: 0, y: -0.01, z: -0.21, r: 0.16, detail: 1 },
+      { x: -0.11, y: 0.00, z: -0.19, r: 0.15, detail: 1 },
+      { x: 0.11, y: 0.00, z: -0.19, r: 0.15, detail: 1 },
+
+      // 6. 前額瀏海與鬢角自然包覆 (Forehead & temple, 不遮擋眼睛)
+      { x: 0, y: 0.22, z: 0.15, r: 0.15, detail: 1 },
+      { x: -0.13, y: 0.19, z: 0.15, r: 0.14, detail: 1, highlight: true },
+      { x: 0.13, y: 0.19, z: 0.15, r: 0.14, detail: 1, highlight: true },
+      { x: -0.19, y: 0.10, z: 0.12, r: 0.13, detail: 1 },
+      { x: 0.19, y: 0.10, z: 0.12, r: 0.13, detail: 1 },
+
+      // 7. 外圍俏皮捲髮微突顆粒 (Accent curls / Textured perimeter frizz)
+      { x: -0.33, y: 0.25, z: -0.02, r: 0.11, detail: 0, highlight: true },
+      { x: 0.33, y: 0.25, z: -0.02, r: 0.11, detail: 0, highlight: true },
+      { x: 0, y: 0.44, z: -0.04, r: 0.12, detail: 0, highlight: true },
+      { x: -0.17, y: 0.41, z: -0.05, r: 0.10, detail: 0 },
+      { x: 0.17, y: 0.41, z: -0.05, r: 0.10, detail: 0 },
+      { x: -0.24, y: 0.33, z: 0.08, r: 0.10, detail: 0 },
+      { x: 0.24, y: 0.33, z: 0.08, r: 0.10, detail: 0 },
+      { x: 0, y: 0.39, z: 0.12, r: 0.10, detail: 0, highlight: true },
+      { x: 0, y: 0.35, z: -0.23, r: 0.11, detail: 0 },
+      { x: -0.20, y: 0.23, z: -0.22, r: 0.11, detail: 0 },
+      { x: 0.20, y: 0.23, z: -0.22, r: 0.11, detail: 0 },
+      { x: -0.32, y: 0.06, z: -0.07, r: 0.10, detail: 0 },
+      { x: 0.32, y: 0.06, z: -0.07, r: 0.10, detail: 0 },
+    ];
+
+    for (const p of puffDefs) {
+      const geo = new THREE.DodecahedronGeometry(p.r, p.detail ?? 1);
+      if (p.scale) {
+        geo.scale(p.scale[0], p.scale[1], p.scale[2]);
+      }
+      const mat = p.highlight ? afroMatHighlight : afroMat;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(p.x, p.y, p.z);
+      mesh.castShadow = true;
+      afro.add(mesh);
+    }
+
+    // 8. 體育老師專屬經典運動吸汗頭帶 (Retro PE Sweatband)
+    const bandMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa });
+    const sweatband = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.06, 0.40), bandMat);
+    sweatband.position.set(0, 0.115, 0);
+    sweatband.castShadow = true;
+    afro.add(sweatband);
+
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xc0392b }); // 呼應紅色運動外套
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.406, 0.02, 0.406), stripeMat);
+    stripe.position.set(0, 0.115, 0);
+    afro.add(stripe);
+
+    // 正面額前金牌羽球標章 (Gold Sports Emblem)
+    const emblem = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.04, 0.015),
+      new THREE.MeshLambertMaterial({ color: 0xf1c40f })
+    );
+    emblem.position.set(0, 0.115, 0.205);
+    afro.add(emblem);
+
+    // 9. 喜感羽球教練彩蛋：插在爆炸頭側邊的羽毛球髮飾 (Badminton Shuttlecock tucked in afro)
+    const shuttlePin = new THREE.Group();
+    shuttlePin.name = 'afro_shuttlecock';
+    shuttlePin.position.set(0.31, 0.28, 0.06);
+    shuttlePin.rotation.set(-0.25, 0.2, -Math.PI / 4.2);
+
+    // 球頭 (軟木塞底座)
+    const corkMat = new THREE.MeshLambertMaterial({ color: 0xdfe4ea });
+    const cork = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), corkMat);
+    cork.position.set(0, -0.035, 0);
+    cork.castShadow = true;
+    shuttlePin.add(cork);
+
+    // 軟木塞紅膠帶
+    const tape = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.027, 0.027, 0.009, 8),
+      new THREE.MeshBasicMaterial({ color: 0xe74c3c })
+    );
+    tape.position.set(0, -0.025, 0);
+    shuttlePin.add(tape);
+
+    // 羽毛裙身
+    const featherMat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const skirt = new THREE.Mesh(
+      new THREE.ConeGeometry(0.055, 0.07, 8, 1, true),
+      featherMat
+    );
+    skirt.position.set(0, 0.015, 0);
+    skirt.rotation.x = Math.PI;
+    skirt.castShadow = true;
+    shuttlePin.add(skirt);
+
+    afro.add(shuttlePin);
+
+    return afro;
   }
 
   // 建造總教官狂暴衝撞 3D 地面紅色危險預警軌跡線 (Telegraph Danger Corridor)
