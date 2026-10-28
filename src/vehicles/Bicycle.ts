@@ -262,7 +262,15 @@ export class Bicycle {
     });
   }
 
+  // 停妥靜止判定：無人騎乘、已停穩貼地且位置未被外力改變時，跳過整套碰撞與重力運算
+  private restTime: number = 0;
+  private restPos: THREE.Vector3 = new THREE.Vector3(Infinity, Infinity, Infinity);
+
   public update(delta: number, input: InputManager, colliders: CollidableBox[]) {
+    if (!this.isMounted && this.restTime > 0.5 && this.position.equals(this.restPos)) {
+      return;
+    }
+
     if (this.isMounted) {
       // 1. 加速與倒車 (W / S)
       if (input.forward) {
@@ -304,10 +312,9 @@ export class Bicycle {
       this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, 0.22, delta * 5);
     }
 
-    // 3. 前進向量計算
-    const forward = new THREE.Vector3(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
-    const moveX = forward.x * this.speed * delta;
-    const moveZ = forward.z * this.speed * delta;
+    // 3. 前進位移 (車頭朝向 (sin, cos))
+    const moveX = Math.sin(this.rotationY) * this.speed * delta;
+    const moveZ = Math.cos(this.rotationY) * this.speed * delta;
 
     // 4. 碰撞檢測與滑牆
     const radius = 0.42; // 適度微調判定半徑，符合單車縱長窄身特性，不易在窄縫卡死
@@ -430,6 +437,20 @@ export class Bicycle {
       this.headGroup.position.y = 0.96 + Math.sin(this.animTimer) * 0.025;
     } else {
       this.headGroup.position.y = 0.96;
+    }
+
+    // 累計停妥時間 (車身傾角與貼地高度皆已收斂)
+    const isSettled =
+      !this.isMounted &&
+      this.isGrounded &&
+      Math.abs(this.speed) < 0.01 &&
+      Math.abs(this.position.y - groundY) < 0.001 &&
+      Math.abs(this.mesh.rotation.z - 0.22) < 0.002;
+    if (isSettled) {
+      this.restTime += delta;
+      this.restPos.copy(this.position);
+    } else {
+      this.restTime = 0;
     }
   }
 }

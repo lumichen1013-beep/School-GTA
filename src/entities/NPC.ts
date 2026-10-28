@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CollidableBox } from '../world/CampusWorld';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
@@ -139,7 +140,6 @@ export class NPC {
   public bossChargeTraveled: number = 0;
   public bossChargeMaxDist: number = 24.0;
   public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
-  public bossShieldCharges: number = 3;
   public bossTelegraphGroup?: THREE.Group;
   private bossTelegraphMat?: THREE.MeshBasicMaterial;
   public bossBarrierMesh?: THREE.Mesh;
@@ -210,9 +210,11 @@ export class NPC {
   private hpBarBgMesh: THREE.Mesh;
   private hpBarMesh: THREE.Mesh;
   private koBadgeSprite: THREE.Sprite;
-  private koBadgeCanvas: HTMLCanvasElement;
-  private koBadgeTexture: THREE.CanvasTexture;
+  // 頭頂告示牌畫布於首次繪製時才建立 (多數 NPC 從未倒地，省下每隻 256x64 畫布與貼圖記憶體)
+  private koBadgeCanvas: HTMLCanvasElement | null = null;
+  private koBadgeTexture: THREE.CanvasTexture | null = null;
   private lastKoBadgeSec: number = -1;
+  private lastStatusBadgeKey: string = '';
 
   // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法系統
   private lastColliders: CollidableBox[] = [];
@@ -482,11 +484,8 @@ export class NPC {
     this.hpBarGroup.add(this.hpBarMesh);
 
     // 3. 昏睡倒地狀態告示牌 (CanvasTexture 呈現動態倒數秒數)
-    this.koBadgeCanvas = document.createElement('canvas');
-    this.koBadgeCanvas.width = 256;
-    this.koBadgeCanvas.height = 64;
-    this.koBadgeTexture = new THREE.CanvasTexture(this.koBadgeCanvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: this.koBadgeTexture, transparent: true, depthTest: false });
+    // 尚未繪製前以全透明呈現，首次繪製時才掛上畫布貼圖
+    const spriteMat = new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthTest: false });
     this.koBadgeSprite = new THREE.Sprite(spriteMat);
     this.koBadgeSprite.scale.set(1.4, 0.35, 1);
     this.koBadgeSprite.position.set(0, 0.28, 0);
@@ -554,12 +553,27 @@ export class NPC {
     }
   }
 
+  // 取得頭頂告示牌繪圖環境 (首次呼叫時建立畫布與貼圖並掛上 Sprite)
+  private getBadgeContext(): CanvasRenderingContext2D | null {
+    if (!this.koBadgeCanvas) {
+      this.koBadgeCanvas = document.createElement('canvas');
+      this.koBadgeCanvas.width = 256;
+      this.koBadgeCanvas.height = 64;
+      this.koBadgeTexture = new THREE.CanvasTexture(this.koBadgeCanvas);
+      const mat = this.koBadgeSprite.material;
+      mat.map = this.koBadgeTexture;
+      mat.opacity = 1;
+      mat.needsUpdate = true;
+    }
+    return this.koBadgeCanvas.getContext('2d');
+  }
+
   // 更新昏迷休養倒數秒數告示牌 (加入 lastKoBadgeSec 快取節流，僅在秒數變更時重繪)
   private updateKOBadge(secondsLeft: number) {
     if (this.isPermanentlyKnockedOut) {
       if (this.lastKoBadgeSec === -999) return;
       this.lastKoBadgeSec = -999;
-      const ctx = this.koBadgeCanvas.getContext('2d');
+      const ctx = this.getBadgeContext();
       if (!ctx) return;
       ctx.clearRect(0, 0, 256, 64);
       ctx.fillStyle = 'rgba(30, 41, 59, 0.92)';
@@ -574,7 +588,7 @@ export class NPC {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('💫 永久擊昏', 128, 32);
-      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeTexture!.needsUpdate = true;
       this.koBadgeSprite.visible = true;
       return;
     }
@@ -583,7 +597,7 @@ export class NPC {
     if (sec === this.lastKoBadgeSec) return;
     this.lastKoBadgeSec = sec;
 
-    const ctx = this.koBadgeCanvas.getContext('2d');
+    const ctx = this.getBadgeContext();
     if (!ctx) return;
     ctx.clearRect(0, 0, 256, 64);
 
@@ -603,14 +617,18 @@ export class NPC {
     ctx.textBaseline = 'middle';
     ctx.fillText(`💫 昏迷中 (${sec}s)`, 128, 32);
 
-    this.koBadgeTexture.needsUpdate = true;
+    this.koBadgeTexture!.needsUpdate = true;
   }
 
   // 顯示自定義頭頂動態文字徽章 (如金鐘護體、破盾硬直等)
   public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
-    const ctx = this.koBadgeCanvas.getContext('2d');
+    // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)
+    const key = text + bgColor + borderColor;
+    if (this.lastKoBadgeSec === -105 && this.lastStatusBadgeKey === key && this.koBadgeSprite.visible) return;
+    const ctx = this.getBadgeContext();
     if (!ctx) return;
     this.lastKoBadgeSec = -105;
+    this.lastStatusBadgeKey = key;
     ctx.clearRect(0, 0, 256, 64);
     ctx.fillStyle = bgColor;
     ctx.beginPath();
@@ -624,7 +642,7 @@ export class NPC {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 128, 32);
-    this.koBadgeTexture.needsUpdate = true;
+    this.koBadgeTexture!.needsUpdate = true;
     this.koBadgeSprite.visible = true;
   }
 
@@ -638,7 +656,7 @@ export class NPC {
   public setAlertState(state: 'NORMAL' | 'CAUTION' | 'ALERT') {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return;
     this.alertState = state;
-    const ctx = this.koBadgeCanvas.getContext('2d');
+    const ctx = this.getBadgeContext();
     if (!ctx) return;
 
     if (state === 'NORMAL') {
@@ -659,7 +677,7 @@ export class NPC {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('❓', 128, 32);
-      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeTexture!.needsUpdate = true;
       this.koBadgeSprite.visible = true;
     } else if (state === 'ALERT') {
       this.lastKoBadgeSec = -102;
@@ -676,7 +694,7 @@ export class NPC {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('❗', 128, 32);
-      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeTexture!.needsUpdate = true;
       this.koBadgeSprite.visible = true;
     }
   }
@@ -726,7 +744,7 @@ export class NPC {
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
 
     // 顯示硬直星星
-    const ctx = this.koBadgeCanvas.getContext('2d');
+    const ctx = this.getBadgeContext();
     if (ctx) {
       this.lastKoBadgeSec = -103;
       ctx.clearRect(0, 0, 256, 64);
@@ -742,7 +760,7 @@ export class NPC {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('⚡ 破盾硬直！快繞背！', 128, 32);
-      this.koBadgeTexture.needsUpdate = true;
+      this.koBadgeTexture!.needsUpdate = true;
       this.koBadgeSprite.visible = true;
     }
   }
@@ -1464,14 +1482,23 @@ export class NPC {
       { x: 0.32, y: 0.06, z: -0.07, r: 0.10, detail: 0 },
     ];
 
+    // 依材質將數十顆髮球烘焙合併為 2 個 Mesh (深色髮量 + 高光髮束)，大幅減少 Draw Call
+    const baseGeos: THREE.BufferGeometry[] = [];
+    const highlightGeos: THREE.BufferGeometry[] = [];
     for (const p of puffDefs) {
       const geo = new THREE.DodecahedronGeometry(p.r, p.detail ?? 1);
       if (p.scale) {
         geo.scale(p.scale[0], p.scale[1], p.scale[2]);
       }
-      const mat = p.highlight ? afroMatHighlight : afroMat;
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(p.x, p.y, p.z);
+      geo.translate(p.x, p.y, p.z);
+      (p.highlight ? highlightGeos : baseGeos).push(geo);
+    }
+    for (const [geos, mat] of [[baseGeos, afroMat], [highlightGeos, afroMatHighlight]] as const) {
+      if (geos.length === 0) continue;
+      const merged = mergeGeometries(geos, false);
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat);
       mesh.castShadow = true;
       afro.add(mesh);
     }
@@ -1833,7 +1860,7 @@ export class NPC {
       if (this.isDodging || this.isBearShaking) return false;
       // 閃身步老師受擊防衛：50% 機率隨機施展「閃身步」或「狗熊哆嗦毛」
       if (Math.random() < 0.5) {
-        this.performFlashStep(this.lastColliders);
+        this.performFlashStep();
       } else {
         this.performBearShake(this.lastColliders);
       }
@@ -1849,7 +1876,7 @@ export class NPC {
     } else if (this.role === 'DETENTION_BOSS') {
       // 鐵面總長受擊：20% 機率施展「閃身步」避開攻擊，反擊前搖留有公平反應間隔
       if (!this.isDodging && Math.random() < 0.20) {
-        this.performFlashStep(this.lastColliders);
+        this.performFlashStep();
         this.attackCooldown = 0.65;
         return false;
       }
@@ -1922,7 +1949,7 @@ export class NPC {
       if (this.isDodging || this.isBearShaking) return false;
       // 閃身步老師衝撞防衛：50% 機率隨機施展「閃身步」或「狗熊哆嗦毛」
       if (Math.random() < 0.5) {
-        this.performFlashStep(this.lastColliders);
+        this.performFlashStep();
       } else {
         this.performBearShake(this.lastColliders);
       }
@@ -1959,7 +1986,7 @@ export class NPC {
   }
 
   // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
-  public triggerAttackAnimation(delta: number = 0.016) {
+  public triggerAttackAnimation() {
     this.attackAnimTimer = 0.35;
     if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
       soundManager.playDogBark();
@@ -2351,7 +2378,7 @@ export class NPC {
   }
 
   // 待機/發呆行為多樣性程序化動作 (0-GC 純量運算)
-  private applyIdleAnimation(delta: number) {
+  private applyIdleAnimation() {
     if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
       if (this.currentIdleBehavior === 'DOG_SNIFF') {
         // 低頭嗅聞青草，尾巴歡快輕搖
@@ -2524,7 +2551,6 @@ export class NPC {
       this.bossWindupTimer = 0;
       this.bossIsCharging = false;
       this.bossChargeTraveled = 0;
-      this.bossShieldCharges = 3;
       if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
       if (this.bossBarrierMesh) this.bossBarrierMesh.visible = true;
     }
@@ -2943,7 +2969,7 @@ export class NPC {
   }
 
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
-  public performFlashStep(colliders: CollidableBox[] = []) {
+  public performFlashStep() {
     if (this.isKnockedDown) return;
 
     this.isDodging = true;
@@ -3247,7 +3273,8 @@ export class NPC {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
 
-    const isOutdoor = !IndoorManager.isIndoors(this.position);
+    // 依 NPC 所屬世界套用對應室內區域 (少年院守衛不可誤用天天國中的室內範圍)
+    const isOutdoor = !IndoorManager.isIndoors(this.position, this.role.startsWith('DETENTION') ? 'DETENTION' : 'CAMPUS');
     const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
 
     // 傘的顯示與收納狀態更新 (室內、倒地、追捕或雨停時自動收傘)
@@ -3298,7 +3325,7 @@ export class NPC {
           this.dodgeTeacherPracticeTimer = 0;
           this.dodgeTeacherNextPracticeTime = 8.0 + Math.random() * 6.0;
           if (Math.random() < 0.5) {
-            this.performFlashStep(colliders);
+            this.performFlashStep();
           } else {
             this.performBearShake(colliders);
           }
@@ -3820,7 +3847,7 @@ export class NPC {
       if (this.isPaused) {
         this.pauseTimer -= delta;
         this.pauseAnimTimer += delta;
-        this.applyIdleAnimation(delta);
+        this.applyIdleAnimation();
 
         if (this.pauseTimer <= 0) {
           this.isPaused = false;

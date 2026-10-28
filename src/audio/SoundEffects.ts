@@ -1,7 +1,9 @@
 // Procedural Web Audio API sound generator - no external asset dependencies!
 export class SoundEffects {
   private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
+  // 共用白噪音緩衝區 (3 秒)：各噪音音效從中擷取隨機片段播放，避免每次觸發重新產生數萬個樣本
+  private noiseBuffer: AudioBuffer | null = null;
+  private static readonly NOISE_SECONDS = 3.0;
 
   constructor() {
     this.setupAutoResume();
@@ -31,6 +33,27 @@ export class SoundEffects {
     }
   }
 
+  private getNoiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (!this.noiseBuffer || this.noiseBuffer.sampleRate !== ctx.sampleRate) {
+      const size = Math.floor(ctx.sampleRate * SoundEffects.NOISE_SECONDS);
+      this.noiseBuffer = ctx.createBuffer(1, size, ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < size; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+    }
+    return this.noiseBuffer;
+  }
+
+  // 由共用白噪音擷取指定長度片段 (隨機起點，聽感不重複)；回傳節點後由呼叫端連接濾波與音量包絡
+  private playNoiseSlice(ctx: AudioContext, at: number, duration: number): AudioBufferSourceNode {
+    const source = ctx.createBufferSource();
+    source.buffer = this.getNoiseBuffer(ctx);
+    const maxOffset = Math.max(0, SoundEffects.NOISE_SECONDS - duration);
+    source.start(at, Math.random() * maxOffset, duration);
+    return source;
+  }
+
   private initCtx() {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -44,7 +67,7 @@ export class SoundEffects {
   // 經典台灣校園上下課西敏寺鐘聲 (4 聲鐘響)
   public playSchoolBell() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     // F#4, D4, E4, A3 經典旋律
     const notes = [370.0, 293.7, 329.6, 220.0];
@@ -89,7 +112,7 @@ export class SoundEffects {
   // 風紀糾察／教官刺耳哨音 (逼逼逼！)
   public playWhistle() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     for (let i = 0; i < 3; i++) {
@@ -116,7 +139,7 @@ export class SoundEffects {
   // 腳踏車鈴聲 (叮叮！)
   public playBicycleBell() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     [0, 0.1].forEach((delay) => {
@@ -142,7 +165,7 @@ export class SoundEffects {
   // 揮拳 / 擊打聲
   public playPunch() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -165,7 +188,7 @@ export class SoundEffects {
   // 跳躍落地鈍音
   public playJump() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -188,7 +211,7 @@ export class SoundEffects {
   // 通緝警戒升級警笛
   public playAlert() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -212,7 +235,7 @@ export class SoundEffects {
   // 狗吠叫聲 (汪汪！)
   public playDogBark() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     [0, 0.16].forEach((delay) => {
@@ -239,7 +262,7 @@ export class SoundEffects {
   // 重墜高處著地撞擊聲
   public playFallHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -262,7 +285,7 @@ export class SoundEffects {
   // 經典台灣校園學務處全校廣播前奏鐘聲 (叮咚檔鐺！)
   public playBroadcastChime() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
     const step = 0.16;
@@ -291,19 +314,11 @@ export class SoundEffects {
   // 籃球空心刷網進球聲 (Swish!)
   public playSwish() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
-    // 白色噪音 + 低通濾波模擬刷網聲
-    const bufferSize = this.ctx.sampleRate * 0.25;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    // 白色噪音 + 帶通濾波模擬刷網聲
+    const noise = this.playNoiseSlice(this.ctx, now, 0.25);
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';
@@ -318,15 +333,12 @@ export class SoundEffects {
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.ctx.destination);
-
-    noise.start(now);
-    noise.stop(now + 0.25);
   }
 
   // 籃球打鐵砸框金屬撞擊聲 (Rim Hit / Clang)
   public playRimHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -354,33 +366,10 @@ export class SoundEffects {
     osc2.stop(now + 0.2);
   }
 
-  // 籃球擦板撞擊聲 (Backboard Thud)
-  public playBackboardHit() {
-    this.initCtx();
-    if (!this.ctx || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(140, now);
-    osc.frequency.exponentialRampToValueAtTime(45, now + 0.12);
-
-    gain.gain.setValueAtTime(0.5, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.16);
-  }
-
   // 籃球運球落地拍球聲 (Dribble Bounce)
   public playDribble() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -403,7 +392,7 @@ export class SoundEffects {
   // 挑戰成功小勝利號角 (Victory Fanfare)
   public playFanfare() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const melody = [
@@ -437,7 +426,7 @@ export class SoundEffects {
   // 收銀機開箱金幣聲 (Ka-ching!)
   public playCashRegister() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     [1567.98, 2093.00].forEach((freq, idx) => {
@@ -463,7 +452,7 @@ export class SoundEffects {
   // 吃食物補血咀嚼吞嚥聲 (Munch & Gulp)
   public playEatFood() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     for (let i = 0; i < 3; i++) {
@@ -488,7 +477,7 @@ export class SoundEffects {
   // 普通棒球棍重擊木擊聲 (Wooden Bat Crack)
   public playBatHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -511,7 +500,7 @@ export class SoundEffects {
   // 特殊黃金神級棒球棍雷霆轟擊聲 (Golden Bat Thunder Whoosh)
   public playSpecialBatHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc1 = this.ctx.createOscillator();
@@ -542,7 +531,7 @@ export class SoundEffects {
   // 刺客處決/慢動作暴擊重音 (Cinematic Bullet Time Impact Boom & Armor Crunch)
   public playCinematicExecutionHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     // 1. 低頻震顫震撼低音 (Sub-bass boom)
@@ -575,7 +564,7 @@ export class SoundEffects {
   // 食人花 Boss 巨顎咬噬聲 (Monster Chomp)
   public playBossBite() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -598,18 +587,11 @@ export class SoundEffects {
   // 水花拍擊聲 (Water Splash / Swimming)
   public playWaterSplash() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
-    // 白色噪波水花衝擊
-    const bufferSize = this.ctx.sampleRate * 0.22;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    // 白色噪波水花衝擊 (原樣本內建的指數衰減併入音量包絡：較快衰減至 0.14 秒)
+    const noise = this.playNoiseSlice(this.ctx, now, 0.22);
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -618,19 +600,17 @@ export class SoundEffects {
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.ctx.destination);
-
-    noise.start(now);
   }
 
   // 中毒咳嗽流血心跳 (Poison Tick / Cough)
   public playPoisonTick() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -653,7 +633,7 @@ export class SoundEffects {
   // 強盜劈砍揮刀聲 (Bandit Weapon Slash)
   public playBanditSlash() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -676,7 +656,7 @@ export class SoundEffects {
   // 羽球殺球清脆爆裂擊球聲 (Badminton Smash Hit)
   public playBadmintonHit() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -699,7 +679,7 @@ export class SoundEffects {
   // 羽球拍破空橫掃呼嘯聲 (Badminton Racket Swing)
   public playBadmintonWhoosh() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -722,7 +702,7 @@ export class SoundEffects {
   // 閃身步 / 狗熊哆嗦毛身法疾風破空聲 (Martial Dodge Wind Whoosh)
   public playDodge(isAdvanced: boolean = false) {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -745,7 +725,7 @@ export class SoundEffects {
   // 許願池投幣清脆金幣落水聲 (Coin Toss Into Pond)
   public playCoinToss() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     // 1. 金幣叮噹聲
@@ -771,38 +751,10 @@ export class SoundEffects {
     }, 120);
   }
 
-  // 湖中女神神聖降臨靈光仙音 (Goddess of the Lake Divine Chime)
-  public playGoddessChime() {
-    this.initCtx();
-    if (!this.ctx || this.isMuted) return;
-
-    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98]; // C5, E5, G5, C6, E6, G6
-    const now = this.ctx.currentTime;
-
-    notes.forEach((freq, idx) => {
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-
-      gain.gain.setValueAtTime(0, now + idx * 0.08);
-      gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.08 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.6);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start(now + idx * 0.08);
-      osc.stop(now + idx * 0.08 + 0.7);
-    });
-  }
-
   // 生態園昆蟲窸窣嘶鳴聲 (Garden Bug Scurry & Click)
   public playBugChirp() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     for (let i = 0; i < 2; i++) {
@@ -827,7 +779,7 @@ export class SoundEffects {
   // 搶奪腳踏車踹人驚叫與倒地碰撞 (Bike Hijack Shove & Impact)
   public playBikeHijack() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     this.playPunch();
     setTimeout(() => {
@@ -838,7 +790,7 @@ export class SoundEffects {
   // 演藝大樓直達電梯升降與抵達鐘聲 (Elevator Ding)
   public playElevatorDing() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -863,29 +815,15 @@ export class SoundEffects {
   private rainSource: AudioBufferSourceNode | null = null;
   private rainGain: GainNode | null = null;
   private rainFilter: BiquadFilterNode | null = null;
-  private currentRainIntensity: number = 0;
-
-  public get rainIntensity(): number {
-    return this.currentRainIntensity;
-  }
 
   public setRainIntensity(intensity: number, rampTime: number = 2.0, isIndoors: boolean = false) {
     this.initCtx();
     if (!this.ctx) return;
 
-    this.currentRainIntensity = intensity;
-
     if (!this.rainSource && this.ctx) {
-      // 建立 2 秒白噪音循環緩衝區
-      const bufferSize = this.ctx.sampleRate * 2;
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
-
+      // 共用白噪音緩衝區循環播放
       this.rainSource = this.ctx.createBufferSource();
-      this.rainSource.buffer = buffer;
+      this.rainSource.buffer = this.getNoiseBuffer(this.ctx);
       this.rainSource.loop = true;
 
       this.rainFilter = this.ctx.createBiquadFilter();
@@ -905,7 +843,7 @@ export class SoundEffects {
       const now = this.ctx.currentTime;
       // 若在室內：雨聲音量衰減至 22%，呈現隔著實體屋頂與牆壁聽雨的沉悶真實音效
       const volMultiplier = isIndoors ? 0.22 : 1.0;
-      const targetVol = this.isMuted ? 0 : Math.max(0, Math.min(0.42, intensity * 0.42 * volMultiplier));
+      const targetVol = Math.max(0, Math.min(0.42, intensity * 0.42 * volMultiplier));
       this.rainGain.gain.cancelScheduledValues(now);
       this.rainGain.gain.linearRampToValueAtTime(targetVol, now + rampTime);
 
@@ -919,7 +857,7 @@ export class SoundEffects {
   // 天氣系統：程序化低沉震撼雷鳴滾滾 (Rolling Thunder Synthesis)
   public playThunder() {
     this.initCtx();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
 
@@ -941,15 +879,7 @@ export class SoundEffects {
 
     // 2. 帶通濾波衝擊裂帛雜音 (Crackle & rolling rumble)
     const noiseDuration = 2.8;
-    const bufferSize = Math.floor(this.ctx.sampleRate * noiseDuration);
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
-    const noiseSource = this.ctx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
+    const noiseSource = this.playNoiseSlice(this.ctx, now, noiseDuration);
 
     const noiseFilter = this.ctx.createBiquadFilter();
     noiseFilter.type = 'lowpass';
@@ -964,7 +894,6 @@ export class SoundEffects {
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(this.ctx.destination);
-    noiseSource.start(now);
   }
 }
 

@@ -218,14 +218,6 @@ export class RacingGame {
     this.swimRival.hide();
   }
 
-  public get isTrackCountdown(): boolean {
-    return this.isRacingTrack && this.trackState.countdown > 0;
-  }
-
-  public get isSwimCountdown(): boolean {
-    return this.isSwimmingRace && this.swimState.countdown > 0;
-  }
-
   // 即時名次提示 (供 HUD 提示列顯示，避免橫幅洗版)
   public get trackStandingText(): string {
     return RacingGame.formatStanding(this.trackState);

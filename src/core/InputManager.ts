@@ -243,19 +243,8 @@ export class InputManager {
     }
   }
 
-  public triggerVirtualAttack() {
-    this.setVirtualAttack(true);
-    setTimeout(() => {
-      this.setVirtualAttack(false);
-    }, 150);
-  }
-
   public triggerVirtualInteract() {
     if (this.onInteractCallback) this.onInteractCallback();
-  }
-
-  public triggerVirtualSkill() {
-    if (this.onSkillCallback) this.onSkillCallback();
   }
 
   public onSkill(callback: () => void) {
@@ -283,11 +272,14 @@ export class InputManager {
   }
 
   // 每幀消耗累積的旋轉位移
+  // 回傳內部重複使用的物件 (每幀呼叫一次，不配置新物件)
+  private readonly mouseDeltaOut = { x: 0, y: 0 };
   public consumeMouseDelta(): { x: number; y: number } {
-    const delta = { x: this.mouseDeltaX, y: this.mouseDeltaY };
+    this.mouseDeltaOut.x = this.mouseDeltaX;
+    this.mouseDeltaOut.y = this.mouseDeltaY;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
-    return delta;
+    return this.mouseDeltaOut;
   }
 
   // 方向鍵與移動狀態判定 (整合鍵盤與手機虛擬搖桿)
@@ -317,10 +309,6 @@ export class InputManager {
 
   public get interact(): boolean {
     return !!this.keys['KeyE'];
-  }
-
-  public get sneak(): boolean {
-    return this.mouseButtons.right || !!(this.keys['ControlLeft'] || this.keys['ControlRight']);
   }
 
   public get horn(): boolean {

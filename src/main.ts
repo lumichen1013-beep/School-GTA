@@ -21,6 +21,11 @@ import { TennisGame } from './systems/TennisGame';
 import { WeatherSystem } from './systems/WeatherSystem';
 
 // 模組頂層共用 Scratch Vectors (0-GC 避免幀迴圈記憶體堆積觸發微卡頓)
+// 互動距離常數：互動提示與 E 鍵實際判定共用，避免「看得到提示卻按不出動作」
+const KEYCARD_PICKUP_RANGE = 2.5;
+const GATE_CONSOLE_RANGE = 3.8;
+const MUSHROOM_PICK_RANGE = 2.2; // 與 EcologicalGarden.tryPickMushroom 判定半徑一致
+
 const _scratchBikeForward = new THREE.Vector3();
 const _scratchBikeSideVec = new THREE.Vector3();
 const _scratchBikeLaunchDir = new THREE.Vector3();
@@ -86,6 +91,19 @@ class SchoolGTASandbox {
 
   // 經濟與任務解鎖統計系統 (初始改為 100 元)
   private playerCash: number = 100;
+  // 共用加錢回呼與 NPC 發現玩家回呼 (建構一次，避免每幀於迴圈內配置新閉包)
+  private readonly addCash = (amt: number) => {
+    this.playerCash += amt;
+    this.hud.setCash(this.playerCash);
+  };
+  private readonly onNpcSpottedPlayer = () => {
+    this.wantedSystem.markSpotted();
+  };
+  // 固定角色 NPC 快取 (NPC 名單於載入後不再增減，免去每幀 find 線性搜尋)
+  private peCoachNpc?: NPC;
+  private dodgeTeacherNpc?: NPC;
+  private campusDogNpc?: NPC;
+  private wardenBossNpc?: NPC;
   private studentDefeatedCount: number = 0;
   private teacherDefeatedCount: number = 0;
   private dogDefeatedCount: number = 0;
@@ -255,7 +273,6 @@ class SchoolGTASandbox {
     // 階段 2.5 (55%)：建置第二世界【少年院】與開場劇情動畫系統
     this.updateProgress(55, '正在建置第二世界【少年院】與開場劇情動畫系統...');
     this.detentionWorld = new DetentionWorld(this.engine.scene);
-    this.detentionWorld.group.visible = false; // 預設處於天天國中，隱藏少年院
     this.detentionCutscene = new DetentionCutscene(this.engine.scene);
     this.detentionCutscene.onSubtitleChange = (sub) => {
       const subEl = document.getElementById('cutscene-subtitle-text');
@@ -311,6 +328,11 @@ class SchoolGTASandbox {
     this.campusNPCs = createCampusNPCs(this.engine.scene);
     this.detentionNPCs = createDetentionNPCs(this.engine.scene);
     this.npcs = this.campusNPCs;
+    this.setActiveWorldScene('CAMPUS');
+    this.peCoachNpc = this.campusNPCs.find(n => n.role === 'PE_TEACHER_BOSS');
+    this.dodgeTeacherNpc = this.campusNPCs.find(n => n.role === 'DODGE_TEACHER');
+    this.campusDogNpc = this.campusNPCs.find(n => n.role === 'DOG');
+    this.wardenBossNpc = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
     this.wantedSystem = new WantedSystem();
     this.wantedSystem.onWantedCleared = () => {
       for (const n of this.npcs) {
@@ -478,6 +500,26 @@ class SchoolGTASandbox {
     }
   }
 
+  // 只將當前世界的場景群組與 NPC 掛在 scene 上：另一世界整個移出場景圖，
+  // 避免 three.js 每幀仍走訪並更新隱藏世界數千個節點的矩陣 (visible=false 不會略過矩陣更新)
+  private setActiveWorldScene(world: 'CAMPUS' | 'DETENTION') {
+    const scene = this.engine.scene;
+    const isCampus = world === 'CAMPUS';
+    const attach = (obj: THREE.Object3D, active: boolean) => {
+      if (active) {
+        obj.visible = true;
+        if (obj.parent !== scene) scene.add(obj);
+      } else if (obj.parent === scene) {
+        scene.remove(obj);
+      }
+    };
+    attach(this.world.group, isCampus);
+    attach(this.ecologicalGarden.group, isCampus);
+    attach(this.detentionWorld.group, !isCampus);
+    for (const npc of this.campusNPCs) attach(npc.mesh, isCampus);
+    for (const npc of this.detentionNPCs) attach(npc.mesh, !isCampus);
+  }
+
   public switchWorld(targetWorld: 'CAMPUS' | 'DETENTION', skipCutscene: boolean = false) {
     if (this.currentRidingBike) {
       this.currentRidingBike.dismount(this.player, this.engine.scene);
@@ -494,6 +536,7 @@ class SchoolGTASandbox {
     this.hud.showControlsGuide();
 
     this.currentWorldType = targetWorld;
+    this.cameraCtrl.currentWorld = targetWorld;
     if (this.wantedSystem) {
       this.wantedSystem.currentWorld = targetWorld;
     }
@@ -518,9 +561,7 @@ class SchoolGTASandbox {
       this.player.maxHp = 100;
       this.player.hp = Math.min(this.player.hp, 100);
 
-      this.world.group.visible = true;
-      this.ecologicalGarden.group.visible = true;
-      this.detentionWorld.group.visible = false;
+      this.setActiveWorldScene('CAMPUS');
 
       // 恢復天天國中專屬三分球籃球實體
       if (this.basketballGame) {
@@ -529,12 +570,6 @@ class SchoolGTASandbox {
 
       for (const b of this.bicycles) {
         b.mesh.visible = true;
-      }
-      for (const npc of this.campusNPCs) {
-        npc.mesh.visible = true;
-      }
-      for (const npc of this.detentionNPCs) {
-        npc.mesh.visible = false;
       }
       this.npcs = this.campusNPCs;
 
@@ -549,9 +584,7 @@ class SchoolGTASandbox {
       this.wantedSystem.showBanner('🏫 已傳送至【天天國中】！自由探索校園！', 3000);
     } else {
       // 少年院
-      this.world.group.visible = false;
-      this.ecologicalGarden.group.visible = false;
-      this.detentionWorld.group.visible = true;
+      this.setActiveWorldScene('DETENTION');
 
       // 徹底隱藏天天國中特有小遊戲實體 (杜絕籃球、競速光圈、羽球殘留於第二世界)
       if (this.basketballGame) {
@@ -569,12 +602,6 @@ class SchoolGTASandbox {
 
       for (const b of this.bicycles) {
         b.mesh.visible = false;
-      }
-      for (const npc of this.campusNPCs) {
-        npc.mesh.visible = false;
-      }
-      for (const npc of this.detentionNPCs) {
-        npc.mesh.visible = true;
       }
       this.npcs = this.detentionNPCs;
 
@@ -655,7 +682,7 @@ class SchoolGTASandbox {
       // 潛龍諜影特訓院越獄專屬互動點 (撿門禁卡、解鎖管制門、解鎖南大門、小賣部)
       if (this.currentWorldType === 'DETENTION') {
         // 1. 拾取門禁卡 A
-        if (this.player.position.distanceTo(this.detentionWorld.keycardAPos) < 2.5 && !this.hasKeycardA) {
+        if (this.player.position.distanceTo(this.detentionWorld.keycardAPos) < KEYCARD_PICKUP_RANGE && !this.hasKeycardA) {
           this.hasKeycardA = true;
           this.detentionWorld.hasPickedKeycardA = true;
           this.detentionWorld.keycardAMeshGroup.visible = false;
@@ -665,7 +692,7 @@ class SchoolGTASandbox {
           return;
         }
         // 2. 拾取門禁卡 B
-        if (this.player.position.distanceTo(this.detentionWorld.keycardBPos) < 2.5 && !this.hasKeycardB) {
+        if (this.player.position.distanceTo(this.detentionWorld.keycardBPos) < KEYCARD_PICKUP_RANGE && !this.hasKeycardB) {
           this.hasKeycardB = true;
           this.detentionWorld.hasPickedKeycardB = true;
           this.detentionWorld.keycardBMeshGroup.visible = false;
@@ -677,7 +704,7 @@ class SchoolGTASandbox {
         // 3. 拾取萬能鑰匙卡
         if (
           this.detentionWorld.masterKeycardPos &&
-          this.player.position.distanceTo(this.detentionWorld.masterKeycardPos) < 2.5 &&
+          this.player.position.distanceTo(this.detentionWorld.masterKeycardPos) < KEYCARD_PICKUP_RANGE &&
           !this.hasMasterKeycard
         ) {
           this.hasMasterKeycard = true;
@@ -689,7 +716,7 @@ class SchoolGTASandbox {
           return;
         }
         // 4. 開啟管制閘門 1
-        if (this.player.position.distanceTo(this.detentionWorld.gateAPos) < 3.8 && !this.detentionWorld.isGateAOpen) {
+        if (this.player.position.distanceTo(this.detentionWorld.gateAPos) < GATE_CONSOLE_RANGE && !this.detentionWorld.isGateAOpen) {
           if (this.hasKeycardA) {
             this.detentionWorld.openGateA();
             this.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區貨櫃掩體迷宮！', 3500);
@@ -701,7 +728,7 @@ class SchoolGTASandbox {
           return;
         }
         // 5. 開啟管制閘門 2
-        if (this.player.position.distanceTo(this.detentionWorld.gateBPos) < 3.8 && !this.detentionWorld.isGateBOpen) {
+        if (this.player.position.distanceTo(this.detentionWorld.gateBPos) < GATE_CONSOLE_RANGE && !this.detentionWorld.isGateBOpen) {
           if (this.hasKeycardB) {
             this.detentionWorld.openGateB();
             this.wantedSystem.showBanner('🔓 管制閘門 2 已開啟！進入 C 區終極哨戒門庭！', 3500);
@@ -750,6 +777,15 @@ class SchoolGTASandbox {
           soundManager.playBanditSlash();
           return;
         }
+      }
+
+      // 0. 騎乘中按 E 一律下車 (與互動提示「下車」優先順序一致，避免騎經合作社等互動點時誤觸)
+      if (this.currentRidingBike) {
+        this.currentRidingBike.dismount(this.player, this.engine.scene);
+        this.player.isRidingVehicle = false;
+        this.currentRidingBike = null;
+        this.cameraCtrl.setMode(false);
+        return;
       }
 
       // 1. 天天合作社
@@ -926,13 +962,8 @@ class SchoolGTASandbox {
         return;
       }
 
-      // 11. 火柴人自行車上下車互動 (支援強行搶奪火柴人自行車騎士之自行車)
-      if (this.currentRidingBike) {
-        this.currentRidingBike.dismount(this.player, this.engine.scene);
-        this.player.isRidingVehicle = false;
-        this.currentRidingBike = null;
-        this.cameraCtrl.setMode(false);
-      } else {
+      // 11. 火柴人自行車上車互動 (支援強行搶奪火柴人自行車騎士之自行車；下車已於最前方處理)
+      {
         let hijackedBike = false;
         for (const npc of this.npcs) {
           // 支援常態騎乘中、被擊飛中 (isKnockedFlying)、或被擊倒在地 (isKnockedDown) 時搶奪其自行車
@@ -1245,7 +1276,7 @@ class SchoolGTASandbox {
     if (isAdvanced) {
       this.player.performBearShake(this.activeColliders);
     } else {
-      this.player.performFlashStep(this.activeColliders);
+      this.player.performFlashStep();
     }
 
     this.wantedSystem.showBanner(
@@ -1427,10 +1458,7 @@ class SchoolGTASandbox {
       reward = 180;
       this.wantedSystem.showBanner('🏸 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', 5000);
       if (this.tennisGame.tennisState !== 'IDLE') {
-        this.tennisGame.endMatch(true, this.wantedSystem, this.hud, this.engine.scene, (amt) => {
-          this.playerCash += amt;
-          this.hud.setCash(this.playerCash);
-        });
+        this.tennisGame.endMatch(true, this.wantedSystem, this.hud, this.engine.scene, this.addCash);
       }
     } else if (npc.role === 'DETENTION_SENIOR') {
       reward = 100;
@@ -1558,36 +1586,11 @@ class SchoolGTASandbox {
   }
 
   private setupScreenResize() {
-    const applyResize = () => {
-      const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-      const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const aspect = width / height;
-
-      this.engine.resize(width, height);
-      this.cameraCtrl.camera.aspect = aspect;
-      this.cameraCtrl.camera.updateProjectionMatrix();
-      this.cameraCtrl.updateAspect(aspect);
-    };
-
+    // 視窗縮放/翻轉事件統一由 Engine 監聽，這裡只負責同步鏡頭比例 (updateAspect 內含投影矩陣更新)
     this.engine.onResizeCallback = (_w, _h, aspect) => {
-      this.cameraCtrl.camera.aspect = aspect;
-      this.cameraCtrl.camera.updateProjectionMatrix();
       this.cameraCtrl.updateAspect(aspect);
     };
-
-    window.addEventListener('resize', applyResize);
-    window.addEventListener('orientationchange', () => {
-      applyResize();
-      setTimeout(applyResize, 80);
-      setTimeout(applyResize, 200);
-      setTimeout(applyResize, 500);
-    });
-
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', applyResize);
-    }
-
-    applyResize();
+    this.engine.handleResize();
   }
 
   private setupFullscreen() {
@@ -1851,18 +1854,6 @@ class SchoolGTASandbox {
     bindButton(skillHudCard, () => {
       this.triggerDodgeSkill();
     });
-
-    const btnCqc = document.getElementById('btn-cqc-action');
-    if (btnCqc) {
-      btnCqc.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.performCqcTakedown();
-      });
-      btnCqc.addEventListener('touchstart', (e) => {
-        e.stopPropagation();
-        this.performCqcTakedown();
-      }, { passive: false });
-    }
   }
 
   public cycleWeapon() {
@@ -2181,10 +2172,10 @@ class SchoolGTASandbox {
         targetPosition = this.player.position;
         playerRotY = this.player.rotationY;
       } else {
-        const inPool = this.currentWorldType === 'CAMPUS' && (this.world.isInsideSwimmingPool(this.player.position) || this.ecologicalGarden.isInsideWishingPond(this.player.position));
+        const inPond = this.currentWorldType === 'CAMPUS' && this.ecologicalGarden.isInsideWishingPond(this.player.position);
+        const inPool = inPond || (this.currentWorldType === 'CAMPUS' && this.world.isInsideSwimmingPool(this.player.position));
         this.player.isSwimming = inPool;
         if (inPool) {
-          const inPond = this.ecologicalGarden.isInsideWishingPond(this.player.position);
           this.player.swimSurfaceY = inPond ? 0.32 : 0.25;
           this.player.swimBottomY = -1.1; // 許願池與泳池皆為深水 (池底以下被地坪遮蔽，呈現身體沒入水中)
         }
@@ -2196,8 +2187,8 @@ class SchoolGTASandbox {
 
       // 游泳水花特效與持球瞄準 (僅天天國中)
       if (this.currentWorldType === 'CAMPUS') {
-        const inWishingPond = this.ecologicalGarden.isInsideWishingPond(this.player.position);
-        const waterSurfaceY = inWishingPond ? 0.32 : 0.25;
+        // 水面高度沿用本幀游泳判定時已決定的水體 (泳池 0.25 / 許願池 0.32)
+        const waterSurfaceY = this.player.swimSurfaceY;
 
         if (this.player.isSwimming) {
           if (this.player.isMoving) {
@@ -2243,7 +2234,7 @@ class SchoolGTASandbox {
       );
 
       // 4. 更新 4F 羽球比賽
-      const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
+      const peCoach = this.peCoachNpc;
       if (this.hud.isTennisDialogOpen && peCoach) {
         if (targetPosition.distanceTo(peCoach.position) > 4.5) {
           this.hud.closeTennisDialog();
@@ -2251,7 +2242,7 @@ class SchoolGTASandbox {
       }
 
       // 4.5 更新閃身步老師對話距離檢測與對話狀態
-      const dodgeTeacher = this.npcs.find(n => n.role === 'DODGE_TEACHER');
+      const dodgeTeacher = this.dodgeTeacherNpc;
       if (dodgeTeacher) {
         if (this.hud.isDodgeDialogOpen) {
           dodgeTeacher.isConversing = true;
@@ -2272,10 +2263,7 @@ class SchoolGTASandbox {
         this.engine.scene,
         this.wantedSystem,
         this.hud,
-        (amt) => {
-          this.playerCash += amt;
-          this.hud.setCash(this.playerCash);
-        }
+        this.addCash
       );
 
       // 5. 更新田徑賽跑與水上競速
@@ -2293,24 +2281,21 @@ class SchoolGTASandbox {
         this.wantedSystem,
         this.player,
         this.waterSplashVFX,
-        (amt) => {
-          this.playerCash += amt;
-          this.hud.setCash(this.playerCash);
-        }
+        this.addCash
       );
     }
 
     // 6. 更新互動提示
     if (this.currentWorldType === 'DETENTION') {
-      if (!this.hasKeycardA && targetPosition.distanceTo(this.detentionWorld.keycardAPos) < 3.0) {
+      if (!this.hasKeycardA && targetPosition.distanceTo(this.detentionWorld.keycardAPos) < KEYCARD_PICKUP_RANGE) {
         this.hud.showPrompt('E', '💳 拾取【藍色門禁卡 A】(開啟管制閘門 1)');
-      } else if (!this.hasKeycardB && targetPosition.distanceTo(this.detentionWorld.keycardBPos) < 3.0) {
+      } else if (!this.hasKeycardB && targetPosition.distanceTo(this.detentionWorld.keycardBPos) < KEYCARD_PICKUP_RANGE) {
         this.hud.showPrompt('E', '💳 拾取【黃色門禁卡 B】(開啟管制閘門 2)');
-      } else if (this.detentionWorld.masterKeycardPos && !this.hasMasterKeycard && targetPosition.distanceTo(this.detentionWorld.masterKeycardPos) < 3.0) {
+      } else if (this.detentionWorld.masterKeycardPos && !this.hasMasterKeycard && targetPosition.distanceTo(this.detentionWorld.masterKeycardPos) < KEYCARD_PICKUP_RANGE) {
         this.hud.showPrompt('E', '🔑 拾取【萬能逃脫鑰匙卡】(開啟南側大門)');
-      } else if (!this.detentionWorld.isGateAOpen && targetPosition.distanceTo(this.detentionWorld.gateAPos) < 4.0) {
+      } else if (!this.detentionWorld.isGateAOpen && targetPosition.distanceTo(this.detentionWorld.gateAPos) < GATE_CONSOLE_RANGE) {
         this.hud.showPrompt('E', this.hasKeycardA ? '🔓 刷卡開啟【管制閘門 1】' : '🔒 管制閘門 1 (需要藍色門禁卡 A)');
-      } else if (!this.detentionWorld.isGateBOpen && targetPosition.distanceTo(this.detentionWorld.gateBPos) < 4.0) {
+      } else if (!this.detentionWorld.isGateBOpen && targetPosition.distanceTo(this.detentionWorld.gateBPos) < GATE_CONSOLE_RANGE) {
         this.hud.showPrompt('E', this.hasKeycardB ? '🔓 刷卡開啟【管制閘門 2】' : '🔒 管制閘門 2 (需要黃色門禁卡 B)');
       } else if (!this.detentionWorld.isSouthGateOpen && targetPosition.distanceTo(this.detentionWorld.southGateConsolePos) < 4.5) {
         this.hud.showPrompt('E', this.hasMasterKeycard ? '🚪 刷卡解鎖【南側絕境逃脫大門】！' : '🔒 終極防暴大門 (需要萬能逃脫鑰匙卡)');
@@ -2326,8 +2311,8 @@ class SchoolGTASandbox {
         this.hud.hidePrompt();
       }
     } else {
-      const peCoach = this.npcs.find(n => n.role === 'PE_TEACHER_BOSS');
-      const dodgeTeacher = this.npcs.find(n => n.role === 'DODGE_TEACHER');
+      const peCoach = this.peCoachNpc;
+      const dodgeTeacher = this.dodgeTeacherNpc;
       if (this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING' || this.tennisGame.tennisState === 'FINISHED') {
         this.hud.hidePrompt();
       } else if (this.basketballGame.isHolding) {
@@ -2382,7 +2367,7 @@ class SchoolGTASandbox {
         } else {
           let nearMushroom = false;
           for (const m of this.ecologicalGarden.mushrooms) {
-            if (!m.isPicked && targetPosition.distanceTo(m.position) < 2.4) {
+            if (!m.isPicked && targetPosition.distanceTo(m.position) < MUSHROOM_PICK_RANGE) {
               nearMushroom = true;
               break;
             }
@@ -2618,9 +2603,7 @@ class SchoolGTASandbox {
         targetPosition,
         this.wantedSystem.stars,
         this.activeColliders,
-        () => {
-          this.wantedSystem.markSpotted();
-        },
+        this.onNpcSpottedPlayer,
         isPlayerRidingBike,
         this.player.isDead,
         isRaining,
@@ -2641,7 +2624,7 @@ class SchoolGTASandbox {
     }
 
     // 校犬脫逃判定
-    const dog = this.npcs.find(n => n.role === 'DOG');
+    const dog = this.currentWorldType === 'CAMPUS' ? this.campusDogNpc : undefined;
     if (dog) {
       if (dog.isChasing) {
         this.wasDogChasing = true;
@@ -2713,13 +2696,13 @@ class SchoolGTASandbox {
       if (shouldAttack && !this.player.isDead && npc.attackCooldown <= 0) {
         if (this.player.isDodging) {
           npc.attackCooldown = 0.85;
-          npc.triggerAttackAnimation(delta);
+          npc.triggerAttackAnimation();
           this.wantedSystem.showBanner(this.dodgeSkillLevel === 2 ? '🐻 狗熊哆嗦毛！神速規避攻擊！' : '💨 閃身步！成功規避攻擊！', 1500);
           soundManager.playDodge(this.dodgeSkillLevel === 2);
           continue;
         }
         npc.attackCooldown = 0.85;
-        npc.triggerAttackAnimation(delta);
+        npc.triggerAttackAnimation();
 
         _scratchImpactDir.subVectors(targetPosition, npc.position);
         _scratchImpactDir.y = 0;
@@ -2779,8 +2762,7 @@ class SchoolGTASandbox {
       );
 
       // 13. 更新游泳水花微粒
-      const inWishingPondForVFX = this.ecologicalGarden.isInsideWishingPond(this.player.position);
-      const waterSurfaceYForVFX = inWishingPondForVFX ? 0.32 : 0.25;
+      const waterSurfaceYForVFX = this.player.swimSurfaceY;
       this.waterSplashVFX.update(
         delta,
         this.player.position,
@@ -2801,7 +2783,7 @@ class SchoolGTASandbox {
         this.hud.setBossHealth(0, 1000, false);
       }
     } else {
-      const wardenBoss = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
+      const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {
         this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true, '總教官 Boss：鐵面總長', '🎖️');
       } else {
@@ -2822,16 +2804,6 @@ class SchoolGTASandbox {
     }
     const maxSkillCd = this.dodgeSkillLevel === 2 ? 2.0 : 5.0;
     this.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd);
-
-    this.hud.updateWeaponHUD(
-      this.player.currentWeapon,
-      this.player.hasNormalBat,
-      this.player.hasSpecialBat,
-      this.studentDefeatedCount,
-      this.teacherDefeatedCount,
-      this.dogDefeatedCount,
-      this.bikePatrolDefeatedCount
-    );
 
     if (this.currentWorldType === 'DETENTION') {
       if (
@@ -2857,7 +2829,7 @@ class SchoolGTASandbox {
     }
 
     if (this.currentWorldType === 'CAMPUS') {
-      const peCoach = this.campusNPCs.find(n => n.role === 'PE_TEACHER_BOSS');
+      const peCoach = this.peCoachNpc;
       const tracker = this.cachedMissionTrackerData;
       tracker.studentDefeated = this.studentDefeatedCount;
       tracker.hasNormalBat = this.player.hasNormalBat;
@@ -2879,7 +2851,7 @@ class SchoolGTASandbox {
       tracker.dodgeSkillLevel = this.dodgeSkillLevel;
       this.hud.updateMissionTracker(tracker);
     } else {
-      const wardenBoss = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
+      const wardenBoss = this.wardenBossNpc;
       this.hud.updateWorld2EscapeTracker(
         this.detentionTakedownCount,
         this.detentionWorld.isGateAOpen,

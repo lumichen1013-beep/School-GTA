@@ -151,10 +151,6 @@ export class BGMManager {
     return this.isMuted;
   }
 
-  public getIsMuted(): boolean {
-    return this.isMuted;
-  }
-
   public getMode(): BGMMode {
     return this.currentMode;
   }
@@ -207,7 +203,10 @@ export class BGMManager {
     }
 
     while (this.nextStepTime < this.ctx.currentTime + this.scheduleAheadSec) {
-      this.scheduleStep(this.currentStep, this.nextStepTime);
+      // 靜音時僅推進節拍時間軸，不建立任何音訊節點 (解除靜音後無縫接續當前小節)
+      if (!this.isMuted) {
+        this.scheduleStep(this.currentStep, this.nextStepTime);
+      }
       this.nextStepTime += secondsPer16th;
       this.currentStep = (this.currentStep + 1) % 64; // 4-bar loop (16 * 4 = 64 steps)
     }

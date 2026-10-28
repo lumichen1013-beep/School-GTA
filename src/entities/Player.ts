@@ -394,7 +394,7 @@ export class Player {
   }
 
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
-  public performFlashStep(colliders: CollidableBox[] = []) {
+  public performFlashStep() {
     if (this.isDead || this.isRidingVehicle || this.isSwimming) return;
 
     this.isDodging = true;
@@ -596,15 +596,6 @@ export class Player {
     // 若多次隨機取樣皆撞牆，退回當前起始中心安全點
     _safeTeleportResult.set(centerX, currentY, centerZ);
     return _safeTeleportResult;
-  }
-
-  // 兼容舊介面施展技能調用
-  public performDodge(moveDir: THREE.Vector3, isAdvanced: boolean, colliders: CollidableBox[] = []) {
-    if (isAdvanced) {
-      this.performBearShake(colliders);
-    } else {
-      this.performFlashStep(colliders);
-    }
   }
 
   // 產生 0-GC 角色殘影
