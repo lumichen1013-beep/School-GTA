@@ -57,6 +57,8 @@ class SchoolGTASandbox implements GameContext {
   public tennisGame!: TennisGame;
 
   public currentWorldType: WorldType = 'CAMPUS';
+  // 特訓院配發的防暴棒沿用普通球棒槽位：進入特訓院前記下校園的球棒解鎖狀態，返回校園時還原
+  private campusHasNormalBat: boolean = false;
   public bicycles: Bicycle[] = [];
   public currentRidingBike: Bicycle | null = null;
   public npcs: NPC[] = [];
@@ -286,10 +288,14 @@ class SchoolGTASandbox implements GameContext {
     // 進入世界時展開快捷鍵指南，30 秒後自動收合
     this.hud.showControlsGuide();
 
+    const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
     this.cameraCtrl.currentWorld = targetWorld;
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
+    if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
+      this.campusHasNormalBat = this.player.hasNormalBat;
+    }
     this.player.equipBadmintonRacket(false);
     if (this.tennisGame.tennisState !== 'IDLE') {
       this.tennisGame.resetMatch(this.engine.scene, this.player);
@@ -305,6 +311,13 @@ class SchoolGTASandbox implements GameContext {
       // 回歸天天國中：重設生命值上限為 100
       this.player.maxHp = 100;
       this.player.hp = Math.min(this.player.hp, 100);
+      // 交回特訓院防暴棒：還原校園的球棒解鎖狀態，避免跳過【名揚校園】任務
+      if (previousWorld === 'DETENTION') {
+        this.player.hasNormalBat = this.campusHasNormalBat;
+        if (this.player.currentWeapon === 'NORMAL_BAT' && !this.player.hasNormalBat) {
+          this.player.setWeapon('FIST');
+        }
+      }
 
       this.setActiveWorldScene('CAMPUS');
 
