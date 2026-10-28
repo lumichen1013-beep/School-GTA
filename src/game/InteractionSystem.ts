@@ -72,7 +72,7 @@ export class InteractionSystem {
           dw().hasPickedKeycardA = true;
           dw().keycardAMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【藍色門禁卡 A】！可用於開啟管制閘門 1！', 4000);
-          det().setCheckpoint(new THREE.Vector3(5, 0, -60), 'A區安全崗亭');
+          det().setCheckpoint(new THREE.Vector3(0, 0, -51), 'A區中央警衛室');
           soundManager.playPunch();
         }
       },
@@ -85,7 +85,7 @@ export class InteractionSystem {
           dw().hasPickedKeycardB = true;
           dw().keycardBMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【黃色門禁卡 B】！可用於開啟管制閘門 2！', 4000);
-          det().setCheckpoint(new THREE.Vector3(24, 0, 14), 'B區貨櫃掩體');
+          det().setCheckpoint(new THREE.Vector3(61, 0, 4), 'B區器材庫');
           soundManager.playPunch();
         }
       },
@@ -112,8 +112,8 @@ export class InteractionSystem {
         act: () => {
           if (det().hasKeycardA) {
             dw().openGateA();
-            ctx.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區貨櫃掩體迷宮！', 3500);
-            det().setCheckpoint(new THREE.Vector3(0, 0, -22), 'B區門前安全區');
+            ctx.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區訓練場，前往東側器材庫取得門禁卡 B！', 3500);
+            det().setCheckpoint(new THREE.Vector3(0, 0, -25), 'B區閘門內側');
             soundManager.playSchoolBell();
           } else {
             ctx.wantedSystem.showBanner('🔒 門禁鎖死！需要【藍色門禁卡 A】才能開啟閘門 1！', 3000);

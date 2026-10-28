@@ -1,4 +1,18 @@
 import * as THREE from 'three';
+import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, DetentionMapKind } from '../world/detentionLayout';
+
+// 第二世界雷達與大地圖的場景分類配色
+const DETENTION_RADAR_COLORS: Record<DetentionMapKind, string> = {
+  building: '#10b981', structure: '#38bdf8', fence: '#34d399', barrier: '#a3e635', container: '#059669', pillar: '#eab308'
+};
+const DETENTION_FULLMAP_STYLES: Record<DetentionMapKind, { fill: string; stroke: string }> = {
+  building: { fill: 'rgba(6, 78, 59, 0.65)', stroke: '#10b981' },
+  structure: { fill: 'rgba(56, 189, 248, 0.3)', stroke: '#38bdf8' },
+  fence: { fill: 'rgba(16, 185, 129, 0.5)', stroke: '#34d399' },
+  barrier: { fill: 'rgba(163, 230, 53, 0.35)', stroke: '#a3e635' },
+  container: { fill: 'rgba(5, 150, 105, 0.45)', stroke: '#059669' },
+  pillar: { fill: 'rgba(234, 179, 8, 0.4)', stroke: '#eab308' }
+};
 import { NPC } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
@@ -1412,11 +1426,11 @@ export class HUD {
     let zone: string;
     if (currentWorld === 'DETENTION') {
       if (pos.z < -28) {
-        zone = '⛓️ A 區：牢房走廊迷宮 (獲取門禁卡 A)';
+        zone = '⛓️ A 區：監區庭院 (中央警衛室取門禁卡 A)';
       } else if (pos.z >= -28 && pos.z <= 35) {
-        zone = '📦 B 區：操場貨櫃掩體迷宮 (獲取門禁卡 B)';
+        zone = '📦 B 區：訓練場 (東側器材庫取門禁卡 B)';
       } else if (pos.z > 35 && pos.z <= 95) {
-        zone = '⚡ C 區：終極哨戒門庭 (小 Boss 決戰)';
+        zone = '⚡ C 區：決戰庭院 (擊破總教官取得萬能鑰匙卡)';
       } else {
         zone = '🚪 絕境安全脫逃通道 (任務完成)';
       }
@@ -1499,59 +1513,20 @@ export class HUD {
       ctx.lineWidth = 2;
       ctx.strokeRect((-95 - playerPos.x) * mapScale, (-95 - playerPos.z) * mapScale, 190 * mapScale, 190 * mapScale);
 
-      // A 區建築：營舍與食堂
-      drawTacticalBox(-40, -60, 50, 30, '#10b981');
-      drawTacticalBox(50, -60, 50, 30, '#10b981');
+      // 場景建物、圍籬、貨櫃與掩體 (與 DetentionWorld 共用配置資料)
+      for (const f of DETENTION_MAP_FEATURES) {
+        drawTacticalBox((f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, f.maxX - f.minX, f.maxZ - f.minZ, DETENTION_RADAR_COLORS[f.kind]);
+      }
 
-      // A 區走廊迷宮隔牆、安全崗亭與新增戰術拐角隔牆
-      drawTacticalBox(-10, -84, 0.6, 12, '#34d399'); // 北走廊屏障
-      drawTacticalBox(-34, -82, 0.6, 12, '#34d399'); // 北走廊暗殺 L 牆
-      drawTacticalBox(-29, -76, 10, 0.6, '#34d399'); // 北走廊拐角翼壁
-      drawTacticalBox(-10, -63, 0.6, 14, '#34d399'); // 庭院 S 彎戰術隔牆
-      drawTacticalBox(-6.5, -70, 7, 0.6, '#34d399'); // 庭院側翼折板
-      drawTacticalBox(5, -60, 6.5, 4, '#38bdf8');   // 中央安全崗亭 (Keycard A)
-      drawTacticalBox(14, -50, 0.6, 10, '#34d399');  // 東側巡邏盲區阻隔壁
-      drawTacticalBox(-15.5, -38, 19, 0.6, '#34d399'); // 南前庭西折返隔板
-      drawTacticalBox(15.5, -38, 19, 0.6, '#34d399');  // 南前庭東折返隔板
-      drawTacticalBox(0, -33.5, 10, 0.6, '#34d399');  // 閘門 1 前防暴 S 型交錯隔板
-
-      // 管制閘門 1 (Z = -28)
+      // 管制閘門 1 (Z = -28) 與閘門 2 (Z = 35) 隔斷牆
       const gate1Color = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
       drawTacticalBox(-46.75, -28, 86.5, 1.5, '#34d399');
       drawTacticalBox(46.75, -28, 86.5, 1.5, '#34d399');
       drawTacticalBox(0, -28, 7.2, 1.2, gate1Color);
-
-      // B 區貨櫃迷宮群 (18 座軍規重裝海運集裝箱)
-      const conts = [
-        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
-        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
-        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
-        [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
-        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
-        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
-      ];
-      for (const [cx, cz, cw, cd] of conts) {
-        drawTacticalBox(cx, cz, cw, cd, '#059669');
-      }
-
-      // 管制閘門 2 (Z = 35)
       const gate2Color = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
       drawTacticalBox(-46.75, 35, 86.5, 1.5, '#34d399');
       drawTacticalBox(46.75, 35, 86.5, 1.5, '#34d399');
       drawTacticalBox(0, 35, 7.2, 1.2, gate2Color);
-
-      // C 區：4 座發電機掩體柱、防爆翼壁與南大門工事
-      drawTacticalBox(-16, 52, 3.4, 3.4, '#eab308');
-      drawTacticalBox(16, 52, 3.4, 3.4, '#eab308');
-      drawTacticalBox(-16, 74, 3.4, 3.4, '#eab308');
-      drawTacticalBox(16, 74, 3.4, 3.4, '#eab308');
-      drawTacticalBox(-22, 56, 0.8, 20, '#eab308');
-      drawTacticalBox(22, 56, 0.8, 20, '#eab308');
-      drawTacticalBox(-19, 46, 6, 0.8, '#eab308');
-      drawTacticalBox(19, 46, 6, 0.8, '#eab308');
-      drawTacticalBox(-10, 82, 12, 0.8, '#eab308');
-      drawTacticalBox(10, 82, 12, 0.8, '#eab308');
-      drawTacticalBox(0, 87, 10, 0.8, '#eab308');
 
       // 南側脫逃大門 (Z = 95)
       const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
@@ -2290,7 +2265,8 @@ export class HUD {
     const h = HUD.FULLMAP_LOGICAL;
     const cx = w / 2;
     const cy = h / 2;
-    const scale = 3.15; // 縮放比：全地圖 200m 映射到約 630px
+    // 縮放比：校園全圖 200m 映射到約 630px；特訓院依院區範圍 (±97m) 自動貼合畫布
+    const scale = currentWorld === 'DETENTION' ? (w - 20) / 194 : 3.15;
 
     // 更新抬頭元資訊
     const coordsText = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
@@ -2368,42 +2344,60 @@ export class HUD {
       ctx.lineWidth = 2.5;
       ctx.strokeRect(toScreenX(-95), toScreenY(-95), 190 * scale, 190 * scale);
 
-      // 四角瞭望塔
-      const towers = [
-        { x: -78, z: -78 }, { x: 78, z: -78 },
-        { x: -78, z: 78 }, { x: 78, z: 78 }
-      ];
-      for (const tw of towers) {
-        drawBox(tw.x, tw.z, 7, 7, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = this.fmFont(9);
-        ctx.textAlign = 'center';
-        this.fmText(ctx, '瞭望塔', toScreenX(tw.x), toScreenY(tw.z) + 3);
+      // 道路骨架 (收容車道、外圍巡邏路、中軸路、廣場路與服務巷)
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+      for (const r of DETENTION_ROADS) {
+        ctx.fillRect(toScreenX(r.minX), toScreenY(r.minZ), (r.maxX - r.minX) * scale, (r.maxZ - r.minZ) * scale);
       }
 
-      // 中央高空探照燈塔
-      drawBox(0, 10, 4, 4, 'rgba(250, 204, 21, 0.3)', '#facc15');
+      // 瞭望塔與中央探照燈塔
+      for (const tw of DETENTION_TOWERS) {
+        drawBox(tw.x, tw.z, 6.5, 6.5, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
+      }
+      drawBox(SEARCHLIGHT_TOWER.x, SEARCHLIGHT_TOWER.z, 4, 4, 'rgba(250, 204, 21, 0.3)', '#facc15');
 
-      // A 區建築：生活營舍與食堂
-      drawBox(-40, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      drawBox(50, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      ctx.fillStyle = '#34d399';
-      ctx.font = this.fmFont(11);
+      // 場景建物、圍籬、貨櫃與掩體 (與 DetentionWorld 共用配置資料)
+      for (const f of DETENTION_MAP_FEATURES) {
+        const style = DETENTION_FULLMAP_STYLES[f.kind];
+        drawBox((f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, f.maxX - f.minX, f.maxZ - f.minZ, style.fill, style.stroke);
+      }
+
+      // 標籤碰撞迴避：依序嘗試置中/上/下/左/右，與已放置標籤重疊則換位，全部重疊則省略
+      const placedLabels: { x0: number; x1: number; y0: number; y1: number }[] = [];
+      const reserveLabel = (x: number, y: number, halfW: number, halfH: number) => {
+        placedLabels.push({ x0: x - halfW, x1: x + halfW, y0: y - halfH, y1: y + halfH });
+      };
+      // 閘門與南大門狀態標籤稍後繪製，先保留其位置
+      reserveLabel(toScreenX(0), toScreenY(-28) - 10, 85, 9);
+      reserveLabel(toScreenX(0), toScreenY(35) - 10, 85, 9);
+      reserveLabel(toScreenX(0), toScreenY(95) + 10, 110, 9);
+      const placeLabel = (text: string, x: number, y: number, size: number, color: string) => {
+        ctx.font = this.fmFont(size);
+        const halfW = ctx.measureText(text).width / 2 + 3;
+        const halfH = (parseFloat(ctx.font.split(' ')[1]) || 12) * 0.6;
+        const offsets = [[0, 0], [0, -halfH * 2.2], [0, halfH * 2.2], [halfW + 4, 0], [-halfW - 4, 0]];
+        for (const [ox, oy] of offsets) {
+          const lx = x + ox, ly = y + oy;
+          if (lx - halfW < 0 || lx + halfW > w || ly - halfH < 0 || ly + halfH > h) continue;
+          if (placedLabels.some((o) => !(lx + halfW < o.x0 || lx - halfW > o.x1 || ly + halfH < o.y0 || ly - halfH > o.y1))) continue;
+          placedLabels.push({ x0: lx - halfW, x1: lx + halfW, y0: ly - halfH, y1: ly + halfH });
+          ctx.fillStyle = color;
+          this.fmText(ctx, text, lx, ly + halfH * 0.55);
+          return;
+        }
+      };
       ctx.textAlign = 'center';
-      this.fmText(ctx, '第一集訓營舍', toScreenX(-40), toScreenY(-60));
-      this.fmText(ctx, '特訓食堂與補給站', toScreenX(50), toScreenY(-60));
-
-      // A 區迷宮隔牆與新增戰術拐角牆
-      drawBox(-10, -84, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-34, -82, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-29, -76, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-10, -63, 0.6, 14, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-6.5, -70, 7, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(5, -60, 6.5, 4, 'rgba(56, 189, 248, 0.35)', '#38bdf8');
-      drawBox(14, -50, 0.6, 10, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(0, -33.5, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      // 字級依建物面積：大型樓房較大、小型崗哨較小
+      const labeled = DETENTION_MAP_FEATURES.filter((f) => f.label)
+        .map((f) => ({ f, area: (f.maxX - f.minX) * (f.maxZ - f.minZ) }))
+        .sort((a, b) => b.area - a.area);
+      for (const { f, area } of labeled) {
+        const size = Math.min(12, Math.max(8, 6.5 + Math.sqrt(area) / 4));
+        placeLabel(f.label!, toScreenX((f.minX + f.maxX) / 2), toScreenY((f.minZ + f.maxZ) / 2), size, f.kind === 'building' ? '#34d399' : '#a7f3d0');
+      }
+      for (const al of DETENTION_MAP_AREA_LABELS) {
+        placeLabel(al.text, toScreenX(al.x), toScreenY(al.z), 8.5, 'rgba(203, 213, 225, 0.85)');
+      }
 
       // 管制閘門 1 (Z = -28)
       const gate1Col = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
@@ -2414,19 +2408,6 @@ export class HUD {
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
 
-      // B 區貨櫃迷宮群 (18 座軍規貨櫃)
-      const fullConts = [
-        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
-        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
-        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
-        [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
-        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
-        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
-      ];
-      for (const [cx, cz, cw, cd] of fullConts) {
-        drawBox(cx, cz, cw, cd, 'rgba(5, 150, 105, 0.45)', '#059669');
-      }
-
       // 管制閘門 2 (Z = 35)
       const gate2Col = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
       drawBox(-50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
@@ -2435,28 +2416,6 @@ export class HUD {
       ctx.fillStyle = gate2Col;
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
-
-      // C 區：教官總部與實習工廠
-      drawBox(-52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      drawBox(52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      ctx.fillStyle = '#34d399';
-      ctx.font = this.fmFont(11);
-      ctx.textAlign = 'center';
-      this.fmText(ctx, '實習機械工廠', toScreenX(-52.5), toScreenY(50));
-      this.fmText(ctx, '教官總部指揮所', toScreenX(52.5), toScreenY(50));
-
-      // C 區防爆側翼壁與發電機柱
-      drawBox(-22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(-19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      const gens = [[-16, 52], [16, 52], [-16, 74], [16, 74]];
-      for (const [gx, gz] of gens) {
-        drawBox(gx, gz, 3.4, 3.4, 'rgba(234, 179, 8, 0.4)', '#eab308');
-      }
-      drawBox(-10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(0, 87, 10, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
 
       // 南側脫逃大門 (Z = 95)
       const southCol = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';

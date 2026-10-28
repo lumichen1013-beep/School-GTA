@@ -148,7 +148,7 @@ class SchoolGTASandbox implements GameContext {
       this.weatherSystem.setWeather('SUNNY', true, false);
       this.detention.startEscape();
       this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
-      this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
+      this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     };
     await nextFrame();
 
@@ -384,7 +384,7 @@ class SchoolGTASandbox implements GameContext {
       // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
       this.detention.startEscape();
       this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
-      this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
+      this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     }
   }
 

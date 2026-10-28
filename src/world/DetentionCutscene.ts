@@ -24,7 +24,7 @@ const PLAYER_EXIT_END_LX = -3.7;    // 踏出車門後站定 (世界 Z ≈ -88.6
 
 const SPAWN_X = INITIAL_SPAWN.x;  // 開局點 (-55, -84)
 const SPAWN_Z = INITIAL_SPAWN.z;
-const SPAWN_ROT = Math.PI / 2;    // 開局面向東方 (+X)：沿 A 區長廊前往中央崗亭取門禁卡
+const SPAWN_ROT = Math.PI / 2;    // 開局面向東方 (+X)：沿收容車道前往中央警衛室取門禁卡
 
 const WARDEN_START_X = -68;       // 迎接隊伍由西側瞭望塔方向走來 (避開塔柱 X: -80.9 ~ -75.1)
 const WARDEN_END_X = -55;
