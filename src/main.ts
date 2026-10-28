@@ -1553,10 +1553,6 @@ class SchoolGTASandbox {
       window.visualViewport.addEventListener('resize', applyResize);
     }
 
-    if (window.innerWidth <= 900 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
-      this.hud.toggleQuestTracker(false);
-    }
-
     applyResize();
   }
 

@@ -530,8 +530,9 @@
       position: absolute;
       top: 140px;
       left: max(18px, env(safe-area-inset-left, 18px));
-      width: 326px;
+      width: 236px;
       max-width: 90vw;
+      cursor: pointer;
       background: rgba(15, 23, 42, 0.88);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
@@ -689,14 +690,12 @@
       background: rgba(255, 255, 255, 0.4);
     }
 
-    .quest-list-container.collapsed {
-      display: none !important;
+    /* 任務小介面：僅保留標題、進度與細進度條 */
+    #quest-tracker-panel .quest-total-bar-wrap {
+      margin: 7px 0 0 0;
     }
-
-    #quest-tracker-panel.collapsed .quest-total-bar-wrap,
-    #quest-tracker-panel.collapsed .quest-tabs-bar,
-    #quest-tracker-panel.collapsed .quest-list-container {
-      display: none !important;
+    #quest-tracker-panel:hover {
+      border-color: rgba(56, 189, 248, 0.55);
     }
 
     .quest-category-group {
@@ -2043,7 +2042,7 @@
       border: 2px solid #38bdf8;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(56, 189, 248, 0.3);
       border-radius: 18px;
-      width: 760px;
+      width: 1080px;
       max-width: 95vw;
       max-height: 94vh;
       overflow-y: auto;
@@ -2094,13 +2093,37 @@
       color: #94a3b8;
     }
     .fullmap-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 14px;
+      align-items: start;
+    }
+    /* 大地圖任務清單側欄 (由主畫面任務小介面整合而來) */
+    .fullmap-quest-panel {
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      min-height: 0;
+      max-height: min(660px, 70vh);
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .fullmap-quest-header {
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .fullmap-quest-panel .quest-list-container {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
     }
     .fullmap-canvas-wrap {
       width: 100%;
-      max-width: 660px;
+      max-width: min(660px, calc(94vh - 170px));
+      justify-self: center;
       aspect-ratio: 1 / 1;
       background: #02060b;
       border: 1.5px solid rgba(56, 189, 248, 0.35);
@@ -2689,24 +2712,24 @@
         padding: 3px 6px !important;
       }
 
-      /* 任務看板：手機端預設為頂部輕量懸浮膠囊，展開時優雅滑出任務看板 */
+      /* 任務小介面：手機端為頂部輕量懸浮膠囊，點擊開啟大地圖任務清單 */
       #quest-tracker-panel {
         top: max(8px, env(safe-area-inset-top, 8px)) !important;
         left: 50% !important;
         transform: translateX(-50%) !important;
-        width: 320px !important;
-        max-width: 90vw !important;
-        padding: 6px 10px !important;
-        z-index: 45 !important;
-      }
-      #quest-tracker-panel.collapsed {
         width: auto !important;
-        min-width: 140px !important;
+        min-width: 150px !important;
         max-width: 260px !important;
+        min-height: 36px !important;
         border-radius: 20px !important;
-        padding: 4px 10px !important;
+        padding: 6px 12px !important;
+        z-index: 45 !important;
         background: rgba(15, 23, 42, 0.94) !important;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+      }
+      #quest-tracker-panel .quest-total-bar-wrap {
+        margin: 4px 0 0 0 !important;
+        height: 3px !important;
       }
       .quest-tracker-header {
         font-size: 11px !important;
@@ -2721,13 +2744,17 @@
       .quest-key-badge {
         display: none !important;
       }
-      .quest-item {
-        font-size: 9.5px !important;
-        padding: 4px 6px !important;
+      /* 大地圖任務側欄：手機端維持可讀字級與 36px 以上觸控高度 */
+      .fullmap-modal-card {
+        padding: 12px 14px !important;
       }
-      .quest-tab-btn {
-        font-size: 9px !important;
-        padding: 3px 0 !important;
+      .fullmap-quest-panel .quest-item {
+        font-size: 11px !important;
+        padding: 6px 8px !important;
+      }
+      .fullmap-quest-panel .quest-tab-btn {
+        font-size: 11px !important;
+        min-height: 36px !important;
       }
 
       /* 控制導引在手機端隱藏，完全淨空左下角 */
@@ -2803,20 +2830,24 @@
 
     /* 手機直屏 (Portrait) 與窄螢幕下任務看板與頂部核心 UI 重疊修復 */
     @media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
+      /* 直屏：任務膠囊移至頂部狀態列下方，避免壓住地點卡片 */
       #quest-tracker-panel {
-        top: calc(90px + env(safe-area-inset-top, 0px)) !important;
+        top: calc(158px + env(safe-area-inset-top, 0px)) !important;
         left: max(10px, env(safe-area-inset-left, 10px)) !important;
         transform: none !important;
-        width: calc(100vw - 20px) !important;
-        max-width: calc(100vw - 20px) !important;
       }
-      #quest-tracker-panel.collapsed {
-        top: max(8px, env(safe-area-inset-top, 8px)) !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: auto !important;
-        min-width: 140px !important;
-        max-width: 260px !important;
+      /* 直屏大地圖：地圖在上、任務清單在下，標題列精簡 */
+      .fullmap-body {
+        grid-template-columns: minmax(0, 1fr) !important;
+      }
+      .fullmap-subtitle, .fullmap-coords {
+        display: none !important;
+      }
+      .fullmap-title {
+        font-size: 16px !important;
+      }
+      .fullmap-quest-panel {
+        max-height: none !important;
       }
 
       /* 直屏窄屏優化：左下蘑菇頭與右下按鍵組保持安全間距，身法卡緊湊定位 */
@@ -2884,19 +2915,22 @@
         top: max(6px, env(safe-area-inset-top, 6px)) !important;
         left: 50% !important;
         transform: translateX(-50%) !important;
-        width: 310px !important;
-        max-width: 88vw !important;
-        max-height: calc(100vh - 12px) !important;
-        overflow-y: auto !important;
-      }
-      #quest-tracker-panel .quest-list-container {
-        max-height: 130px !important;
-      }
-      #quest-tracker-panel.collapsed {
-        width: auto !important;
         min-width: 130px !important;
-        border-radius: 20px !important;
-        padding: 3px 8px !important;
+        padding: 4px 10px !important;
+      }
+      /* 橫屏大地圖：地圖與任務清單並排，高度貼齊可視範圍 */
+      .fullmap-body {
+        grid-template-columns: auto minmax(0, 1fr) !important;
+      }
+      .fullmap-canvas-wrap {
+        width: calc(94vh - 100px) !important;
+        max-width: none !important;
+      }
+      .fullmap-quest-panel {
+        max-height: calc(94vh - 100px) !important;
+      }
+      .fullmap-footer, .fullmap-subtitle {
+        display: none !important;
       }
       #hud-overlay {
         padding: max(4px, env(safe-area-inset-top, 4px)) max(8px, env(safe-area-inset-right, 8px)) max(4px, env(safe-area-inset-bottom, 4px)) max(8px, env(safe-area-inset-left, 8px)) !important;
@@ -3200,16 +3234,16 @@
       </div>
     </div>
 
-    <!-- 專屬任務看板 (Quest / Mission Tracker Panel) -->
-    <div id="quest-tracker-panel">
+    <!-- 任務小介面 (Compact Quest Widget)：完整任務清單已整合進大地圖，點擊或按 J 開啟 -->
+    <div id="quest-tracker-panel" title="開啟大地圖任務清單 (J)">
       <!-- 頂部 Header -->
       <div class="quest-tracker-header" id="quest-tracker-toggle-btn">
         <div class="quest-header-left">
-          <span class="quest-title-text">📜 校園歷練</span>
+          <span class="quest-title-text" id="q-title-text">📜 校園歷練</span>
           <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
         </div>
         <div class="quest-header-right">
-          <span class="quest-toggle-indicator" id="quest-toggle-indicator">▼</span>
+          <span class="quest-toggle-indicator" id="quest-toggle-indicator">🗺️</span>
           <span class="quest-key-badge">J</span>
         </div>
       </div>
@@ -3219,210 +3253,6 @@
         <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
       </div>
 
-      <!-- 分類標籤切換 Tabs (全部 / 戰鬥 / 競技 / 探索) -->
-      <div class="quest-tabs-bar" id="quest-tabs-bar">
-        <button type="button" class="quest-tab-btn active" data-tab="all">全部</button>
-        <button type="button" class="quest-tab-btn" data-tab="combat">⚔️ 戰鬥</button>
-        <button type="button" class="quest-tab-btn" data-tab="sports">🏆 競技</button>
-        <button type="button" class="quest-tab-btn" data-tab="explore">🌟 探索</button>
-      </div>
-
-      <!-- 任務列表容器 -->
-      <div class="quest-list-container" id="quest-list-content">
-        <div id="campus-quest-wrapper">
-        <!-- 分類 1: 戰鬥歷練 -->
-        <div class="quest-category-group" data-category="combat">
-          <div class="quest-category-title">⚔️ 戰鬥歷練</div>
-
-          <!-- 1. 普通球棒解鎖任務 -->
-          <div class="quest-item" id="q-bat-item">
-            <span class="q-icon">🏏</span>
-            <div class="q-info">
-              <span class="q-name">【普通球棒】名揚校園</span>
-              <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/5</span>)</span>
-            </div>
-            <span class="q-status" id="q-bat-status">進行中</span>
-          </div>
-
-          <!-- 2. 神兵球棒解鎖任務 -->
-          <div class="quest-item" id="q-special-item">
-            <span class="q-icon">⚡</span>
-            <div class="q-info">
-              <span class="q-name">【神兵球棒】校園霸王</span>
-              <span class="q-desc">老師(<span id="q-teacher-prog">0/1</span>) · 犬(<span id="q-dog-prog">0/1</span>) · 車(<span id="q-bike-prog">0/5</span>)</span>
-            </div>
-            <span class="q-status" id="q-special-status">進行中</span>
-          </div>
-
-          <!-- 3. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛) -->
-          <div class="quest-item" id="q-dodge-item">
-            <span class="q-icon">🥋</span>
-            <div class="q-info">
-              <span class="q-name">【獨門技能】閃身步 / 狗熊哆嗦毛</span>
-              <span class="q-desc" id="q-dodge-desc">前往教學大樓尋訪「閃身步老師」學習技能【閃身步】 (0/2)</span>
-            </div>
-            <span class="q-status" id="q-dodge-status">未習得</span>
-          </div>
-
-          <!-- 3. 挑戰羽球大如老師 -->
-          <div class="quest-item" id="q-pe-item">
-            <span class="q-icon">🏸</span>
-            <div class="q-info">
-              <span class="q-name">挑戰羽球大如老師</span>
-              <span class="q-desc">4F羽球館 · 搶 5 分勝</span>
-            </div>
-            <span class="q-status" id="q-pe-status">進行中</span>
-          </div>
-
-          <!-- 4. 挑戰溫室食人花 Boss -->
-          <div class="quest-item" id="q-plant-item">
-            <span class="q-icon">🌸</span>
-            <div class="q-info">
-              <span class="q-name">挑戰溫室食人花 Boss</span>
-              <span class="q-desc">生態溫室霸主討伐</span>
-            </div>
-            <span class="q-status" id="q-plant-status">進行中</span>
-          </div>
-
-          <!-- 5. 擊倒教官與步巡隊 -->
-          <div class="quest-item" id="q-inspector-item">
-            <span class="q-icon">👮</span>
-            <div class="q-info">
-              <span class="q-name">擊倒教官與步巡隊</span>
-              <span class="q-desc">生教與校園步巡隊 (<span id="q-inspector-prog">0/1</span>)</span>
-            </div>
-            <span class="q-status" id="q-inspector-status">進行中</span>
-          </div>
-        </div>
-
-        <!-- 分類 2: 體育競技 -->
-        <div class="quest-category-group" data-category="sports">
-          <div class="quest-category-title">🏆 體育競技</div>
-
-          <!-- 5. 經典三分球投籃挑戰 -->
-          <div class="quest-item" id="q-basketball-item">
-            <span class="q-icon">🏀</span>
-            <div class="q-info">
-              <span class="q-name">經典三分球投籃挑戰</span>
-              <span class="q-desc">三分球紀錄 (<span id="q-basket-streak">0顆</span>)</span>
-            </div>
-            <span class="q-status" id="q-basketball-status">進行中</span>
-          </div>
-
-          <!-- 6. 操場跑道 400m 競速 -->
-          <div class="quest-item" id="q-track-item">
-            <span class="q-icon">🏃</span>
-            <div class="q-info">
-              <span class="q-name">操場跑道 400m 競速</span>
-              <span class="q-desc">最快秒數 (<span id="q-track-time">未完成</span>)</span>
-            </div>
-            <span class="q-status" id="q-track-status">進行中</span>
-          </div>
-
-          <!-- 7. 25m 水上競速挑戰 -->
-          <div class="quest-item" id="q-swim-item">
-            <span class="q-icon">🏊</span>
-            <div class="q-info">
-              <span class="q-name">25m 水上競速挑戰</span>
-              <span class="q-desc">最快秒數 (<span id="q-swim-time">未完成</span>)</span>
-            </div>
-            <span class="q-status" id="q-swim-status">進行中</span>
-          </div>
-        </div>
-
-        <!-- 分類 3: 校園探索 -->
-        <div class="quest-category-group" data-category="explore">
-          <div class="quest-category-title">🌟 校園探索</div>
-
-          <!-- 8. 自由騎乘火柴人自行車 -->
-          <div class="quest-item" id="q-bike-item">
-            <span class="q-icon">🚲</span>
-            <div class="q-info">
-              <span class="q-name">自由騎乘火柴人自行車</span>
-              <span class="q-desc">騎乘火柴人自行車校園漫遊</span>
-            </div>
-            <span class="q-status" id="q-bike-status">進行中</span>
-          </div>
-
-          <!-- 9. 擺脫校犬柴柴追捕 -->
-          <div class="quest-item" id="q-dog-item">
-            <span class="q-icon">🐕</span>
-            <div class="q-info">
-              <span class="q-name">擺脫校犬柴柴追捕</span>
-              <span class="q-desc">走廊避難脫離柴柴</span>
-            </div>
-            <span class="q-status" id="q-dog-status">進行中</span>
-          </div>
-
-          <!-- 10. 生態池許願池投幣 -->
-          <div class="quest-item" id="q-pond-item">
-            <span class="q-icon">🪙</span>
-            <div class="q-info">
-              <span class="q-name">生態池許願池投幣</span>
-              <span class="q-desc">女神許願池祈福</span>
-            </div>
-            <span class="q-status" id="q-pond-status">進行中</span>
-          </div>
-
-          <!-- 11. 天天合作社品嚐熱食 -->
-          <div class="quest-item" id="q-hotfood-item">
-            <span class="q-icon">🍱</span>
-            <div class="q-info">
-              <span class="q-name">天天合作社品嚐熱食</span>
-              <span class="q-desc">合作社品嚐特色美食</span>
-            </div>
-            <span class="q-status" id="q-hotfood-status">進行中</span>
-          </div>
-        </div>
-        </div><!-- /#campus-quest-wrapper -->
-
-        <!-- 第二世界：特訓院專屬潛入逃脫任務 (PROJECT: ESCAPE) -->
-        <div id="detention-quest-wrapper" style="display:none;">
-          <div class="quest-category-group" data-category="combat">
-            <div class="quest-category-title">⛓️ 絕境潛入逃脫任務 (PROJECT: ESCAPE)</div>
-            <div class="quest-item" id="q-det-takedown-item">
-              <span class="q-icon">🥷</span>
-              <div class="q-info">
-                <span class="q-name">【無聲潛入】背後擊昏守衛</span>
-                <span class="q-desc">悄悄繞後點擊攻擊擊昏 (<span id="det-ko-count">0</span> 人昏迷)</span>
-              </div>
-              <span class="q-status" id="det-ko-status">進行中</span>
-            </div>
-            <div class="quest-item" id="q-det-gate1-item">
-              <span class="q-icon">💳</span>
-              <div class="q-info">
-                <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
-                <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
-              </div>
-              <span class="q-status" id="det-gate1-status">未解鎖</span>
-            </div>
-            <div class="quest-item" id="q-det-gate2-item">
-              <span class="q-icon">📦</span>
-              <div class="q-info">
-                <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
-                <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
-              </div>
-              <span class="q-status" id="det-gate2-status">未解鎖</span>
-            </div>
-            <div class="quest-item" id="q-det-boss-item">
-              <span class="q-icon">⚡</span>
-              <div class="q-info">
-                <span class="q-name">【破盾對決】擊破小 Boss【鐵面總教官】</span>
-                <span class="q-desc">引誘 Boss 撞擊發電機柱硬直，繞背破盾 3 次</span>
-              </div>
-              <span class="q-status" id="det-boss-status">未擊敗</span>
-            </div>
-            <div class="quest-item" id="q-det-escape-item">
-              <span class="q-icon">🚪</span>
-              <div class="q-info">
-                <span class="q-name">【絕境逃脫】解鎖南大門撤離</span>
-                <span class="q-desc">拾取萬能鑰匙卡解鎖南大門逃出特訓院！</span>
-              </div>
-              <span class="q-status" id="det-escape-status">未完成</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- 秘境霸主：變異食人花王 Boss 血條 -->
@@ -3497,7 +3327,7 @@
         <div><span class="key-badge">1</span><span class="key-badge">2</span><span class="key-badge">3</span> 切換武器 (拳/球棒)</div>
         <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
         <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
-        <div><span class="key-badge">J</span> 開啟 / 收合歷練任務看板</div>
+        <div><span class="key-badge">J</span> 開啟 / 關閉大地圖任務清單</div>
         <div><span class="key-badge">M</span> 開啟 / 靜音 BGM 音樂</div>
       </div>
 
@@ -3613,6 +3443,222 @@
         <div class="fullmap-canvas-wrap">
           <canvas id="fullmap-canvas" width="700" height="700"></canvas>
         </div>
+
+        <!-- 任務清單側欄 (由主畫面任務小介面整合進大地圖) -->
+        <aside class="fullmap-quest-panel" id="fullmap-quest-panel">
+          <div class="fullmap-quest-header">
+            <span class="quest-title-text" id="fm-quest-title">📜 校園歷練</span>
+            <span class="quest-progress-badge">進度 <span id="fm-q-total-progress">0/13</span></span>
+          </div>
+          <div class="quest-total-bar-wrap">
+            <div class="quest-total-bar" id="fm-q-total-bar" style="width: 0%;"></div>
+          </div>
+
+          <!-- 分類標籤切換 Tabs (全部 / 戰鬥 / 競技 / 探索) -->
+          <div class="quest-tabs-bar" id="quest-tabs-bar">
+            <button type="button" class="quest-tab-btn active" data-tab="all">全部</button>
+            <button type="button" class="quest-tab-btn" data-tab="combat">⚔️ 戰鬥</button>
+            <button type="button" class="quest-tab-btn" data-tab="sports">🏆 競技</button>
+            <button type="button" class="quest-tab-btn" data-tab="explore">🌟 探索</button>
+          </div>
+
+          <!-- 任務列表容器 -->
+          <div class="quest-list-container" id="quest-list-content">
+            <div id="campus-quest-wrapper">
+            <!-- 分類 1: 戰鬥歷練 -->
+            <div class="quest-category-group" data-category="combat">
+              <div class="quest-category-title">⚔️ 戰鬥歷練</div>
+
+              <!-- 1. 普通球棒解鎖任務 -->
+              <div class="quest-item" id="q-bat-item">
+                <span class="q-icon">🏏</span>
+                <div class="q-info">
+                  <span class="q-name">【普通球棒】名揚校園</span>
+                  <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/5</span>)</span>
+                </div>
+                <span class="q-status" id="q-bat-status">進行中</span>
+              </div>
+
+              <!-- 2. 神兵球棒解鎖任務 -->
+              <div class="quest-item" id="q-special-item">
+                <span class="q-icon">⚡</span>
+                <div class="q-info">
+                  <span class="q-name">【神兵球棒】校園霸王</span>
+                  <span class="q-desc">老師(<span id="q-teacher-prog">0/1</span>) · 犬(<span id="q-dog-prog">0/1</span>) · 車(<span id="q-bike-prog">0/5</span>)</span>
+                </div>
+                <span class="q-status" id="q-special-status">進行中</span>
+              </div>
+
+              <!-- 3. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛) -->
+              <div class="quest-item" id="q-dodge-item">
+                <span class="q-icon">🥋</span>
+                <div class="q-info">
+                  <span class="q-name">【獨門技能】閃身步 / 狗熊哆嗦毛</span>
+                  <span class="q-desc" id="q-dodge-desc">前往教學大樓尋訪「閃身步老師」學習技能【閃身步】 (0/2)</span>
+                </div>
+                <span class="q-status" id="q-dodge-status">未習得</span>
+              </div>
+
+              <!-- 3. 挑戰羽球大如老師 -->
+              <div class="quest-item" id="q-pe-item">
+                <span class="q-icon">🏸</span>
+                <div class="q-info">
+                  <span class="q-name">挑戰羽球大如老師</span>
+                  <span class="q-desc">4F羽球館 · 搶 5 分勝</span>
+                </div>
+                <span class="q-status" id="q-pe-status">進行中</span>
+              </div>
+
+              <!-- 4. 挑戰溫室食人花 Boss -->
+              <div class="quest-item" id="q-plant-item">
+                <span class="q-icon">🌸</span>
+                <div class="q-info">
+                  <span class="q-name">挑戰溫室食人花 Boss</span>
+                  <span class="q-desc">生態溫室霸主討伐</span>
+                </div>
+                <span class="q-status" id="q-plant-status">進行中</span>
+              </div>
+
+              <!-- 5. 擊倒教官與步巡隊 -->
+              <div class="quest-item" id="q-inspector-item">
+                <span class="q-icon">👮</span>
+                <div class="q-info">
+                  <span class="q-name">擊倒教官與步巡隊</span>
+                  <span class="q-desc">生教與校園步巡隊 (<span id="q-inspector-prog">0/1</span>)</span>
+                </div>
+                <span class="q-status" id="q-inspector-status">進行中</span>
+              </div>
+            </div>
+
+            <!-- 分類 2: 體育競技 -->
+            <div class="quest-category-group" data-category="sports">
+              <div class="quest-category-title">🏆 體育競技</div>
+
+              <!-- 5. 經典三分球投籃挑戰 -->
+              <div class="quest-item" id="q-basketball-item">
+                <span class="q-icon">🏀</span>
+                <div class="q-info">
+                  <span class="q-name">經典三分球投籃挑戰</span>
+                  <span class="q-desc">三分球紀錄 (<span id="q-basket-streak">0顆</span>)</span>
+                </div>
+                <span class="q-status" id="q-basketball-status">進行中</span>
+              </div>
+
+              <!-- 6. 操場跑道 400m 競速 -->
+              <div class="quest-item" id="q-track-item">
+                <span class="q-icon">🏃</span>
+                <div class="q-info">
+                  <span class="q-name">操場跑道 400m 競速</span>
+                  <span class="q-desc">最快秒數 (<span id="q-track-time">未完成</span>)</span>
+                </div>
+                <span class="q-status" id="q-track-status">進行中</span>
+              </div>
+
+              <!-- 7. 25m 水上競速挑戰 -->
+              <div class="quest-item" id="q-swim-item">
+                <span class="q-icon">🏊</span>
+                <div class="q-info">
+                  <span class="q-name">25m 水上競速挑戰</span>
+                  <span class="q-desc">最快秒數 (<span id="q-swim-time">未完成</span>)</span>
+                </div>
+                <span class="q-status" id="q-swim-status">進行中</span>
+              </div>
+            </div>
+
+            <!-- 分類 3: 校園探索 -->
+            <div class="quest-category-group" data-category="explore">
+              <div class="quest-category-title">🌟 校園探索</div>
+
+              <!-- 8. 自由騎乘火柴人自行車 -->
+              <div class="quest-item" id="q-bike-item">
+                <span class="q-icon">🚲</span>
+                <div class="q-info">
+                  <span class="q-name">自由騎乘火柴人自行車</span>
+                  <span class="q-desc">騎乘火柴人自行車校園漫遊</span>
+                </div>
+                <span class="q-status" id="q-bike-status">進行中</span>
+              </div>
+
+              <!-- 9. 擺脫校犬柴柴追捕 -->
+              <div class="quest-item" id="q-dog-item">
+                <span class="q-icon">🐕</span>
+                <div class="q-info">
+                  <span class="q-name">擺脫校犬柴柴追捕</span>
+                  <span class="q-desc">走廊避難脫離柴柴</span>
+                </div>
+                <span class="q-status" id="q-dog-status">進行中</span>
+              </div>
+
+              <!-- 10. 生態池許願池投幣 -->
+              <div class="quest-item" id="q-pond-item">
+                <span class="q-icon">🪙</span>
+                <div class="q-info">
+                  <span class="q-name">生態池許願池投幣</span>
+                  <span class="q-desc">女神許願池祈福</span>
+                </div>
+                <span class="q-status" id="q-pond-status">進行中</span>
+              </div>
+
+              <!-- 11. 天天合作社品嚐熱食 -->
+              <div class="quest-item" id="q-hotfood-item">
+                <span class="q-icon">🍱</span>
+                <div class="q-info">
+                  <span class="q-name">天天合作社品嚐熱食</span>
+                  <span class="q-desc">合作社品嚐特色美食</span>
+                </div>
+                <span class="q-status" id="q-hotfood-status">進行中</span>
+              </div>
+            </div>
+            </div><!-- /#campus-quest-wrapper -->
+
+            <!-- 第二世界：特訓院專屬潛入逃脫任務 (PROJECT: ESCAPE) -->
+            <div id="detention-quest-wrapper" style="display:none;">
+              <div class="quest-category-group" data-category="combat">
+                <div class="quest-category-title">⛓️ 絕境潛入逃脫任務 (PROJECT: ESCAPE)</div>
+                <div class="quest-item" id="q-det-takedown-item">
+                  <span class="q-icon">🥷</span>
+                  <div class="q-info">
+                    <span class="q-name">【無聲潛入】背後擊昏守衛</span>
+                    <span class="q-desc">悄悄繞後點擊攻擊擊昏 (<span id="det-ko-count">0</span> 人昏迷)</span>
+                  </div>
+                  <span class="q-status" id="det-ko-status">進行中</span>
+                </div>
+                <div class="quest-item" id="q-det-gate1-item">
+                  <span class="q-icon">💳</span>
+                  <div class="q-info">
+                    <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
+                    <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
+                  </div>
+                  <span class="q-status" id="det-gate1-status">未解鎖</span>
+                </div>
+                <div class="quest-item" id="q-det-gate2-item">
+                  <span class="q-icon">📦</span>
+                  <div class="q-info">
+                    <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
+                    <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
+                  </div>
+                  <span class="q-status" id="det-gate2-status">未解鎖</span>
+                </div>
+                <div class="quest-item" id="q-det-boss-item">
+                  <span class="q-icon">⚡</span>
+                  <div class="q-info">
+                    <span class="q-name">【破盾對決】擊破小 Boss【鐵面總教官】</span>
+                    <span class="q-desc">引誘 Boss 撞擊發電機柱硬直，繞背破盾 3 次</span>
+                  </div>
+                  <span class="q-status" id="det-boss-status">未擊敗</span>
+                </div>
+                <div class="quest-item" id="q-det-escape-item">
+                  <span class="q-icon">🚪</span>
+                  <div class="q-info">
+                    <span class="q-name">【絕境逃脫】解鎖南大門撤離</span>
+                    <span class="q-desc">拾取萬能鑰匙卡解鎖南大門逃出特訓院！</span>
+                  </div>
+                  <span class="q-status" id="det-escape-status">未完成</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
       <div class="fullmap-footer">
         <div class="fullmap-legend">
@@ -3623,7 +3669,7 @@
           <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
           <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
         </div>
-        <div class="fullmap-hotkey-hint">⌨️ 按 [ESC] 鍵、點擊右上角關閉或再次點擊小地圖即可返回遊戲</div>
+        <div class="fullmap-hotkey-hint">⌨️ 按 [J] / [ESC] 鍵、點擊右上角關閉或再次點擊小地圖即可返回遊戲</div>
       </div>
     </div>
   </div>

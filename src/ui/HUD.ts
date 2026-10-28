@@ -351,11 +351,13 @@ export class HUD {
 
     // 頂部專屬任務介面 (Mission Tracker Panel)
     this.questTrackerPanel = document.getElementById('quest-tracker-panel');
-    this.questTrackerToggleBtn = document.getElementById('quest-tracker-toggle-btn');
-    this.questToggleIndicator = document.getElementById('quest-toggle-indicator');
-    this.questListContent = document.getElementById('quest-list-content');
     this.qTotalProgress = document.getElementById('q-total-progress');
     this.qTotalBar = document.getElementById('q-total-bar');
+    this.qTitleText = document.getElementById('q-title-text');
+    this.fmQuestTitle = document.getElementById('fm-quest-title');
+    this.fmQTotalProgress = document.getElementById('fm-q-total-progress');
+    this.fmQTotalBar = document.getElementById('fm-q-total-bar');
+    this.questTabsBar = document.getElementById('quest-tabs-bar');
 
     // 12 項任務項目與數值元素 (含普通球棒與神兵球棒解鎖任務)
     this.qBatItem = document.getElementById('q-bat-item');
@@ -406,9 +408,11 @@ export class HUD {
     this.qDodgeDesc = document.getElementById('q-dodge-desc');
     this.qDodgeStatus = document.getElementById('q-dodge-status');
 
-    if (this.questTrackerToggleBtn) {
-      this.questTrackerToggleBtn.addEventListener('click', () => {
-        this.toggleQuestTracker();
+    // 任務小介面：點擊開啟整合任務清單的大地圖
+    if (this.questTrackerPanel) {
+      this.questTrackerPanel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleQuestTracker(true);
       });
     }
 
@@ -434,21 +438,18 @@ export class HUD {
         });
       });
     });
-
-    // 行動裝置或窄螢幕預設將任務看板收合，維持乾淨清爽的開放視野
-    const isMobileDevice = window.innerWidth <= 900 || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    if (isMobileDevice) {
-      this.toggleQuestTracker(false);
-    }
   }
 
   // 頂部任務介面屬性
   private questTrackerPanel: HTMLElement | null;
-  private questTrackerToggleBtn: HTMLElement | null;
-  private questToggleIndicator: HTMLElement | null;
-  private questListContent: HTMLElement | null;
   private qTotalProgress: HTMLElement | null;
   private qTotalBar: HTMLElement | null;
+  // 大地圖任務側欄的標題與總進度 (與任務小介面同步)
+  private qTitleText: HTMLElement | null;
+  private fmQuestTitle: HTMLElement | null;
+  private fmQTotalProgress: HTMLElement | null;
+  private fmQTotalBar: HTMLElement | null;
+  private questTabsBar: HTMLElement | null;
 
   // 12 項任務 DOM 參照
   private qBatItem: HTMLElement | null;
@@ -495,7 +496,6 @@ export class HUD {
   private qHotfoodItem: HTMLElement | null;
   private qHotfoodStatus: HTMLElement | null;
 
-  private isQuestTrackerExpanded: boolean = true;
 
   // 效能優化節流與髒檢查 (Perf 6)
   private minimapDeltaAccumulator: number = 0;
@@ -677,6 +677,10 @@ export class HUD {
   // 開啟全螢幕大地圖
   public openFullMap() {
     this.isFullMapOpen = true;
+    // 解除滑鼠指標鎖定，使 PC 玩家可點選任務分類與捲動清單 (按 J 開啟時仍處於鎖定)
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
     if (this.fullmapModalEl) {
       this.fullmapModalEl.style.display = 'flex';
     }
@@ -745,33 +749,27 @@ export class HUD {
     // 安全保留空函式，避免呼叫端報錯
   }
 
-  // 切換任務介面收合/展開
+  // 任務清單已整合進大地圖：開啟 / 關閉 / 切換大地圖任務側欄 (J 鍵與任務小介面共用)
   public toggleQuestTracker(expand?: boolean) {
-    if (expand !== undefined) {
-      this.isQuestTrackerExpanded = expand;
+    if (expand === undefined) {
+      this.toggleFullMap();
+    } else if (expand) {
+      this.openFullMap();
     } else {
-      this.isQuestTrackerExpanded = !this.isQuestTrackerExpanded;
+      this.closeFullMap();
     }
+  }
 
-    if (this.questTrackerPanel) {
-      if (this.isQuestTrackerExpanded) {
-        this.questTrackerPanel.classList.remove('collapsed');
-      } else {
-        this.questTrackerPanel.classList.add('collapsed');
-      }
-    }
-
-    if (this.questListContent) {
-      if (this.isQuestTrackerExpanded) {
-        this.questListContent.classList.remove('collapsed');
-      } else {
-        this.questListContent.classList.add('collapsed');
-      }
-    }
-
-    if (this.questToggleIndicator) {
-      this.questToggleIndicator.textContent = this.isQuestTrackerExpanded ? '▲' : '▼';
-    }
+  // 同步任務小介面與大地圖任務側欄的標題、總進度與進度條
+  private setQuestSummary(title: string, done: number, total: number) {
+    const progressText = `${done}/${total}`;
+    const pct = `${Math.min(100, Math.round((done / total) * 100))}%`;
+    if (this.qTitleText && this.qTitleText.textContent !== title) this.qTitleText.textContent = title;
+    if (this.fmQuestTitle && this.fmQuestTitle.textContent !== title) this.fmQuestTitle.textContent = title;
+    if (this.qTotalProgress && this.qTotalProgress.textContent !== progressText) this.qTotalProgress.textContent = progressText;
+    if (this.fmQTotalProgress && this.fmQTotalProgress.textContent !== progressText) this.fmQTotalProgress.textContent = progressText;
+    if (this.qTotalBar && this.qTotalBar.style.width !== pct) this.qTotalBar.style.width = pct;
+    if (this.fmQTotalBar && this.fmQTotalBar.style.width !== pct) this.fmQTotalBar.style.width = pct;
   }
 
   // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄與探索，含髒檢查 Dirty check)
@@ -781,6 +779,8 @@ export class HUD {
     if (campusWrapper && detentionWrapper && campusWrapper.style.display === 'none') {
       campusWrapper.style.display = 'block';
       detentionWrapper.style.display = 'none';
+      if (this.questTabsBar) this.questTabsBar.style.display = '';
+      this.lastMissionData = null; // 世界切換回校園：強制重繪任務標題與進度
     }
 
     const last = this.lastMissionData;
@@ -1065,18 +1065,8 @@ export class HUD {
       }
     }
 
-    // 更新總進度與進度條
-    if (this.qTotalProgress) {
-      this.qTotalProgress.textContent = `${completedCount}/13`;
-    }
-    if (this.qTotalBar) {
-      const totalPct = Math.round((completedCount / 13) * 100);
-      this.qTotalBar.style.width = `${totalPct}%`;
-    }
-    if (this.qTotalBar) {
-      const pct = Math.min(100, Math.round((completedCount / 12) * 100));
-      this.qTotalBar.style.width = `${pct}%`;
-    }
+    // 更新總進度與進度條 (任務小介面與大地圖側欄同步)
+    this.setQuestSummary('📜 校園歷練', completedCount, 13);
   }
 
   // 合作社 (熱食補血部) 彈出式選單
@@ -2159,6 +2149,10 @@ export class HUD {
       campusWrapper.style.display = 'none';
       detentionWrapper.style.display = 'block';
     }
+    // 特訓院僅單一任務分類，隱藏分類標籤並顯示逃脫任務總進度
+    if (this.questTabsBar) this.questTabsBar.style.display = 'none';
+    const escapeDone = (takedowns > 0 ? 1 : 0) + (gateAOpen ? 1 : 0) + (gateBOpen ? 1 : 0) + (isBossDefeated ? 1 : 0) + (isEscapeComplete ? 1 : 0);
+    this.setQuestSummary('⛓️ 逃脫任務', escapeDone, 5);
 
     const koCountEl = document.getElementById('det-ko-count');
     const koStatusEl = document.getElementById('det-ko-status');
