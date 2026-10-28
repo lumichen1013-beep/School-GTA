@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, DetentionMapKind } from '../world/detentionLayout';
+import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, GATE_WALLS, GATE_A_Z, GATE_B_Z, DetentionMapKind } from '../world/detentionLayout';
 
 // 第二世界雷達與大地圖的場景分類配色
 const DETENTION_RADAR_COLORS: Record<DetentionMapKind, string> = {
@@ -13,9 +13,35 @@ const DETENTION_FULLMAP_STYLES: Record<DetentionMapKind, { fill: string; stroke:
   container: { fill: 'rgba(5, 150, 105, 0.45)', stroke: '#059669' },
   pillar: { fill: 'rgba(234, 179, 8, 0.4)', stroke: '#eab308' }
 };
-import { NPC } from '../entities/NPC';
+import { NPC, NPCRole } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
+
+// 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
+const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
+  DETENTION_BOSS: { color: '#ff2222', radius: 6.5 },
+  DETENTION_GUARD: { color: '#2563eb', radius: 5.2 },
+  DETENTION_HEAVY: { color: '#7c3aed', radius: 5.8 },
+  DETENTION_SENIOR: { color: '#f59e0b', radius: 4.5 },
+  DETENTION_WOLF: { color: '#ea580c', radius: 4.6 },
+  TEACHER: { color: '#dc2626', radius: 5.5 },
+  INSTRUCTOR: { color: '#b91c1c', radius: 5.5 },
+  BANDIT: { color: '#be123c', radius: 5.0 },
+  DOG: { color: '#f59e0b', radius: 4.5 },
+  BIKE_PATROL: { color: '#8b5cf6', radius: 5.0 },
+  INSPECTOR: { color: '#ef4444', radius: 4.0 }
+};
+const DEFAULT_NPC_MAP_STYLE = { color: '#cbd5e1', radius: 3.5 };
+
+// 特訓院守衛雷達/大地圖警戒色階：0 正常、1 追捕/警戒、2 疑惑、3 Boss (正常狀態)
+function guardAlertTier(npc: NPC): number {
+  if (npc.alertState === 'ALERT' || npc.isChasing) return 1;
+  if (npc.alertState === 'CAUTION') return 2;
+  return npc.role === 'DETENTION_BOSS' ? 3 : 0;
+}
+const GUARD_DOT_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#ff2222'];
+const GUARD_CONE_COLORS_RADAR = ['rgba(34, 197, 94, 0.24)', 'rgba(239, 68, 68, 0.38)', 'rgba(245, 158, 11, 0.32)', 'rgba(255, 34, 34, 0.28)'];
+const GUARD_CONE_COLORS_FULLMAP = ['rgba(34, 197, 94, 0.22)', 'rgba(239, 68, 68, 0.35)', 'rgba(245, 158, 11, 0.28)', 'rgba(255, 34, 34, 0.25)'];
 
 export interface CommissaryItem {
   id: string;
@@ -163,6 +189,12 @@ export class HUD {
   private worldBadgeEl: HTMLElement | null;
   private worldTextEl: HTMLElement | null;
   public onWorldToggle?: () => void;
+  // 每幀更新的 HUD 髒檢查快取
+  private lastSkillKey: number = -1;
+  private lastBossShown: boolean | null = null;
+  private lastBossHp: number = -2;
+  private lastBossMaxHp: number = -1;
+  private lastBossName: string | undefined = undefined;
   // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
@@ -861,7 +893,16 @@ export class HUD {
   public setBossHealth(currentHp: number, maxHp: number, visible: boolean, bossName?: string, bossIcon?: string) {
     if (!this.bossHudEl || !this.bossHpTextEl || !this.bossBarFillEl) return;
 
-    if (!visible || currentHp <= 0) {
+    // 髒檢查：每幀呼叫，僅在顯示狀態、血量 (取整) 或名稱變動時寫入 DOM
+    const shown = visible && currentHp > 0;
+    const hpKey = shown ? Math.ceil(currentHp) : -1;
+    if (shown === this.lastBossShown && hpKey === this.lastBossHp && maxHp === this.lastBossMaxHp && bossName === this.lastBossName) return;
+    this.lastBossShown = shown;
+    this.lastBossHp = hpKey;
+    this.lastBossMaxHp = maxHp;
+    this.lastBossName = bossName;
+
+    if (!shown) {
       this.bossHudEl.style.display = 'none';
       return;
     }
@@ -1254,6 +1295,10 @@ export class HUD {
     if (!this.skillHudCardEl || !this.skillIconEl || !this.skillNameEl || !this.skillDescEl || !this.skillCdNumberEl || !this.skillCooldownOverlayEl) {
       return;
     }
+    // 髒檢查：每幀呼叫，僅在技能等級或冷卻顯示值 (0.1s 精度) 變動時寫入 DOM
+    const skillKey = skillLevel * 100000 + (cdRemaining > 0 ? Math.ceil(cdRemaining * 10) : 0);
+    if (skillKey === this.lastSkillKey) return;
+    this.lastSkillKey = skillKey;
 
     if (skillLevel === 0) {
       this.skillIconEl.textContent = '🔒';
@@ -1519,14 +1564,11 @@ export class HUD {
       }
 
       // 管制閘門 1 (Z = -28) 與閘門 2 (Z = 35) 隔斷牆
-      const gate1Color = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
-      drawTacticalBox(-46.75, -28, 86.5, 1.5, '#34d399');
-      drawTacticalBox(46.75, -28, 86.5, 1.5, '#34d399');
-      drawTacticalBox(0, -28, 7.2, 1.2, gate1Color);
-      const gate2Color = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
-      drawTacticalBox(-46.75, 35, 86.5, 1.5, '#34d399');
-      drawTacticalBox(46.75, 35, 86.5, 1.5, '#34d399');
-      drawTacticalBox(0, 35, 7.2, 1.2, gate2Color);
+      for (const w of GATE_WALLS) {
+        drawTacticalBox((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, 1.5, '#34d399');
+      }
+      drawTacticalBox(0, GATE_A_Z, 7.2, 1.2, detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8');
+      drawTacticalBox(0, GATE_B_Z, 7.2, 1.2, detentionData?.isGateBOpen ? '#22c55e' : '#facc15');
 
       // 南側脫逃大門 (Z = 95)
       const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
@@ -1540,120 +1582,32 @@ export class HUD {
         if (!detentionData.hasKeycardA) {
           const kx = (detentionData.keycardAPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardAPos.z - playerPos.z) * mapScale;
-
-          // 動態擴散外圈
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心光點
-          ctx.fillStyle = '#38bdf8';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#38bdf8';
-          ctx.fillText('🔑KEY A', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#38bdf8', 'rgba(56, 189, 248, 0.65)', 6.5 * pulse, 1.8, 4.2, 1.2);
+          HUD.drawMarkerLabel(ctx, '🔑KEY A', kx, kz - 8, 'bold 9px sans-serif', '#38bdf8');
         }
 
         // 2. 黃色門禁卡 B
         if (!detentionData.hasKeycardB) {
           const kx = (detentionData.keycardBPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardBPos.z - playerPos.z) * mapScale;
-
-          // 動態擴散外圈
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心光點
-          ctx.fillStyle = '#facc15';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#facc15';
-          ctx.fillText('🔑KEY B', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#facc15', 'rgba(250, 204, 21, 0.65)', 6.5 * pulse, 1.8, 4.2, 1.2);
+          HUD.drawMarkerLabel(ctx, '🔑KEY B', kx, kz - 8, 'bold 9px sans-serif', '#facc15');
         }
 
         // 3. 萬能逃脫鑰匙卡 (金黃色傳奇標記)
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
           const kx = (detentionData.masterKeycardPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.masterKeycardPos.z - playerPos.z) * mapScale;
-
-          // 金色耀眼動態光環
-          ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
-          ctx.lineWidth = 2.2;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 8.0 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心金鑽
-          ctx.fillStyle = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 5.0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ffd700';
-          ctx.fillText('★MASTER KEY', 0, -10);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#ffd700', 'rgba(255, 215, 0, 0.85)', 8.0 * pulse, 2.2, 5.0, 1.5);
+          HUD.drawMarkerLabel(ctx, '★MASTER KEY', kx, kz - 10, 'bold 10px sans-serif', '#ffd700');
         }
 
         // 4. 重生存檔點 (綠色旗幟標記)
         if (detentionData.checkpointPos) {
           const cpx = (detentionData.checkpointPos.x - playerPos.x) * mapScale;
           const cpz = (detentionData.checkpointPos.z - playerPos.z) * mapScale;
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.75)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(cpx, cpz, 6.0 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          ctx.fillStyle = '#22c55e';
-          ctx.beginPath();
-          ctx.arc(cpx, cpz, 3.8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-
-          ctx.save();
-          ctx.translate(cpx, cpz);
-          ctx.font = 'bold 8.5px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#22c55e';
-          ctx.fillText('🚩CP', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, cpx, cpz, '#22c55e', 'rgba(34, 197, 94, 0.75)', 6.0 * pulse, 1.5, 3.8, 1);
+          HUD.drawMarkerLabel(ctx, '🚩CP', cpx, cpz - 8, 'bold 8.5px sans-serif', '#22c55e');
         }
       }
 
@@ -1677,20 +1631,9 @@ export class HUD {
 
         // 存活守衛
         const isBoss = npc.role === 'DETENTION_BOSS';
-        const alertState = npc.alertState || 'NORMAL';
-
-        let dotColor = '#22c55e';
-        let coneColor = 'rgba(34, 197, 94, 0.24)';
-        if (alertState === 'ALERT' || npc.isChasing) {
-          dotColor = '#ef4444';
-          coneColor = 'rgba(239, 68, 68, 0.38)';
-        } else if (alertState === 'CAUTION') {
-          dotColor = '#f59e0b';
-          coneColor = 'rgba(245, 158, 11, 0.32)';
-        } else if (isBoss) {
-          dotColor = '#ff2222';
-          coneColor = 'rgba(255, 34, 34, 0.28)';
-        }
+        const tier = guardAlertTier(npc);
+        const dotColor = GUARD_DOT_COLORS[tier];
+        const coneColor = GUARD_CONE_COLORS_RADAR[tier];
 
         const ang = npc.rotationY;
         const coneDist = (isBoss ? 24 : 18) * mapScale;
@@ -1715,13 +1658,7 @@ export class HUD {
 
         // 若 Boss 存活且尚未掉落萬能鑰匙卡，在雷達上直立標示 ★BOSS [KEY]
         if (isBoss && detentionData && !detentionData.hasMasterKeycard && !detentionData.masterKeycardPos) {
-          ctx.save();
-          ctx.translate(nx, nz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ff4444';
-          ctx.fillText('★BOSS [KEY]', 0, -10);
-          ctx.restore();
+          HUD.drawMarkerLabel(ctx, '★BOSS [KEY]', nx, nz - 10, 'bold 9px sans-serif', '#ff4444');
         }
       }
 
@@ -1742,15 +1679,15 @@ export class HUD {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.2;
       ctx.stroke();
-      ctx.restore();
 
-      // 潛行模式指示 (外圍柔和虛線圈)
+      // 潛行模式指示 (玩家外圍柔和虛線圈；仍在玩家平移座標內，畫完重設虛線避免外洩至下一幀網格)
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.arc(0, 0, 10, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
 
       // 警戒閃爍外框
@@ -1805,44 +1742,10 @@ export class HUD {
     for (const npc of npcs) {
       const nx = (npc.position.x - playerPos.x) * mapScale;
       const nz = (npc.position.z - playerPos.z) * mapScale;
-      let dotColor = '#e2e8f0';
-      let dotRadius = 3.5;
-
-      if (npc.role === 'DETENTION_BOSS') {
-        dotColor = '#ff2222';
-        dotRadius = 6.5;
-      } else if (npc.role === 'DETENTION_GUARD') {
-        dotColor = '#2563eb';
-        dotRadius = 5.2;
-      } else if (npc.role === 'DETENTION_HEAVY') {
-        dotColor = '#7c3aed';
-        dotRadius = 5.8;
-      } else if (npc.role === 'DETENTION_SENIOR') {
-        dotColor = '#f59e0b';
-        dotRadius = 4.5;
-      } else if (npc.role === 'DETENTION_WOLF') {
-        dotColor = '#ea580c';
-        dotRadius = 4.6;
-      } else if (npc.role === 'TEACHER' || npc.role === 'INSTRUCTOR') {
-        dotColor = '#dc2626';
-        dotRadius = 5.5;
-      } else if (npc.role === 'BANDIT') {
-        dotColor = '#be123c';
-        dotRadius = 5.0;
-      } else if (npc.role === 'DOG') {
-        dotColor = '#f97316';
-        dotRadius = 4.5;
-      } else if (npc.role === 'BIKE_PATROL') {
-        dotColor = '#a855f7';
-        dotRadius = 5.0;
-      } else if (npc.role === 'INSPECTOR') {
-        dotColor = '#ef4444';
-        dotRadius = 4.0;
-      }
-
-      ctx.fillStyle = dotColor;
+      const style = NPC_ROLE_MAP_STYLE[npc.role] || DEFAULT_NPC_MAP_STYLE;
+      ctx.fillStyle = style.color;
       ctx.beginPath();
-      ctx.arc(nx, nz, dotRadius, 0, Math.PI * 2);
+      ctx.arc(nx, nz, style.radius, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -1885,8 +1788,8 @@ export class HUD {
 
     // 可見時僅於座標變動才更新位置；可見狀態切換才更新顯示與手機攻擊鈕
     if (el && visible && (x !== this.lastCqcX || y !== this.lastCqcY || !this.lastCqcVisible)) {
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
+      // 以 transform 定位 (僅合成層更新，不觸發版面重排)；錨點為提示框底部中央
+      el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
       this.lastCqcX = x;
       this.lastCqcY = y;
     }
@@ -1899,8 +1802,6 @@ export class HUD {
     if (el) {
       if (visible) {
         el.style.display = 'flex';
-        el.style.bottom = 'auto';
-        el.style.transform = 'translate(-50%, -100%)';
         if (textEl) {
           textEl.textContent = '擊暈';
         }
@@ -1960,24 +1861,28 @@ export class HUD {
         banner.style.display = 'none';
         return;
       }
-      const style = HUD.MGS_PHASE_STYLE[phase];
       banner.style.display = 'flex';
-      banner.style.background = style.bg;
-      banner.style.borderColor = style.border;
-      banner.style.boxShadow = `0 0 25px ${style.glow}`;
-      label.textContent = style.label;
+      banner.classList.remove('mgs-phase-alert', 'mgs-phase-evasion', 'mgs-phase-caution');
+      banner.classList.add(`mgs-phase-${phase.toLowerCase()}`);
+      label.textContent = HUD.MGS_PHASE_LABEL[phase];
       if (phase === 'ALERT') val.textContent = '';
+      this.lastMgsTimerTenths = -1;
     }
     if (phase === 'EVASION' || phase === 'CAUTION') {
-      const text = Math.max(0, timer).toFixed(2);
-      if (val.textContent !== text) val.textContent = text;
+      // 倒數顯示 0.1 秒精度：僅在顯示值變動時才格式化字串並寫入 DOM
+      const tenths = Math.ceil(Math.max(0, timer) * 10);
+      if (tenths !== this.lastMgsTimerTenths) {
+        this.lastMgsTimerTenths = tenths;
+        val.textContent = (tenths / 10).toFixed(1);
+      }
     }
   }
+  private lastMgsTimerTenths: number = -1;
 
-  private static readonly MGS_PHASE_STYLE = {
-    ALERT: { label: '🚨 ALERT', bg: 'rgba(220, 38, 38, 0.92)', border: '#fca5a5', glow: 'rgba(239, 68, 68, 0.85)' },
-    EVASION: { label: '⚠️ EVASION', bg: 'rgba(234, 88, 12, 0.92)', border: '#fdba74', glow: 'rgba(249, 115, 22, 0.8)' },
-    CAUTION: { label: '❓ CAUTION', bg: 'rgba(202, 138, 4, 0.92)', border: '#fde68a', glow: 'rgba(234, 179, 8, 0.7)' }
+  private static readonly MGS_PHASE_LABEL = {
+    ALERT: '🚨 ALERT',
+    EVASION: '⚠️ EVASION',
+    CAUTION: '❓ CAUTION'
   } as const;
 
   // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
@@ -2121,7 +2026,7 @@ export class HUD {
   }
 
   // 更新特訓院越獄任務面板
-  private lastEscapeTrackerKey = '';
+  private lastEscapeTrackerKey = -1;
 
   public updateWorld2EscapeTracker(
     takedowns: number,
@@ -2133,7 +2038,9 @@ export class HUD {
     isEscapeComplete: boolean
   ) {
     // 每幀呼叫：所有輸入值未變時略過 DOM 寫入
-    const stateKey = `${takedowns}|${gateAOpen}|${gateBOpen}|${bossHp}|${bossMaxHp}|${isBossDefeated}|${isEscapeComplete}`;
+    // 數值鍵 (不產生每幀字串)：擊昏數、Boss 血量/上限與四個旗標
+    const flags = (gateAOpen ? 1 : 0) | (gateBOpen ? 2 : 0) | (isBossDefeated ? 4 : 0) | (isEscapeComplete ? 8 : 0);
+    const stateKey = ((takedowns * 10000 + Math.ceil(bossHp)) * 10000 + bossMaxHp) * 16 + flags;
     const campusWrapper = this.$('campus-quest-wrapper');
     const detentionWrapper = this.$('detention-quest-wrapper');
     if (stateKey === this.lastEscapeTrackerKey && detentionWrapper && detentionWrapper.style.display === 'block') return;
@@ -2192,6 +2099,35 @@ export class HUD {
   private static readonly FULLMAP_LOGICAL = 700;
 
   // 大地圖標籤字級：隨地圖尺寸放大，且不低於 13px (窄螢幕 11px) 的實際顯示字級
+  // 雷達/大地圖共用的脈衝標記 (外圈擴散環 + 核心光點；coreStrokeWidth > 0 時核心加白色描邊)
+  private static drawPulseMarker(
+    ctx: CanvasRenderingContext2D, x: number, y: number, color: string,
+    ringColor: string, ringR: number, ringWidth: number, coreR: number, coreStrokeWidth: number
+  ) {
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = ringWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, coreR, 0, Math.PI * 2);
+    ctx.fill();
+    if (coreStrokeWidth > 0) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = coreStrokeWidth;
+      ctx.stroke();
+    }
+  }
+
+  // 雷達直立文字標籤 (雷達畫面不旋轉，直接置中繪製，無需 save/translate/restore)
+  private static drawMarkerLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color: string) {
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
   private fmFont(size: number): string {
     const minCss = this.fullmapCssSide < 520 ? 11 : 13;
     const minLogical = minCss * HUD.FULLMAP_LOGICAL / this.fullmapCssSide;
@@ -2401,18 +2337,17 @@ export class HUD {
 
       // 管制閘門 1 (Z = -28)
       const gate1Col = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
-      drawBox(-50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(0, -28, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
+      for (const w of GATE_WALLS) {
+        drawBox((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      }
+      drawBox(0, GATE_A_Z, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
       ctx.fillStyle = gate1Col;
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
 
       // 管制閘門 2 (Z = 35)
       const gate2Col = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
-      drawBox(-50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(0, 35, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
+      drawBox(0, GATE_B_Z, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
       ctx.fillStyle = gate2Col;
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
@@ -2423,6 +2358,37 @@ export class HUD {
       ctx.fillStyle = southCol;
       ctx.font = this.fmFont(10);
       this.fmText(ctx, detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
+      // 指北針圖標 (Compass North，靜態元素併入快取圖層，不再每幀重繪)
+      ctx.save();
+      ctx.translate(w - 38, 42);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.moveTo(0, 14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = this.fmFont(9);
+      this.fmText(ctx, 'N', 0, -17);
+      ctx.restore();
       ctx = outCtx;
       }
       outCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2436,15 +2402,7 @@ export class HUD {
         if (!detentionData.hasKeycardA) {
           const kx = toScreenX(detentionData.keycardAPos.x);
           const ky = toScreenY(detentionData.keycardAPos.z);
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#38bdf8';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#38bdf8', '#38bdf8', 8 * pulse, 2, 5, 0);
           ctx.font = this.fmFont(10);
           this.fmText(ctx, '🔑 KEY A', kx, ky - 10);
         }
@@ -2452,15 +2410,7 @@ export class HUD {
         if (!detentionData.hasKeycardB) {
           const kx = toScreenX(detentionData.keycardBPos.x);
           const ky = toScreenY(detentionData.keycardBPos.z);
-          ctx.strokeStyle = '#facc15';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#facc15';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#facc15', '#facc15', 8 * pulse, 2, 5, 0);
           ctx.font = this.fmFont(10);
           this.fmText(ctx, '🔑 KEY B', kx, ky - 10);
         }
@@ -2468,15 +2418,7 @@ export class HUD {
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
           const kx = toScreenX(detentionData.masterKeycardPos.x);
           const ky = toScreenY(detentionData.masterKeycardPos.z);
-          ctx.strokeStyle = '#ffd700';
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 10 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 6, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#ffd700', '#ffd700', 10 * pulse, 2.5, 6, 0);
           ctx.font = this.fmFont(10.5);
           this.fmText(ctx, '★ MASTER KEY', kx, ky - 12);
         }
@@ -2486,15 +2428,7 @@ export class HUD {
       if (detentionData?.checkpointPos) {
         const cpx = toScreenX(detentionData.checkpointPos.x);
         const cpy = toScreenY(detentionData.checkpointPos.z);
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(cpx, cpy, 9 * pulse, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(cpx, cpy, 5.5, 0, Math.PI * 2);
-        ctx.fill();
+        HUD.drawPulseMarker(ctx, cpx, cpy, '#22c55e', '#22c55e', 9 * pulse, 2.5, 5.5, 0);
         ctx.fillStyle = '#ffffff';
         ctx.font = this.fmFont(9.5);
         this.fmText(ctx, `🚩 重生點 [${detentionData.checkpointName || '存檔點'}]`, cpx, cpy + 16);
@@ -2518,19 +2452,9 @@ export class HUD {
         }
 
         const isBoss = npc.role === 'DETENTION_BOSS';
-        const alertState = npc.alertState || 'NORMAL';
-        let dotColor = '#22c55e';
-        let coneColor = 'rgba(34, 197, 94, 0.22)';
-        if (alertState === 'ALERT' || npc.isChasing) {
-          dotColor = '#ef4444';
-          coneColor = 'rgba(239, 68, 68, 0.35)';
-        } else if (alertState === 'CAUTION') {
-          dotColor = '#f59e0b';
-          coneColor = 'rgba(245, 158, 11, 0.28)';
-        } else if (isBoss) {
-          dotColor = '#ff2222';
-          coneColor = 'rgba(255, 34, 34, 0.25)';
-        }
+        const tier = guardAlertTier(npc);
+        const dotColor = GUARD_DOT_COLORS[tier];
+        const coneColor = GUARD_CONE_COLORS_FULLMAP[tier];
 
         const ang = npc.rotationY;
         const coneDist = (isBoss ? 24 : 18) * scale;
@@ -2588,38 +2512,6 @@ export class HUD {
       ctx.font = this.fmFont(11);
       ctx.textAlign = 'center';
       this.fmText(ctx, 'YOU (主角)', px, py - 14);
-
-      // 指北針圖標 (Compass North)
-      ctx.save();
-      ctx.translate(w - 38, 42);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.moveTo(0, -14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(0, 14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.font = this.fmFont(9);
-      this.fmText(ctx, 'N', 0, -17);
-      ctx.restore();
 
       return;
     }
@@ -2682,13 +2574,7 @@ export class HUD {
     for (const npc of npcs) {
       const nx = toScreenX(npc.position.x);
       const nz = toScreenY(npc.position.z);
-      let dotColor = '#cbd5e1';
-      if (npc.role === 'TEACHER') dotColor = '#dc2626';
-      else if (npc.role === 'INSTRUCTOR') dotColor = '#b91c1c';
-      else if (npc.role === 'DOG') dotColor = '#f59e0b';
-      else if (npc.role === 'BIKE_PATROL') dotColor = '#8b5cf6';
-
-      ctx.fillStyle = dotColor;
+      ctx.fillStyle = (NPC_ROLE_MAP_STYLE[npc.role] || DEFAULT_NPC_MAP_STYLE).color;
       ctx.beginPath();
       ctx.arc(nx, nz, 4, 0, Math.PI * 2);
       ctx.fill();

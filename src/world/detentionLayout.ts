@@ -35,6 +35,24 @@ export interface DetentionHall extends Rect {
   doorTo: number;
 }
 
+// ---------- 管制閘門隔斷牆與 C 區發電機柱 (場景建模、碰撞、雷達、大地圖共用) ----------
+export const GATE_A_Z = -28;
+export const GATE_B_Z = 35;
+export const GATE_OPENING_HALF = 3.5;   // 中央閘口半寬
+export const GATE_WALL_OUTER_X = 96.5;  // 隔斷牆延伸至東西圍牆
+export const GATE_WALL_THICK = 1.0;     // 牆體厚度 (碰撞體另含 0.1m 餘裕)
+export const GATE_WALL_H = 5.5;
+// 每道閘門兩側各一段牆 (西段、東段)
+export const GATE_WALLS: Rect[] = [GATE_A_Z, GATE_B_Z].flatMap((z) => [
+  { minX: -GATE_WALL_OUTER_X, maxX: -GATE_OPENING_HALF, minZ: z - GATE_WALL_THICK / 2, maxZ: z + GATE_WALL_THICK / 2 },
+  { minX: GATE_OPENING_HALF, maxX: GATE_WALL_OUTER_X, minZ: z - GATE_WALL_THICK / 2, maxZ: z + GATE_WALL_THICK / 2 }
+]);
+
+export const GENERATOR_PILLAR_SIZE = 3.4;
+export const GENERATOR_PILLARS: { x: number; z: number }[] = [
+  { x: -16, z: 52 }, { x: 16, z: 52 }, { x: -16, z: 74 }, { x: 16, z: 74 }
+];
+
 // ---------- 道路 (地面貼圖，不阻擋移動) ----------
 export const DETENTION_ROADS: Rect[] = [
   { minX: -92, maxX: 92, minZ: -93.5, maxZ: -86 },  // 北側收容車道
@@ -155,10 +173,7 @@ export const DETENTION_MAP_FEATURES: DetentionMapFeature[] = [
   ...DETENTION_CONTAINERS.map((c) => rect(c.x, c.z, c.isZ ? CONTAINER_SHORT : CONTAINER_LONG, c.isZ ? CONTAINER_LONG : CONTAINER_SHORT, 'container')),
   ...OBSTACLE_WALLS.map((w) => box(w, 'barrier')),
   ...DETENTION_BARRIERS.map((b) => box(b, 'barrier')),
-  rect(-16, 52, 3.4, 3.4, 'pillar'),
-  rect(16, 52, 3.4, 3.4, 'pillar'),
-  rect(-16, 74, 3.4, 3.4, 'pillar'),
-  rect(16, 74, 3.4, 3.4, 'pillar'),
+  ...GENERATOR_PILLARS.map((gp) => rect(gp.x, gp.z, GENERATOR_PILLAR_SIZE, GENERATOR_PILLAR_SIZE, 'pillar')),
   box(GATE_KIOSK, 'structure')
 ];
 

@@ -14,7 +14,6 @@ export class StartScreen {
 
   constructor(handlers: StartScreenHandlers) {
     const startScreen = document.getElementById('start-screen');
-    const btnStart = document.getElementById('btn-start');
     const btnStartCampus = document.getElementById('btn-start-campus');
     const btnStartDetention = document.getElementById('btn-start-detention');
     const cardCampus = document.getElementById('card-world-campus');
@@ -69,24 +68,16 @@ export class StartScreen {
       cardDetention.addEventListener('click', (e) => handleStartWithWorld('DETENTION', e));
     }
 
-    if (btnStart) {
-      btnStart.addEventListener('click', (e) => handleStartWithWorld('CAMPUS', e));
-      btnStart.addEventListener('touchend', (e) => handleStartWithWorld('CAMPUS', e), { passive: false });
-    }
   }
 
   public updateProgress(percent: number, statusText: string) {
     const barFill = document.getElementById('loading-bar-fill');
     const percentText = document.getElementById('loading-percent-text');
     const statusEl = document.getElementById('loading-status-text');
-    const btnStart = document.getElementById('btn-start');
 
     if (barFill) barFill.style.width = `${percent}%`;
     if (percentText) percentText.textContent = `${percent}%`;
     if (statusEl) statusEl.textContent = statusText;
-    if (btnStart && !this.isLoaded) {
-      btnStart.textContent = `載入資源中 (${percent}%)...`;
-    }
   }
 
   // 資源載入完成：顯示世界選擇並啟用開始按鈕
@@ -97,7 +88,6 @@ export class StartScreen {
     const startScreen = document.getElementById('start-screen');
     const loadingContainer = document.getElementById('loading-container');
     const worldSelectContainer = document.getElementById('world-select-container');
-    const btnStart = document.getElementById('btn-start') as HTMLButtonElement | null;
 
     if (startScreen) {
       startScreen.classList.add('loaded');
@@ -107,11 +97,6 @@ export class StartScreen {
     }
     if (worldSelectContainer) {
       worldSelectContainer.style.display = 'flex';
-    }
-    if (btnStart) {
-      btnStart.removeAttribute('disabled');
-      btnStart.disabled = false;
-      btnStart.classList.add('is-ready');
     }
   }
 }

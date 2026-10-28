@@ -95,9 +95,9 @@ export class DetentionCutscene {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.scene.add(this.cutsceneGroup);
     this.buildVanModel();
     this.buildActors();
+    // 過場群組平時不掛在場景上 (僅隱藏仍會每幀走訪更新約百個節點的矩陣)，播放時才加入
     this.cutsceneGroup.visible = false;
   }
 
@@ -230,6 +230,7 @@ export class DetentionCutscene {
     this.timer = 0;
     this.whistlePlayed = false;
     this.brakePlayed = false;
+    this.scene.add(this.cutsceneGroup);
     this.cutsceneGroup.visible = true;
     setGameUiHidden(true);
 
@@ -510,6 +511,7 @@ export class DetentionCutscene {
   private complete() {
     this.isActive = false;
     this.cutsceneGroup.visible = false;
+    this.scene.remove(this.cutsceneGroup);
     setGameUiHidden(false);
     this.warden.resetPose();
     for (const g of this.guards) g.resetPose();

@@ -4,10 +4,15 @@ import {
   DETENTION_ROADS, DETENTION_BUILDINGS, DETENTION_TOWERS, DETENTION_CORNER_POSTS, SEARCHLIGHT_TOWER, DETENTION_CONTAINERS,
   CONTAINER_LONG, CONTAINER_SHORT, OBSTACLE_WALLS, DETENTION_BARRIERS, BOSS_ARENA, GATE_KIOSK, GUARD_HOUSE, EQUIPMENT_STORE,
   INTAKE_BOOTH, YARD_WATCHPOST, INTAKE_FENCE_Z0, INTAKE_FENCE_Z1, INTAKE_FENCE_SEGMENTS, FENCE_BREACH, INTAKE_CHECKPOINT, SERVICE_GATE,
+  GATE_WALLS, GATE_WALL_H, GENERATOR_PILLARS, GENERATOR_PILLAR_SIZE,
   DetentionHall, DoorSide, Rect
 } from './detentionLayout';
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 import { isBlockedXZ } from '../physics/aabb';
+import { sharedLambert } from './sceneUtils';
+
+// 管制閘門 1、2 門板共用材質 (外觀相同，閘門開啟只移動群組不改材質)
+const GATE_PANEL_MAT = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 });
 
 // 越獄起點 (北側牢房後方通風口)：首次進入與「重新挑戰」皆由此出發
 export const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
@@ -21,11 +26,6 @@ export interface SearchlightItem {
   groundSpot: THREE.Mesh;
   currentGroundPos: THREE.Vector3;
   angle: number;
-  speed: number;
-  radiusX: number;
-  radiusZ: number;
-  centerX: number;
-  centerZ: number;
   isDetecting: boolean;
   waypointIndex?: number;
   dwellTimer?: number;
@@ -115,12 +115,7 @@ export class DetentionWorld {
   public masterKeycardPos: THREE.Vector3 | null = null;                // 萬能逃脫鑰匙卡 (Boss 擊敗後掉落)
 
   // C 區發電機混凝土防護柱 (供玩家誘使 Boss 衝撞硬直破盾)
-  public generatorPillars: THREE.Vector3[] = [
-    new THREE.Vector3(-16, 0, 52),
-    new THREE.Vector3(16, 0, 52),
-    new THREE.Vector3(-16, 0, 74),
-    new THREE.Vector3(16, 0, 74)
-  ];
+  public generatorPillars: THREE.Vector3[] = GENERATOR_PILLARS.map((gp) => new THREE.Vector3(gp.x, 0, gp.z));
 
   // 門禁動態模型與碰撞體
   public isGateAOpen: boolean = false;
@@ -313,8 +308,9 @@ export class DetentionWorld {
 
     // 雙扇重型鋼柵防暴南大門 (動態解鎖升起大門，擊敗小Boss取得萬能鑰匙卡後開門逃脫)
     this.southGateMeshGroup = new THREE.Group();
-    const darkSteelMatSingle = new THREE.MeshLambertMaterial({ color: 0x5c728a });
-    const yellowMatSingle = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
+    // 與合併網格的鍍鋅鋼架/警示黃同色：共用材質實例
+    const darkSteelMatSingle = sharedLambert(0x5c728a);
+    const yellowMatSingle = sharedLambert(0xf1c40f);
     const rustMatSingle = new THREE.MeshLambertMaterial({ color: 0x8b0000 });
 
     const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(10.2, 6.6, 0.25), darkSteelMatSingle);
@@ -738,20 +734,18 @@ export class DetentionWorld {
       this.addCollider(bx.minX, bx.maxX, bx.minZ, bx.maxZ, 0, bx.h);
     }
 
-    // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
-    const gateA_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateA_WallW.translate(-50.0, 2.75, -28);
-    const gateA_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateA_WallE.translate(50.0, 2.75, -28);
-    concreteGeos.push(gateA_WallW, gateA_WallE);
-    this.addCollider(-96.5, -3.5, -28.6, -27.4, 0, 8.0);
-    this.addCollider(3.5, 96.5, -28.6, -27.4, 0, 8.0);
+    // 管制閘門 1、2 隔斷牆 (Z = -28 / 35，橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
+    for (const w of GATE_WALLS) {
+      const cz = (w.minZ + w.maxZ) / 2;
+      pushBox(concreteGeos, w.maxX - w.minX, GATE_WALL_H, w.maxZ - w.minZ, (w.minX + w.maxX) / 2, GATE_WALL_H / 2, cz);
+      this.addCollider(w.minX, w.maxX, cz - 0.6, cz + 0.6, 0, 8.0);
+    }
 
     // 動態管制閘門 1 (需藍色門禁卡 A 開啟)
     this.gateAMeshGroup = new THREE.Group();
     const gateADoor = new THREE.Mesh(
       new THREE.BoxGeometry(7.2, 4.5, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 })
+      GATE_PANEL_MAT
     );
     gateADoor.position.set(0, 2.25, -28);
     const gateAStripe = new THREE.Mesh(
@@ -810,20 +804,11 @@ export class DetentionWorld {
       this.addCollider(cp.minX, cp.maxX, cp.minZ, cp.maxZ, 0, cp.h + 0.3);
     }
 
-    // 管制閘門 2 隔斷牆 (Z = 35, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
-    const gateB_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateB_WallW.translate(-50.0, 2.75, 35);
-    const gateB_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateB_WallE.translate(50.0, 2.75, 35);
-    concreteGeos.push(gateB_WallW, gateB_WallE);
-    this.addCollider(-96.5, -3.5, 34.4, 35.6, 0, 8.0);
-    this.addCollider(3.5, 96.5, 34.4, 35.6, 0, 8.0);
-
     // 動態管制閘門 2 (需黃色門禁卡 B 開啟)
     this.gateBMeshGroup = new THREE.Group();
     const gateBDoor = new THREE.Mesh(
       new THREE.BoxGeometry(7.2, 4.5, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 })
+      GATE_PANEL_MAT
     );
     gateBDoor.position.set(0, 2.25, 35);
     const gateBStripe = new THREE.Mesh(
@@ -844,7 +829,7 @@ export class DetentionWorld {
     // 4 座巨型發電機混凝土加固防護柱 (供誘使 Boss 衝撞陷入硬直破盾)
     for (const gp of this.generatorPillars) {
       // 柱身
-      const pilGeo = new THREE.BoxGeometry(3.4, 5.5, 3.4);
+      const pilGeo = new THREE.BoxGeometry(GENERATOR_PILLAR_SIZE, 5.5, GENERATOR_PILLAR_SIZE);
       pilGeo.translate(gp.x, 2.75, gp.z);
       concreteGeos.push(pilGeo);
       this.addCollider(gp.x - 1.8, gp.x + 1.8, gp.z - 1.8, gp.z + 1.8, 0, 5.5);
@@ -1133,9 +1118,7 @@ export class DetentionWorld {
     const concreteMat = new THREE.MeshLambertMaterial({
       color: 0xdfe6ec // 現代工業建築淺灰白色石灰石混泥土 (營舍、總部、工廠大樓全面明亮化)
     });
-    const darkSteelMat = new THREE.MeshLambertMaterial({
-      color: 0x5c728a // 清晰鍍鋅金屬藍灰鋼架 (瞭望塔柱、樓梯、單槓立柱，具備金屬高光)
-    });
+    const darkSteelMat = sharedLambert(0x5c728a); // 清晰鍍鋅金屬藍灰鋼架 (瞭望塔柱、樓梯、單槓立柱，具備金屬高光)
     const rustedMetalMat = new THREE.MeshLambertMaterial({
       color: 0x5dade2 // 清澈天藍反射水窪積水鏡面與鍍鋅鋼板
     });
@@ -1148,9 +1131,7 @@ export class DetentionWorld {
     const corrugatedMat = new THREE.MeshLambertMaterial({
       color: 0x4a779d // 醒目鮮明的地中海海軍鋼藍波浪鐵皮頂棚
     });
-    const yellowHazardMat = new THREE.MeshLambertMaterial({
-      color: 0xf1c40f // 亮麗警示高光金黃色 (招牌、防撞邊緣)
-    });
+    const yellowHazardMat = sharedLambert(0xf1c40f); // 亮麗警示高光金黃色 (招牌、防撞邊緣)
     const woodPlankMat = new THREE.MeshLambertMaterial({
       color: 0xd7ccc8 // 明亮淺色松木/白樺木質棧板與長椅
     });
@@ -1186,11 +1167,11 @@ export class DetentionWorld {
     createMergedMesh(concreteGeos, concreteMat);
     createMergedMesh(darkSteelGeos, darkSteelMat);
     createMergedMesh(rustedMetalGeos, rustedMetalMat);
-    createMergedMesh(fenceWireGeos, fenceWireMat);
+    createMergedMesh(fenceWireGeos, fenceWireMat, false); // 半透明鐵網：陰影 pass 會當成不透明而投出實心牆影
     createMergedMesh(corrugatedIronGeos, corrugatedMat);
     createMergedMesh(yellowHazardGeos, yellowHazardMat);
     createMergedMesh(woodPlankGeos, woodPlankMat);
-    createMergedMesh(glassGeos, glassMat);
+    createMergedMesh(glassGeos, glassMat, false); // 半透明玻璃同上，不投射陰影
     createMergedMesh(tireRubberGeos, tireRubberMat);
     createMergedMesh(hayStrawGeos, hayStrawMat);
     createMergedMesh(sandbagGeos, sandbagMat);
@@ -1260,11 +1241,6 @@ export class DetentionWorld {
       groundSpot,
       currentGroundPos: new THREE.Vector3(0, 0.06, -72),
       angle: 0,
-      speed: 0.45,
-      radiusX: 36,
-      radiusZ: 32,
-      centerX: 0,
-      centerZ: 0,
       isDetecting: false,
       waypointIndex: 0,
       dwellTimer: 0,
@@ -1292,9 +1268,6 @@ export class DetentionWorld {
       if (sl.dwellTimer === undefined) sl.dwellTimer = 0;
       if (sl.alertLostTimer === undefined) sl.alertLostTimer = 0;
 
-      // 檢查光線路徑是否遭到任何掩體或建築實體碰撞箱遮擋
-      const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
-
       // 計算與玩家平面距離
       const pDx = playerPos.x - sl.currentGroundPos.x;
       const pDz = playerPos.z - sl.currentGroundPos.z;
@@ -1305,7 +1278,8 @@ export class DetentionWorld {
       }
 
       // 判定是否真正被光束捕捉：在光圈半徑 4.2m 內、身處室外地面 (Y < 3.0)、且無掩體遮擋、且未身處刺客草堆掩體中
-      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isOccludedByCover && !isPlayerHiding;
+      // 光線遮蔽射線測試成本高 (掃描全部碰撞箱)：僅在玩家已進入光圈範圍時才檢查 (短路求值)
+      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isPlayerHiding && !this.isRayBlockedByColliders(sl.towerPos, playerPos);
 
       if (isPlayerCaught) {
         sl.isDetecting = true;
@@ -1461,7 +1435,7 @@ export class DetentionWorld {
       metalness: 0.85,
       roughness: 0.2,
       emissive: colorHex,
-      emissiveIntensity: 0.5
+      emissiveIntensity: 0.9 // 不再附掛點光源 (撿卡/掉卡時切換光源數量會觸發全場材質 shader 重編譯卡頓)，改以較強自發光呈現
     });
     const card = new THREE.Mesh(cardGeo, cardMat);
     grp.add(card);
@@ -1472,10 +1446,6 @@ export class DetentionWorld {
     chip.position.y = 0.01;
     grp.add(chip);
 
-    const pLight = new THREE.PointLight(colorHex, 1.4, 4.5);
-    pLight.position.y = 0.35;
-    grp.add(pLight);
-
     return grp;
   }
 
@@ -1484,14 +1454,14 @@ export class DetentionWorld {
     const grp = new THREE.Group();
     const stand = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 1.2, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0x334155 })
+      sharedLambert(0x334155)
     );
     stand.position.y = 0.6;
     grp.add(stand);
 
     const head = new THREE.Mesh(
       new THREE.BoxGeometry(0.46, 0.35, 0.35),
-      new THREE.MeshLambertMaterial({ color: 0x1e293b })
+      sharedLambert(0x1e293b)
     );
     head.position.set(0, 1.2, 0);
     head.rotation.x = -0.3;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CollidableBox } from './CampusWorld';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
+import { bakeStatic, freezeStaticMatrices } from './sceneUtils';
 
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
@@ -9,6 +10,13 @@ const _ecoPushDir = new THREE.Vector3();
 // 毒液孢子共用幾何體與材質 (每次發射重複使用，消散時不釋放)
 const SPORE_GEO = new THREE.SphereGeometry(0.28, 8, 8);
 const SPORE_MAT = new THREE.MeshLambertMaterial({ color: 0x9b59b6 });
+// 發光物件改用自發光 + 加法混色地面光暈取代 PointLight：
+// 前向渲染下每盞點光源都會讓全場片元多跑一次光照迴圈，且光源顯示/隱藏會觸發全場材質 shader 重編譯
+const GLOW_DISC_GEO = new THREE.CircleGeometry(1.4, 24).rotateX(-Math.PI / 2);
+const GLOW_HALO_GEO = new THREE.SphereGeometry(1.1, 16, 12);
+function makeAdditiveGlowMat(color: number, opacity: number): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+}
 
 export interface HostileVine {
   id: number;
@@ -52,7 +60,6 @@ export interface InteractiveMushroom {
   visualColor: number;
   name: string;
   mesh: THREE.Group;
-  light: THREE.PointLight;
   isPicked: boolean;
   respawnTimer: number;
 }
@@ -136,6 +143,16 @@ export class EcologicalGarden {
     this.spawnGardenBugs();
     this.spawnHostilePlants();
     this.buildBossModel();
+
+    // 靜態場景 (地形、圍欄、拱門、花草、樹、池畔石、棧道、石碑) 依材質與空間格合併並凍結矩陣；
+    // 排除執行期會移動、變色或切換顯示的物件：食人花藤蔓、Boss、野菇、甲蟲、湖中女神
+    const dynamicObjects = new Set<THREE.Object3D>([this.lakeGoddessMesh, this.boss.mesh]);
+    for (const vine of this.hostileVines) dynamicObjects.add(vine.mesh);
+    for (const m of this.mushrooms) dynamicObjects.add(m.mesh);
+    for (const bug of this.bugs) dynamicObjects.add(bug.mesh);
+    bakeStatic(this.group, dynamicObjects);
+    freezeStaticMatrices(this.group, dynamicObjects);
+
     this.scene.add(this.group);
   }
 
@@ -407,9 +424,9 @@ export class EcologicalGarden {
     halo.rotation.x = Math.PI / 2;
     this.lakeGoddessMesh.add(halo);
 
-    // 湖水靈光
-    const goddessGlow = new THREE.PointLight(0x38bdf8, 1.5, 8.0);
-    goddessGlow.position.y = 2.0;
+    // 湖水靈光 (加法混色光暈球，不使用點光源)
+    const goddessGlow = new THREE.Mesh(GLOW_HALO_GEO, makeAdditiveGlowMat(0x38bdf8, 0.16));
+    goddessGlow.position.y = 1.9;
     this.lakeGoddessMesh.add(goddessGlow);
 
     this.group.add(this.lakeGoddessMesh);
@@ -574,7 +591,7 @@ export class EcologicalGarden {
       // 菇傘
       const cap = new THREE.Mesh(
         new THREE.ConeGeometry(0.65, 0.55, 10),
-        new THREE.MeshLambertMaterial({ color: cfg.color })
+        new THREE.MeshLambertMaterial({ color: cfg.color, emissive: cfg.glow, emissiveIntensity: 0.45 })
       );
       cap.position.y = 0.9;
       group.add(cap);
@@ -588,9 +605,9 @@ export class EcologicalGarden {
         group.add(dot);
       }
 
-      // 地面光暈
-      const glow = new THREE.PointLight(cfg.glow, 0.75, 4.2);
-      glow.position.y = 0.95;
+      // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)
+      const glow = new THREE.Mesh(GLOW_DISC_GEO, makeAdditiveGlowMat(cfg.glow, 0.32));
+      glow.position.y = 0.03;
       group.add(glow);
 
       this.group.add(group);
@@ -601,7 +618,6 @@ export class EcologicalGarden {
         visualColor: cfg.color,
         name: cfg.name,
         mesh: group,
-        light: glow,
         isPicked: false,
         respawnTimer: 0
       });
@@ -617,7 +633,6 @@ export class EcologicalGarden {
         m.isPicked = true;
         m.respawnTimer = 15.0; // 15秒後重新長出
         m.mesh.visible = false;
-        m.light.intensity = 0;
 
         // 隨機決定 6 種不同效果之一 (效果完全隨機，與外觀顏色無關)
         const roll = Math.random();
@@ -936,7 +951,6 @@ export class EcologicalGarden {
         if (m.respawnTimer <= 0) {
           m.isPicked = false;
           m.mesh.visible = true;
-          m.light.intensity = 0.7;
         }
       }
     }
