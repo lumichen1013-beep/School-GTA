@@ -14,3070 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Changa+One&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #0f141c;
-      font-family: 'Noto Sans TC', sans-serif;
-      touch-action: none;
-      -webkit-touch-callout: none;
-      overscroll-behavior: none;
-      position: fixed;
-    }
-
-    /* 行動端防手勢衝突與徹底阻絕下拉重整/縮放 */
-    html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
-      touch-action: none;
-      overscroll-behavior: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    #game-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: block;
-      z-index: 1;
-      touch-action: none;
-    }
-
-    /* HUD UI Overlay */
-    #hud-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 10;
-      pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: max(16px, env(safe-area-inset-top, 16px)) max(18px, env(safe-area-inset-right, 18px)) max(16px, env(safe-area-inset-bottom, 16px)) max(18px, env(safe-area-inset-left, 18px));
-      touch-action: none;
-      box-sizing: border-box;
-    }
-
-    /* Top Bar */
-    .hud-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      width: 100%;
-      pointer-events: none;
-    }
-
-    /* Top-Left: Minimap + Location Title + Health / Stamina Bars */
-    .hud-top-left {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      pointer-events: none;
-    }
-
-    .radar-container {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      pointer-events: none;
-    }
-
-    .minimap-wrapper {
-      position: relative;
-      width: 110px;
-      height: 110px;
-      border-radius: 50%;
-      background: rgba(10, 16, 26, 0.90);
-      border: 2.5px solid rgba(255, 204, 0, 0.45);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65), 0 0 12px rgba(255, 204, 0, 0.2);
-      overflow: hidden;
-      flex-shrink: 0;
-      pointer-events: auto;
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .minimap-wrapper:hover {
-      transform: scale(1.06);
-      border-color: #38bdf8;
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.6);
-    }
-    .minimap-expand-badge {
-      position: absolute;
-      bottom: 6px;
-      right: 6px;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(56, 189, 248, 0.7);
-      color: #38bdf8;
-      font-size: 11px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-      transition: background 0.2s, transform 0.2s;
-    }
-    .minimap-wrapper:hover .minimap-expand-badge {
-      background: #38bdf8;
-      color: #0f172a;
-      transform: scale(1.15);
-    }
-
-    #minimap-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    .radar-center-ring {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #ffcc00;
-      border: 2px solid #fff;
-      transform: translate(-50%, -50%);
-      box-shadow: 0 0 8px #ffcc00;
-      pointer-events: none;
-    }
-
-    .player-status-block {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      pointer-events: none;
-    }
-
-    .hud-title-zone {
-      background: rgba(13, 19, 33, 0.82);
-      backdrop-filter: blur(8px);
-      padding: 6px 12px;
-      border-radius: 8px;
-      border-left: 3.5px solid #ffcc00;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      color: #fff;
-    }
-
-    .school-badge {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #ffcc00;
-      font-weight: 700;
-      line-height: 1.2;
-    }
-
-    .location-name {
-      font-size: 15px;
-      font-weight: 900;
-      letter-spacing: 0.5px;
-      color: #ffffff;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
-      white-space: nowrap;
-    }
-
-    .bars-container {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      width: 160px;
-      background: rgba(13, 19, 33, 0.78);
-      backdrop-filter: blur(8px);
-      padding: 6px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    .meter-group {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .meter-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: #bbb;
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .meter-title {
-      color: #ddd;
-    }
-
-    .meter-val {
-      font-family: 'Changa One', monospace;
-      font-size: 11px;
-      color: #fff;
-    }
-
-    .meter-bar {
-      width: 100%;
-      height: 7px;
-      background: rgba(0, 0, 0, 0.65);
-      border-radius: 4px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    .meter-fill {
-      height: 100%;
-      width: 100%;
-      border-radius: 4px;
-      transition: width 0.15s ease-out;
-    }
-
-    .fill-hp {
-      background: linear-gradient(90deg, #27ae60, #2ecc71);
-      box-shadow: 0 0 6px rgba(46, 204, 113, 0.5);
-    }
-
-    .fill-stamina {
-      background: linear-gradient(90deg, #2980b9, #3498db);
-      box-shadow: 0 0 6px rgba(52, 152, 219, 0.5);
-    }
-
-    /* Top-Right: Wanted Stars, Demerits, Status, Pills, Weapons */
-    .hud-top-right {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 6px;
-      pointer-events: none;
-    }
-
-    /* GTA Style 5-Star Wanted Level */
-    .wanted-stars {
-      display: flex;
-      gap: 6px;
-      background: rgba(13, 19, 33, 0.7);
-      padding: 8px 14px;
-      border-radius: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    }
-
-    .star {
-      font-size: 26px;
-      color: rgba(255, 255, 255, 0.2);
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      text-shadow: 0 0 5px rgba(0,0,0,0.8);
-    }
-
-    .star.active {
-      color: #ffcc00;
-      transform: scale(1.15);
-      text-shadow: 0 0 12px rgba(255, 204, 0, 0.8), 0 0 24px rgba(255, 100, 0, 0.5);
-      animation: pulseStar 1s infinite alternate;
-    }
-
-    .star.danger {
-      color: #ff3344;
-      text-shadow: 0 0 14px rgba(255, 51, 68, 0.9), 0 0 28px rgba(255, 0, 0, 0.6);
-    }
-
-    .star.evading {
-      animation: evadingBlink 0.45s infinite alternate !important;
-    }
-
-    @keyframes pulseStar {
-      from { transform: scale(1.1); filter: brightness(1); }
-      to { transform: scale(1.25); filter: brightness(1.3); }
-    }
-
-    @keyframes evadingBlink {
-      from { opacity: 0.25; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1.2); }
-    }
-
-    /* Clock & Cash & Pills Row */
-    .hud-status-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      pointer-events: auto;
-    }
-
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: rgba(13, 19, 33, 0.82);
-      backdrop-filter: blur(8px);
-      padding: 6px 12px;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      border-right: 3px solid #2ecc71;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    .badge-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .cash-val {
-      color: #2ecc71;
-      font-family: 'Changa One', monospace;
-      font-size: 16px;
-      letter-spacing: 0.5px;
-    }
-
-    .time-val {
-      color: #f1c40f;
-      font-family: 'Changa One', monospace;
-      font-size: 15px;
-    }
-
-    .weather-badge {
-      cursor: pointer;
-      padding: 2px 7px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      transition: all 0.2s ease;
-      user-select: none;
-    }
-
-    .weather-badge:hover {
-      background: rgba(255, 255, 255, 0.25);
-      border-color: rgba(255, 255, 255, 0.45);
-      transform: translateY(-1px);
-    }
-
-    .weather-key-hint {
-      font-size: 10px;
-      padding: 1px 4px;
-      background: rgba(0, 0, 0, 0.45);
-      border-radius: 3px;
-      color: #ffd32a;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      margin-left: 4px;
-      font-weight: bold;
-    }
-
-    .world-badge {
-      cursor: pointer;
-      padding: 2px 8px;
-      border-radius: 6px;
-      background: rgba(41, 128, 185, 0.25);
-      border: 1px solid rgba(52, 152, 219, 0.45);
-      transition: all 0.2s ease;
-      user-select: none;
-      color: #ecf0f1;
-    }
-
-    .world-badge:hover {
-      background: rgba(41, 128, 185, 0.45);
-      border-color: rgba(52, 152, 219, 0.8);
-      transform: translateY(-1px);
-    }
-
-    .world-key-hint {
-      font-size: 10px;
-      padding: 1px 4px;
-      background: rgba(0, 0, 0, 0.45);
-      border-radius: 3px;
-      color: #38bdf8;
-      border: 1px solid rgba(52, 152, 219, 0.4);
-      margin-left: 4px;
-      font-weight: bold;
-    }
-
-    .hud-action-pills {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .hud-pill-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      background: rgba(13, 19, 33, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 5px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-right: 3px solid #f1c40f;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      font-family: inherit;
-      cursor: pointer;
-      user-select: none;
-      transition: all 0.25s ease;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      pointer-events: auto;
-      outline: none;
-    }
-
-    .hud-pill-btn:hover {
-      background: rgba(26, 38, 66, 0.95);
-      border-color: rgba(241, 196, 15, 0.6);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(241, 196, 15, 0.35);
-    }
-
-    .hud-pill-btn:active {
-      transform: translateY(0);
-      filter: brightness(0.9);
-    }
-
-    #toggle-mobile-mode-btn {
-      border-right-color: #9b59b6;
-    }
-
-    #toggle-mobile-mode-btn:hover {
-      border-color: rgba(155, 89, 182, 0.6);
-      box-shadow: 0 6px 16px rgba(155, 89, 182, 0.35);
-    }
-
-    /* BGM Control Badge */
-    .bgm-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(13, 19, 33, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 5px 10px;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      border-right: 3px solid #3498db;
-      cursor: pointer;
-      user-select: none;
-      transition: all 0.25s ease;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      pointer-events: auto;
-    }
-
-    .bgm-badge:hover {
-      background: rgba(26, 38, 66, 0.95);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(52, 152, 219, 0.35);
-    }
-
-    .bgm-badge.pursuit {
-      border-right-color: #e74c3c;
-      animation: bgmPulse 1s infinite alternate;
-    }
-
-    .bgm-badge.muted {
-      border-right-color: #7f8c8d;
-      opacity: 0.7;
-    }
-
-    .bgm-btn-pill {
-      background: rgba(52, 152, 219, 0.3);
-      color: #3498db;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    .bgm-badge.pursuit .bgm-btn-pill {
-      background: rgba(231, 76, 60, 0.35);
-      color: #ff4d4d;
-    }
-
-    .bgm-badge.muted .bgm-btn-pill {
-      background: rgba(127, 140, 141, 0.3);
-      color: #bdc3c7;
-    }
-
-    .bgm-key-hint {
-      background: rgba(255, 255, 255, 0.15);
-      padding: 1px 5px;
-      border-radius: 3px;
-      font-size: 10px;
-      color: #ffcc00;
-    }
-
-    @keyframes bgmPulse {
-      from { transform: scale(1); filter: brightness(1); }
-      to { transform: scale(1.04); filter: brightness(1.2); }
-    }
-
-    /* 專屬任務看板 (Quest / Mission Tracker Panel) - 頂級毛玻璃手遊風格看板 */
-    #quest-tracker-panel {
-      position: absolute;
-      top: 140px;
-      left: max(18px, env(safe-area-inset-left, 18px));
-      width: 326px;
-      max-width: 90vw;
-      background: rgba(15, 23, 42, 0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
-      padding: 10px 12px;
-      color: #fff;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.15) inset;
-      z-index: 40;
-      pointer-events: auto;
-      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-      user-select: none;
-    }
-
-    .quest-tracker-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      user-select: none;
-      gap: 8px;
-    }
-
-    .quest-header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .quest-title-text {
-      font-weight: 800;
-      font-size: 13.5px;
-      letter-spacing: 0.5px;
-      background: linear-gradient(135deg, #fef08a, #f59e0b);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
-    }
-
-    .quest-progress-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      font-size: 10.5px;
-      font-weight: 700;
-      padding: 2px 7px;
-      border-radius: 12px;
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(52, 211, 153, 0.35);
-      box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
-    }
-
-    .quest-header-right {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .quest-toggle-indicator {
-      font-size: 11px;
-      color: #94a3b8;
-      font-weight: 700;
-      transition: transform 0.25s ease;
-    }
-
-    .quest-key-badge {
-      background: rgba(255, 255, 255, 0.08);
-      color: #e2e8f0;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-size: 9.5px;
-      font-weight: 800;
-    }
-
-    /* 金綠色光澤細緻總進度條 */
-    .quest-total-bar-wrap {
-      width: 100%;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 2px;
-      overflow: hidden;
-      margin: 8px 0 8px 0;
-      position: relative;
-    }
-
-    .quest-total-bar {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #10b981, #eab308);
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
-      border-radius: 2px;
-      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    /* 分類標籤切換 Tabs */
-    .quest-tabs-bar {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 8px;
-    }
-
-    .quest-tab-btn {
-      flex: 1;
-      padding: 4px 0;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      font-size: 10px;
-      color: #94a3b8;
-      font-weight: 700;
-      cursor: pointer;
-      outline: none;
-      transition: all 0.2s ease;
-      font-family: inherit;
-      text-align: center;
-    }
-
-    .quest-tab-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: #f1f5f9;
-    }
-
-    .quest-tab-btn.active {
-      background: rgba(56, 189, 248, 0.2);
-      border-color: rgba(56, 189, 248, 0.55);
-      color: #38bdf8;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
-    }
-
-    /* 任務項目清單容器與客製化捲軸 */
-    .quest-list-container {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-height: 275px;
-      overflow-y: auto;
-      padding-right: 3px;
-      transition: all 0.25s ease;
-    }
-
-    .quest-list-container::-webkit-scrollbar {
-      width: 4px;
-    }
-    .quest-list-container::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.15);
-      border-radius: 4px;
-    }
-    .quest-list-container::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-    }
-    .quest-list-container::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.4);
-    }
-
-    .quest-list-container.collapsed {
-      display: none !important;
-    }
-
-    #quest-tracker-panel.collapsed .quest-total-bar-wrap,
-    #quest-tracker-panel.collapsed .quest-tabs-bar,
-    #quest-tracker-panel.collapsed .quest-list-container {
-      display: none !important;
-    }
-
-    .quest-category-group {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-bottom: 4px;
-    }
-
-    .quest-category-group.hidden {
-      display: none !important;
-    }
-
-    .quest-category-title {
-      font-size: 10px;
-      font-weight: 800;
-      color: #94a3b8;
-      padding: 3px 4px 2px 4px;
-      letter-spacing: 0.5px;
-      border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
-      margin-bottom: 2px;
-    }
-
-    .quest-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.035);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      transition: all 0.2s ease;
-    }
-
-    .quest-item:hover {
-      background: rgba(255, 255, 255, 0.065);
-      transform: translateX(2px);
-    }
-
-    .quest-item.completed {
-      background: rgba(34, 197, 94, 0.08);
-      border-color: rgba(34, 197, 94, 0.25);
-    }
-
-    .q-icon {
-      font-size: 14px;
-      flex-shrink: 0;
-    }
-
-    .q-info {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .q-name {
-      font-weight: 700;
-      font-size: 11px;
-      color: #f1f5f9;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .q-desc {
-      font-size: 9.5px;
-      color: #94a3b8;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-top: 1px;
-    }
-
-    .q-status {
-      font-weight: 700;
-      font-size: 9.5px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      white-space: nowrap;
-      flex-shrink: 0;
-      background: rgba(245, 158, 11, 0.15);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      transition: all 0.2s ease;
-    }
-
-    .q-status.done {
-      background: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(234, 179, 8, 0.22));
-      color: #4ade80;
-      border-color: rgba(74, 222, 128, 0.5);
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
-      text-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
-    }
-
-    #crosshair {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 6px;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.8);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
-      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    /* 籃球專用瞄準準心 (Basketball Aiming Reticle) */
-    #crosshair.aiming-basketball {
-      width: 26px;
-      height: 26px;
-      border: 2px solid #ff9f43;
-      background: rgba(255, 159, 67, 0.2);
-      border-radius: 50%;
-      box-shadow: 0 0 14px rgba(255, 159, 67, 0.95), inset 0 0 8px rgba(255, 159, 67, 0.5);
-      animation: crosshairAimPulse 1.1s infinite alternate;
-    }
-
-    #crosshair.aiming-basketball::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 5px;
-      height: 5px;
-      background: #ffcc00;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      box-shadow: 0 0 8px #ffcc00;
-    }
-
-    @keyframes crosshairAimPulse {
-      0% { transform: translate(-50%, -50%) scale(1.0); border-color: #ff9f43; }
-      100% { transform: translate(-50%, -50%) scale(1.18); border-color: #ff5252; box-shadow: 0 0 18px rgba(255, 82, 82, 0.9); }
-    }
-
-    /* Basketball Shot Timing Gauge */
-    #shot-meter {
-      position: absolute;
-      top: 42%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 175px;
-      background: rgba(15, 23, 42, 0.90);
-      backdrop-filter: blur(8px);
-      padding: 8px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 159, 67, 0.7);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 159, 67, 0.35);
-      display: none;
-      pointer-events: none;
-      z-index: 10;
-      transition: opacity 0.15s ease;
-    }
-
-    .shot-meter-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 11px;
-      font-weight: 800;
-      color: #ff9f43;
-      margin-bottom: 5px;
-      letter-spacing: 0.5px;
-    }
-
-    .shot-meter-hint {
-      color: #a4b0be;
-      font-size: 10px;
-    }
-
-    .shot-meter-track {
-      position: relative;
-      width: 100%;
-      height: 14px;
-      background: #1e293b;
-      border-radius: 7px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    /* 最佳綠色出手區間 (Sweet Spot) */
-    .shot-meter-sweetspot {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 68%;
-      width: 18%;
-      background: linear-gradient(90deg, rgba(46, 204, 113, 0.7), rgba(46, 204, 113, 1), rgba(46, 204, 113, 0.7));
-      box-shadow: 0 0 8px #2ecc71;
-      z-index: 2;
-    }
-
-    .shot-meter-fill {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: 0%;
-      background: linear-gradient(90deg, #3498db, #f1c40f, #e67e22);
-      border-radius: 7px;
-      transition: width 0.02s linear;
-      z-index: 1;
-    }
-
-    .shot-meter-needle {
-      position: absolute;
-      top: -2px;
-      bottom: -2px;
-      left: 0%;
-      width: 3px;
-      background: #ffffff;
-      box-shadow: 0 0 6px #ffffff, 0 0 10px #ffcc00;
-      z-index: 3;
-      transform: translateX(-50%);
-    }
-
-    .shot-meter-feedback {
-      text-align: center;
-      font-size: 13px;
-      font-weight: 900;
-      margin-top: 5px;
-      letter-spacing: 1px;
-      display: none;
-    }
-
-    .shot-meter-feedback.perfect {
-      color: #2ecc71;
-      text-shadow: 0 0 10px rgba(46, 204, 113, 0.9);
-      display: block;
-    }
-
-    .shot-meter-feedback.good {
-      color: #f1c40f;
-      text-shadow: 0 0 8px rgba(241, 196, 15, 0.8);
-      display: block;
-    }
-
-    .shot-meter-feedback.bad {
-      color: #e74c3c;
-      text-shadow: 0 0 8px rgba(231, 76, 60, 0.8);
-      display: block;
-    }
-
-    #action-prompt {
-      position: absolute;
-      top: 58%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(6px);
-      color: #fff;
-      padding: 8px 18px;
-      border-radius: 20px;
-      border: 1px solid rgba(255, 204, 0, 0.5);
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    }
-
-    #action-prompt .key {
-      display: inline-block;
-      background: #ffcc00;
-      color: #000;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-weight: 900;
-      margin-right: 6px;
-    }
-
-    /* Notification Banner */
-    #hud-banner {
-      position: absolute;
-      top: 90px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-20px);
-      background: linear-gradient(90deg, rgba(231, 76, 60, 0) 0%, rgba(231, 76, 60, 0.9) 30%, rgba(231, 76, 60, 0.9) 70%, rgba(231, 76, 60, 0) 100%);
-      color: #fff;
-      padding: 10px 48px;
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      opacity: 0;
-      transition: all 0.4s ease;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-      pointer-events: none;
-      z-index: 100;
-    }
-
-    #hud-banner.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    /* 4F 羽球挑戰賽即時比分橫幅 */
-    #tennis-scoreboard {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: linear-gradient(135deg, rgba(22, 160, 133, 0.95), rgba(44, 62, 80, 0.95));
-      border: 2px solid #2ecc71;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 15px rgba(46, 204, 113, 0.5);
-      color: #ffffff;
-      font-weight: 800;
-      font-size: 13px;
-      padding: 4px 16px;
-      border-radius: 20px;
-      letter-spacing: 0.5px;
-      z-index: 100;
-      display: none;
-      align-items: center;
-      gap: 8px;
-      pointer-events: none;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-      animation: modalSlide 0.2s ease-out;
-    }
-
-    /* 4F 羽球挑戰賽對話視窗 */
-    .tennis-dialog-card {
-      background: #111827;
-      border: 2px solid #f1c40f;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(241, 196, 15, 0.3);
-      border-radius: 16px;
-      width: 520px;
-      max-width: 90vw;
-      padding: 24px 28px;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      animation: modalSlide 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-    .tennis-dialog-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      padding-bottom: 12px;
-    }
-    .tennis-dialog-title {
-      font-size: 20px;
-      font-weight: 900;
-      color: #f1c40f;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .tennis-dialog-body {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 16px;
-      border-left: 4px solid #2ecc71;
-    }
-    .tennis-dialog-avatar {
-      font-size: 38px;
-      flex-shrink: 0;
-      background: rgba(46, 204, 113, 0.15);
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .tennis-dialog-text {
-      font-size: 15px;
-      line-height: 1.55;
-      color: #eceff1;
-      font-weight: 500;
-    }
-    .tennis-dialog-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      margin-top: 6px;
-    }
-    .tennis-btn-start {
-      background: linear-gradient(135deg, #2ecc71, #27ae60);
-      color: #fff;
-      font-weight: 700;
-      font-size: 14px;
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
-      transition: transform 0.1s, filter 0.1s;
-    }
-    .tennis-btn-start:hover {
-      filter: brightness(1.15);
-      transform: translateY(-1px);
-    }
-    .tennis-btn-cancel {
-      background: rgba(255, 255, 255, 0.1);
-      color: #ccc;
-      font-weight: 600;
-      font-size: 14px;
-      padding: 10px 18px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-    }
-    .tennis-btn-cancel:hover {
-      background: rgba(255, 255, 255, 0.18);
-      color: #fff;
-    }
-
-    /* 教學大樓 閃身步老師對話視窗 */
-    .dodge-dialog-card {
-      background: #151928;
-      border: 2px solid #8e44ad;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.75), 0 0 25px rgba(142, 68, 173, 0.4);
-      border-radius: 16px;
-      width: 530px;
-      max-width: 90vw;
-      padding: 24px 28px;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      animation: modalSlide 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-    .dodge-dialog-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      padding-bottom: 12px;
-    }
-    .dodge-dialog-title {
-      font-size: 20px;
-      font-weight: 900;
-      color: #bb6bd9;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .dodge-dialog-cash {
-      font-size: 14px;
-      font-weight: 700;
-      color: #f1c40f;
-    }
-    .dodge-dialog-body {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 16px;
-      border-left: 4px solid #9b59b6;
-    }
-    .dodge-dialog-avatar {
-      font-size: 38px;
-      flex-shrink: 0;
-      background: rgba(142, 68, 173, 0.2);
-      width: 58px;
-      height: 58px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid rgba(187, 107, 217, 0.5);
-    }
-    .dodge-dialog-text {
-      font-size: 14.5px;
-      line-height: 1.6;
-      color: #eceff1;
-      font-weight: 500;
-    }
-    .dodge-dialog-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      margin-top: 6px;
-    }
-    .dodge-btn-learn {
-      background: linear-gradient(135deg, #8e44ad, #6c5ce7);
-      color: #fff;
-      font-weight: 800;
-      font-size: 14px;
-      padding: 10px 22px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 4px 14px rgba(108, 92, 231, 0.5);
-      transition: transform 0.1s, filter 0.1s;
-    }
-    .dodge-btn-learn:hover:not(:disabled) {
-      filter: brightness(1.2);
-      transform: translateY(-1px);
-    }
-    .dodge-btn-learn:disabled {
-      background: #4a4e69;
-      color: #aaa;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-    .dodge-btn-cancel {
-      background: rgba(255, 255, 255, 0.1);
-      color: #ccc;
-      font-weight: 600;
-      font-size: 14px;
-      padding: 10px 18px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      cursor: pointer;
-    }
-
-    /* HUD 技能槽卡片 (Skill HUD Card) */
-    .skill-hud-card {
-      background: rgba(13, 19, 33, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 8px 12px;
-      border-radius: 12px;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      border: 1px solid rgba(142, 68, 173, 0.45);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 12px rgba(142, 68, 173, 0.25);
-      pointer-events: auto;
-      margin-left: 12px;
-      transition: opacity 0.2s, border-color 0.2s;
-    }
-    .skill-hud-card.locked {
-      opacity: 0.65;
-      border-color: rgba(255, 255, 255, 0.15);
-      box-shadow: none;
-    }
-    .skill-hud-card.on-cooldown {
-      border-color: rgba(231, 76, 60, 0.6);
-    }
-    .skill-icon-wrapper {
-      position: relative;
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      background: rgba(142, 68, 173, 0.25);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 1.5px solid rgba(187, 107, 217, 0.6);
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .skill-icon {
-      font-size: 24px;
-      z-index: 1;
-    }
-    .skill-cooldown-overlay {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 0%;
-      background: rgba(0, 0, 0, 0.65);
-      transition: height 0.08s linear;
-      z-index: 2;
-    }
-    .skill-cd-number {
-      position: absolute;
-      font-size: 13px;
-      font-weight: 900;
-      color: #ff7675;
-      text-shadow: 0 0 4px #000;
-      z-index: 3;
-      display: none;
-      font-family: monospace;
-    }
-    .skill-info-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .skill-name-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .skill-name {
-      font-size: 13px;
-      font-weight: 800;
-      color: #a29bfe;
-    }
-    .skill-key-badge {
-      background: rgba(255, 255, 255, 0.22);
-      color: #ffeaa7;
-      padding: 0 5px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 800;
-      font-family: monospace;
-    }
-    .skill-desc-text {
-      font-size: 10.5px;
-      color: rgba(255, 255, 255, 0.72);
-      white-space: nowrap;
-    }
-
-    #pointer-unlock-hint {
-      position: absolute;
-      top: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid #ffcc00;
-      color: #ffcc00;
-      padding: 10px 24px;
-      border-radius: 30px;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 1px;
-      display: none;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-      pointer-events: none;
-      animation: pulseHint 1.2s infinite alternate;
-    }
-
-    @keyframes pulseHint {
-      from { transform: translateX(-50%) scale(0.98); opacity: 0.9; }
-      to { transform: translateX(-50%) scale(1.02); opacity: 1; }
-    }
-
-    /* Bottom Section (PC Controls Guide Left, Mobile Left is completely clean for joystick) */
-    .hud-bottom {
-      display: flex;
-      justify-content: flex-start;
-      align-items: flex-end;
-      width: 100%;
-      pointer-events: none;
-    }
-
-    /* Controls Guide Overlay */
-    .controls-panel {
-      background: rgba(13, 19, 33, 0.78);
-      backdrop-filter: blur(8px);
-      padding: 10px 14px;
-      border-radius: 10px;
-      color: rgba(255, 255, 255, 0.85);
-      font-size: 11px;
-      line-height: 1.7;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-      pointer-events: auto;
-    }
-
-    .controls-panel-title {
-      font-weight: 800;
-      color: #ffcc00;
-      margin-bottom: 4px;
-      font-size: 11.5px;
-      letter-spacing: 0.5px;
-    }
-
-    .key-badge {
-      background: rgba(255, 255, 255, 0.2);
-      color: #fff;
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-weight: 700;
-      margin: 0 2px;
-      font-family: monospace;
-    }
-
-    /* 變異食人花 Boss 血條 */
-    #boss-hud {
-      position: absolute;
-      top: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 440px;
-      background: rgba(13, 19, 33, 0.85);
-      backdrop-filter: blur(10px);
-      border-radius: 12px;
-      padding: 12px 18px;
-      border: 2px solid #8e44ad;
-      box-shadow: 0 0 25px rgba(142, 68, 173, 0.6), inset 0 0 15px rgba(231, 76, 60, 0.3);
-      display: none;
-      z-index: 20;
-      pointer-events: none;
-      animation: bossHudGlow 2s infinite alternate;
-    }
-
-    @keyframes bossHudGlow {
-      from { box-shadow: 0 0 15px rgba(142, 68, 173, 0.4); }
-      to { box-shadow: 0 0 28px rgba(231, 76, 60, 0.7); }
-    }
-
-    .boss-title-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      font-weight: 900;
-    }
-
-    .boss-name {
-      color: #ff7675;
-      font-size: 15px;
-      letter-spacing: 1px;
-      text-shadow: 0 0 8px rgba(255, 118, 117, 0.6);
-    }
-
-    .boss-hp-text {
-      color: #ffeaa7;
-      font-family: 'Changa One', monospace;
-      font-size: 15px;
-    }
-
-    .boss-bar-track {
-      width: 100%;
-      height: 14px;
-      background: rgba(0, 0, 0, 0.7);
-      border-radius: 7px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .boss-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #d63031, #e84393, #8e44ad);
-      border-radius: 7px;
-      transition: width 0.2s ease-out;
-      box-shadow: 0 0 12px rgba(232, 67, 147, 0.8);
-    }
-
-    /* 合作社補血熱食部 Modal */
-    .modal-backdrop {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(5, 8, 15, 0.75);
-      backdrop-filter: blur(8px);
-      z-index: 80;
-      display: none;
-      justify-content: center;
-      align-items: center;
-      pointer-events: auto;
-    }
-
-    .commissary-card {
-      background: #111827;
-      border: 2px solid #2ecc71;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(46, 204, 113, 0.25);
-      border-radius: 16px;
-      width: 600px;
-      max-width: 90vw;
-      max-height: 85vh;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-y;
-      padding: 24px 28px;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      animation: modalSlide 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    @keyframes modalSlide {
-      from { opacity: 0; transform: scale(0.92) translateY(20px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
-    }
-
-    .commissary-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      padding-bottom: 12px;
-    }
-
-    .commissary-title {
-      font-size: 22px;
-      font-weight: 900;
-      color: #2ecc71;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .commissary-cash {
-      font-size: 15px;
-      font-weight: 700;
-      color: #f1c40f;
-    }
-
-    .commissary-close {
-      background: none;
-      border: none;
-      color: #aaa;
-      font-size: 28px;
-      cursor: pointer;
-      line-height: 1;
-      transition: color 0.15s ease;
-    }
-
-    .commissary-close:hover {
-      color: #ff4757;
-    }
-
-    .commissary-desc {
-      font-size: 13px;
-      color: #ccc;
-    }
-
-    .commissary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-
-    .food-card {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: all 0.2s ease;
-    }
-
-    .food-card:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: #2ecc71;
-      transform: translateY(-2px);
-    }
-
-    .food-info {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .food-name {
-      font-weight: 800;
-      font-size: 14px;
-      color: #fff;
-    }
-
-    .food-effect {
-      font-size: 12px;
-      color: #2ecc71;
-      font-weight: 600;
-    }
-
-    .food-price {
-      font-size: 13px;
-      color: #f1c40f;
-      font-weight: 800;
-    }
-
-    .food-buy-btn {
-      background: linear-gradient(135deg, #27ae60, #2ecc71);
-      color: #fff;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .food-buy-btn:hover {
-      filter: brightness(1.15);
-      transform: scale(1.05);
-    }
-
-    .food-buy-btn:disabled {
-      background: #4b5563;
-      color: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    /* Start Screen Overlay */
-    #start-screen {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(7, 11, 18, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      cursor: wait;
-      color: #fff;
-      transition: opacity 0.5s ease;
-      padding: env(safe-area-inset-top, 16px) env(safe-area-inset-right, 16px) env(safe-area-inset-bottom, 16px) env(safe-area-inset-left, 16px);
-      box-sizing: border-box;
-    }
-
-    #start-screen.loaded {
-      cursor: pointer;
-    }
-
-    .game-logo {
-      font-size: 64px;
-      font-weight: 900;
-      font-family: 'Changa One', 'Noto Sans TC', sans-serif;
-      letter-spacing: 4px;
-      text-transform: uppercase;
-      background: linear-gradient(135deg, #ffcc00 0%, #ff5500 50%, #e74c3c 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 10px 30px rgba(255, 100, 0, 0.4);
-      margin-bottom: 8px;
-      text-align: center;
-    }
-
-    .game-sub {
-      font-size: 18px;
-      color: #ddd;
-      letter-spacing: 2px;
-      margin-bottom: 28px;
-      text-align: center;
-    }
-
-    /* 載入進度條容器 (Loading Progress Bar) */
-    #loading-container {
-      width: 380px;
-      max-width: 90vw;
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1.5px solid rgba(245, 158, 11, 0.35);
-      border-radius: 16px;
-      padding: 16px 20px;
-      margin-bottom: 28px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.12);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-sizing: border-box;
-      pointer-events: auto;
-    }
-
-    .loading-info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-    }
-
-    #loading-status-text {
-      color: #e2e8f0;
-      font-size: 13px;
-      font-weight: 600;
-      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-    }
-
-    #loading-percent-text {
-      color: #f59e0b;
-      font-weight: 900;
-      font-family: 'Changa One', monospace, sans-serif;
-      font-size: 16px;
-      text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
-      flex-shrink: 0;
-    }
-
-    .loading-bar-track {
-      width: 100%;
-      height: 14px;
-      background: #0f172a;
-      border-radius: 999px;
-      border: 1.5px solid rgba(245, 158, 11, 0.4);
-      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.5);
-      overflow: hidden;
-      position: relative;
-      padding: 2px;
-      box-sizing: border-box;
-      display: flex;
-      align-items: center;
-    }
-
-    #loading-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #f39c12, #e67e22, #f1c40f);
-      border-radius: 999px;
-      box-shadow: 0 0 12px rgba(241, 196, 15, 0.7);
-      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .loading-hint {
-      font-size: 11px;
-      color: #94a3b8;
-      text-align: center;
-      letter-spacing: 0.5px;
-    }
-
-    .btn-start {
-      background: linear-gradient(135deg, #ffcc00, #ff8800);
-      color: #111;
-      font-size: 18px;
-      font-weight: 900;
-      padding: 16px 48px;
-      border-radius: 40px;
-      border: none;
-      box-shadow: 0 8px 24px rgba(255, 136, 0, 0.4);
-      letter-spacing: 1px;
-      opacity: 0.65;
-      cursor: wait;
-      pointer-events: none;
-      filter: grayscale(30%);
-      animation: none;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .btn-start.is-ready {
-      opacity: 1;
-      cursor: pointer;
-      pointer-events: auto;
-      filter: none;
-      animation: pulseBtn 1.5s infinite;
-    }
-
-    .btn-start.is-ready:hover {
-      transform: scale(1.05);
-      box-shadow: 0 10px 30px rgba(255, 170, 0, 0.65);
-    }
-
-    .btn-start.is-ready:active {
-      transform: scale(0.97);
-    }
-
-    @keyframes pulseBtn {
-      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7), 0 8px 24px rgba(255, 136, 0, 0.4); }
-      70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(255, 204, 0, 0), 0 12px 30px rgba(255, 136, 0, 0.6); }
-      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0), 0 8px 24px rgba(255, 136, 0, 0.4); }
-    }
-
-    /* 雙世界切換與選擇介面 (World Selection UI) */
-    #world-select-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-      max-width: 840px;
-      margin-top: 10px;
-      animation: modalSlide 0.35s ease;
-      pointer-events: auto;
-    }
-
-    .world-select-prompt {
-      font-size: 17px;
-      font-weight: 800;
-      color: #ecf0f1;
-      margin-bottom: 14px;
-      letter-spacing: 1.5px;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
-    }
-
-    .world-select-grid {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      align-items: stretch;
-      width: 100%;
-      flex-wrap: wrap;
-    }
-
-    .world-card {
-      flex: 1 1 340px;
-      max-width: 390px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 2px solid rgba(255, 255, 255, 0.16);
-      border-radius: 16px;
-      padding: 22px 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(10px);
-      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
-      cursor: pointer;
-    }
-
-    .world-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(52, 152, 219, 0.85);
-      box-shadow: 0 16px 42px rgba(52, 152, 219, 0.3);
-    }
-
-    .world-card.hardcore {
-      border-color: rgba(231, 76, 60, 0.4);
-    }
-
-    .world-card.hardcore:hover {
-      border-color: rgba(231, 76, 60, 0.95);
-      box-shadow: 0 16px 45px rgba(231, 76, 60, 0.4);
-    }
-
-    .world-card-badge {
-      padding: 3px 12px;
-      border-radius: 20px;
-      font-size: 11.5px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      margin-bottom: 10px;
-    }
-
-    .world-card-badge.normal {
-      background: linear-gradient(135deg, #27ae60, #2ecc71);
-      color: #fff;
-      box-shadow: 0 2px 8px rgba(46, 204, 113, 0.4);
-    }
-
-    .world-card-badge.hardcore {
-      background: linear-gradient(135deg, #c0392b, #e74c3c);
-      color: #fff;
-      box-shadow: 0 2px 8px rgba(231, 76, 60, 0.5);
-    }
-
-    .world-card-icon {
-      font-size: 44px;
-      margin-bottom: 6px;
-      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
-    }
-
-    .world-card-name {
-      font-size: 23px;
-      font-weight: 900;
-      color: #fff;
-      margin-bottom: 3px;
-    }
-
-    .world-card-tagline {
-      font-size: 12.5px;
-      color: #f39c12;
-      font-weight: 700;
-      margin-bottom: 12px;
-    }
-
-    .world-card-features {
-      font-size: 12.5px;
-      color: #cbd5e1;
-      line-height: 1.75;
-      text-align: left;
-      width: 100%;
-      margin-bottom: 18px;
-      flex-grow: 1;
-      padding: 0 6px;
-    }
-
-    .world-card-btn {
-      width: 100%;
-      padding: 12px 0;
-      border: none;
-      border-radius: 10px;
-      font-size: 15.5px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: transform 0.15s ease, filter 0.15s ease;
-      color: #fff;
-    }
-
-    .world-card-btn:hover {
-      filter: brightness(1.12);
-      transform: scale(1.02);
-    }
-
-    .world-card-btn.campus-btn {
-      background: linear-gradient(135deg, #2980b9, #3498db);
-      box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
-    }
-
-    .world-card-btn.detention-btn {
-      background: linear-gradient(135deg, #b71540, #eb2f06);
-      box-shadow: 0 4px 15px rgba(235, 47, 6, 0.4);
-    }
-
-    .world-card-current {
-      font-size: 13px;
-      color: #2ecc71;
-      font-weight: 800;
-      margin-bottom: 12px;
-    }
-
-    /* 少年院開場劇情電影級遮罩 (Cutscene Overlay) */
-    #cutscene-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1500;
-      pointer-events: auto;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: transparent;
-    }
-
-    .cutscene-letterbox {
-      height: 8.5vh;
-      background: #000;
-      width: 100%;
-      box-shadow: 0 0 30px rgba(0, 0, 0, 0.95);
-      z-index: 1505;
-    }
-
-    .cutscene-skip-badge {
-      position: absolute;
-      top: calc(8.5vh + 14px);
-      right: 20px;
-      background: rgba(10, 15, 25, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 8px;
-      color: #fff;
-      padding: 8px 16px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      backdrop-filter: blur(8px);
-      z-index: 1515;
-      transition: background 0.2s, transform 0.2s;
-    }
-
-    .cutscene-skip-badge:hover {
-      background: rgba(30, 40, 60, 0.95);
-      transform: scale(1.04);
-      border-color: rgba(255, 255, 255, 0.55);
-    }
-
-    .cutscene-skip-key {
-      display: inline-block;
-      background: #ffd32a;
-      color: #111;
-      font-weight: 900;
-      padding: 1px 6px;
-      border-radius: 4px;
-      margin-right: 6px;
-      font-size: 11px;
-    }
-
-    .cutscene-subtitle-container {
-      position: absolute;
-      bottom: calc(8.5vh + 20px);
-      left: 50%;
-      transform: translateX(-50%);
-      max-width: 85%;
-      text-align: center;
-      z-index: 1515;
-      pointer-events: none;
-    }
-
-    .cutscene-subtitle-text {
-      display: inline-block;
-      background: rgba(10, 15, 25, 0.88);
-      border: 1px solid rgba(241, 196, 15, 0.5);
-      border-radius: 10px;
-      padding: 12px 28px;
-      color: #fff;
-      font-size: clamp(14px, 2.5vw, 20px);
-      font-weight: 800;
-      letter-spacing: 1.2px;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(241, 196, 15, 0.4);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-    }
-
-    /* 畫面中央醒目提示 (Center Mission Directive Toast) */
-    .mission-center-prompt {
-      position: fixed;
-      top: 42%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(0.92);
-      background: rgba(4, 13, 24, 0.94);
-      border: 2.5px solid #38bdf8;
-      border-radius: 20px;
-      padding: 26px 48px;
-      color: #fff;
-      text-align: center;
-      pointer-events: none;
-      z-index: 10000;
-      opacity: 0;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.88), 0 0 40px rgba(56, 189, 248, 0.45);
-      backdrop-filter: blur(12px);
-      transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .mission-center-prompt.show {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-    .mission-center-prompt.fade-out {
-      opacity: 0;
-      transform: translate(-50%, -55%) scale(0.96);
-      transition: opacity 1.8s ease-out, transform 1.8s ease-out;
-    }
-    .mission-center-badge {
-      font-size: 13.5px;
-      font-weight: 800;
-      color: #f59e0b;
-      letter-spacing: 3px;
-      margin-bottom: 8px;
-      text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
-    }
-    .mission-center-text {
-      font-size: clamp(24px, 4.2vw, 34px);
-      font-weight: 900;
-      color: #ffffff;
-      letter-spacing: 2px;
-      text-shadow: 0 0 20px rgba(56, 189, 248, 0.9), 0 2px 8px rgba(0, 0, 0, 0.9);
-      margin-bottom: 6px;
-    }
-    .mission-center-sub {
-      font-size: 12px;
-      font-weight: 600;
-      color: #94a3b8;
-      letter-spacing: 2px;
-    }
-
-    /* 全螢幕大地圖視窗 (Full Map Modal) */
-    .fullmap-modal-card {
-      background: #090e17;
-      border: 2px solid #38bdf8;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(56, 189, 248, 0.3);
-      border-radius: 18px;
-      width: 760px;
-      max-width: 95vw;
-      max-height: 94vh;
-      overflow-y: auto;
-      padding: 20px 24px;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      animation: modalSlide 0.25s ease;
-      position: relative;
-    }
-    .fullmap-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(56, 189, 248, 0.25);
-      padding-bottom: 10px;
-    }
-    .fullmap-title {
-      font-size: 20px;
-      font-weight: 900;
-      color: #38bdf8;
-      letter-spacing: 1px;
-    }
-    .fullmap-subtitle {
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      letter-spacing: 2px;
-    }
-    .fullmap-header-meta {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    .fullmap-badge {
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid #38bdf8;
-      color: #38bdf8;
-      font-size: 12px;
-      font-weight: bold;
-      padding: 3px 10px;
-      border-radius: 6px;
-    }
-    .fullmap-coords {
-      font-family: monospace;
-      font-size: 13px;
-      color: #94a3b8;
-    }
-    .fullmap-body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .fullmap-canvas-wrap {
-      width: 100%;
-      max-width: 660px;
-      aspect-ratio: 1 / 1;
-      background: #02060b;
-      border: 1.5px solid rgba(56, 189, 248, 0.35);
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
-      position: relative;
-    }
-    #fullmap-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .fullmap-footer {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding-top: 10px;
-    }
-    .fullmap-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      font-size: 12px;
-      color: #cbd5e1;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .legend-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    .legend-dot.player { background: #facc15; box-shadow: 0 0 6px #facc15; }
-    .legend-dot.checkpoint { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
-    .legend-dot.keycard { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
-    .legend-dot.gate { background: #ef4444; }
-    .legend-dot.enemy { background: #f87171; }
-    .legend-dot.hiding { background: #eab308; }
-    .fullmap-hotkey-hint {
-      font-size: 11.5px;
-      color: #64748b;
-      text-align: right;
-    }
-
-    /* 遊戲內空間傳送 Modal */
-    .world-modal-card {
-      background: #0f172a;
-      border: 2px solid #3498db;
-      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(52, 152, 219, 0.3);
-      border-radius: 18px;
-      width: 780px;
-      max-width: 92vw;
-      max-height: 85vh;
-      overflow-y: auto;
-      padding: 24px 28px;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      animation: modalSlide 0.25s ease;
-    }
-
-    .world-modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-      padding-bottom: 12px;
-    }
-
-    .world-modal-title {
-      font-size: 20px;
-      font-weight: 800;
-      color: #38bdf8;
-    }
-
-    .world-modal-desc {
-      font-size: 13.5px;
-      color: #cbd5e1;
-      margin-bottom: 4px;
-    }
-
-    /* 被追捕時外框淡淡的紅色閃爍特效 (Pursuit Alert Vignette) */
-    #pursuit-vignette {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 5;
-      opacity: 0;
-      transition: opacity 0.45s ease-out;
-      box-shadow: inset 0 0 70px 15px rgba(231, 76, 60, 0.38), inset 0 0 140px 40px rgba(192, 57, 43, 0.20);
-    }
-
-    #pursuit-vignette.active {
-      opacity: 1;
-      animation: pursuitPulse 1.25s ease-in-out infinite alternate;
-    }
-
-    #pursuit-vignette.danger {
-      animation: pursuitPulseFast 0.75s ease-in-out infinite alternate;
-      box-shadow: inset 0 0 95px 25px rgba(231, 76, 60, 0.55), inset 0 0 170px 55px rgba(192, 57, 43, 0.32);
-    }
-
-    @keyframes pursuitPulse {
-      0% {
-        opacity: 0.25;
-        box-shadow: inset 0 0 50px 12px rgba(231, 76, 60, 0.25), inset 0 0 100px 25px rgba(192, 57, 43, 0.12);
-      }
-      50% {
-        opacity: 0.75;
-        box-shadow: inset 0 0 85px 22px rgba(231, 76, 60, 0.48), inset 0 0 155px 45px rgba(214, 48, 49, 0.25);
-      }
-      100% {
-        opacity: 0.35;
-        box-shadow: inset 0 0 60px 15px rgba(231, 76, 60, 0.30), inset 0 0 120px 30px rgba(192, 57, 43, 0.15);
-      }
-    }
-
-    @keyframes pursuitPulseFast {
-      0% {
-        opacity: 0.4;
-        box-shadow: inset 0 0 65px 18px rgba(231, 76, 60, 0.35), inset 0 0 125px 35px rgba(192, 57, 43, 0.20);
-      }
-      100% {
-        opacity: 0.9;
-        box-shadow: inset 0 0 105px 30px rgba(231, 76, 60, 0.65), inset 0 0 185px 60px rgba(214, 48, 49, 0.38);
-      }
-    }
-
-    /* 中毒生病墨綠暗角特效 (Poison Vignette) */
-    #poison-vignette {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 6;
-      opacity: 0;
-      transition: opacity 0.35s ease-out;
-      box-shadow: inset 0 0 85px 25px rgba(46, 204, 113, 0.5), inset 0 0 160px 50px rgba(39, 174, 96, 0.3);
-    }
-
-    #poison-vignette.active {
-      opacity: 1;
-      animation: poisonPulse 1.1s infinite alternate;
-    }
-
-    @keyframes poisonPulse {
-      0% { opacity: 0.35; filter: hue-rotate(0deg); }
-      100% { opacity: 0.95; filter: hue-rotate(30deg); }
-    }
-
-    /* 慢動作處決特寫電影黑邊與命中閃爍特效 (Cinematic Execution Letterbox & Impact Flash) */
-    #cinematic-bars {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 120;
-    }
-
-    .cinema-bar {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      height: 9vh;
-      min-height: 48px;
-      max-height: 90px;
-      background: #000000;
-      transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.85);
-    }
-
-    .cinema-bar-top {
-      top: 0;
-      transform: translateY(-100%);
-    }
-
-    .cinema-bar-bottom {
-      bottom: 0;
-      transform: translateY(100%);
-    }
-
-    #cinematic-bars.active .cinema-bar-top {
-      transform: translateY(0);
-    }
-
-    #cinematic-bars.active .cinema-bar-bottom {
-      transform: translateY(0);
-    }
-
-    #cinema-flash {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.75) 0%, rgba(255, 82, 82, 0.45) 40%, rgba(0, 0, 0, 0.7) 100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.12s ease-out;
-    }
-
-    #cinema-flash.flash {
-      opacity: 1;
-    }
-
-    #cinema-qte-title {
-      position: absolute;
-      top: 15%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(0.85);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
-    }
-
-    #cinematic-bars.active #cinema-qte-title {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1.0);
-    }
-
-    .qte-main-badge {
-      font-size: 24px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      padding: 6px 20px;
-      border-radius: 30px;
-      color: #ffffff;
-      background: linear-gradient(135deg, rgba(231, 76, 60, 0.95), rgba(192, 57, 43, 0.95));
-      box-shadow: 0 0 25px rgba(231, 76, 60, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-      white-space: nowrap;
-    }
-
-    .qte-sub-text {
-      font-size: 14px;
-      font-weight: 700;
-      color: #f1c40f;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
-      background: rgba(0, 0, 0, 0.65);
-      padding: 3px 12px;
-      border-radius: 12px;
-      white-space: nowrap;
-    }
-
-    /* 學校懲戒記過等級 (School Disciplinary Demerits) */
-    .demerit-container {
-      background: rgba(13, 19, 33, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 6px 14px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    .demerit-header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 13px;
-      font-weight: 800;
-    }
-
-    .demerit-status {
-      font-size: 13px;
-      color: #2ecc71;
-      font-weight: 900;
-      letter-spacing: 0.5px;
-      transition: color 0.2s ease;
-    }
-
-    .demerit-badges {
-      display: flex;
-      gap: 5px;
-    }
-
-    .demerit-badge {
-      font-size: 11px;
-      font-weight: 800;
-      padding: 3px 8px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #7f8c8d;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      transition: all 0.2s ease;
-      letter-spacing: 0.5px;
-    }
-
-    .demerit-badge.active {
-      background: linear-gradient(135deg, #d35400, #e67e22);
-      color: #fff;
-      border-color: #f39c12;
-      box-shadow: 0 0 8px rgba(230, 126, 34, 0.6);
-      transform: scale(1.05);
-    }
-
-    .demerit-badge.active.evading {
-      animation: evadingBlink 0.45s infinite alternate !important;
-    }
-
-    .demerit-badge.danger.active {
-      background: linear-gradient(135deg, #c0392b, #e74c3c);
-      border-color: #ff4757;
-      box-shadow: 0 0 12px rgba(231, 76, 60, 0.85);
-      animation: dangerPulse 0.8s infinite alternate;
-    }
-
-    @keyframes dangerPulse {
-      from { transform: scale(1.05); filter: brightness(1); }
-      to { transform: scale(1.15); filter: brightness(1.3); }
-    }
-
-    /* 手機觸控操作介面 (Mobile On-Screen Touch Controls) */
-    #mobile-controls-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 50;
-      display: none;
-    }
-
-    /* 左下角專屬虛擬搖桿：安全區邊距定位，騰空淨空無任何重疊 */
-    #touch-joystick-zone {
-      position: absolute;
-      bottom: max(22px, env(safe-area-inset-bottom, 22px));
-      left: max(22px, env(safe-area-inset-left, 22px));
-      width: 115px;
-      height: 115px;
-      pointer-events: auto;
-      touch-action: none;
-    }
-
-    #touch-joystick-base {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(13, 19, 33, 0.45) 0%, rgba(13, 19, 33, 0.72) 100%);
-      border: 2px solid rgba(255, 255, 255, 0.28);
-      backdrop-filter: blur(6px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.05);
-      position: relative;
-      touch-action: none;
-    }
-
-    #touch-joystick-thumb {
-      width: 46px;
-      height: 46px;
-      border-radius: 50%;
-      background: radial-gradient(circle, #38bdf8 0%, #0284c7 100%);
-      border: 2px solid rgba(255, 255, 255, 0.85);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.75);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-    }
-
-    /* 右下角人體工學拇指扇形按鈕群 (Ergonomic Thumb Arc) */
-    #mobile-action-buttons {
-      position: absolute;
-      bottom: max(18px, env(safe-area-inset-bottom, 18px));
-      right: max(18px, env(safe-area-inset-right, 18px));
-      width: 215px;
-      height: 185px;
-      pointer-events: none;
-    }
-
-    .mobile-btn {
-      position: absolute;
-      border-radius: 50%;
-      border: 1.5px solid rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(8px);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
-      overscroll-behavior: none;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-      pointer-events: auto;
-      transition: transform 0.1s ease, filter 0.1s ease;
-      font-size: 21px;
-      font-weight: 900;
-      font-family: inherit;
-      line-height: 1;
-      text-align: center;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-    }
-
-    .mobile-btn:active {
-      transform: scale(0.92);
-      filter: brightness(1.35);
-    }
-
-    /* 攻擊按鍵：位於最舒適的主拇指發力點 (打) */
-    #m-btn-attack {
-      bottom: 8px;
-      right: 8px;
-      width: 62px;
-      height: 62px;
-      font-size: 22px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(231, 76, 60, 0.88) 0%, rgba(192, 57, 43, 0.88) 100%);
-      border-color: rgba(255, 107, 107, 0.85);
-      box-shadow: 0 0 16px rgba(231, 76, 60, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    #m-btn-attack.cqc-active {
-      background: radial-gradient(circle, rgba(220, 38, 38, 0.96) 0%, rgba(153, 27, 27, 0.96) 100%) !important;
-      border-color: #fca5a5 !important;
-      box-shadow: 0 0 25px rgba(239, 68, 68, 0.95), 0 0 10px rgba(254, 202, 202, 0.8) !important;
-      animation: pulse-cqc-btn 0.8s infinite alternate ease-in-out;
-    }
-    @keyframes pulse-cqc-btn {
-      from { transform: scale(1.0); }
-      to { transform: scale(1.15); }
-    }
-
-    /* 跳躍按鍵 (跳) */
-    #m-btn-jump {
-      bottom: 86px;
-      right: 6px;
-      width: 48px;
-      height: 48px;
-      font-size: 20px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(46, 204, 113, 0.85) 0%, rgba(39, 174, 96, 0.85) 100%);
-      border-color: rgba(46, 204, 113, 0.8);
-      box-shadow: 0 0 12px rgba(46, 204, 113, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
-    }
-
-    /* 衝刺跑步按鍵 (跑) */
-    #m-btn-sprint {
-      bottom: 92px;
-      right: 68px;
-      width: 48px;
-      height: 48px;
-      font-size: 20px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(243, 156, 18, 0.85) 0%, rgba(211, 84, 0, 0.85) 100%);
-      border-color: rgba(243, 156, 18, 0.8);
-      box-shadow: 0 0 12px rgba(243, 156, 18, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
-    }
-
-    /* 互動 / 騎乘按鍵 (動) */
-    #m-btn-interact {
-      bottom: 12px;
-      right: 82px;
-      width: 50px;
-      height: 50px;
-      font-size: 21px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(52, 152, 219, 0.85) 0%, rgba(41, 128, 185, 0.85) 100%);
-      border-color: rgba(52, 152, 219, 0.8);
-      box-shadow: 0 0 12px rgba(52, 152, 219, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
-    }
-
-    /* 武器切換按鍵 (換) */
-    #m-btn-weapon {
-      bottom: 70px;
-      right: 128px;
-      width: 46px;
-      height: 46px;
-      font-size: 20px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(155, 89, 182, 0.85) 0%, rgba(142, 68, 173, 0.85) 100%);
-      border-color: rgba(155, 89, 182, 0.8);
-      box-shadow: 0 0 12px rgba(155, 89, 182, 0.4), 0 4px 10px rgba(0, 0, 0, 0.35);
-    }
-
-    /* 身法閃避技能按鍵 (閃) */
-    #m-btn-dodge {
-      bottom: 12px;
-      right: 142px;
-      width: 50px;
-      height: 50px;
-      font-size: 21px;
-      font-weight: 900;
-      background: radial-gradient(circle, rgba(142, 68, 173, 0.92) 0%, rgba(108, 92, 231, 0.92) 100%);
-      border-color: rgba(187, 107, 217, 0.85);
-      box-shadow: 0 0 14px rgba(142, 68, 173, 0.5), 0 4px 10px rgba(0, 0, 0, 0.35);
-    }
-
-    /* 手機與觸控螢幕響應式佈局 (直向與橫向全面適配，解決介面重疊與視野遮擋) */
-    @media (max-width: 900px), (pointer: coarse) {
-      #hud-overlay {
-        padding: max(8px, env(safe-area-inset-top, 8px)) max(10px, env(safe-area-inset-right, 10px)) max(8px, env(safe-area-inset-bottom, 8px)) max(10px, env(safe-area-inset-left, 10px)) !important;
-      }
-      .hud-top-left {
-        gap: 4px !important;
-      }
-      .radar-container {
-        gap: 8px !important;
-      }
-      .minimap-wrapper {
-        width: 74px !important;
-        height: 74px !important;
-        border-width: 2px !important;
-      }
-      .hud-title-zone {
-        padding: 4px 8px !important;
-        border-left-width: 3px !important;
-      }
-      .school-badge {
-        font-size: 8.5px !important;
-        letter-spacing: 1px !important;
-      }
-      .location-name {
-        font-size: 12px !important;
-      }
-      .bars-container {
-        width: 108px !important;
-        padding: 4px 7px !important;
-        gap: 3px !important;
-      }
-      .meter-label {
-        font-size: 8.5px !important;
-      }
-      .meter-val {
-        font-size: 9px !important;
-      }
-      .meter-bar {
-        height: 5px !important;
-      }
-      .demerit-container {
-        padding: 4px 8px !important;
-        gap: 3px !important;
-      }
-      .demerit-header {
-        font-size: 10px !important;
-      }
-      .demerit-status {
-        font-size: 10px !important;
-      }
-      .demerit-badge {
-        font-size: 8.5px !important;
-        padding: 2px 4px !important;
-      }
-      .hud-status-row {
-        gap: 5px !important;
-      }
-      .status-badge {
-        padding: 4px 8px !important;
-        font-size: 10.5px !important;
-        gap: 8px !important;
-      }
-      .cash-val {
-        font-size: 13px !important;
-      }
-      .time-val {
-        font-size: 12px !important;
-      }
-      .hud-action-pills {
-        gap: 4px !important;
-      }
-      .hud-pill-btn, #toggle-mobile-mode-btn, .bgm-badge {
-        font-size: 10px !important;
-        padding: 3px 6px !important;
-      }
-
-      /* 任務看板：手機端預設為頂部輕量懸浮膠囊，展開時優雅滑出任務看板 */
-      #quest-tracker-panel {
-        top: max(8px, env(safe-area-inset-top, 8px)) !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: 320px !important;
-        max-width: 90vw !important;
-        padding: 6px 10px !important;
-        z-index: 45 !important;
-      }
-      #quest-tracker-panel.collapsed {
-        width: auto !important;
-        min-width: 140px !important;
-        max-width: 260px !important;
-        border-radius: 20px !important;
-        padding: 4px 10px !important;
-        background: rgba(15, 23, 42, 0.94) !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
-      }
-      .quest-tracker-header {
-        font-size: 11px !important;
-      }
-      .quest-title-text {
-        font-size: 12px !important;
-      }
-      .quest-progress-badge {
-        font-size: 9.5px !important;
-        padding: 1px 5px !important;
-      }
-      .quest-key-badge {
-        display: none !important;
-      }
-      .quest-item {
-        font-size: 9.5px !important;
-        padding: 4px 6px !important;
-      }
-      .quest-tab-btn {
-        font-size: 9px !important;
-        padding: 3px 0 !important;
-      }
-
-      /* 控制導引在手機端隱藏，完全淨空左下角 */
-      .controls-panel {
-        display: none !important;
-      }
-
-      /* 底部導引區在觸控模式靠右排列，避免佔用左側搖桿空間 */
-      .hud-bottom {
-        justify-content: flex-end !important;
-        pointer-events: none !important;
-      }
-
-      /* 身法技能狀態卡移至右側動作按鍵上方，左下角徹底留給蘑菇頭虛擬搖桿 */
-      .skill-hud-card {
-        position: absolute !important;
-        bottom: max(205px, calc(env(safe-area-inset-bottom, 18px) + 190px)) !important;
-        right: max(14px, env(safe-area-inset-right, 14px)) !important;
-        left: auto !important;
-        margin: 0 !important;
-        padding: 5px 10px !important;
-        gap: 8px !important;
-        border-radius: 10px !important;
-        z-index: 45 !important;
-        max-width: 190px !important;
-        pointer-events: auto !important;
-      }
-      .skill-hud-card .skill-icon-wrapper {
-        width: 34px !important;
-        height: 34px !important;
-        border-radius: 8px !important;
-      }
-      .skill-hud-card .skill-icon {
-        font-size: 18px !important;
-      }
-      .skill-hud-card .skill-name-text {
-        font-size: 12px !important;
-      }
-      .skill-hud-card .skill-key-badge {
-        display: none !important; /* 手機觸控無須顯示電腦 Q 鍵標籤 */
-      }
-      .skill-hud-card .skill-desc-text {
-        display: none !important; /* 手機端隱藏冗長說明文字，極致省屏 */
-      }
-
-      /* 手機端開始畫面載入進度條與按鈕自適應 */
-      #loading-container {
-        width: min(88vw, 360px) !important;
-        padding: 14px 16px !important;
-        margin-bottom: 20px !important;
-      }
-      .game-logo {
-        font-size: clamp(34px, 8vw, 54px) !important;
-        letter-spacing: 2px !important;
-        margin-bottom: 6px !important;
-      }
-      .game-sub {
-        font-size: clamp(12px, 3.5vw, 15px) !important;
-        margin-bottom: 16px !important;
-      }
-      .btn-start {
-        font-size: clamp(14px, 4vw, 17px) !important;
-        padding: 14px 32px !important;
-        width: min(88vw, 360px) !important;
-        text-align: center;
-      }
-
-      /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
-      #mobile-controls-container {
-        display: block !important;
-      }
-    }
-
-    /* 手機直屏 (Portrait) 與窄螢幕下任務看板與頂部核心 UI 重疊修復 */
-    @media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
-      #quest-tracker-panel {
-        top: calc(90px + env(safe-area-inset-top, 0px)) !important;
-        left: max(10px, env(safe-area-inset-left, 10px)) !important;
-        transform: none !important;
-        width: calc(100vw - 20px) !important;
-        max-width: calc(100vw - 20px) !important;
-      }
-      #quest-tracker-panel.collapsed {
-        top: max(8px, env(safe-area-inset-top, 8px)) !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: auto !important;
-        min-width: 140px !important;
-        max-width: 260px !important;
-      }
-
-      /* 直屏窄屏優化：左下蘑菇頭與右下按鍵組保持安全間距，身法卡緊湊定位 */
-      #touch-joystick-zone {
-        width: 100px !important;
-        height: 100px !important;
-        bottom: max(14px, env(safe-area-inset-bottom, 14px)) !important;
-        left: max(12px, env(safe-area-inset-left, 12px)) !important;
-      }
-      #touch-joystick-thumb {
-        width: 40px !important;
-        height: 40px !important;
-      }
-      #mobile-action-buttons {
-        width: 185px !important;
-        height: 160px !important;
-        bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
-        right: max(10px, env(safe-area-inset-right, 10px)) !important;
-      }
-      .mobile-btn {
-        width: 44px !important;
-        height: 44px !important;
-        font-size: 20px !important;
-      }
-      #m-btn-attack {
-        width: 54px !important;
-        height: 54px !important;
-        font-size: 22px !important;
-        bottom: 8px !important;
-        right: 8px !important;
-      }
-      #m-btn-jump {
-        bottom: 76px !important;
-        right: 6px !important;
-      }
-      #m-btn-sprint {
-        bottom: 82px !important;
-        right: 58px !important;
-      }
-      #m-btn-interact {
-        bottom: 8px !important;
-        right: 70px !important;
-      }
-      #m-btn-weapon {
-        bottom: 62px !important;
-        right: 112px !important;
-        width: 40px !important;
-        height: 40px !important;
-      }
-      #m-btn-dodge {
-        bottom: 8px !important;
-        right: 124px !important;
-        width: 44px !important;
-        height: 44px !important;
-      }
-      .skill-hud-card {
-        bottom: max(178px, calc(env(safe-area-inset-bottom, 12px) + 166px)) !important;
-        right: max(10px, env(safe-area-inset-right, 10px)) !important;
-      }
-    }
-
-    /* 手機橫屏模式 (高度 <= 520px) 極致緊湊優化 */
-    @media (max-height: 520px) {
-      #quest-tracker-panel {
-        top: max(6px, env(safe-area-inset-top, 6px)) !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: 310px !important;
-        max-width: 88vw !important;
-        max-height: calc(100vh - 12px) !important;
-        overflow-y: auto !important;
-      }
-      #quest-tracker-panel .quest-list-container {
-        max-height: 130px !important;
-      }
-      #quest-tracker-panel.collapsed {
-        width: auto !important;
-        min-width: 130px !important;
-        border-radius: 20px !important;
-        padding: 3px 8px !important;
-      }
-      #hud-overlay {
-        padding: max(4px, env(safe-area-inset-top, 4px)) max(8px, env(safe-area-inset-right, 8px)) max(4px, env(safe-area-inset-bottom, 4px)) max(8px, env(safe-area-inset-left, 8px)) !important;
-      }
-      #hud-banner {
-        top: max(6px, env(safe-area-inset-top, 6px)) !important;
-        font-size: 11px !important;
-        padding: 3px 12px !important;
-      }
-      #tennis-scoreboard {
-        top: max(4px, env(safe-area-inset-top, 4px)) !important;
-        font-size: 10px !important;
-        padding: 2px 10px !important;
-        border-radius: 14px !important;
-      }
-      .minimap-wrapper {
-        width: 60px !important;
-        height: 60px !important;
-      }
-      .bars-container {
-        width: 90px !important;
-      }
-      .location-name {
-        font-size: 11px !important;
-      }
-      #touch-joystick-zone {
-        width: 96px !important;
-        height: 96px !important;
-        bottom: max(8px, env(safe-area-inset-bottom, 8px)) !important;
-        left: max(10px, env(safe-area-inset-left, 10px)) !important;
-      }
-      #touch-joystick-thumb {
-        width: 38px !important;
-        height: 38px !important;
-      }
-      #mobile-action-buttons {
-        width: 175px !important;
-        height: 145px !important;
-        bottom: max(6px, env(safe-area-inset-bottom, 6px)) !important;
-        right: max(8px, env(safe-area-inset-right, 8px)) !important;
-      }
-      .mobile-btn {
-        width: 42px !important;
-        height: 42px !important;
-        font-size: 20px !important;
-        font-weight: 900 !important;
-      }
-      #m-btn-attack {
-        width: 52px !important;
-        height: 52px !important;
-        font-size: 22px !important;
-        bottom: 6px !important;
-        right: 6px !important;
-      }
-      #m-btn-jump {
-        bottom: 68px !important;
-        right: 4px !important;
-        font-size: 20px !important;
-      }
-      #m-btn-sprint {
-        bottom: 74px !important;
-        right: 54px !important;
-        font-size: 20px !important;
-      }
-      #m-btn-interact {
-        bottom: 6px !important;
-        right: 66px !important;
-        font-size: 21px !important;
-      }
-      #m-btn-weapon {
-        bottom: 56px !important;
-        right: 104px !important;
-        width: 40px !important;
-        height: 40px !important;
-        font-size: 20px !important;
-      }
-      #m-btn-dodge {
-        bottom: 6px !important;
-        right: 118px !important;
-        width: 42px !important;
-        height: 42px !important;
-        font-size: 19px !important;
-      }
-      .skill-hud-card {
-        bottom: max(152px, calc(env(safe-area-inset-bottom, 6px) + 146px)) !important;
-        right: max(10px, env(safe-area-inset-right, 10px)) !important;
-        padding: 3px 8px !important;
-        gap: 6px !important;
-      }
-      .skill-hud-card .skill-icon-wrapper {
-        width: 28px !important;
-        height: 28px !important;
-      }
-      .skill-hud-card .skill-icon {
-        font-size: 15px !important;
-      }
-      .skill-hud-card .skill-name-text {
-        font-size: 11px !important;
-      }
-      #boss-hud {
-        top: calc(36px + env(safe-area-inset-top, 0px)) !important;
-        width: 300px !important;
-        padding: 5px 10px !important;
-      }
-      #hud-banner {
-        top: max(8px, env(safe-area-inset-top, 8px)) !important;
-        font-size: 13px !important;
-        padding: 4px 18px !important;
-      }
-      #tennis-scoreboard {
-        top: max(6px, env(safe-area-inset-top, 6px)) !important;
-        font-size: 11px !important;
-        padding: 3px 12px !important;
-        border-radius: 16px !important;
-      }
-
-      /* 橫屏手機矮螢幕開始畫面自適應 */
-      #start-screen {
-        padding: max(8px, env(safe-area-inset-top, 8px)) 16px max(8px, env(safe-area-inset-bottom, 8px)) 16px !important;
-        justify-content: center !important;
-      }
-      .game-logo {
-        font-size: clamp(24px, 6.5vh, 38px) !important;
-        margin-bottom: 2px !important;
-      }
-      .game-sub {
-        font-size: clamp(10px, 3vh, 12px) !important;
-        margin-bottom: 8px !important;
-      }
-      #loading-container {
-        width: min(88vw, 340px) !important;
-        padding: 8px 14px !important;
-        margin-bottom: 8px !important;
-        gap: 5px !important;
-      }
-      .loading-info-row {
-        font-size: 11px !important;
-      }
-      #loading-status-text {
-        font-size: 11px !important;
-      }
-      #loading-percent-text {
-        font-size: 13px !important;
-      }
-      .loading-bar-track {
-        height: 10px !important;
-        padding: 1px !important;
-      }
-      .loading-hint {
-        font-size: 9.5px !important;
-      }
-      .btn-start {
-        padding: 8px 24px !important;
-        font-size: 13px !important;
-        width: min(88vw, 340px) !important;
-      }
-    }
-
-    /* 手動開啟觸控模式時的電腦端自適應 */
-    body.touch-mode-active #mobile-controls-container {
-      display: block !important;
-    }
-    body.touch-mode-active .controls-panel {
-      display: none !important;
-    }
-    body.touch-mode-active .hud-bottom {
-      justify-content: flex-end !important;
-      pointer-events: none !important;
-    }
-    body.touch-mode-active .skill-hud-card {
-      position: absolute !important;
-      bottom: max(205px, calc(env(safe-area-inset-bottom, 18px) + 190px)) !important;
-      right: max(14px, env(safe-area-inset-right, 14px)) !important;
-      left: auto !important;
-      margin: 0 !important;
-    }
-    body.touch-mode-active .skill-hud-card .skill-key-badge,
-    body.touch-mode-active .skill-hud-card .skill-desc-text {
-      display: none !important;
-    }
-  </style>
+  <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
   <!-- 3D WebGL Canvas -->
@@ -3101,54 +38,78 @@
 
   <!-- HUD Interface -->
   <div id="hud-overlay">
-    <!-- Top Bar -->
+    <!-- 精力環：衝刺/游泳消耗時浮現於角色身旁，回滿後淡出 (位置由 HUD.updateStaminaRing 每幀以 transform 定位) -->
+    <div id="stamina-ring" aria-hidden="true">
+      <svg viewBox="0 0 40 40">
+        <circle class="stamina-ring-track" cx="20" cy="20" r="16" pathLength="100"></circle>
+        <circle class="stamina-ring-fill" id="stamina-ring-fill" cx="20" cy="20" r="16" pathLength="100"></circle>
+      </svg>
+      <span class="stamina-ring-icon">⚡</span>
+    </div>
+    <!-- Top Bar：左欄 (空間資訊：雷達 → 地點 → 任務膠囊)、中央留空 (橫幅/比分板)、右欄 (個人狀態：零用錢 + ⚙️ → 校規處分) -->
     <div class="hud-top">
-      <!-- 左上角 (Top-Left)：小地圖 (Minimap) + 地點分區標題 + 體力 (HP) / 精力 (Stamina) 條 -->
+      <!-- 左上角 (Top-Left)：雷達 (外圈體力弧) → 地點卡片 → 任務膠囊 -->
       <div class="hud-top-left" id="hud-top-left">
-        <div class="radar-container">
+        <!-- 雷達外框：體力 (HP) 以 3/4 弧環繞雷達，視線集中於雷達時即可一併掌握血量 -->
+        <div class="radar-frame">
           <!-- Circular Minimap -->
           <div class="minimap-wrapper" id="minimap-wrapper" title="點擊展開全域大地圖 (Click to Open Full Map)">
             <canvas id="minimap-canvas" width="120" height="120"></canvas>
             <div class="radar-center-ring"></div>
-            <div class="minimap-expand-badge" id="minimap-expand-btn">⛶</div>
+            <div class="minimap-expand-badge">⛶</div>
           </div>
+          <svg class="hp-ring" id="hp-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="hp-ring-track" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+            <circle class="hp-ring-trail" id="hp-ring-trail" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+            <circle class="hp-ring-fill" id="hp-ring-fill" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+          </svg>
+          <div class="hp-ring-label"><span class="hp-ring-icon">♥</span><span id="hp-ring-num">100</span></div>
+        </div>
 
-          <!-- Player Location & Health / Stamina Status Block -->
-          <div class="player-status-block">
-            <div class="hud-title-zone">
-              <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
-              <div class="location-name" id="current-zone">教學大樓前 中庭廣場</div>
+        <!-- Player Location Block -->
+        <div class="hud-title-zone">
+          <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
+          <div class="location-name" id="current-zone">教學大樓前 中庭廣場</div>
+        </div>
+
+        <!-- 任務小介面 (Compact Quest Widget)：完整任務清單已整合進大地圖，點擊或按 J 開啟 -->
+        <div id="quest-tracker-panel" title="開啟大地圖任務清單 (J)">
+          <!-- 頂部 Header -->
+          <div class="quest-tracker-header">
+            <div class="quest-header-left">
+              <span class="quest-title-text" id="q-title-text">📜 校園歷練</span>
+              <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
             </div>
-
-            <div class="bars-container">
-              <div class="meter-group">
-                <div class="meter-label">
-                  <span class="meter-title">💚 體力</span>
-                  <span class="meter-val" id="hp-num">100%</span>
-                </div>
-                <div class="meter-bar">
-                  <div class="meter-fill fill-hp" id="hp-bar" style="width: 100%;"></div>
-                </div>
-              </div>
-
-              <div class="meter-group">
-                <div class="meter-label">
-                  <span class="meter-title">⚡ 精力</span>
-                  <span class="meter-val" id="stamina-num">100%</span>
-                </div>
-                <div class="meter-bar">
-                  <div class="meter-fill fill-stamina" id="stamina-bar" style="width: 100%;"></div>
-                </div>
-              </div>
+            <div class="quest-header-right">
+              <span class="quest-toggle-indicator" id="quest-toggle-indicator">🗺️</span>
+              <span class="quest-key-badge">J</span>
             </div>
           </div>
+
+          <!-- 細緻的總進度條 -->
+          <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
+            <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
+          </div>
+
         </div>
       </div>
 
-      <!-- 右上角 (Top-Right)：通緝星級處分 (Wanted Demerits) + 金幣/時間 + 觸控/音樂按鈕 + 武器裝備槽 -->
+      <!-- 右上角 (Top-Right)：零用錢 + ⚙️ 設定選單 → 校規處分 -->
       <div class="hud-top-right">
+        <div class="hud-status-row">
+          <div class="cash-badge">💰 <span class="cash-val" id="cash-text">NT$ 250</span></div>
+          <div class="hud-action-pills" id="hud-action-pills">
+            <!-- ⚙️ 設定選單：收納全螢幕 / 觸控操作 (BGM、天氣、世界切換已移至大地圖) -->
+            <button type="button" id="hud-settings-btn" class="hud-pill-btn hud-settings-btn" title="設定選單" aria-expanded="false">⚙️</button>
+            <div class="hud-settings-menu" id="hud-settings-menu">
+              <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
+              <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 學校懲戒記過等級 (School Disciplinary Demerits) -->
-        <div class="demerit-container" id="stars-box">
+        <div class="demerit-container">
           <div class="demerit-header">
             <span class="demerit-icon">📋</span>
             <span class="demerit-label">校規處分:</span>
@@ -3160,266 +121,6 @@
             <span class="demerit-badge" data-level="3" title="記小過 2 次">小過二</span>
             <span class="demerit-badge" data-level="4" title="記大過 1 次">大過</span>
             <span class="demerit-badge danger-badge" data-level="5" title="記大過 2 次 (留校察看)">留校察看</span>
-          </div>
-          <!-- 隱藏保留 .star 標籤相容任何舊引用 -->
-          <div class="wanted-stars" style="display: none;">
-            <span class="star" data-star="1">★</span>
-            <span class="star" data-star="2">★</span>
-            <span class="star" data-star="3">★</span>
-            <span class="star" data-star="4">★</span>
-            <span class="star" data-star="5">★</span>
-          </div>
-        </div>
-
-        <!-- 狀態資訊列：零用錢、時間、功能按鈕 -->
-        <div class="hud-status-row">
-          <div class="status-badge">
-            <span class="badge-item">💰 <span class="cash-val" id="cash-text">NT$ 250</span></span>
-            <span class="badge-item">⏰ <span class="time-val" id="clock-text">12:15 PM</span></span>
-            <span class="badge-item world-badge" id="world-badge" title="點擊切換世界 (或按 M 鍵)">
-              <span id="world-text">🏫 天天國中</span>
-              <span class="world-key-hint">M</span>
-            </span>
-            <span class="badge-item weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
-              <span id="weather-text">☀️ 晴朗</span>
-              <span class="weather-key-hint">P</span>
-            </span>
-          </div>
-
-          <div class="hud-action-pills">
-            <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
-            <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
-            <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 B 鍵)">
-              <span id="bgm-icon">🎵</span>
-              <span id="bgm-text">BGM: 校園漫步</span>
-              <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
-              <span class="bgm-key-hint">B</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 專屬任務看板 (Quest / Mission Tracker Panel) -->
-    <div id="quest-tracker-panel">
-      <!-- 頂部 Header -->
-      <div class="quest-tracker-header" id="quest-tracker-toggle-btn">
-        <div class="quest-header-left">
-          <span class="quest-title-text">📜 校園歷練</span>
-          <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
-        </div>
-        <div class="quest-header-right">
-          <span class="quest-toggle-indicator" id="quest-toggle-indicator">▼</span>
-          <span class="quest-key-badge">J</span>
-        </div>
-      </div>
-
-      <!-- 細緻的總進度條 -->
-      <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
-        <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
-      </div>
-
-      <!-- 分類標籤切換 Tabs (全部 / 戰鬥 / 競技 / 探索) -->
-      <div class="quest-tabs-bar" id="quest-tabs-bar">
-        <button type="button" class="quest-tab-btn active" data-tab="all">全部</button>
-        <button type="button" class="quest-tab-btn" data-tab="combat">⚔️ 戰鬥</button>
-        <button type="button" class="quest-tab-btn" data-tab="sports">🏆 競技</button>
-        <button type="button" class="quest-tab-btn" data-tab="explore">🌟 探索</button>
-      </div>
-
-      <!-- 任務列表容器 -->
-      <div class="quest-list-container" id="quest-list-content">
-        <div id="campus-quest-wrapper">
-        <!-- 分類 1: 戰鬥歷練 -->
-        <div class="quest-category-group" data-category="combat">
-          <div class="quest-category-title">⚔️ 戰鬥歷練</div>
-
-          <!-- 1. 普通球棒解鎖任務 -->
-          <div class="quest-item" id="q-bat-item">
-            <span class="q-icon">🏏</span>
-            <div class="q-info">
-              <span class="q-name">【普通球棒】名揚校園</span>
-              <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/5</span>)</span>
-            </div>
-            <span class="q-status" id="q-bat-status">進行中</span>
-          </div>
-
-          <!-- 2. 神兵球棒解鎖任務 -->
-          <div class="quest-item" id="q-special-item">
-            <span class="q-icon">⚡</span>
-            <div class="q-info">
-              <span class="q-name">【神兵球棒】校園霸王</span>
-              <span class="q-desc">老師(<span id="q-teacher-prog">0/1</span>) · 犬(<span id="q-dog-prog">0/1</span>) · 車(<span id="q-bike-prog">0/5</span>)</span>
-            </div>
-            <span class="q-status" id="q-special-status">進行中</span>
-          </div>
-
-          <!-- 3. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛) -->
-          <div class="quest-item" id="q-dodge-item">
-            <span class="q-icon">🥋</span>
-            <div class="q-info">
-              <span class="q-name">【獨門技能】閃身步 / 狗熊哆嗦毛</span>
-              <span class="q-desc" id="q-dodge-desc">前往教學大樓尋訪「閃身步老師」學習技能【閃身步】 (0/2)</span>
-            </div>
-            <span class="q-status" id="q-dodge-status">未習得</span>
-          </div>
-
-          <!-- 3. 挑戰羽球大如老師 -->
-          <div class="quest-item" id="q-pe-item">
-            <span class="q-icon">🏸</span>
-            <div class="q-info">
-              <span class="q-name">挑戰羽球大如老師</span>
-              <span class="q-desc">4F羽球館 · 搶 5 分勝</span>
-            </div>
-            <span class="q-status" id="q-pe-status">進行中</span>
-          </div>
-
-          <!-- 4. 挑戰溫室食人花 Boss -->
-          <div class="quest-item" id="q-plant-item">
-            <span class="q-icon">🌸</span>
-            <div class="q-info">
-              <span class="q-name">挑戰溫室食人花 Boss</span>
-              <span class="q-desc">生態溫室霸主討伐</span>
-            </div>
-            <span class="q-status" id="q-plant-status">進行中</span>
-          </div>
-
-          <!-- 5. 擊倒教官與步巡隊 -->
-          <div class="quest-item" id="q-inspector-item">
-            <span class="q-icon">👮</span>
-            <div class="q-info">
-              <span class="q-name">擊倒教官與步巡隊</span>
-              <span class="q-desc">生教與校園步巡隊 (<span id="q-inspector-prog">0/1</span>)</span>
-            </div>
-            <span class="q-status" id="q-inspector-status">進行中</span>
-          </div>
-        </div>
-
-        <!-- 分類 2: 體育競技 -->
-        <div class="quest-category-group" data-category="sports">
-          <div class="quest-category-title">🏆 體育競技</div>
-
-          <!-- 5. 經典三分球投籃挑戰 -->
-          <div class="quest-item" id="q-basketball-item">
-            <span class="q-icon">🏀</span>
-            <div class="q-info">
-              <span class="q-name">經典三分球投籃挑戰</span>
-              <span class="q-desc">三分球紀錄 (<span id="q-basket-streak">0顆</span>)</span>
-            </div>
-            <span class="q-status" id="q-basketball-status">進行中</span>
-          </div>
-
-          <!-- 6. 操場跑道 400m 競速 -->
-          <div class="quest-item" id="q-track-item">
-            <span class="q-icon">🏃</span>
-            <div class="q-info">
-              <span class="q-name">操場跑道 400m 競速</span>
-              <span class="q-desc">最快秒數 (<span id="q-track-time">未完成</span>)</span>
-            </div>
-            <span class="q-status" id="q-track-status">進行中</span>
-          </div>
-
-          <!-- 7. 25m 水上競速挑戰 -->
-          <div class="quest-item" id="q-swim-item">
-            <span class="q-icon">🏊</span>
-            <div class="q-info">
-              <span class="q-name">25m 水上競速挑戰</span>
-              <span class="q-desc">最快秒數 (<span id="q-swim-time">未完成</span>)</span>
-            </div>
-            <span class="q-status" id="q-swim-status">進行中</span>
-          </div>
-        </div>
-
-        <!-- 分類 3: 校園探索 -->
-        <div class="quest-category-group" data-category="explore">
-          <div class="quest-category-title">🌟 校園探索</div>
-
-          <!-- 8. 自由騎乘火柴人自行車 -->
-          <div class="quest-item" id="q-bike-item">
-            <span class="q-icon">🚲</span>
-            <div class="q-info">
-              <span class="q-name">自由騎乘火柴人自行車</span>
-              <span class="q-desc">騎乘火柴人自行車校園漫遊</span>
-            </div>
-            <span class="q-status" id="q-bike-status">進行中</span>
-          </div>
-
-          <!-- 9. 擺脫校犬柴柴追捕 -->
-          <div class="quest-item" id="q-dog-item">
-            <span class="q-icon">🐕</span>
-            <div class="q-info">
-              <span class="q-name">擺脫校犬柴柴追捕</span>
-              <span class="q-desc">走廊避難脫離柴柴</span>
-            </div>
-            <span class="q-status" id="q-dog-status">進行中</span>
-          </div>
-
-          <!-- 10. 生態池許願池投幣 -->
-          <div class="quest-item" id="q-pond-item">
-            <span class="q-icon">🪙</span>
-            <div class="q-info">
-              <span class="q-name">生態池許願池投幣</span>
-              <span class="q-desc">女神許願池祈福</span>
-            </div>
-            <span class="q-status" id="q-pond-status">進行中</span>
-          </div>
-
-          <!-- 11. 天天合作社品嚐熱食 -->
-          <div class="quest-item" id="q-hotfood-item">
-            <span class="q-icon">🍱</span>
-            <div class="q-info">
-              <span class="q-name">天天合作社品嚐熱食</span>
-              <span class="q-desc">合作社品嚐特色美食</span>
-            </div>
-            <span class="q-status" id="q-hotfood-status">進行中</span>
-          </div>
-        </div>
-        </div><!-- /#campus-quest-wrapper -->
-
-        <!-- 第二世界：特訓院專屬潛入逃脫任務 (PROJECT: ESCAPE) -->
-        <div id="detention-quest-wrapper" style="display:none;">
-          <div class="quest-category-group" data-category="combat">
-            <div class="quest-category-title">⛓️ 絕境潛入逃脫任務 (PROJECT: ESCAPE)</div>
-            <div class="quest-item" id="q-det-takedown-item">
-              <span class="q-icon">🥷</span>
-              <div class="q-info">
-                <span class="q-name">【無聲潛入】背後擊昏守衛</span>
-                <span class="q-desc">悄悄繞後點擊攻擊擊昏 (<span id="det-ko-count">0</span> 人昏迷)</span>
-              </div>
-              <span class="q-status" id="det-ko-status">進行中</span>
-            </div>
-            <div class="quest-item" id="q-det-gate1-item">
-              <span class="q-icon">💳</span>
-              <div class="q-info">
-                <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
-                <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
-              </div>
-              <span class="q-status" id="det-gate1-status">未解鎖</span>
-            </div>
-            <div class="quest-item" id="q-det-gate2-item">
-              <span class="q-icon">📦</span>
-              <div class="q-info">
-                <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
-                <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
-              </div>
-              <span class="q-status" id="det-gate2-status">未解鎖</span>
-            </div>
-            <div class="quest-item" id="q-det-boss-item">
-              <span class="q-icon">⚡</span>
-              <div class="q-info">
-                <span class="q-name">【破盾對決】擊破小 Boss【鐵面總教官】</span>
-                <span class="q-desc">引誘 Boss 撞擊發電機柱硬直，繞背破盾 3 次</span>
-              </div>
-              <span class="q-status" id="det-boss-status">未擊敗</span>
-            </div>
-            <div class="quest-item" id="q-det-escape-item">
-              <span class="q-icon">🚪</span>
-              <div class="q-info">
-                <span class="q-name">【絕境逃脫】解鎖南大門撤離</span>
-                <span class="q-desc">拾取萬能鑰匙卡解鎖南大門逃出特訓院！</span>
-              </div>
-              <span class="q-status" id="det-escape-status">未完成</span>
-            </div>
           </div>
         </div>
       </div>
@@ -3459,19 +160,22 @@
     <div id="hud-banner">生教組長發動走廊巡查！</div>
 
     <!-- MGS 潛龍諜影警戒倒數橫幅 (Alert Phase Countdown) -->
-    <div id="mgs-alert-banner" style="display:none; position:fixed; top:75px; left:50%; transform:translateX(-50%); z-index:90; background:rgba(220, 38, 38, 0.92); border:2px solid #fca5a5; border-radius:8px; padding:6px 20px; color:#fff; font-family:'Courier New', monospace; font-size:22px; font-weight:bold; letter-spacing:2px; box-shadow:0 0 25px rgba(239,68,68,0.85); pointer-events:none;">
-      🚨 ALERT <span id="mgs-alert-timer">99.99</span>
+    <div id="mgs-alert-banner" style="display:none;">
+      <span id="mgs-alert-label">🚨 ALERT</span>&nbsp;<span id="mgs-alert-timer"></span>
     </div>
 
     <!-- 暗殺/擊昏動作提示 (動態浮動於目標 NPC 頭頂上方，僅精準顯示「擊暈」) -->
-    <div id="cqc-prompt-container" style="display:none; position:fixed; z-index:120; pointer-events:none; will-change:transform, top, left;">
-      <div style="background:rgba(220, 38, 38, 0.92); border:1.5px solid #fecaca; color:#ffffff; font-size:13.5px; font-weight:900; padding:4px 14px; border-radius:18px; box-shadow:0 0 16px rgba(220, 38, 38, 0.85); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; letter-spacing:1px; text-shadow:0 1px 3px rgba(0,0,0,0.85);">
+    <div id="cqc-prompt-container" style="display:none; position:fixed; z-index:var(--z-hud-prompt); pointer-events:none; will-change:transform, top, left;">
+      <div class="cqc-prompt-pill">
+        <span class="cqc-prompt-icon">💥</span>
         <span id="cqc-btn-text">擊暈</span>
+        <span class="cqc-prompt-key">F</span>
       </div>
+      <div class="cqc-prompt-arrow"></div>
     </div>
 
     <!-- 刺客教條草堆匿蹤狀態徽章 (AC Stealth Blend Badge) -->
-    <div id="ac-stealth-badge" style="display:none; position:fixed; top:110px; left:50%; transform:translateX(-50%); z-index:120; pointer-events:none;">
+    <div id="ac-stealth-badge" style="display:none; position:fixed; top:110px; left:50%; transform:translateX(-50%); z-index:var(--z-hud-prompt); pointer-events:none;">
       <div style="background:rgba(15, 23, 42, 0.92); border:2px solid #eab308; color:#fef08a; font-size:15px; font-weight:800; padding:8px 22px; border-radius:24px; box-shadow:0 0 20px rgba(234,179,8,0.65); backdrop-filter:blur(6px); display:flex; align-items:center; gap:8px;">
         <span id="ac-stealth-badge-text">🥷 刺客匿蹤中 (NPC 與探照燈無視)</span>
       </div>
@@ -3487,8 +191,10 @@
 
     <!-- 底部區域 (Bottom Section)：電腦端顯示鍵盤操作手冊；手機端/觸控模式隱藏以完全騰空左下角給搖桿 -->
     <div class="hud-bottom">
-      <div class="controls-panel">
-        <div class="controls-panel-title">🎮 鍵盤快捷鍵指南</div>
+      <div class="controls-panel" id="controls-panel">
+        <!-- 收合狀態：僅顯示精簡快捷鍵標籤，按 K 或點擊展開 -->
+        <div class="controls-guide-chip">⌨️ <span class="key-badge">K</span> 快捷鍵</div>
+        <div class="controls-panel-title">🎮 鍵盤快捷鍵指南 <span class="controls-panel-hint">(K 收合)</span></div>
         <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
         <div><span class="key-badge">滑鼠右鍵</span> 按住潛行 (手機搖桿推半程&lt;0.5)</div>
         <div><span class="key-badge">左鍵</span><span class="key-badge">F</span> 揮擊武器 / 背後暗殺 (合併按鍵)</div>
@@ -3497,8 +203,12 @@
         <div><span class="key-badge">1</span><span class="key-badge">2</span><span class="key-badge">3</span> 切換武器 (拳/球棒)</div>
         <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
         <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
-        <div><span class="key-badge">J</span> 開啟 / 收合歷練任務看板</div>
-        <div><span class="key-badge">M</span> 開啟 / 靜音 BGM 音樂</div>
+        <div><span class="key-badge">J</span> 開啟 / 關閉大地圖任務清單</div>
+        <div><span class="key-badge">M</span> 切換世界</div>
+        <div><span class="key-badge">P</span> 切換天氣</div>
+        <div><span class="key-badge">B</span> 開啟 / 靜音 BGM 音樂</div>
+        <div><span class="key-badge">H</span> 騎車按鈴</div>
+        <div><span class="key-badge">K</span> 展開 / 收合本快捷鍵指南</div>
       </div>
 
       <!-- 技能狀態快捷展示卡 (Skill HUD Card) -->
@@ -3601,7 +311,25 @@
       <div class="fullmap-header">
         <div class="fullmap-title-group">
           <div class="fullmap-title" id="fullmap-title">🗺️ 全域態勢戰術大地圖</div>
-          <div class="fullmap-subtitle" id="fullmap-subtitle">GLOBAL TACTICAL OVERVIEW MAP</div>
+          <div class="fullmap-subtitle" id="fullmap-subtitle">⌨️ [J] / [ESC] 或點擊右上角關閉，返回遊戲</div>
+        </div>
+        <!-- 大地圖工具列 (標題列右側)：背景音樂 / 天氣 / 世界切換 (B / P / M 鍵同效) -->
+        <div class="fullmap-toolbar">
+          <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關 (或按 B 鍵)">
+            <span id="bgm-icon">🎵</span>
+            <span id="bgm-text">BGM: 校園漫步</span>
+            <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+            <span class="bgm-key-hint">B</span>
+          </div>
+          <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
+            <span id="weather-text">☀️ 晴朗</span>
+            <span class="tool-key-hint">P</span>
+          </button>
+          <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界 (或按 M 鍵)">
+            <span>🔁 切換世界</span>
+            <span class="world-current" id="world-text">🏫 天天國中</span>
+            <span class="tool-key-hint">M</span>
+          </button>
         </div>
         <div class="fullmap-header-meta">
           <div class="fullmap-badge" id="fullmap-world-badge">第七少年特訓院</div>
@@ -3610,20 +338,248 @@
         </div>
       </div>
       <div class="fullmap-body">
-        <div class="fullmap-canvas-wrap">
-          <canvas id="fullmap-canvas" width="700" height="700"></canvas>
+        <!-- 地圖主區 (容器查詢單位使地圖以正方形填滿剩餘空間) -->
+        <div class="fullmap-map-area">
+          <div class="fullmap-canvas-wrap">
+            <canvas id="fullmap-canvas" width="700" height="700"></canvas>
+          </div>
         </div>
-      </div>
-      <div class="fullmap-footer">
-        <div class="fullmap-legend">
-          <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
-          <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
-          <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
-          <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
-          <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
-          <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
-        </div>
-        <div class="fullmap-hotkey-hint">⌨️ 按 [ESC] 鍵、點擊右上角關閉或再次點擊小地圖即可返回遊戲</div>
+
+        <!-- 任務清單側欄 (由主畫面任務小介面整合進大地圖) -->
+        <aside class="fullmap-quest-panel" id="fullmap-quest-panel">
+          <div class="fullmap-quest-header">
+            <span class="quest-title-text" id="fm-quest-title">📜 校園歷練</span>
+            <span class="quest-progress-badge">進度 <span id="fm-q-total-progress">0/13</span></span>
+          </div>
+          <div class="quest-total-bar-wrap">
+            <div class="quest-total-bar" id="fm-q-total-bar" style="width: 0%;"></div>
+          </div>
+
+          <!-- 分類標籤切換 Tabs (全部 / 戰鬥 / 競技 / 探索) -->
+          <div class="quest-tabs-bar" id="quest-tabs-bar">
+            <button type="button" class="quest-tab-btn active" data-tab="all">全部</button>
+            <button type="button" class="quest-tab-btn" data-tab="combat">⚔️ 戰鬥</button>
+            <button type="button" class="quest-tab-btn" data-tab="sports">🏆 競技</button>
+            <button type="button" class="quest-tab-btn" data-tab="explore">🌟 探索</button>
+          </div>
+
+          <!-- 任務列表容器 -->
+          <div class="quest-list-container">
+            <div id="campus-quest-wrapper">
+            <!-- 分類 1: 戰鬥歷練 -->
+            <div class="quest-category-group" data-category="combat">
+              <div class="quest-category-title">⚔️ 戰鬥歷練</div>
+
+              <!-- 1. 普通球棒解鎖任務 -->
+              <div class="quest-item" id="q-bat-item">
+                <span class="q-icon">🏏</span>
+                <div class="q-info">
+                  <span class="q-name">【普通球棒】名揚校園</span>
+                  <span class="q-desc">擊敗普通同學 (<span id="q-bat-progress">0/5</span>)</span>
+                </div>
+                <span class="q-status" id="q-bat-status">進行中</span>
+              </div>
+
+              <!-- 2. 神兵球棒解鎖任務 -->
+              <div class="quest-item" id="q-special-item">
+                <span class="q-icon">⚡</span>
+                <div class="q-info">
+                  <span class="q-name">【神兵球棒】校園霸王</span>
+                  <span class="q-desc">老師(<span id="q-teacher-prog">0/1</span>) · 犬(<span id="q-dog-prog">0/1</span>) · 車(<span id="q-bike-prog">0/5</span>)</span>
+                </div>
+                <span class="q-status" id="q-special-status">進行中</span>
+              </div>
+
+              <!-- 3. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛) -->
+              <div class="quest-item" id="q-dodge-item">
+                <span class="q-icon">🥋</span>
+                <div class="q-info">
+                  <span class="q-name">【獨門技能】閃身步 / 狗熊哆嗦毛</span>
+                  <span class="q-desc" id="q-dodge-desc">前往教學大樓尋訪「閃身步老師」學習技能【閃身步】 (0/2)</span>
+                </div>
+                <span class="q-status" id="q-dodge-status">未習得</span>
+              </div>
+
+              <!-- 3. 挑戰羽球大如老師 -->
+              <div class="quest-item" id="q-pe-item">
+                <span class="q-icon">🏸</span>
+                <div class="q-info">
+                  <span class="q-name">挑戰羽球大如老師</span>
+                  <span class="q-desc">4F羽球館 · 搶 5 分勝</span>
+                </div>
+                <span class="q-status" id="q-pe-status">進行中</span>
+              </div>
+
+              <!-- 4. 挑戰溫室食人花 Boss -->
+              <div class="quest-item" id="q-plant-item">
+                <span class="q-icon">🌸</span>
+                <div class="q-info">
+                  <span class="q-name">挑戰溫室食人花 Boss</span>
+                  <span class="q-desc">生態溫室霸主討伐</span>
+                </div>
+                <span class="q-status" id="q-plant-status">進行中</span>
+              </div>
+
+              <!-- 5. 擊倒教官與步巡隊 -->
+              <div class="quest-item" id="q-inspector-item">
+                <span class="q-icon">👮</span>
+                <div class="q-info">
+                  <span class="q-name">擊倒教官與步巡隊</span>
+                  <span class="q-desc">生教與校園步巡隊 (<span id="q-inspector-prog">0/1</span>)</span>
+                </div>
+                <span class="q-status" id="q-inspector-status">進行中</span>
+              </div>
+            </div>
+
+            <!-- 分類 2: 體育競技 -->
+            <div class="quest-category-group" data-category="sports">
+              <div class="quest-category-title">🏆 體育競技</div>
+
+              <!-- 5. 經典三分球投籃挑戰 -->
+              <div class="quest-item" id="q-basketball-item">
+                <span class="q-icon">🏀</span>
+                <div class="q-info">
+                  <span class="q-name">經典三分球投籃挑戰</span>
+                  <span class="q-desc">三分球紀錄 (<span id="q-basket-streak">0顆</span>)</span>
+                </div>
+                <span class="q-status" id="q-basketball-status">進行中</span>
+              </div>
+
+              <!-- 6. 操場跑道 400m 競速 -->
+              <div class="quest-item" id="q-track-item">
+                <span class="q-icon">🏃</span>
+                <div class="q-info">
+                  <span class="q-name">操場跑道 400m 競速</span>
+                  <span class="q-desc">最快秒數 (<span id="q-track-time">未完成</span>)</span>
+                </div>
+                <span class="q-status" id="q-track-status">進行中</span>
+              </div>
+
+              <!-- 7. 25m 水上競速挑戰 -->
+              <div class="quest-item" id="q-swim-item">
+                <span class="q-icon">🏊</span>
+                <div class="q-info">
+                  <span class="q-name">25m 水上競速挑戰</span>
+                  <span class="q-desc">最快秒數 (<span id="q-swim-time">未完成</span>)</span>
+                </div>
+                <span class="q-status" id="q-swim-status">進行中</span>
+              </div>
+            </div>
+
+            <!-- 分類 3: 校園探索 -->
+            <div class="quest-category-group" data-category="explore">
+              <div class="quest-category-title">🌟 校園探索</div>
+
+              <!-- 8. 自由騎乘火柴人自行車 -->
+              <div class="quest-item" id="q-bike-item">
+                <span class="q-icon">🚲</span>
+                <div class="q-info">
+                  <span class="q-name">自由騎乘火柴人自行車</span>
+                  <span class="q-desc">騎乘火柴人自行車校園漫遊</span>
+                </div>
+                <span class="q-status" id="q-bike-status">進行中</span>
+              </div>
+
+              <!-- 9. 擺脫校犬柴柴追捕 -->
+              <div class="quest-item" id="q-dog-item">
+                <span class="q-icon">🐕</span>
+                <div class="q-info">
+                  <span class="q-name">擺脫校犬柴柴追捕</span>
+                  <span class="q-desc">走廊避難脫離柴柴</span>
+                </div>
+                <span class="q-status" id="q-dog-status">進行中</span>
+              </div>
+
+              <!-- 10. 生態池許願池投幣 -->
+              <div class="quest-item" id="q-pond-item">
+                <span class="q-icon">🪙</span>
+                <div class="q-info">
+                  <span class="q-name">生態池許願池投幣</span>
+                  <span class="q-desc">女神許願池祈福</span>
+                </div>
+                <span class="q-status" id="q-pond-status">進行中</span>
+              </div>
+
+              <!-- 11. 天天合作社品嚐熱食 -->
+              <div class="quest-item" id="q-hotfood-item">
+                <span class="q-icon">🍱</span>
+                <div class="q-info">
+                  <span class="q-name">天天合作社品嚐熱食</span>
+                  <span class="q-desc">合作社品嚐特色美食</span>
+                </div>
+                <span class="q-status" id="q-hotfood-status">進行中</span>
+              </div>
+            </div>
+            </div><!-- /#campus-quest-wrapper -->
+
+            <!-- 第二世界：特訓院專屬潛入逃脫任務 (PROJECT: ESCAPE) -->
+            <div id="detention-quest-wrapper" style="display:none;">
+              <div class="quest-category-group" data-category="combat">
+                <div class="quest-category-title">⛓️ 絕境潛入逃脫任務 (PROJECT: ESCAPE)</div>
+                <div class="quest-item">
+                  <span class="q-icon">🥷</span>
+                  <div class="q-info">
+                    <span class="q-name">【無聲潛入】背後擊昏守衛</span>
+                    <span class="q-desc">悄悄繞後點擊攻擊擊昏 (<span id="det-ko-count">0</span> 人昏迷)</span>
+                  </div>
+                  <span class="q-status" id="det-ko-status">進行中</span>
+                </div>
+                <div class="quest-item">
+                  <span class="q-icon">💳</span>
+                  <div class="q-info">
+                    <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
+                    <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
+                  </div>
+                  <span class="q-status" id="det-gate1-status">未解鎖</span>
+                </div>
+                <div class="quest-item">
+                  <span class="q-icon">📦</span>
+                  <div class="q-info">
+                    <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
+                    <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
+                  </div>
+                  <span class="q-status" id="det-gate2-status">未解鎖</span>
+                </div>
+                <div class="quest-item">
+                  <span class="q-icon">⚡</span>
+                  <div class="q-info">
+                    <span class="q-name">【破盾對決】擊破小 Boss【鐵面總教官】</span>
+                    <span class="q-desc">引誘 Boss 撞擊發電機柱硬直，繞背破盾 3 次</span>
+                  </div>
+                  <span class="q-status" id="det-boss-status">未擊敗</span>
+                </div>
+                <div class="quest-item">
+                  <span class="q-icon">🚪</span>
+                  <div class="q-info">
+                    <span class="q-name">【絕境逃脫】解鎖南大門撤離</span>
+                    <span class="q-desc">拾取萬能鑰匙卡解鎖南大門逃出特訓院！</span>
+                  </div>
+                  <span class="q-status" id="det-escape-status">未完成</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="fullmap-legend-box">
+            <!-- 圖例依世界切換：天天國中顯示校園人物與載具，特訓院顯示潛入戰術要素 -->
+            <div class="fullmap-legend" id="fullmap-legend-campus">
+              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+              <span class="legend-item"><span class="legend-dot student"></span> 同學</span>
+              <span class="legend-item"><span class="legend-dot teacher"></span> 生教 / 老師</span>
+              <span class="legend-item"><span class="legend-dot instructor"></span> 教官</span>
+              <span class="legend-item"><span class="legend-dot dog"></span> 校犬</span>
+              <span class="legend-item"><span class="legend-dot patrol"></span> 單車糾察</span>
+              <span class="legend-item"><span class="legend-dot bike"></span> 自行車</span>
+            </div>
+            <div class="fullmap-legend" id="fullmap-legend-detention" style="display:none;">
+              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+              <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
+              <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
+              <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
+              <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
+              <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   </div>
@@ -3638,7 +594,7 @@
       <div class="world-modal-desc">可隨時自由穿梭於【天天國中】與【第七少年特訓院】雙世界！</div>
       <div class="world-select-grid">
         <!-- 世界 1：天天國中 -->
-        <div class="world-card" id="modal-card-campus">
+        <div class="world-card">
           <div class="world-card-badge normal">普通難度 ★★★☆☆</div>
           <div class="world-card-icon">🏫</div>
           <div class="world-card-name">天天國中</div>
@@ -3653,7 +609,7 @@
         </div>
 
         <!-- 世界 2：少年院 -->
-        <div class="world-card hardcore" id="modal-card-detention">
+        <div class="world-card hardcore">
           <div class="world-card-badge hardcore">極限特訓 ★★★★★</div>
           <div class="world-card-icon">⛓️</div>
           <div class="world-card-name">第七少年特訓院</div>
@@ -3671,7 +627,7 @@
   </div>
 
   <!-- 絕境越獄通關結算對話框 (Tactical Escape Victory Modal) -->
-  <div id="detention-victory-modal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(2, 6, 23, 0.90); z-index:99999; align-items:center; justify-content:center; backdrop-filter:blur(8px); pointer-events:auto !important;">
+  <div id="detention-victory-modal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(2, 6, 23, 0.90); z-index:var(--z-top-modal); align-items:center; justify-content:center; backdrop-filter:blur(8px); pointer-events:auto !important;">
     <div style="background:#0f172a; border:2px solid #22c55e; border-radius:18px; padding:28px 32px; max-width:480px; width:92%; color:#fff; text-align:center; box-shadow:0 0 50px rgba(34,197,94,0.6); pointer-events:auto;">
       <div style="font-size:26px; font-weight:900; color:#22c55e; margin-bottom:6px;">🏆 成功逃離第七少年院！</div>
       <div style="font-size:12.5px; color:#94a3b8; letter-spacing:1px; margin-bottom:16px;">MISSION ACCOMPLISHED · ESCAPE COMPLETE</div>
@@ -3768,14 +724,18 @@
     <div class="mission-center-sub" id="mission-center-sub">COLLECT KEYCARD TO ACCESS NEXT ZONE</div>
   </div>
 
-  <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援) -->
+  <!-- Service Worker 註冊 (PWA 桌面/手遊捷徑支援)：僅正式 build 註冊；開發模式移除殘留 SW，避免快取到 Vite 原始碼 -->
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
-          console.warn('[PWA] Service Worker 註冊失敗:', err);
+      if ('%MODE%' === 'production') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.warn('[PWA] Service Worker 註冊失敗:', err);
+          });
         });
-      });
+      } else {
+        navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((reg) => reg.unregister()));
+      }
     }
   </script>
 

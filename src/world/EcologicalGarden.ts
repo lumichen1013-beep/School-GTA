@@ -6,6 +6,9 @@ import { soundManager } from '../audio/SoundEffects';
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
 const _ecoPushDir = new THREE.Vector3();
+// 毒液孢子共用幾何體與材質 (每次發射重複使用，消散時不釋放)
+const SPORE_GEO = new THREE.SphereGeometry(0.28, 8, 8);
+const SPORE_MAT = new THREE.MeshLambertMaterial({ color: 0x9b59b6 });
 
 export interface HostileVine {
   id: number;
@@ -915,8 +918,6 @@ export class EcologicalGarden {
         onPlayerHit(14, '被變異食人花的劇毒孢子命中！');
         soundManager.playPunch();
         this.scene.remove(sp.mesh);
-        sp.mesh.geometry.dispose();
-        (sp.mesh.material as THREE.Material).dispose();
         this.spores.splice(i, 1);
         continue;
       }
@@ -924,8 +925,6 @@ export class EcologicalGarden {
       // 壽命耗盡或著地消散
       if (sp.life <= 0 || sp.position.y <= 0.1) {
         this.scene.remove(sp.mesh);
-        sp.mesh.geometry.dispose();
-        (sp.mesh.material as THREE.Material).dispose();
         this.spores.splice(i, 1);
       }
     }
@@ -1043,8 +1042,7 @@ export class EcologicalGarden {
 
   // 發射劇毒孢子
   private spitPoisonSpore(targetPos: THREE.Vector3) {
-    const sporeMat = new THREE.MeshLambertMaterial({ color: 0x9b59b6 });
-    const spore = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), sporeMat);
+    const spore = new THREE.Mesh(SPORE_GEO, SPORE_MAT);
     const startPos = this.boss.position.clone().add(new THREE.Vector3(0, 3.5, 0));
     spore.position.copy(startPos);
     this.scene.add(spore);
@@ -1138,7 +1136,7 @@ export class EcologicalGarden {
   public isInsideWishingPond(pos: THREE.Vector3): boolean {
     const dx = pos.x - this.pondPos.x;
     const dz = pos.z - this.pondPos.z;
-    return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.0;
+    return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.5;
   }
 
   // Boss 死亡傾倒枯萎動畫

@@ -4,7 +4,16 @@ export class WantedSystem {
   public stars: number = 0; // 0 ~ 5 級記過懲戒
   public escapeTimer: number = 0;
   public isEvading: boolean = false;
-  public currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  private _currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  // 切換世界時立即刷新處分狀態標籤 (避免切回校園仍顯示第二世界的「隱蔽安全」)
+  public get currentWorld(): 'CAMPUS' | 'DETENTION' {
+    return this._currentWorld;
+  }
+  public set currentWorld(world: 'CAMPUS' | 'DETENTION') {
+    if (world === this._currentWorld) return;
+    this._currentWorld = world;
+    this.updateHUDStars();
+  }
   private isSpottedThisFrame: boolean = false;
   private bannerTimeout: number = 0;
   public onWantedCleared?: () => void;
@@ -105,44 +114,33 @@ export class WantedSystem {
     this.isSpottedThisFrame = false;
   }
 
+  // 處分徽章與狀態標籤 DOM 快取，以及上次繪製的狀態 (星數/躲藏中/世界未變時略過 DOM 寫入)
+  private demeritBadgeEls: NodeListOf<Element> | null = null;
+  private demeritStatusTitleEl: HTMLElement | null = null;
+  private lastHUDStarsKey = '';
+
   public updateHUDStars() {
-    // 支援記過懲戒標籤 (.demerit-badge) 以及相容原本的 (.star)
-    const demeritBadges = document.querySelectorAll('.demerit-badge');
-    demeritBadges.forEach((el, idx) => {
+    const stateKey = `${this.stars}|${this.isEvading}|${this._currentWorld}`;
+    if (stateKey === this.lastHUDStarsKey) return;
+    this.lastHUDStarsKey = stateKey;
+
+    if (!this.demeritBadgeEls) this.demeritBadgeEls = document.querySelectorAll('.demerit-badge');
+    if (!this.demeritStatusTitleEl) this.demeritStatusTitleEl = document.getElementById('demerit-status-title');
+
+    this.demeritBadgeEls.forEach((el, idx) => {
       if (idx < this.stars) {
         el.classList.add('active');
-        if (this.isEvading) {
-          el.classList.add('evading');
-        } else {
-          el.classList.remove('evading');
-        }
-        if (this.stars >= 4) {
-          el.classList.add('danger');
-        } else {
-          el.classList.remove('danger');
-        }
+        el.classList.toggle('evading', this.isEvading);
+        el.classList.toggle('danger', this.stars >= 4);
       } else {
         el.classList.remove('active', 'danger', 'evading');
       }
     });
 
-    const starEls = document.querySelectorAll('.wanted-stars .star');
-    starEls.forEach((el, idx) => {
-      if (idx < this.stars) {
-        el.classList.add('active');
-        if (this.isEvading) el.classList.add('evading');
-        else el.classList.remove('evading');
-        if (this.stars >= 4) el.classList.add('danger');
-        else el.classList.remove('danger');
-      } else {
-        el.classList.remove('active', 'danger', 'evading');
-      }
-    });
-
-    const statusTitleEl = document.getElementById('demerit-status-title');
+    const statusTitleEl = this.demeritStatusTitleEl;
     if (statusTitleEl) {
       if (this.stars === 0) {
-        statusTitleEl.textContent = this.currentWorld === 'DETENTION' ? '隱蔽安全' : '操行良好';
+        statusTitleEl.textContent = this._currentWorld === 'DETENTION' ? '隱蔽安全' : '操行良好';
         statusTitleEl.style.color = '#2ecc71';
       } else {
         statusTitleEl.textContent = this.getDemeritLevelTitle(this.stars);
@@ -151,16 +149,89 @@ export class WantedSystem {
     }
   }
 
+  // 橫幅佇列：同時僅顯示一則；相同 (僅數字不同) 訊息原地更新並延長，不重複排隊；
+  // 有訊息排隊時目前橫幅最少停留 BANNER_MIN_SHOW_MS 後即輪替，佇列滿時捨棄最舊的一則
   public showBanner(text: string, duration: number = 3000) {
     const banner = document.getElementById('hud-banner');
     if (!banner) return;
 
+    const key = WantedSystem.bannerKey(text);
+    const now = performance.now();
+
+    // 1. 與目前顯示中的橫幅相同 (或僅數字不同)：原地更新文字並延長顯示
+    if (this.bannerCurrentKey === key) {
+      banner.textContent = text;
+      const remaining = this.bannerCurrentDuration - (now - this.bannerShownAt);
+      if (this.bannerQueue.length === 0 && duration > remaining) {
+        this.bannerShownAt = now;
+        this.bannerCurrentDuration = duration;
+        this.scheduleBannerEnd(banner, duration);
+      }
+      return;
+    }
+
+    // 2. 已在佇列中的同類訊息：以最新文字取代，不重複排隊
+    for (const queued of this.bannerQueue) {
+      if (queued.key === key) {
+        queued.text = text;
+        queued.duration = duration;
+        return;
+      }
+    }
+
+    // 3. 目前無橫幅：立即顯示
+    if (this.bannerCurrentKey === null) {
+      this.displayBanner(banner, text, key, duration);
+      return;
+    }
+
+    // 4. 排隊等候，並縮短目前橫幅的剩餘時間
+    this.bannerQueue.push({ text, key, duration });
+    if (this.bannerQueue.length > WantedSystem.BANNER_MAX_QUEUE) {
+      this.bannerQueue.shift();
+    }
+    const elapsed = now - this.bannerShownAt;
+    const remaining = this.bannerCurrentDuration - elapsed;
+    const minLeft = Math.max(0, WantedSystem.BANNER_MIN_SHOW_MS - elapsed);
+    if (remaining > minLeft) {
+      this.bannerCurrentDuration = elapsed + minLeft;
+      this.scheduleBannerEnd(banner, minLeft);
+    }
+  }
+
+  private static readonly BANNER_MAX_QUEUE = 3;
+  private static readonly BANNER_MIN_SHOW_MS = 1400;
+  private bannerQueue: { text: string; key: string; duration: number }[] = [];
+  private bannerCurrentKey: string | null = null;
+  private bannerShownAt: number = 0;
+  private bannerCurrentDuration: number = 0;
+
+  // 去除數字後的比對鍵，讓「來回 3 拍 / 來回 4 拍」等連續訊息視為同一則
+  private static bannerKey(text: string): string {
+    return text.replace(/[\d.]+/g, '#');
+  }
+
+  private displayBanner(banner: HTMLElement, text: string, key: string, duration: number) {
     banner.textContent = text;
     banner.classList.add('show');
+    this.bannerCurrentKey = key;
+    this.bannerShownAt = performance.now();
+    // 後方仍有排隊訊息時僅停留最短時間，加速輪替避免訊息過時
+    const showMs = this.bannerQueue.length > 0 ? Math.min(duration, WantedSystem.BANNER_MIN_SHOW_MS) : duration;
+    this.bannerCurrentDuration = showMs;
+    this.scheduleBannerEnd(banner, showMs);
+  }
 
+  private scheduleBannerEnd(banner: HTMLElement, ms: number) {
     if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
     this.bannerTimeout = window.setTimeout(() => {
-      banner.classList.remove('show');
-    }, duration);
+      const next = this.bannerQueue.shift();
+      if (next) {
+        this.displayBanner(banner, next.text, next.key, next.duration);
+      } else {
+        banner.classList.remove('show');
+        this.bannerCurrentKey = null;
+      }
+    }, ms);
   }
 }

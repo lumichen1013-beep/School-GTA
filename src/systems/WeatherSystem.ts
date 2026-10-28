@@ -447,15 +447,18 @@ export class WeatherSystem {
         }
 
         // 水平超出玩家範圍跟隨包裝
-        if (pos[idx] < playerPos.x - rangeX) pos[idx] += rangeX * 2.0;
-        else if (pos[idx] > playerPos.x + rangeX) pos[idx] -= rangeX * 2.0;
+        let wrapped = false;
+        if (pos[idx] < playerPos.x - rangeX) { pos[idx] += rangeX * 2.0; wrapped = true; }
+        else if (pos[idx] > playerPos.x + rangeX) { pos[idx] -= rangeX * 2.0; wrapped = true; }
 
-        if (pos[idx + 2] < playerPos.z - rangeZ) pos[idx + 2] += rangeZ * 2.0;
-        else if (pos[idx + 2] > playerPos.z + rangeZ) pos[idx + 2] -= rangeZ * 2.0;
-        // 水平循環後若粒子不幸位於室內 (Y < 屋頂高度)，立即提至天空上方
-        const wrapRoofY = IndoorManager.getRoofHeightAt(pos[idx], pos[idx + 2], this.currentWorld);
-        if (wrapRoofY !== null && pos[idx + 1] < wrapRoofY) {
-          pos[idx + 1] = Math.max(maxY, wrapRoofY + 2.5) + Math.random() * 4.0;
+        if (pos[idx + 2] < playerPos.z - rangeZ) { pos[idx + 2] += rangeZ * 2.0; wrapped = true; }
+        else if (pos[idx + 2] > playerPos.z + rangeZ) { pos[idx + 2] -= rangeZ * 2.0; wrapped = true; }
+        // 水平循環後若粒子不幸位於室內 (Y < 屋頂高度)，立即提至天空上方 (僅發生循環時才需查詢屋頂)
+        if (wrapped) {
+          const wrapRoofY = IndoorManager.getRoofHeightAt(pos[idx], pos[idx + 2], this.currentWorld);
+          if (wrapRoofY !== null && pos[idx + 1] < wrapRoofY) {
+            pos[idx + 1] = Math.max(maxY, wrapRoofY + 2.5) + Math.random() * 4.0;
+          }
         }
       }
 

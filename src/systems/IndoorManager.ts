@@ -153,6 +153,16 @@ export class IndoorManager {
     }
   ];
 
+  // 依世界預先篩選的區域清單 (雨滴粒子每幀數千次查詢，避免逐一略過其他世界的區域)
+  private static readonly zonesByWorld: Record<'CAMPUS' | 'DETENTION', IndoorZone[]> = {
+    CAMPUS: IndoorManager.ZONES.filter(z => z.world === 'ALL' || z.world === 'CAMPUS'),
+    DETENTION: IndoorManager.ZONES.filter(z => z.world === 'ALL' || z.world === 'DETENTION')
+  };
+
+  private static zonesFor(currentWorld: 'CAMPUS' | 'DETENTION'): IndoorZone[] {
+    return this.zonesByWorld[currentWorld];
+  }
+
   /**
    * 判定指定 3D 向量座標是否處於室內 / 建築物頂蓋遮蔽之下
    */
@@ -164,9 +174,9 @@ export class IndoorManager {
    * 判定任意 (X, Y, Z) 點位是否處於室內
    */
   public static isPointIndoors(x: number, y: number, z: number, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS'): boolean {
-    for (let i = 0; i < this.ZONES.length; i++) {
-      const zItem = this.ZONES[i];
-      if (zItem.world !== 'ALL' && zItem.world !== currentWorld) continue;
+    const zones = this.zonesFor(currentWorld);
+    for (let i = 0; i < zones.length; i++) {
+      const zItem = zones[i];
       if (x >= zItem.minX && x <= zItem.maxX && z >= zItem.minZ && z <= zItem.maxZ) {
         if (y < zItem.roofY && (zItem.minY === undefined || y >= zItem.minY)) {
           return true;
@@ -182,9 +192,9 @@ export class IndoorManager {
    */
   public static getRoofHeightAt(x: number, z: number, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS'): number | null {
     let maxRoof: number | null = null;
-    for (let i = 0; i < this.ZONES.length; i++) {
-      const zItem = this.ZONES[i];
-      if (zItem.world !== 'ALL' && zItem.world !== currentWorld) continue;
+    const zones = this.zonesFor(currentWorld);
+    for (let i = 0; i < zones.length; i++) {
+      const zItem = zones[i];
       if (x >= zItem.minX && x <= zItem.maxX && z >= zItem.minZ && z <= zItem.maxZ) {
         if (maxRoof === null || zItem.roofY > maxRoof) {
           maxRoof = zItem.roofY;

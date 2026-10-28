@@ -37,14 +37,16 @@ export class Engine {
     this.setupLighting();
 
     // 4. 視窗縮放與螢幕翻轉自適應
-    window.addEventListener('resize', () => this.onResize());
+    // 行動裝置翻轉後 visualViewport 尺寸需數百毫秒才穩定，分段補量確保最終尺寸正確
+    window.addEventListener('resize', () => this.handleResize());
     window.addEventListener('orientationchange', () => {
-      this.onResize();
-      setTimeout(() => this.onResize(), 100);
-      setTimeout(() => this.onResize(), 300);
+      this.handleResize();
+      setTimeout(() => this.handleResize(), 100);
+      setTimeout(() => this.handleResize(), 300);
+      setTimeout(() => this.handleResize(), 500);
     });
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', () => this.onResize());
+      window.visualViewport.addEventListener('resize', () => this.handleResize());
     }
   }
 
@@ -99,7 +101,7 @@ export class Engine {
     }
   }
 
-  private onResize() {
+  public handleResize() {
     const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
     const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     this.resize(width, height);

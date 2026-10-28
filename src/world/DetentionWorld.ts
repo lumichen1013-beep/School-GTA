@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CollidableBox } from './CampusWorld';
+import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
+import { isBlockedXZ } from '../physics/aabb';
+
+// 越獄起點 (北側牢房後方通風口)：首次進入與「重新挑戰」皆由此出發
+export const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
+const INITIAL_CHECKPOINT_NAME = 'A 區 牢房起點';
 
 export interface SearchlightItem {
   id: number;
@@ -61,6 +66,9 @@ export interface ACHidingSpot {
   type: 'HAY_CART' | 'HAY_BALE';
 }
 
+// 探照燈燈頭朝向用暫存向量 (重複使用，避免每幀配置)
+const _scratchLook = new THREE.Vector3();
+
 export class DetentionWorld {
   public scene: THREE.Scene;
   public group: THREE.Group = new THREE.Group();
@@ -70,9 +78,9 @@ export class DetentionWorld {
   public hidingSpots: ACHidingSpot[] = [];
 
   // 少年院關鍵點位 (改為潛龍諜影潛行迷宮配置)
-  public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 起點：北側牢房後方通風口 (空曠安全區)
-  public currentCheckpointPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 當前重生/存檔點
-  public currentCheckpointName: string = 'A 區 牢房起點'; // 存檔點名稱
+  public spawnPos: THREE.Vector3 = INITIAL_SPAWN.clone(); // 起點：北側牢房後方通風口 (空曠安全區)
+  public currentCheckpointPos: THREE.Vector3 = INITIAL_SPAWN.clone(); // 當前重生/存檔點
+  public currentCheckpointName: string = INITIAL_CHECKPOINT_NAME; // 存檔點名稱
 
   // 更新檢查點 / 存檔點
   public setCheckpoint(pos: THREE.Vector3, name: string) {
@@ -80,14 +88,15 @@ export class DetentionWorld {
     this.spawnPos.copy(pos);
     this.currentCheckpointName = name;
   }
+
+  // 存檔點還原為越獄起點 (重新挑戰時使用)
+  public resetCheckpoint() {
+    this.setCheckpoint(INITIAL_SPAWN, INITIAL_CHECKPOINT_NAME);
+  }
   public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
   public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(-48, 0, -8); // 西側體能區：臥推訓練
   public tireStationPos: THREE.Vector3 = new THREE.Vector3(-49, 0, 8); // 西側體能區：巨型輪胎翻滾
-  public barracksPos: THREE.Vector3 = new THREE.Vector3(-40, 0, -60); // 監舍主體大樓
-  public hqPos: THREE.Vector3 = new THREE.Vector3(52.5, 0, 50); // 教官總部
-  public workshopPos: THREE.Vector3 = new THREE.Vector3(-52.5, 0, 50); // 實習工廠
-  public gatePos: THREE.Vector3 = new THREE.Vector3(0, 0, 95); // 少年院正門 (南側脫逃大門)
 
   // 門禁與機關點位
   public gateAPos: THREE.Vector3 = new THREE.Vector3(0, 0, -28); // 管制閘門 1 (連通 A 區與 B 區)
@@ -144,37 +153,16 @@ export class DetentionWorld {
     this.buildDetentionFacility();
   }
 
-  // 註冊垂直阻擋物體 (牆面、立柱、鐵欄杆、設施等)
-  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY: number = 0, maxY: number = 5): CollidableBox {
-    const box: CollidableBox = {
-      min: new THREE.Vector3(Math.min(minX, maxX), minY, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), maxY, Math.max(minZ, maxZ))
-    };
-    this.colliders.push(box);
-    return box;
+  // 碰撞體登記 (牆面預設高 5m；地板層板上下各 0.25m；坡道頂部延伸 0.4m)
+  private readonly colliderRegistry = new ColliderRegistry(this.colliders, { defaultWallHeight: 5, slabBelow: 0.25, slabAbove: 0.25, rampTopPad: 0.4 });
+  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY?: number, maxY?: number): CollidableBox {
+    return this.colliderRegistry.addCollider(minX, maxX, minZ, maxZ, minY, maxY);
   }
-
-  // 註冊可站立行走的地板層板 (Floor Slabs) - isFloorOnly 不阻礙水平位移
   public addFloorSlab(minX: number, maxX: number, minZ: number, maxZ: number, floorY: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), floorY - 0.25, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), floorY + 0.25, Math.max(minZ, maxZ)),
-      isFloorOnly: true
-    });
+    this.colliderRegistry.addFloorSlab(minX, maxX, minZ, maxZ, floorY);
   }
-
-  // 註冊可平滑行走的斜坡 (Ramps) - 支援上下樓梯坡道物理檢測
   public addRamp(minX: number, maxX: number, minZ: number, maxZ: number, yAtMinZ: number, yAtMaxZ: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), Math.min(yAtMinZ, yAtMaxZ) - 0.4, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), Math.max(yAtMinZ, yAtMaxZ) + 0.4, Math.min(minZ, maxZ)),
-      isFloorOnly: true,
-      isRamp: true,
-      rampMinZ: Math.min(minZ, maxZ),
-      rampMaxZ: Math.max(minZ, maxZ),
-      rampYAtMinZ: yAtMinZ,
-      rampYAtMaxZ: yAtMaxZ
-    });
+    this.colliderRegistry.addRamp(minX, maxX, minZ, maxZ, yAtMinZ, yAtMaxZ);
   }
 
   private buildDetentionFacility() {
@@ -1293,19 +1281,20 @@ export class DetentionWorld {
       color: 0xbaa478 // 軍規帆布沙包土黃色
     });
 
-    const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material) => {
+    // 地面類合併網格 (泥地/跑道) 平貼地表，僅接收陰影不投射，省去整片地面的陰影 pass 繪製
+    const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material, castShadow: boolean = true) => {
       if (geos.length === 0) return;
       const merged = mergeGeometries(geos, false);
       if (merged) {
         const mesh = new THREE.Mesh(merged, mat);
-        mesh.castShadow = true;
+        mesh.castShadow = castShadow;
         mesh.receiveShadow = true;
         this.group.add(mesh);
       }
     };
 
-    createMergedMesh(groundMudGeos, mudMat);
-    createMergedMesh(groundTrackGeos, trackMat);
+    createMergedMesh(groundMudGeos, mudMat, false);
+    createMergedMesh(groundTrackGeos, trackMat, false);
     createMergedMesh(concreteGeos, concreteMat);
     createMergedMesh(darkSteelGeos, darkSteelMat);
     createMergedMesh(rustedMetalGeos, rustedMetalMat);
@@ -1401,7 +1390,6 @@ export class DetentionWorld {
     let anyDetected = false;
     let minDistance = 999;
 
-    const _scratchLook = new THREE.Vector3();
     const isPlayerOutdoors = playerPos.y < 3.0;
 
     // 沉穩緩慢速度設計：
@@ -1542,6 +1530,12 @@ export class DetentionWorld {
     for (let i = 0; i < this.colliders.length; i++) {
       const box = this.colliders[i];
       if (box.isFloorOnly) continue; // 地板/層板不阻礙高空俯視
+      // 略過包住光源起點的碰撞盒 (燈塔本體)：起點在盒內時 tEnter≈0，會把整片燈塔周圍誤判為被遮蔽
+      if (
+        start.x >= box.min.x - 0.01 && start.x <= box.max.x + 0.01 &&
+        start.y >= box.min.y - 0.01 && start.y <= box.max.y + 0.01 &&
+        start.z >= box.min.z - 0.01 && start.z <= box.max.z + 0.01
+      ) continue;
 
       // AABB Slab Test
       const t1x = (box.min.x - start.x) * invDirX;
@@ -1660,11 +1654,33 @@ export class DetentionWorld {
   }
 
   // Boss 擊敗後於地面生成【萬能逃脫鑰匙卡】
+  // 落點若位於柱子、牆壁等阻擋物內，就近環狀搜尋可站立的空地，確保玩家必定拿得到
   public spawnMasterKeycard(pos: THREE.Vector3) {
-    this.masterKeycardPos = pos.clone();
+    this.masterKeycardPos = this.findReachableGroundPos(pos.x, pos.z);
     this.masterKeycardPos.y = 0.8;
     this.masterKeycardMeshGroup.position.copy(this.masterKeycardPos);
     this.masterKeycardMeshGroup.visible = true;
+  }
+
+  // 清除萬能鑰匙卡 (重新挑戰時使用)
+  public clearMasterKeycard() {
+    this.masterKeycardPos = null;
+    this.hasPickedMasterKeycard = false;
+    this.masterKeycardMeshGroup.visible = false;
+  }
+
+  private findReachableGroundPos(x: number, z: number): THREE.Vector3 {
+    const r = 0.5;
+    if (!isBlockedXZ(this.colliders, x, z, r, 0, 0.3, 1.8)) return new THREE.Vector3(x, 0, z);
+    for (let ring = 0.5; ring <= 8; ring += 0.5) {
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const cx = x + Math.cos(a) * ring;
+        const cz = z + Math.sin(a) * ring;
+        if (!isBlockedXZ(this.colliders, cx, cz, r, 0, 0.3, 1.8)) return new THREE.Vector3(cx, 0, cz);
+      }
+    }
+    return new THREE.Vector3(x, 0, z);
   }
 
   // 鑰匙卡自轉與上下懸浮動畫
