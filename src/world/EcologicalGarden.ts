@@ -1138,7 +1138,7 @@ export class EcologicalGarden {
   public isInsideWishingPond(pos: THREE.Vector3): boolean {
     const dx = pos.x - this.pondPos.x;
     const dz = pos.z - this.pondPos.z;
-    return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.0;
+    return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.5;
   }
 
   // Boss 死亡傾倒枯萎動畫

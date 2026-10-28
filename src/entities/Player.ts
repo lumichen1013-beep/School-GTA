@@ -49,7 +49,10 @@ export class Player {
   public isGrounded: boolean = true;
   public isRidingVehicle: boolean = false;
   public isSwimming: boolean = false; // 游泳狀態
+  public swimSurfaceY: number = 0.25; // 當前水體水面高度 (泳池 0.25 / 許願池 0.32)
+  public swimBottomY: number = -1.1;  // 當前水體池底高度 (雙腳不可低於此值)
   private wasSwimming: boolean = false; // 游泳狀態切換檢測
+  private isClimbingOutOfWater: boolean = false; // 出水攀上池畔中 (平滑抬升，避免瞬間彈起)
   public isMoving: boolean = false;   // 當前是否正在移動推進
   public isSprinting: boolean = false; // 當前是否處於衝刺加速狀態
   public isSneaking: boolean = false;  // 潛龍諜影靜音潛行模式 (無腳步聲，背刺專用)
@@ -1187,8 +1190,13 @@ export class Player {
           this.isGrounded = false;
           soundManager.playJump();
         } else {
-          // 水面自然浮力平衡 (水面高度約 0.18m，伴隨波浪起伏)
-          const targetWaterY = 0.18 + (isMoving ? Math.sin(this.animTimer * 2.0) * 0.025 : Math.sin(this.animTimer) * 0.035);
+          // 水面自然浮力平衡：依身體俯仰角計算雙腳深度，使身體沒入水中
+          // 踩水直立 (0.32 rad)：下巴略高於水面；自由式俯趴 (1.18 rad 以上)：軀幹中線貼齊水面
+          const pitch = this.mesh.rotation.x;
+          const proneT = THREE.MathUtils.clamp((pitch - 0.32) / (1.18 - 0.32), 0, 1);
+          const feetDepth = THREE.MathUtils.lerp(1.30, 0.05 + 1.05 * Math.cos(pitch), proneT);
+          const bob = isMoving ? Math.sin(this.animTimer * 2.0) * 0.025 : Math.sin(this.animTimer) * 0.035;
+          const targetWaterY = Math.max(this.swimBottomY, this.swimSurfaceY - feetDepth + bob);
           const yDiff = targetWaterY - this.position.y;
           this.velocity.y = THREE.MathUtils.clamp(yDiff * 8.0, -2.5, 4.0);
           this.isGrounded = false;
@@ -1241,110 +1249,126 @@ export class Player {
     const halfWidth = 0.35;
     const height = 1.8;
     const stepHeight = 0.65; // 階梯平滑攀爬容許度
+    const skin = 0.001; // 貼牆間隙，避免浮點誤差造成重疊
+    const maxSubStep = 0.2; // 單一子步最大位移 (小於 halfWidth，防止高速穿牆)
 
-    // 分軸檢測：X 軸移動
-    const targetX = this.position.x + this.velocity.x * delta;
+    // 水平位移切成子步，分軸檢測後直接貼齊碰撞面 (不再整步丟棄位移)
+    const totalDx = this.velocity.x * delta;
+    const totalDz = this.velocity.z * delta;
+    const subSteps = Math.max(1, Math.ceil(Math.max(Math.abs(totalDx), Math.abs(totalDz)) / maxSubStep));
+    const stepDx = totalDx / subSteps;
+    const stepDz = totalDz / subSteps;
     let collidedX = false;
-    for (const box of colliders) {
-      if (box.isFloorOnly) continue; // 地板/坡道不阻擋水平位移
-      if (
-        targetX + halfWidth > box.min.x &&
-        targetX - halfWidth < box.max.x &&
-        this.position.z + halfWidth > box.min.z &&
-        this.position.z - halfWidth < box.max.z &&
-        this.position.y + height > box.min.y &&
-        this.position.y + stepHeight < box.max.y
-      ) {
-        // 若當前位置本已重疊，但 targetX 正在遠離障礙物中心 (向外逃出)，允許移動逃脫
-        const boxCenterX = (box.min.x + box.max.x) * 0.5;
-        const currentDist = Math.abs(this.position.x - boxCenterX);
-        const targetDist = Math.abs(targetX - boxCenterX);
-        if (targetDist > currentDist) {
-          continue;
+    let collidedZ = false;
+
+    for (let s = 0; s < subSteps; s++) {
+      // X 軸移動
+      if (stepDx !== 0 && !collidedX) {
+        let newX = this.position.x + stepDx;
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
+          if (box.isFloorOnly) continue; // 地板/坡道不阻擋水平位移
+          if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
+          if (this.position.z + halfWidth <= box.min.z || this.position.z - halfWidth >= box.max.z) continue;
+          if (newX + halfWidth <= box.min.x || newX - halfWidth >= box.max.x) continue;
+          // 起點已重疊的障礙物不阻擋，交由下方擠出修正處理
+          if (this.position.x + halfWidth > box.min.x && this.position.x - halfWidth < box.max.x) continue;
+          if (stepDx > 0) {
+            newX = Math.min(newX, box.min.x - halfWidth - skin);
+          } else {
+            newX = Math.max(newX, box.max.x + halfWidth + skin);
+          }
+          collidedX = true;
         }
-        collidedX = true;
-        break;
+        this.position.x = newX;
+      }
+
+      // Z 軸移動
+      if (stepDz !== 0 && !collidedZ) {
+        let newZ = this.position.z + stepDz;
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
+          if (box.isFloorOnly) continue;
+          if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
+          if (this.position.x + halfWidth <= box.min.x || this.position.x - halfWidth >= box.max.x) continue;
+          if (newZ + halfWidth <= box.min.z || newZ - halfWidth >= box.max.z) continue;
+          if (this.position.z + halfWidth > box.min.z && this.position.z - halfWidth < box.max.z) continue;
+          if (stepDz > 0) {
+            newZ = Math.min(newZ, box.min.z - halfWidth - skin);
+          } else {
+            newZ = Math.max(newZ, box.max.z + halfWidth + skin);
+          }
+          collidedZ = true;
+        }
+        this.position.z = newZ;
       }
     }
-    if (!collidedX) {
-      this.position.x = targetX;
-    } else {
+
+    if (collidedX) {
       this.velocity.x = 0;
       this.knockVelocity.x = 0;
     }
-
-    // Z 軸移動
-    const targetZ = this.position.z + this.velocity.z * delta;
-    let collidedZ = false;
-    for (const box of colliders) {
-      if (box.isFloorOnly) continue; // 地板/坡道不阻擋水平位移
-      if (
-        this.position.x + halfWidth > box.min.x &&
-        this.position.x - halfWidth < box.max.x &&
-        targetZ + halfWidth > box.min.z &&
-        targetZ - halfWidth < box.max.z &&
-        this.position.y + height > box.min.y &&
-        this.position.y + stepHeight < box.max.y
-      ) {
-        // 若當前位置本已重疊，但 targetZ 正在遠離障礙物中心 (向外逃出)，允許移動逃脫
-        const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-        const currentDist = Math.abs(this.position.z - boxCenterZ);
-        const targetDist = Math.abs(targetZ - boxCenterZ);
-        if (targetDist > currentDist) {
-          continue;
-        }
-        collidedZ = true;
-        break;
-      }
-    }
-    if (!collidedZ) {
-      this.position.z = targetZ;
-    } else {
+    if (collidedZ) {
       this.velocity.z = 0;
       this.knockVelocity.z = 0;
     }
 
     // 防卡牆與牆角擠壓自解修復 (Depenetration / Anti-Stuck Auto Ejection)
-    // 進行 2 輪迭代，可完全排除直角牆角 (Corner) 同時與兩面牆交疊的情況
-    for (let pass = 0; pass < 2; pass++) {
+    // 最多 4 輪迭代，沿最小穿透軸擠出；無重疊即提前結束，避免牆角/窄縫來回彈跳
+    for (let pass = 0; pass < 4; pass++) {
+      let resolved = true;
       for (let i = 0; i < colliders.length; i++) {
         const box = colliders[i];
         if (box.isFloorOnly) continue;
-        if (
-          this.position.y + height > box.min.y &&
-          this.position.y + stepHeight < box.max.y
-        ) {
-          if (
-            this.position.x + halfWidth > box.min.x &&
-            this.position.x - halfWidth < box.max.x &&
-            this.position.z + halfWidth > box.min.z &&
-            this.position.z - halfWidth < box.max.z
-          ) {
-            const boxCenterX = (box.min.x + box.max.x) * 0.5;
-            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-            const halfBoxX = (box.max.x - box.min.x) * 0.5;
-            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
+        if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
+        const overlapLeft = this.position.x + halfWidth - box.min.x;
+        const overlapRight = box.max.x - (this.position.x - halfWidth);
+        const overlapBack = this.position.z + halfWidth - box.min.z;
+        const overlapFront = box.max.z - (this.position.z - halfWidth);
+        if (overlapLeft <= 0 || overlapRight <= 0 || overlapBack <= 0 || overlapFront <= 0) continue;
 
-            const overlapX = (halfBoxX + halfWidth) - Math.abs(this.position.x - boxCenterX);
-            const overlapZ = (halfBoxZ + halfWidth) - Math.abs(this.position.z - boxCenterZ);
-
-            if (overlapX < overlapZ) {
-              this.position.x = this.position.x >= boxCenterX ? box.max.x + halfWidth + 0.02 : box.min.x - halfWidth - 0.02;
-              this.velocity.x = 0;
-              this.knockVelocity.x = 0;
-            } else {
-              this.position.z = this.position.z >= boxCenterZ ? box.max.z + halfWidth + 0.02 : box.min.z - halfWidth - 0.02;
-              this.velocity.z = 0;
-              this.knockVelocity.z = 0;
-            }
-          }
+        resolved = false;
+        const pushX = Math.min(overlapLeft, overlapRight);
+        const pushZ = Math.min(overlapBack, overlapFront);
+        if (pushX < pushZ) {
+          this.position.x = overlapLeft < overlapRight ? box.min.x - halfWidth - skin : box.max.x + halfWidth + skin;
+          this.velocity.x = 0;
+          this.knockVelocity.x = 0;
+        } else {
+          this.position.z = overlapBack < overlapFront ? box.min.z - halfWidth - skin : box.max.z + halfWidth + skin;
+          this.velocity.z = 0;
+          this.knockVelocity.z = 0;
         }
       }
+      if (resolved) break;
     }
 
+    // 出水攀岸判定：剛脫離水體且雙腳仍低於水面時，放寬落腳高度並平滑抬升至池畔
+    if (this.isSwimming) {
+      this.isClimbingOutOfWater = false;
+    } else if (this.wasSwimming && this.position.y < this.swimSurfaceY) {
+      this.isClimbingOutOfWater = true;
+    }
+    const groundReach = this.isClimbingOutOfWater ? 1.6 : 0.65;
+
     // Y 軸移動 (重力與垂直檢測，支援水平層板與連續坡道階梯)
-    const targetY = this.position.y + this.velocity.y * delta;
+    let targetY = this.position.y + this.velocity.y * delta;
     let groundY = 0; // 地面水平面
+
+    // 頭頂天花板檢測：上升時頭部不可穿入上方障礙物 (僅檢查目前位於頭頂之上的物件)
+    if (targetY > this.position.y) {
+      const headY = this.position.y + height;
+      for (let i = 0; i < colliders.length; i++) {
+        const box = colliders[i];
+        if (box.isRamp || box.min.y < headY - skin) continue;
+        if (targetY + height <= box.min.y) continue;
+        if (this.position.x + halfWidth <= box.min.x || this.position.x - halfWidth >= box.max.x) continue;
+        if (this.position.z + halfWidth <= box.min.z || this.position.z - halfWidth >= box.max.z) continue;
+        targetY = box.min.y - height - skin;
+        this.velocity.y = 0;
+        this.knockVelocity.y = 0;
+      }
+    }
 
     for (const box of colliders) {
       if (
@@ -1361,19 +1385,29 @@ export class Player {
           }
         } else {
           // 標準水平樓地板或物件頂部
-          if (box.max.y <= this.position.y + 0.65 && box.max.y > groundY) {
+          if (box.max.y <= this.position.y + groundReach && box.max.y > groundY) {
             groundY = box.max.y;
           }
         }
       }
     }
 
+    // 已站上地面或主動起跳時結束攀岸狀態
+    if (this.isClimbingOutOfWater && (groundY <= this.position.y || this.velocity.y > 0)) {
+      this.isClimbingOutOfWater = false;
+    }
+
     // 落地檢測與貼地 (Ground-snapping 下樓防抖動)
     if (this.isSwimming) {
       // 游泳狀態下由浮力主導高度，防止穿透泳池底層
-      const poolBottomY = -1.1;
-      this.position.y = Math.max(poolBottomY, targetY);
+      this.position.y = Math.max(this.swimBottomY, targetY);
       this.isGrounded = false;
+    } else if (this.isClimbingOutOfWater) {
+      // 攀上池畔：以固定速度平滑抬升，抵達地面後恢復一般落地邏輯
+      this.position.y = Math.min(groundY, this.position.y + 3.0 * delta);
+      this.velocity.y = 0;
+      this.isGrounded = true;
+      if (this.position.y >= groundY) this.isClimbingOutOfWater = false;
     } else if (targetY <= groundY || (this.isGrounded && this.position.y - groundY <= 0.65 && this.velocity.y <= 0)) {
       const landingSpeedY = this.velocity.y;
       this.position.y = groundY;

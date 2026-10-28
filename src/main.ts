@@ -2145,6 +2145,11 @@ class SchoolGTASandbox {
       } else {
         const inPool = this.currentWorldType === 'CAMPUS' && (this.world.isInsideSwimmingPool(this.player.position) || this.ecologicalGarden.isInsideWishingPond(this.player.position));
         this.player.isSwimming = inPool;
+        if (inPool) {
+          const inPond = this.ecologicalGarden.isInsideWishingPond(this.player.position);
+          this.player.swimSurfaceY = inPond ? 0.32 : 0.25;
+          this.player.swimBottomY = -1.1; // 許願池與泳池皆為深水 (池底以下被地坪遮蔽，呈現身體沒入水中)
+        }
 
         this.player.update(delta, this.input, forwardVec, rightVec, this.activeColliders, isRaining, false, this.currentWorldType);
         targetPosition = this.player.position;
@@ -2784,7 +2789,8 @@ class SchoolGTASandbox {
             this.switchWorld('DETENTION', true);
           },
           () => {
-            this.switchWorld('CAMPUS');
+            // 通關後回主畫面：重新載入頁面完整重置所有世界狀態，避免第二世界進度混入天天國中
+            window.location.reload();
           }
         );
       }

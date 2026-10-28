@@ -66,7 +66,8 @@ export class CampusWorld {
 
   // 判斷玩家是否身處游泳池水體範圍之內
   public isInsideSwimmingPool(pos: THREE.Vector3): boolean {
-    return pos.x >= 67.5 && pos.x <= 82.5 && pos.z >= -48.5 && pos.z <= -21.5 && pos.y <= 1.0 && pos.y >= -1.5;
+    // 範圍與水面 (14m x 26m) 精確對齊，避免站在池畔圍邊上被誤判為游泳
+    return pos.x >= 68.0 && pos.x <= 82.0 && pos.z >= -48.0 && pos.z <= -22.0 && pos.y <= 1.0 && pos.y >= -1.5;
   }
   public trackStartPos: THREE.Vector3 = new THREE.Vector3(-30, 0, 14); // 位於東主直道北端終點線 (進第一彎道前，標準田徑終點與200m起點)
   public trackCheckpoints: THREE.Vector3[] = [
@@ -547,10 +548,10 @@ export class CampusWorld {
 
     // 講台 (Podium)
     const podium = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 0.8), woodMat);
-    podium.position.set(rx + 9.5, ry + 0.55, rz);
+    podium.position.set(rx + 10.0, ry + 0.55, rz);
     podium.castShadow = true;
     this.group.add(podium);
-    this.addCollider(rx + 8.8, rx + 10.2, rz - 0.5, rz + 0.5, ry, ry + 1.2);
+    this.addCollider(rx + 9.4, rx + 10.6, rz - 0.4, rz + 0.4, ry, ry + 1.1);
 
     // 課桌椅：擴增為 4 排 x 3 行 = 12 組完整課桌椅 (配備木質靠背與桌面教材書本)
     const bookColors = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf1c40f, 0x9b59b6];
@@ -1367,6 +1368,8 @@ export class CampusWorld {
     base.receiveShadow = true;
     this.group.add(base);
     this.addFloorSlab(x - stageWidth / 2, x + stageWidth / 2, z - stageDepth / 2, z + stageDepth / 2, stageHeight);
+    // 台座實體碰撞：側面阻擋，避免玩家從側邊鑽進台體內被講台/柱子卡住 (頂部仍可站立)
+    this.addCollider(x - stageWidth / 2, x + stageWidth / 2, z - stageDepth / 2, z + stageDepth / 2, y, y + stageHeight);
 
     // 台階
     const stepMat = new THREE.MeshLambertMaterial({ color: 0xbdc3c7 });
@@ -1738,7 +1741,11 @@ export class CampusWorld {
     ring.position.set(x, y + 0.3, z);
     ring.castShadow = true;
     this.group.add(ring);
-    this.addCollider(x - 3.8, x + 3.8, z - 3.8, z + 3.8, y, y + 0.7);
+    // 以七塊內接方盒近似 r=4 圓形花台 (避免方形碰撞盒在對角形成隱形牆)
+    for (let k = 1; k < 8; k++) {
+      const a = (k * Math.PI) / 16;
+      this.addCollider(x - 3.98 * Math.cos(a), x + 3.98 * Math.cos(a), z - 3.98 * Math.sin(a), z + 3.98 * Math.sin(a), y, y + 0.7);
+    }
 
     const soil = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 0.2, 24), soilMat);
     soil.position.set(x, y + 0.6, z);
@@ -2246,6 +2253,8 @@ export class CampusWorld {
     stage.castShadow = true;
     this.group.add(stage);
     this.addFloorSlab(baseX + 3.5 - stageW / 2, baseX + 3.5 + stageW / 2, minZ + 1.2, minZ + stageL + 1.2, stageH);
+    // 舞台實體碰撞：側面阻擋，避免玩家鑽進舞台內部 (經前方台階可登台)
+    this.addCollider(baseX + 3.5 - stageW / 2, baseX + 3.5 + stageW / 2, minZ + 1.2, minZ + stageL + 1.2, 0, stageH);
 
     // 舞台台階 (Stage front stairs: Z: 29.2 ~ 30.0)
     const step = new THREE.Mesh(new THREE.BoxGeometry(stageW, 0.5, 0.8), stageFloorMat);
@@ -2323,11 +2332,13 @@ export class CampusWorld {
       pianoGroup.add(pLeg);
     });
     this.group.add(pianoGroup);
+    this.addCollider(baseX - 3.2, baseX - 1.2, minZ + 2.7, minZ + 4.9, stageH, stageH + 1.1);
 
     // D. 演講司儀講台 (移至右側翼側，維持舞台功能與視野開闊)
     const podium = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
     podium.position.set(baseX + 9.5, stageH + 0.55, minZ + 3.8);
     this.group.add(podium);
+    this.addCollider(baseX + 9.0, baseX + 10.0, minZ + 3.4, minZ + 4.2, stageH, stageH + 1.1);
 
     // E. 高級電影院看台座椅 (Luxury Cinema Seats with Armrests, Cup Holders, Headrests & Aisle Guide Lights)
     const cinemaVelvetMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 }); // 酒紅色絲絨厚沙發
@@ -2350,6 +2361,8 @@ export class CampusWorld {
       riser.position.set(baseX + 4.5, rowY + 0.175, rowZ);
       this.group.add(riser);
       this.addFloorSlab(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, floorY);
+      // 看台實體碰撞：每排僅升 0.35m 可逐排踏上，側面無法鑽入座位底下
+      this.addCollider(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, 0, floorY);
 
       // 階梯看台邊緣微型柔和地腳導引地燈 (Aisle Guide Lights)
       // 中央走道踏階導引燈條
@@ -3148,6 +3161,8 @@ export class CampusWorld {
       deckPart.position.set(dx, 0.15, dz);
       deckPart.receiveShadow = true;
       poolGroup.add(deckPart);
+      // 甲板頂面 (0.3m) 註冊為可站立地板，避免雙腳陷入甲板
+      this.addFloorSlab(x + dx - dw / 2, x + dx + dw / 2, z + dz - dl / 2, z + dz + dl / 2, y + 0.3);
     });
 
     // 2. 陽光下清澈透亮的水藍色泳池水面 (Crystal Sunlit Blue Pool Water: 14m x 26m)
@@ -3192,6 +3207,11 @@ export class CampusWorld {
     const borderE = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.35, 27.2), borderMat);
     borderE.position.set(7.3, 0.35, 0);
     poolGroup.add(borderE);
+    // 圍邊頂面 (0.525m) 註冊為可站立地板
+    this.addFloorSlab(x - 7.3, x + 7.3, z - 13.6, z - 13.0, y + 0.525);
+    this.addFloorSlab(x - 7.3, x + 7.3, z + 13.0, z + 13.6, y + 0.525);
+    this.addFloorSlab(x - 7.6, x - 7.0, z - 13.6, z + 13.6, y + 0.525);
+    this.addFloorSlab(x + 7.0, x + 7.6, z - 13.6, z + 13.6, y + 0.525);
 
     // 4. 四條標準泳道分道線 (4 Lanes with 3 Lane Dividers with floating buoys)
     const floatWhiteMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -3315,7 +3335,8 @@ export class CampusWorld {
     this.group.add(poolGroup);
 
     // 外圍防護欄杆與碰撞箱 (防止掉出校園，北端留出通道)
-    this.addCollider(x - 9.8, x + 9.8, z - 16.0, z - 15.6, y, y + 1.2);
+    this.addCollider(x - 9.8, x - 1.0, z - 16.0, z - 15.6, y, y + 1.2);
+    this.addCollider(x + 1.0, x + 9.8, z - 16.0, z - 15.6, y, y + 1.2);
     this.addCollider(x - 9.8, x + 9.8, z + 15.6, z + 16.0, y, y + 1.2);
     this.addCollider(x - 9.8, x - 9.4, z - 16.0, z + 16.0, y, y + 1.2);
     this.addCollider(x + 9.4, x + 9.8, z - 16.0, z + 16.0, y, y + 1.2);
