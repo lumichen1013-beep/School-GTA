@@ -27,8 +27,8 @@ export class Player {
   // Attributes
   public hp: number = 100;
   public maxHp: number = 100;
-  public stamina: number = 100;
-  public maxStamina: number = 100;
+  public stamina: number = 150;
+  public maxStamina: number = 150;
 
   // 武器系統 (Weapon System)
   public currentWeapon: WeaponType = 'FIST';
@@ -44,6 +44,9 @@ export class Player {
   // Speeds: 行走 5.0 | 跑步 10.0 (與教官、糾察隊在相同狀態下速度完全一致)
   public walkSpeed: number = 5.0;
   public sprintSpeed: number = 10.0;
+  // 游泳速度：泳池僅 25m，放慢水中速度讓 50m 競速約 15~20 秒，衝刺體力仍為勝負關鍵
+  public swimSpeed: number = 2.0;
+  public swimSprintSpeed: number = 2.8;
   public jumpStrength: number = 8.5;
   public gravity: number = -24.0;
   public isGrounded: boolean = true;
@@ -1077,9 +1080,9 @@ export class Player {
       }
     } else {
       if (this.isSwimming) {
-        currentSpeed = input.sprint && this.stamina > 5 ? 7.8 : 4.5;
+        currentSpeed = input.sprint && this.stamina > 5 ? this.swimSprintSpeed : this.swimSpeed;
         if (input.sprint && isMoving && this.stamina > 5) {
-          this.stamina = Math.max(0, this.stamina - delta * 24.0);
+          this.stamina = Math.max(0, this.stamina - delta * 14.0);
         } else {
           this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
         }
@@ -1240,7 +1243,7 @@ export class Player {
     }
 
     // 7. 人物走動與攻擊動畫擺動 (Procedural Animation)
-    const isSprinting = currentSpeed === (this.isSwimming ? 7.8 : this.sprintSpeed);
+    const isSprinting = currentSpeed === (this.isSwimming ? this.swimSprintSpeed : this.sprintSpeed);
     this.isSprinting = isMoving && isSprinting;
     this.animatePlayer(delta, isMoving, isSprinting, currentSpeed);
   }
@@ -1441,7 +1444,7 @@ export class Player {
 
       if (isMoving) {
         // 自由式划水衝刺/游泳姿態
-        const strokeRate = isSprinting ? 12.0 : 8.0;
+        const strokeRate = isSprinting ? 8.0 : 5.5; // 配合放慢後的游速，划水頻率同步降低
         this.animTimer += delta * strokeRate;
 
         // 自由式手臂大輪迴風車劃水動作 (Windmill Crawl Strokes)

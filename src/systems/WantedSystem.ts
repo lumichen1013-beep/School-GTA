@@ -151,16 +151,89 @@ export class WantedSystem {
     }
   }
 
+  // 橫幅佇列：同時僅顯示一則；相同 (僅數字不同) 訊息原地更新並延長，不重複排隊；
+  // 有訊息排隊時目前橫幅最少停留 BANNER_MIN_SHOW_MS 後即輪替，佇列滿時捨棄最舊的一則
   public showBanner(text: string, duration: number = 3000) {
     const banner = document.getElementById('hud-banner');
     if (!banner) return;
 
+    const key = WantedSystem.bannerKey(text);
+    const now = performance.now();
+
+    // 1. 與目前顯示中的橫幅相同 (或僅數字不同)：原地更新文字並延長顯示
+    if (this.bannerCurrentKey === key) {
+      banner.textContent = text;
+      const remaining = this.bannerCurrentDuration - (now - this.bannerShownAt);
+      if (this.bannerQueue.length === 0 && duration > remaining) {
+        this.bannerShownAt = now;
+        this.bannerCurrentDuration = duration;
+        this.scheduleBannerEnd(banner, duration);
+      }
+      return;
+    }
+
+    // 2. 已在佇列中的同類訊息：以最新文字取代，不重複排隊
+    for (const queued of this.bannerQueue) {
+      if (queued.key === key) {
+        queued.text = text;
+        queued.duration = duration;
+        return;
+      }
+    }
+
+    // 3. 目前無橫幅：立即顯示
+    if (this.bannerCurrentKey === null) {
+      this.displayBanner(banner, text, key, duration);
+      return;
+    }
+
+    // 4. 排隊等候，並縮短目前橫幅的剩餘時間
+    this.bannerQueue.push({ text, key, duration });
+    if (this.bannerQueue.length > WantedSystem.BANNER_MAX_QUEUE) {
+      this.bannerQueue.shift();
+    }
+    const elapsed = now - this.bannerShownAt;
+    const remaining = this.bannerCurrentDuration - elapsed;
+    const minLeft = Math.max(0, WantedSystem.BANNER_MIN_SHOW_MS - elapsed);
+    if (remaining > minLeft) {
+      this.bannerCurrentDuration = elapsed + minLeft;
+      this.scheduleBannerEnd(banner, minLeft);
+    }
+  }
+
+  private static readonly BANNER_MAX_QUEUE = 3;
+  private static readonly BANNER_MIN_SHOW_MS = 1400;
+  private bannerQueue: { text: string; key: string; duration: number }[] = [];
+  private bannerCurrentKey: string | null = null;
+  private bannerShownAt: number = 0;
+  private bannerCurrentDuration: number = 0;
+
+  // 去除數字後的比對鍵，讓「來回 3 拍 / 來回 4 拍」等連續訊息視為同一則
+  private static bannerKey(text: string): string {
+    return text.replace(/[\d.]+/g, '#');
+  }
+
+  private displayBanner(banner: HTMLElement, text: string, key: string, duration: number) {
     banner.textContent = text;
     banner.classList.add('show');
+    this.bannerCurrentKey = key;
+    this.bannerShownAt = performance.now();
+    // 後方仍有排隊訊息時僅停留最短時間，加速輪替避免訊息過時
+    const showMs = this.bannerQueue.length > 0 ? Math.min(duration, WantedSystem.BANNER_MIN_SHOW_MS) : duration;
+    this.bannerCurrentDuration = showMs;
+    this.scheduleBannerEnd(banner, showMs);
+  }
 
+  private scheduleBannerEnd(banner: HTMLElement, ms: number) {
     if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
     this.bannerTimeout = window.setTimeout(() => {
-      banner.classList.remove('show');
-    }, duration);
+      const next = this.bannerQueue.shift();
+      if (next) {
+        this.displayBanner(banner, next.text, next.key, next.duration);
+      } else {
+        banner.classList.remove('show');
+        this.bannerCurrentKey = null;
+      }
+    }, ms);
   }
 }

@@ -261,14 +261,17 @@ export class Bicycle {
       }
 
       // 2. 轉向 (A / D)
-      let steerAngle = 0;
-      if (input.left) {
-        this.rotationY += this.turnSpeed * delta * (this.speed >= 0 ? 1 : -1);
-        steerAngle = 0.35;
+      // 手機虛擬搖桿採類比轉向：推得越偏轉越快，方便小幅修正車頭
+      let steer = 0;
+      if (Math.abs(input.virtualAxisX) > 0.25) {
+        steer = THREE.MathUtils.clamp(-input.virtualAxisX, -1, 1);
+      } else if (input.left) {
+        steer = 1;
       } else if (input.right) {
-        this.rotationY -= this.turnSpeed * delta * (this.speed >= 0 ? 1 : -1);
-        steerAngle = -0.35;
+        steer = -1;
       }
+      this.rotationY += this.turnSpeed * steer * delta * (this.speed >= 0 ? 1 : -1);
+      const steerAngle = 0.35 * steer;
 
       // 龍頭轉向
       this.handlebars.rotation.y = THREE.MathUtils.lerp(this.handlebars.rotation.y, steerAngle, delta * 12);

@@ -157,6 +157,7 @@ export class InputManager {
           target.closest('#bgm-badge') ||
           target.closest('#toggle-mobile-mode-btn') ||
           target.closest('#btn-fullscreen') ||
+          target.closest('#hud-action-pills') ||
           target.closest('#quest-tracker-panel') ||
           target.closest('#fullmap-modal') ||
           target.closest('.demerit-container') ||

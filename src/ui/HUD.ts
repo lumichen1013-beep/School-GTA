@@ -165,6 +165,9 @@ export class HUD {
   private fullmapTitleEl: HTMLElement | null;
   private fullmapCoordsEl: HTMLElement | null;
   private fullmapWorldBadgeEl: HTMLElement | null;
+  private fullmapLegendCampusEl: HTMLElement | null;
+  private fullmapLegendDetentionEl: HTMLElement | null;
+  private lastFullmapLegendWorld: 'CAMPUS' | 'DETENTION' | null = null;
   private minimapWrapperEl: HTMLElement | null;
   public isFullMapOpen: boolean = false;
 
@@ -196,6 +199,27 @@ export class HUD {
         e.stopPropagation();
         if (this.onWeatherToggle) this.onWeatherToggle();
       });
+    }
+
+    // ⚙️ 設定選單 (手機端)：點擊展開/收合，點選單外任意處自動收合
+    const settingsBtnEl = document.getElementById('hud-settings-btn');
+    const settingsMenuEl = document.getElementById('hud-settings-menu');
+    if (settingsBtnEl && settingsMenuEl) {
+      const setSettingsOpen = (open: boolean) => {
+        settingsMenuEl.classList.toggle('open', open);
+        settingsBtnEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      settingsBtnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSettingsOpen(!settingsMenuEl.classList.contains('open'));
+      });
+      document.addEventListener('pointerdown', (e) => {
+        if (!settingsMenuEl.classList.contains('open')) return;
+        const target = e.target as Node;
+        if (!settingsMenuEl.contains(target) && !settingsBtnEl.contains(target)) {
+          setSettingsOpen(false);
+        }
+      }, true);
     }
 
     this.worldBadgeEl = document.getElementById('world-badge');
@@ -250,7 +274,30 @@ export class HUD {
     this.fullmapTitleEl = document.getElementById('fullmap-title');
     this.fullmapCoordsEl = document.getElementById('fullmap-coords');
     this.fullmapWorldBadgeEl = document.getElementById('fullmap-world-badge');
+    this.fullmapLegendCampusEl = document.getElementById('fullmap-legend-campus');
+    this.fullmapLegendDetentionEl = document.getElementById('fullmap-legend-detention');
     this.minimapWrapperEl = document.getElementById('minimap-wrapper');
+
+    // 頂部狀態列實際底緣寫入 CSS 變數 --hud-top-bottom，供任務膠囊與橫幅定位於其下方 (各尺寸與換行皆不重疊)
+    const hudTopEl = document.querySelector('.hud-top') as HTMLElement | null;
+    if (hudTopEl && 'ResizeObserver' in window) {
+      const syncHudTopBottom = () => {
+        const bottom = Math.round(hudTopEl.getBoundingClientRect().bottom);
+        if (bottom > 0) document.documentElement.style.setProperty('--hud-top-bottom', `${bottom}px`);
+      };
+      new ResizeObserver(syncHudTopBottom).observe(hudTopEl);
+      window.addEventListener('resize', syncHudTopBottom);
+      syncHudTopBottom();
+    }
+
+    // 快捷鍵指南：點擊面板切換展開 / 收合
+    const controlsPanelEl = document.getElementById('controls-panel');
+    if (controlsPanelEl) {
+      controlsPanelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleControlsGuide();
+      });
+    }
 
     if (this.minimapWrapperEl) {
       this.minimapWrapperEl.addEventListener('click', (e) => {
@@ -758,6 +805,29 @@ export class HUD {
     } else {
       this.closeFullMap();
     }
+  }
+
+  // 鍵盤快捷鍵指南：進入世界時完整展開，30 秒後自動收合為「⌨️ K 快捷鍵」小標籤
+  private controlsGuideTimer: number = 0;
+  public showControlsGuide(autoCollapseMs: number = 30000) {
+    const panel = document.getElementById('controls-panel');
+    if (!panel) return;
+    panel.classList.remove('collapsed');
+    if (this.controlsGuideTimer) window.clearTimeout(this.controlsGuideTimer);
+    this.controlsGuideTimer = window.setTimeout(() => {
+      panel.classList.add('collapsed');
+      this.controlsGuideTimer = 0;
+    }, autoCollapseMs);
+  }
+
+  public toggleControlsGuide() {
+    const panel = document.getElementById('controls-panel');
+    if (!panel) return;
+    if (this.controlsGuideTimer) {
+      window.clearTimeout(this.controlsGuideTimer);
+      this.controlsGuideTimer = 0;
+    }
+    panel.classList.toggle('collapsed');
   }
 
   // 同步任務小介面與大地圖任務側欄的標題、總進度與進度條
@@ -1951,14 +2021,14 @@ export class HUD {
       }
     }
 
-    // 手機端：直接聯動既有攻擊按鈕 (👊 -> 擊暈)
+    // 手機端：直接聯動既有攻擊按鈕 (打 -> 擊暈)
     if (mobileAttackBtn) {
       if (visible) {
         mobileAttackBtn.classList.add('cqc-active');
         mobileAttackBtn.textContent = '擊暈';
       } else {
         mobileAttackBtn.classList.remove('cqc-active');
-        mobileAttackBtn.textContent = '👊';
+        mobileAttackBtn.textContent = '打';
       }
     }
   }
@@ -2213,6 +2283,12 @@ export class HUD {
     }
     if (this.fullmapTitleEl) {
       this.fullmapTitleEl.textContent = currentWorld === 'DETENTION' ? '🗺️ 第七少年特訓院 · 戰術全域態勢圖' : '🗺️ 天天國中 · 全校導覽全景地圖';
+    }
+    // 圖例依當前世界切換 (髒檢查，世界變更時才更新 DOM)
+    if (this.lastFullmapLegendWorld !== currentWorld) {
+      this.lastFullmapLegendWorld = currentWorld;
+      if (this.fullmapLegendCampusEl) this.fullmapLegendCampusEl.style.display = currentWorld === 'CAMPUS' ? 'flex' : 'none';
+      if (this.fullmapLegendDetentionEl) this.fullmapLegendDetentionEl.style.display = currentWorld === 'DETENTION' ? 'flex' : 'none';
     }
 
     ctx.clearRect(0, 0, w, h);

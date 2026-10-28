@@ -487,6 +487,8 @@ class SchoolGTASandbox {
     for (const n of this.npcs) {
       n.resetAggro();
     }
+    // 進入世界時展開快捷鍵指南，30 秒後自動收合
+    this.hud.showControlsGuide();
 
     this.currentWorldType = targetWorld;
     if (this.wantedSystem) {
@@ -556,10 +558,7 @@ class SchoolGTASandbox {
         this.basketballGame.basketballMesh.visible = false;
       }
       if (this.racingGame) {
-        this.racingGame.checkpointMarker.visible = false;
-        this.racingGame.swimCheckpointMarker.visible = false;
-        this.racingGame.isRacingTrack = false;
-        this.racingGame.isSwimmingRace = false;
+        this.racingGame.abortAll();
       }
       if (this.tennisGame) {
         this.tennisGame.endMatch(false, this.wantedSystem, this.hud, this.engine.scene, () => {});
@@ -908,13 +907,13 @@ class SchoolGTASandbox {
 
       // 8. 操場 200m 賽跑計時挑戰
       if (this.player.position.distanceTo(this.world.trackStartPos) < 4.5 && !this.currentRidingBike) {
-        this.racingGame.startTrackRace(this.wantedSystem);
+        this.racingGame.startTrackRace(this.wantedSystem, this.player.position, this.world.trackCheckpoints);
         return;
       }
 
       // 9. 泳池 50m 水上競速挑戰
       if (this.player.position.distanceTo(this.world.swimmingPoolPos) < 4.5 && !this.currentRidingBike && !this.racingGame.isSwimmingRace) {
-        this.racingGame.startSwimRace(this.wantedSystem);
+        this.racingGame.startSwimRace(this.wantedSystem, this.player.position, this.world.swimCheckpoints);
         return;
       }
 
@@ -1149,6 +1148,8 @@ class SchoolGTASandbox {
         }
       } else if (e.code === 'KeyJ') {
         this.hud.toggleQuestTracker();
+      } else if (e.code === 'KeyK') {
+        this.hud.toggleControlsGuide();
       } else if (e.code === 'KeyP') {
         this.weatherSystem.cycleWeather(true);
       } else if (e.code === 'Escape') {
@@ -1645,12 +1646,15 @@ class SchoolGTASandbox {
     }
 
     if (toggleBtn && container) {
+      // 以狀態旗標切換 (手機 CSS 會強制顯示容器，故改用 body class 隱藏，不依賴 inline display 判斷)
+      let isControlsOpen = window.getComputedStyle(container).display !== 'none';
       toggleBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const isCurrentlyOpen = container.style.display === 'block';
-        container.style.display = isCurrentlyOpen ? 'none' : 'block';
-        document.body.classList.toggle('touch-mode-active', !isCurrentlyOpen);
-        toggleBtn.textContent = isCurrentlyOpen ? '📱 手機虛擬按鍵' : '📱 隱藏手機鍵盤';
+        isControlsOpen = !isControlsOpen;
+        container.style.display = isControlsOpen ? 'block' : 'none';
+        document.body.classList.toggle('touch-mode-active', isControlsOpen);
+        document.body.classList.toggle('touch-controls-hidden', !isControlsOpen);
+        toggleBtn.textContent = isControlsOpen ? '📱 隱藏手機鍵盤' : '📱 手機虛擬按鍵';
       });
     }
 
@@ -2070,6 +2074,8 @@ class SchoolGTASandbox {
 
     // 1. 滑鼠視角旋轉
     const mouseDelta = this.input.consumeMouseDelta();
+    // 手機騎車時鏡頭自動跟隨車頭，忽略觸控滑動視角，僅需搖桿即可騎乘
+    this.cameraCtrl.isVehicleFollow = !!this.currentRidingBike && this.input.isTouchDevice;
     this.cameraCtrl.updateRotation(mouseDelta.x, mouseDelta.y);
 
     const forwardVec = this.cameraCtrl.getForwardVector();
@@ -2087,6 +2093,9 @@ class SchoolGTASandbox {
       this.currentRidingBike.update(delta, this.input, this.activeColliders);
       targetPosition = this.currentRidingBike.position;
       playerRotY = this.currentRidingBike.rotationY;
+      if (this.cameraCtrl.isVehicleFollow) {
+        this.cameraCtrl.followHeading(playerRotY, delta);
+      }
       this.player.position.copy(targetPosition);
       this.player.updateSkillBubble(delta);
       this.player.updateUmbrella(isRaining, true, this.currentWorldType);
@@ -2305,11 +2314,11 @@ class SchoolGTASandbox {
       } else if (targetPosition.distanceTo(this.world.trackStartPos) < 4.5 && !this.racingGame.isRacingTrack) {
         this.hud.showPrompt('E', '參加 200m 操場極速挑戰 (逆時針方向)');
       } else if (this.racingGame.isRacingTrack) {
-        this.hud.showPrompt('⏱️', `操場計時: ${this.racingGame.raceTimer.toFixed(1)}s (檢查點 ${this.racingGame.raceCheckpointIdx + 1}/${this.world.trackCheckpoints.length})`);
+        this.hud.showPrompt('⏱️', `${this.racingGame.trackStandingText} | 操場計時: ${this.racingGame.raceTimer.toFixed(1)}s (檢查點 ${this.racingGame.raceCheckpointIdx + 1}/${this.world.trackCheckpoints.length})`);
       } else if (targetPosition.distanceTo(this.world.swimmingPoolPos) < 4.5 && !this.racingGame.isSwimmingRace) {
         this.hud.showPrompt('E', '參加 50m 自由式水上競速挑戰');
       } else if (this.racingGame.isSwimmingRace) {
-        this.hud.showPrompt('🏊', `泳池計時: ${this.racingGame.swimRaceTimer.toFixed(1)}s (檢查點 ${this.racingGame.swimCheckpointIdx + 1}/${this.world.swimCheckpoints.length})`);
+        this.hud.showPrompt('🏊', `${this.racingGame.swimStandingText} | 泳池計時: ${this.racingGame.swimRaceTimer.toFixed(1)}s (檢查點 ${this.racingGame.swimCheckpointIdx + 1}/${this.world.swimCheckpoints.length})`);
       } else if (this.ecologicalGarden.isNearWishingPond(targetPosition)) {
         this.hud.showPrompt('E', '🪙 向生態池許願投幣 ($30)');
       } else if (this.world.isNear1FElevator(targetPosition)) {
@@ -2855,7 +2864,7 @@ class SchoolGTASandbox {
       targetPosition,
       playerRotY,
       this.player.hp,
-      this.player.stamina,
+      (this.player.stamina / this.player.maxStamina) * 100, // 體力條以上限百分比顯示
       this.npcs,
       this.bicycles,
       isBeingChased,

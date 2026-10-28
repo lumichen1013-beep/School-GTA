@@ -40,9 +40,22 @@ export class ThirdPersonCamera {
   private static readonly MATCH_PITCH = 0.4;
   private static readonly MATCH_LOOK_AHEAD = 3.0;
 
+  // 手機騎乘單車：視角自動鎖定車頭方向，玩家只需用虛擬搖桿操控
+  public isVehicleFollow: boolean = false;
+
+  // 平滑將鏡頭轉至目標朝向正後方 (headingY 為載具 rotationY，前進方向為 (sin, cos))
+  public followHeading(headingY: number, delta: number) {
+    let diff = (headingY + Math.PI) - this.yaw;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    const t = Math.min(delta * 5.0, 1.0);
+    this.yaw += diff * t;
+    this.pitch = THREE.MathUtils.lerp(this.pitch, 0.25, t);
+  }
+
   public updateRotation(deltaX: number, deltaY: number) {
     if (this.isCinematicExecution && this.cinematicTimer > 0) return; // 特寫運鏡期間鎖定自由視角旋轉
     if (this.isMatchView) return; // 羽球比賽轉播視角鎖定朝向球場
+    if (this.isVehicleFollow) return; // 手機騎車視角跟隨車頭
     this.yaw -= deltaX * this.sensitivityX;
     this.pitch += deltaY * this.sensitivityY;
 
