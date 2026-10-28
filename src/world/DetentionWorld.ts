@@ -4,7 +4,7 @@ import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 import { isBlockedXZ } from '../physics/aabb';
 
 // 越獄起點 (北側牢房後方通風口)：首次進入與「重新挑戰」皆由此出發
-const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
+export const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
 const INITIAL_CHECKPOINT_NAME = 'A 區 牢房起點';
 
 export interface SearchlightItem {

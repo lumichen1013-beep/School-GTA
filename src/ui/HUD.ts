@@ -281,6 +281,19 @@ export class HUD {
     this.fullmapCanvas = document.getElementById('fullmap-canvas') as HTMLCanvasElement;
     if (this.fullmapCanvas) {
       this.fullmapCtx = this.fullmapCanvas.getContext('2d');
+      // 大地圖依實際顯示尺寸 × DPR (上限 2) 調整畫布解析度；尺寸變更時才重設，並觸發立即重繪
+      const canvas = this.fullmapCanvas;
+      new ResizeObserver(() => {
+        const cssSide = canvas.clientWidth;
+        if (cssSide <= 0) return;
+        const side = Math.round(cssSide * Math.min(window.devicePixelRatio || 1, 2));
+        this.fullmapCssSide = cssSide;
+        if (canvas.width !== side) {
+          canvas.width = side;
+          canvas.height = side;
+        }
+        this.lastFullmapRenderAt = 0;
+      }).observe(canvas);
     }
     this.fullmapCloseBtnEl = document.getElementById('fullmap-close-btn');
     this.fullmapTitleEl = document.getElementById('fullmap-title');
@@ -1947,20 +1960,41 @@ export class HUD {
   }
 
   // 更新 MGS 警戒倒數計時器
-  private lastMgsActive: boolean | null = null;
+  private lastMgsPhase: 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION' | null = null;
 
-  public updateMgsAlert(timer: number) {
-    const active = timer > 0;
-    // 非警戒狀態且已隱藏時略過；警戒中僅更新倒數文字
-    if (!active && this.lastMgsActive === false) return;
+  // 第二世界全域警戒橫幅：ALERT (紅，被看見中不倒數) / EVASION (橘，搜索倒數) / CAUTION (黃，戒備倒數) / NORMAL 隱藏
+  public updateMgsAlert(phase: 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION', timer: number) {
     const banner = this.$('mgs-alert-banner');
+    const label = this.$('mgs-alert-label');
     const val = this.$('mgs-alert-timer');
-    if (banner && val) {
-      if (active !== this.lastMgsActive) banner.style.display = active ? 'flex' : 'none';
-      if (active) val.textContent = timer.toFixed(2);
+    if (!banner || !label || !val) return;
+    if (phase !== this.lastMgsPhase) {
+      this.lastMgsPhase = phase;
+      // 警戒列顯示時標記 body，直屏橫幅據此下移避開 (僅於階段切換時更新，無每幀版面讀取)
+      document.body.classList.toggle('mgs-alert-active', phase !== 'NORMAL');
+      if (phase === 'NORMAL') {
+        banner.style.display = 'none';
+        return;
+      }
+      const style = HUD.MGS_PHASE_STYLE[phase];
+      banner.style.display = 'flex';
+      banner.style.background = style.bg;
+      banner.style.borderColor = style.border;
+      banner.style.boxShadow = `0 0 25px ${style.glow}`;
+      label.textContent = style.label;
+      if (phase === 'ALERT') val.textContent = '';
     }
-    this.lastMgsActive = active;
+    if (phase === 'EVASION' || phase === 'CAUTION') {
+      const text = Math.max(0, timer).toFixed(2);
+      if (val.textContent !== text) val.textContent = text;
+    }
   }
+
+  private static readonly MGS_PHASE_STYLE = {
+    ALERT: { label: '🚨 ALERT', bg: 'rgba(220, 38, 38, 0.92)', border: '#fca5a5', glow: 'rgba(239, 68, 68, 0.85)' },
+    EVASION: { label: '⚠️ EVASION', bg: 'rgba(234, 88, 12, 0.92)', border: '#fdba74', glow: 'rgba(249, 115, 22, 0.8)' },
+    CAUTION: { label: '❓ CAUTION', bg: 'rgba(202, 138, 4, 0.92)', border: '#fde68a', glow: 'rgba(234, 179, 8, 0.7)' }
+  } as const;
 
   // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
   public triggerCinematicExecution(title: string, subtitle: string, duration: number = 1.0) {
@@ -2169,6 +2203,30 @@ export class HUD {
   private lastFullmapCoordsText = '';
   private lastFullmapHeaderWorld: 'CAMPUS' | 'DETENTION' | null = null;
   private lastFullmapRenderAt = 0;
+  private fullmapCssSide = 700;
+  // 大地圖以 700×700 邏輯座標繪製，經 setTransform 縮放至實際畫布解析度
+  private static readonly FULLMAP_LOGICAL = 700;
+
+  // 大地圖標籤字級：隨地圖尺寸放大，且不低於 13px (窄螢幕 11px) 的實際顯示字級
+  private fmFont(size: number): string {
+    const minCss = this.fullmapCssSide < 520 ? 11 : 13;
+    const minLogical = minCss * HUD.FULLMAP_LOGICAL / this.fullmapCssSide;
+    return `bold ${Math.max(size * 1.45, minLogical).toFixed(1)}px sans-serif`;
+  }
+
+  // 大地圖標籤：深色描邊光暈 + 填色，確保壓在建築與網格上仍清晰可讀
+  private fmText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
+    const prevStroke = ctx.strokeStyle;
+    const prevWidth = ctx.lineWidth;
+    const px = parseFloat(ctx.font.split(' ')[1]) || 12;
+    ctx.strokeStyle = 'rgba(2, 6, 11, 0.92)';
+    ctx.lineWidth = px * 0.3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+    ctx.strokeStyle = prevStroke;
+    ctx.lineWidth = prevWidth;
+  }
 
   private getFullmapStaticCtx(w: number, h: number): CanvasRenderingContext2D {
     if (!this.fullmapStaticCanvas) this.fullmapStaticCanvas = document.createElement('canvas');
@@ -2215,8 +2273,12 @@ export class HUD {
     const outCtx = this.fullmapCtx;
     // 靜態底圖 (建築、迷宮、跑道等) 繪於離屏畫布並快取；世界或閘門狀態變更時才重繪，每幀僅疊加動態標記
     let ctx: CanvasRenderingContext2D = outCtx;
-    const w = this.fullmapCanvas.width;
-    const h = this.fullmapCanvas.height;
+    const bw = this.fullmapCanvas.width;
+    const bh = this.fullmapCanvas.height;
+    const k = bw / HUD.FULLMAP_LOGICAL;
+    outCtx.setTransform(k, 0, 0, k, 0, 0);
+    const w = HUD.FULLMAP_LOGICAL;
+    const h = HUD.FULLMAP_LOGICAL;
     const cx = w / 2;
     const cy = h / 2;
     const scale = 3.15; // 縮放比：全地圖 200m 映射到約 630px
@@ -2261,10 +2323,11 @@ export class HUD {
         ctx.strokeRect(sx, sy, bw * scale, bd * scale);
       };
 
-      const staticKey = `DETENTION|${detentionData?.isGateAOpen}|${detentionData?.isGateBOpen}|${detentionData?.isSouthGateOpen}|${w}x${h}`;
+      const staticKey = `DETENTION|${detentionData?.isGateAOpen}|${detentionData?.isGateBOpen}|${detentionData?.isSouthGateOpen}|${bw}x${bh}`;
       if (this.fullmapStaticKey !== staticKey) {
       this.fullmapStaticKey = staticKey;
-      ctx = this.getFullmapStaticCtx(w, h);
+      ctx = this.getFullmapStaticCtx(bw, bh);
+      ctx.setTransform(k, 0, 0, k, 0, 0);
       // 1. 深邃軍規情報雷達底色
       ctx.fillStyle = '#02100b';
       ctx.fillRect(0, 0, w, h);
@@ -2304,9 +2367,9 @@ export class HUD {
       for (const tw of towers) {
         drawBox(tw.x, tw.z, 7, 7, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
         ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 9px sans-serif';
+        ctx.font = this.fmFont(9);
         ctx.textAlign = 'center';
-        ctx.fillText('瞭望塔', toScreenX(tw.x), toScreenY(tw.z) + 3);
+        this.fmText(ctx, '瞭望塔', toScreenX(tw.x), toScreenY(tw.z) + 3);
       }
 
       // 中央高空探照燈塔
@@ -2316,10 +2379,10 @@ export class HUD {
       drawBox(-40, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
       drawBox(50, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
       ctx.fillStyle = '#34d399';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = this.fmFont(11);
       ctx.textAlign = 'center';
-      ctx.fillText('第一集訓營舍', toScreenX(-40), toScreenY(-60));
-      ctx.fillText('特訓食堂與補給站', toScreenX(50), toScreenY(-60));
+      this.fmText(ctx, '第一集訓營舍', toScreenX(-40), toScreenY(-60));
+      this.fmText(ctx, '特訓食堂與補給站', toScreenX(50), toScreenY(-60));
 
       // A 區迷宮隔牆與新增戰術拐角牆
       drawBox(-10, -84, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
@@ -2339,8 +2402,8 @@ export class HUD {
       drawBox(50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
       drawBox(0, -28, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
       ctx.fillStyle = gate1Col;
-      ctx.font = 'bold 9.5px sans-serif';
-      ctx.fillText(detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
+      ctx.font = this.fmFont(9.5);
+      this.fmText(ctx, detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
 
       // B 區貨櫃迷宮群 (18 座軍規貨櫃)
       const fullConts = [
@@ -2361,17 +2424,17 @@ export class HUD {
       drawBox(50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
       drawBox(0, 35, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
       ctx.fillStyle = gate2Col;
-      ctx.font = 'bold 9.5px sans-serif';
-      ctx.fillText(detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
+      ctx.font = this.fmFont(9.5);
+      this.fmText(ctx, detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
 
       // C 區：教官總部與實習工廠
       drawBox(-52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
       drawBox(52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
       ctx.fillStyle = '#34d399';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = this.fmFont(11);
       ctx.textAlign = 'center';
-      ctx.fillText('實習機械工廠', toScreenX(-52.5), toScreenY(50));
-      ctx.fillText('教官總部指揮所', toScreenX(52.5), toScreenY(50));
+      this.fmText(ctx, '實習機械工廠', toScreenX(-52.5), toScreenY(50));
+      this.fmText(ctx, '教官總部指揮所', toScreenX(52.5), toScreenY(50));
 
       // C 區防爆側翼壁與發電機柱
       drawBox(-22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
@@ -2390,11 +2453,13 @@ export class HUD {
       const southCol = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
       drawBox(0, 95, 20.4, 2.0, detentionData?.isSouthGateOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.5)', southCol);
       ctx.fillStyle = southCol;
-      ctx.font = 'bold 10px sans-serif';
-      ctx.fillText(detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
+      ctx.font = this.fmFont(10);
+      this.fmText(ctx, detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
       ctx = outCtx;
       }
+      outCtx.setTransform(1, 0, 0, 1, 0, 0);
       outCtx.drawImage(this.fullmapStaticCanvas!, 0, 0);
+      outCtx.setTransform(k, 0, 0, k, 0, 0);
       outCtx.textAlign = 'center';
 
       // 鑰匙卡標記
@@ -2412,8 +2477,8 @@ export class HUD {
           ctx.beginPath();
           ctx.arc(kx, ky, 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.font = 'bold 10px sans-serif';
-          ctx.fillText('🔑 KEY A', kx, ky - 10);
+          ctx.font = this.fmFont(10);
+          this.fmText(ctx, '🔑 KEY A', kx, ky - 10);
         }
         // Keycard B
         if (!detentionData.hasKeycardB) {
@@ -2428,8 +2493,8 @@ export class HUD {
           ctx.beginPath();
           ctx.arc(kx, ky, 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.font = 'bold 10px sans-serif';
-          ctx.fillText('🔑 KEY B', kx, ky - 10);
+          ctx.font = this.fmFont(10);
+          this.fmText(ctx, '🔑 KEY B', kx, ky - 10);
         }
         // Master Keycard
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
@@ -2444,8 +2509,8 @@ export class HUD {
           ctx.beginPath();
           ctx.arc(kx, ky, 6, 0, Math.PI * 2);
           ctx.fill();
-          ctx.font = 'bold 10.5px sans-serif';
-          ctx.fillText('★ MASTER KEY', kx, ky - 12);
+          ctx.font = this.fmFont(10.5);
+          this.fmText(ctx, '★ MASTER KEY', kx, ky - 12);
         }
       }
 
@@ -2463,8 +2528,8 @@ export class HUD {
         ctx.arc(cpx, cpy, 5.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 9.5px sans-serif';
-        ctx.fillText(`🚩 重生點 [${detentionData.checkpointName || '存檔點'}]`, cpx, cpy + 16);
+        ctx.font = this.fmFont(9.5);
+        this.fmText(ctx, `🚩 重生點 [${detentionData.checkpointName || '存檔點'}]`, cpx, cpy + 16);
       }
 
       // 繪製敵方 NPC 及其 90° 視野錐
@@ -2520,8 +2585,8 @@ export class HUD {
 
         if (isBoss) {
           ctx.fillStyle = '#ff4444';
-          ctx.font = 'bold 9.5px sans-serif';
-          ctx.fillText('★ 鐵面總長 (BOSS)', nx, ny - 10);
+          ctx.font = this.fmFont(9.5);
+          this.fmText(ctx, '★ 鐵面總長 (BOSS)', nx, ny - 10);
         }
       }
 
@@ -2552,9 +2617,9 @@ export class HUD {
       ctx.restore();
 
       ctx.fillStyle = '#facc15';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = this.fmFont(11);
       ctx.textAlign = 'center';
-      ctx.fillText('YOU (主角)', px, py - 14);
+      this.fmText(ctx, 'YOU (主角)', px, py - 14);
 
       // 指北針圖標 (Compass North)
       ctx.save();
@@ -2584,8 +2649,8 @@ export class HUD {
       ctx.fill();
 
       ctx.fillStyle = '#ef4444';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.fillText('N', 0, -17);
+      ctx.font = this.fmFont(9);
+      this.fmText(ctx, 'N', 0, -17);
       ctx.restore();
 
       return;
@@ -2597,10 +2662,11 @@ export class HUD {
     const toScreenX = (wx: number) => cx + wx * scale;
     const toScreenY = (wz: number) => cy + wz * scale;
 
-    const campusStaticKey = `CAMPUS|${w}x${h}`;
+    const campusStaticKey = `CAMPUS|${bw}x${bh}`;
     if (this.fullmapStaticKey !== campusStaticKey) {
     this.fullmapStaticKey = campusStaticKey;
-    ctx = this.getFullmapStaticCtx(w, h);
+    ctx = this.getFullmapStaticCtx(bw, bh);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.fillStyle = '#0b1320';
     ctx.fillRect(0, 0, w, h);
 
@@ -2614,9 +2680,9 @@ export class HUD {
       ctx.strokeRect(sx, sy, bw * scale, bd * scale);
       if (label) {
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 10px sans-serif';
+        ctx.font = this.fmFont(10);
         ctx.textAlign = 'center';
-        ctx.fillText(label, toScreenX(bx), toScreenY(bz) + 3);
+        this.fmText(ctx, label, toScreenX(bx), toScreenY(bz) + 3);
       }
     };
 
@@ -2629,7 +2695,9 @@ export class HUD {
     }
     ctx = outCtx;
     }
+    outCtx.setTransform(1, 0, 0, 1, 0, 0);
     outCtx.drawImage(this.fullmapStaticCanvas!, 0, 0);
+    outCtx.setTransform(k, 0, 0, k, 0, 0);
     outCtx.textAlign = 'center';
 
     // 自行車
@@ -2682,8 +2750,8 @@ export class HUD {
     ctx.restore();
 
     ctx.fillStyle = '#facc15';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = this.fmFont(10);
     ctx.textAlign = 'center';
-    ctx.fillText('YOU (主角)', px, py - 12);
+    this.fmText(ctx, 'YOU (主角)', px, py - 12);
   }
 }

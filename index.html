@@ -160,8 +160,8 @@
     <div id="hud-banner">生教組長發動走廊巡查！</div>
 
     <!-- MGS 潛龍諜影警戒倒數橫幅 (Alert Phase Countdown) -->
-    <div id="mgs-alert-banner" style="display:none; position:fixed; top:75px; left:50%; transform:translateX(-50%); z-index:var(--z-hud-banner); background:rgba(220, 38, 38, 0.92); border:2px solid #fca5a5; border-radius:8px; padding:6px 20px; color:#fff; font-family:'Courier New', monospace; font-size:22px; font-weight:bold; letter-spacing:2px; box-shadow:0 0 25px rgba(239,68,68,0.85); pointer-events:none;">
-      🚨 ALERT <span id="mgs-alert-timer">99.99</span>
+    <div id="mgs-alert-banner" style="display:none;">
+      <span id="mgs-alert-label">🚨 ALERT</span>&nbsp;<span id="mgs-alert-timer"></span>
     </div>
 
     <!-- 暗殺/擊昏動作提示 (動態浮動於目標 NPC 頭頂上方，僅精準顯示「擊暈」) -->
@@ -311,7 +311,25 @@
       <div class="fullmap-header">
         <div class="fullmap-title-group">
           <div class="fullmap-title" id="fullmap-title">🗺️ 全域態勢戰術大地圖</div>
-          <div class="fullmap-subtitle" id="fullmap-subtitle">GLOBAL TACTICAL OVERVIEW MAP</div>
+          <div class="fullmap-subtitle" id="fullmap-subtitle">⌨️ [J] / [ESC] 或點擊右上角關閉，返回遊戲</div>
+        </div>
+        <!-- 大地圖工具列 (標題列右側)：背景音樂 / 天氣 / 世界切換 (B / P / M 鍵同效) -->
+        <div class="fullmap-toolbar">
+          <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關 (或按 B 鍵)">
+            <span id="bgm-icon">🎵</span>
+            <span id="bgm-text">BGM: 校園漫步</span>
+            <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+            <span class="bgm-key-hint">B</span>
+          </div>
+          <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
+            <span id="weather-text">☀️ 晴朗</span>
+            <span class="tool-key-hint">P</span>
+          </button>
+          <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界 (或按 M 鍵)">
+            <span>🔁 切換世界</span>
+            <span class="world-current" id="world-text">🏫 天天國中</span>
+            <span class="tool-key-hint">M</span>
+          </button>
         </div>
         <div class="fullmap-header-meta">
           <div class="fullmap-badge" id="fullmap-world-badge">第七少年特訓院</div>
@@ -319,27 +337,12 @@
           <button class="commissary-close" id="fullmap-close-btn" title="關閉大地圖 (ESC)">&times;</button>
         </div>
       </div>
-      <!-- 大地圖工具列：背景音樂 / 天氣 / 世界切換 (B / P / M 鍵同效) -->
-      <div class="fullmap-toolbar">
-        <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關 (或按 B 鍵)">
-          <span id="bgm-icon">🎵</span>
-          <span id="bgm-text">BGM: 校園漫步</span>
-          <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
-          <span class="bgm-key-hint">B</span>
-        </div>
-        <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
-          <span id="weather-text">☀️ 晴朗</span>
-          <span class="tool-key-hint">P</span>
-        </button>
-        <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界 (或按 M 鍵)">
-          <span>🔁 切換世界</span>
-          <span class="world-current" id="world-text">🏫 天天國中</span>
-          <span class="tool-key-hint">M</span>
-        </button>
-      </div>
       <div class="fullmap-body">
-        <div class="fullmap-canvas-wrap">
-          <canvas id="fullmap-canvas" width="700" height="700"></canvas>
+        <!-- 地圖主區 (容器查詢單位使地圖以正方形填滿剩餘空間) -->
+        <div class="fullmap-map-area">
+          <div class="fullmap-canvas-wrap">
+            <canvas id="fullmap-canvas" width="700" height="700"></canvas>
+          </div>
         </div>
 
         <!-- 任務清單側欄 (由主畫面任務小介面整合進大地圖) -->
@@ -556,28 +559,27 @@
               </div>
             </div>
           </div>
+          <div class="fullmap-legend-box">
+            <!-- 圖例依世界切換：天天國中顯示校園人物與載具，特訓院顯示潛入戰術要素 -->
+            <div class="fullmap-legend" id="fullmap-legend-campus">
+              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+              <span class="legend-item"><span class="legend-dot student"></span> 同學</span>
+              <span class="legend-item"><span class="legend-dot teacher"></span> 生教 / 老師</span>
+              <span class="legend-item"><span class="legend-dot instructor"></span> 教官</span>
+              <span class="legend-item"><span class="legend-dot dog"></span> 校犬</span>
+              <span class="legend-item"><span class="legend-dot patrol"></span> 單車糾察</span>
+              <span class="legend-item"><span class="legend-dot bike"></span> 自行車</span>
+            </div>
+            <div class="fullmap-legend" id="fullmap-legend-detention" style="display:none;">
+              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+              <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
+              <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
+              <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
+              <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
+              <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
+            </div>
+          </div>
         </aside>
-      </div>
-      <div class="fullmap-footer">
-        <!-- 圖例依世界切換：天天國中顯示校園人物與載具，特訓院顯示潛入戰術要素 -->
-        <div class="fullmap-legend" id="fullmap-legend-campus">
-          <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
-          <span class="legend-item"><span class="legend-dot student"></span> 同學</span>
-          <span class="legend-item"><span class="legend-dot teacher"></span> 生教 / 老師</span>
-          <span class="legend-item"><span class="legend-dot instructor"></span> 教官</span>
-          <span class="legend-item"><span class="legend-dot dog"></span> 校犬</span>
-          <span class="legend-item"><span class="legend-dot patrol"></span> 單車糾察</span>
-          <span class="legend-item"><span class="legend-dot bike"></span> 自行車</span>
-        </div>
-        <div class="fullmap-legend" id="fullmap-legend-detention" style="display:none;">
-          <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
-          <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
-          <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
-          <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
-          <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
-          <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
-        </div>
-        <div class="fullmap-hotkey-hint">⌨️ 按 [J] / [ESC] 鍵、點擊右上角關閉或再次點擊小地圖即可返回遊戲</div>
       </div>
     </div>
   </div>

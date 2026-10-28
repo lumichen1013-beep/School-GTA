@@ -1309,6 +1309,11 @@ export class Player {
     this.updateAfterimages(delta);
   }
 
+  // 過場動畫期間玩家不執行 update，由過場驅動走路/站立動作
+  public animateCutscene(delta: number, isMoving: boolean, speed: number = 2.5) {
+    this.animatePlayer(delta, isMoving, false, speed);
+  }
+
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean, currentSpeed: number = 5.0) {
     if (this.isSwimming !== this.isSwimOutfit) this.setSwimOutfit(this.isSwimming);
     if (this.isSwimming) {

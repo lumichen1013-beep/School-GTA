@@ -308,6 +308,9 @@ class SchoolGTASandbox implements GameContext {
       }
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
 
+      // 離開特訓院時收起 MGS 警戒列 (避免警戒中切換世界殘留於校園畫面)
+      this.hud.updateMgsAlert('NORMAL', 0);
+
       // 回歸天天國中：重設生命值上限為 100
       this.player.maxHp = 100;
       this.player.hp = Math.min(this.player.hp, 100);
@@ -370,10 +373,12 @@ class SchoolGTASandbox implements GameContext {
     } else {
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
       this.weatherSystem.setWeather('SUNNY', false, false);
+      // 與開場結束相同：開局面向東方 (A 區長廊)，鏡頭置於身後
       this.player.position.copy(this.detentionWorld.spawnPos);
       this.player.velocity.set(0, 0, 0);
-      this.player.rotationY = 0;
-      this.cameraCtrl.resetBehind(this.player.position, 0);
+      this.player.rotationY = Math.PI / 2;
+      this.player.mesh.rotation.set(0, Math.PI / 2, 0);
+      this.cameraCtrl.resetBehind(this.player.position, Math.PI / 2 + Math.PI);
       // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
       this.detention.startEscape();
       this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
@@ -697,6 +702,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 8. NPC AI 更新
     this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
+    // 8.1 少年院全域警戒階段：依本幀守衛實際目擊結果推進 (須在 NPC AI 更新之後)
+    if (!isCampus) this.detention.updateAlertPhase(delta, targetPosition);
 
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
@@ -741,7 +748,7 @@ class SchoolGTASandbox implements GameContext {
     } else {
       this.detention.checkEscapeVictory(targetPosition);
       this.detention.updateEscapeTracker(this.wardenBossNpc);
-      detentionRadarData = this.detention.getRadarData(this.isAnyChasing);
+      detentionRadarData = this.detention.getRadarData();
     }
 
     this.hud.update(

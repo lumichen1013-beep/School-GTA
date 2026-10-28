@@ -6,6 +6,12 @@ import type { GameContext } from './GameContext';
 
 const _scratchCqcScreenPos = new THREE.Vector3();
 
+// 第二世界全域警戒階段 (MGS 式)：NORMAL → ALERT (有守衛看見) → EVASION (失去目標、搜索最後目擊點並倒數) → CAUTION (提高戒備回崗) → NORMAL
+export type AlertPhase = 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION';
+const ALERT_HOLD_TIME = 1.0; // 短暫失去視線 (如總教官衝撞、轉角) 不立即轉入搜索，避免警戒橫幅閃爍
+const EVASION_TIME = 10.0;
+const CAUTION_TIME = 8.0;
+
 /**
  * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
  */
@@ -14,7 +20,8 @@ export class DetentionMode {
   public escapeStartTime: number = 0;
   public takedownCount: number = 0;
   public alertCount: number = 0;
-  public alertTimer: number = 0;
+  public alertPhase: AlertPhase = 'NORMAL';
+  public alertTimer: number = 0; // EVASION / CAUTION 階段剩餘秒數
   public hasKeycardA: boolean = false;
   public hasKeycardB: boolean = false;
   public hasMasterKeycard: boolean = false;
@@ -23,6 +30,9 @@ export class DetentionMode {
   public spawnGraceTimer: number = 0;
   public nearbyCqcTarget: NPC | null = null;
   private searchlightAlertTimer: number = 0;
+  private searchlightLocked: boolean = false;
+  private alertHoldTimer: number = 0;
+  private pendingSighting: boolean = false;
 
   private readonly radarData: DetentionRadarData = {
     isGateAOpen: false,
@@ -48,20 +58,18 @@ export class DetentionMode {
     this.escapeStartTime = performance.now();
     this.takedownCount = 0;
     this.alertCount = 0;
-    this.alertTimer = 0;
     this.hasKeycardA = false;
     this.hasKeycardB = false;
     this.hasMasterKeycard = false;
     this.isBossDefeated = false;
     this.isEscapeComplete = false;
     this.spawnGraceTimer = 5.0;
-    this.searchlightAlertTimer = 0;
     this.nearbyCqcTarget = null;
 
     for (const n of this.ctx.detentionNPCs) {
       n.resetToInitialState();
     }
-    this.ctx.hud.updateMgsAlert(0);
+    this.resetAlertPhase();
 
     const dw = this.ctx.detentionWorld;
     dw.resetCheckpoint();
@@ -121,23 +129,34 @@ export class DetentionMode {
   }
 
   // 守衛全體回到初始崗位並清除警戒 (玩家倒地與復甦時)；已擊敗的總教官維持倒地，不因玩家死亡復活
+  // 警戒次數 (評級依據) 不因死亡歸零，避免以死亡洗白評級
   public resetGuards() {
     for (const n of this.ctx.detentionNPCs) {
       if (this.isBossDefeated && n.role === 'DETENTION_BOSS') continue;
       n.resetToInitialState();
     }
-    this.alertTimer = 0;
-    this.alertCount = 0;
-    this.ctx.hud.updateMgsAlert(0);
+    this.resetAlertPhase();
   }
 
-  // 攻擊守衛：打草驚蛇，全面進入警戒
+  private resetAlertPhase() {
+    this.alertPhase = 'NORMAL';
+    this.alertTimer = 0;
+    this.alertHoldTimer = 0;
+    this.pendingSighting = false;
+    this.searchlightAlertTimer = 0;
+    this.searchlightLocked = false;
+    for (const n of this.ctx.detentionNPCs) n.detentionHuntActive = false;
+    this.ctx.hud.updateMgsAlert('NORMAL', 0);
+  }
+
+  // 攻擊守衛：打草驚蛇，該守衛立即追捕並視為一次目擊 (同一次警戒事件不重複計次)
   public onPlayerAttackedGuard(npc: NPC) {
     this.spawnGraceTimer = 0;
     npc.setAlertState('ALERT');
     npc.isChasing = true;
-    this.alertTimer = 15.0;
-    this.alertCount++;
+    npc.detentionHuntActive = true; // 本幀即生效，避免守衛在警戒階段推進前自行放棄
+    npc.lastKnownPos.copy(this.ctx.player.position);
+    this.pendingSighting = true;
   }
 
   // 每幀：草堆匿蹤、鑰匙卡/探照燈動畫、MGS 警戒倒數與背後暗殺目標鎖定
@@ -171,16 +190,16 @@ export class DetentionMode {
     if (slState.isDetectedBySearchlight) {
       this.searchlightAlertTimer += delta;
       if (this.searchlightAlertTimer >= 0.25) {
-        if (this.alertTimer <= 0) {
-          this.alertCount++;
-          soundManager.playAlert();
+        // 探照燈鎖定視同目擊，交由全域警戒階段統一處理 (計次、音效、倒數)
+        this.pendingSighting = true;
+        if (!this.searchlightLocked) {
+          this.searchlightLocked = true;
           soundManager.playWhistle();
+          if (wantedSystem.stars < 2) {
+            wantedSystem.reportCrime(2, '探照燈高空鎖定！發布緊急圍剿警報！');
+          }
+          wantedSystem.showBanner('🚨 探照燈高空鎖定！已發布全場警報，守衛部隊全面包夾追捕！', 2500);
         }
-        this.alertTimer = 18.0; // 觸發 18 秒 MGS 警戒倒數
-        if (wantedSystem.stars < 2) {
-          wantedSystem.reportCrime(2, '探照燈高空鎖定！發布緊急圍剿警報！');
-        }
-        wantedSystem.showBanner('🚨 探照燈高空鎖定！已發布全場警報，守衛部隊全面包夾追捕！', 1000);
 
         // 核心機制：被探照燈照到時，半徑 65m 內所有少年院 NPC 全力往玩家位置衝刺聚集追捕
         for (const n of this.ctx.detentionNPCs) {
@@ -190,6 +209,7 @@ export class DetentionMode {
               if (n.isPaused) n.cancelPause();
               n.setAlertState('ALERT');
               n.isChasing = true;
+              n.detentionHuntActive = true;
               n.isBurstSprinting = true;
               n.lostSightTimer = 0;
               n.lastKnownPos.copy(targetPosition);
@@ -199,25 +219,75 @@ export class DetentionMode {
       }
     } else {
       this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 2.0);
+      if (this.searchlightAlertTimer <= 0) this.searchlightLocked = false;
     }
-
-    // MGS 警戒倒數計時器
-    if (this.alertTimer > 0) {
-      this.alertTimer -= delta;
-      if (this.alertTimer <= 0) {
-        this.alertTimer = 0;
-        wantedSystem.showBanner('🌿 警戒解除，守衛恢復常態巡邏。', 2500);
-        for (const n of this.ctx.detentionNPCs) {
-          if (!n.isKnockedDown && !n.isPermanentlyKnockedOut) {
-            n.setAlertState('NORMAL');
-            n.isChasing = false;
-          }
-        }
-      }
-    }
-    hud.updateMgsAlert(this.alertTimer);
 
     this.updateCqcTarget(targetPosition);
+  }
+
+  // 每幀 (NPC AI 更新之後)：彙整守衛實際目擊、探照燈與攻擊事件，推進唯一的全域警戒階段，
+  // 並讓守衛行為 (搜索 / 收隊) 與 HUD 警戒橫幅、雷達同步
+  public updateAlertPhase(delta: number, playerPos: THREE.Vector3) {
+    const { wantedSystem, hud } = this.ctx;
+    const npcs = this.ctx.detentionNPCs;
+
+    let sighted = this.pendingSighting;
+    this.pendingSighting = false;
+    for (let i = 0; i < npcs.length && !sighted; i++) {
+      const n = npcs[i];
+      if (n.seesPlayerNow && !n.isKnockedDown && !n.isPermanentlyKnockedOut) sighted = true;
+    }
+
+    if (sighted) {
+      if (this.alertPhase !== 'ALERT') {
+        // 每次從平時或戒備狀態被發現才算一次警戒 (搜索中再被看見屬同一事件)
+        if (this.alertPhase === 'NORMAL' || this.alertPhase === 'CAUTION') {
+          this.alertCount++;
+          soundManager.playAlert();
+        }
+        this.alertPhase = 'ALERT';
+      }
+      this.alertHoldTimer = ALERT_HOLD_TIME;
+      this.alertTimer = 0;
+      // 無線電通報：所有追捕中的守衛同步玩家目前位置
+      for (let i = 0; i < npcs.length; i++) npcs[i].receiveSightingReport(playerPos);
+    } else if (this.alertPhase === 'ALERT') {
+      this.alertHoldTimer -= delta;
+      if (this.alertHoldTimer <= 0) {
+        this.alertPhase = 'EVASION';
+        this.alertTimer = EVASION_TIME;
+        wantedSystem.showBanner('⚠️ 守衛失去目標，正在搜索最後目擊位置！保持隱蔽直到倒數結束！', 2500);
+      }
+    } else if (this.alertPhase === 'EVASION') {
+      this.alertTimer -= delta;
+      if (this.alertTimer <= 0) {
+        this.alertPhase = 'CAUTION';
+        this.alertTimer = CAUTION_TIME;
+        for (let i = 0; i < npcs.length; i++) {
+          const n = npcs[i];
+          if (n.isKnockedDown || n.isPermanentlyKnockedOut) continue;
+          if (n.isChasing) n.resetAggro();
+          n.setAlertState('CAUTION');
+          n.cautionTimer = CAUTION_TIME;
+        }
+        wantedSystem.showBanner('❓ 搜索結束，守衛提高戒備返回巡邏。', 2500);
+      }
+    } else if (this.alertPhase === 'CAUTION') {
+      this.alertTimer -= delta;
+      if (this.alertTimer <= 0) {
+        this.alertPhase = 'NORMAL';
+        this.alertTimer = 0;
+        for (let i = 0; i < npcs.length; i++) {
+          const n = npcs[i];
+          if (!n.isChasing && n.alertState !== 'NORMAL') n.setAlertState('NORMAL');
+        }
+        wantedSystem.showBanner('🌿 警戒解除，守衛恢復常態巡邏。', 2500);
+      }
+    }
+
+    const hunt = this.alertPhase === 'ALERT' || this.alertPhase === 'EVASION';
+    for (let i = 0; i < npcs.length; i++) npcs[i].detentionHuntActive = hunt;
+    hud.updateMgsAlert(this.alertPhase, this.alertTimer);
   }
 
   // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定
@@ -331,10 +401,12 @@ export class DetentionMode {
   }
 
   // 雷達小地圖資料 (重用同一物件，不於每幀配置)
-  public getRadarData(isAnyChasing: boolean): DetentionRadarData {
+  public getRadarData(): DetentionRadarData {
     let radarAlert: 'NORMAL' | 'CAUTION' | 'ALERT' = 'NORMAL';
-    if (this.alertTimer > 0 || isAnyChasing) {
+    if (this.alertPhase === 'ALERT' || this.alertPhase === 'EVASION') {
       radarAlert = 'ALERT';
+    } else if (this.alertPhase === 'CAUTION') {
+      radarAlert = 'CAUTION';
     } else {
       for (const n of this.ctx.detentionNPCs) {
         if (n.alertState === 'CAUTION') {
@@ -356,7 +428,7 @@ export class DetentionMode {
     radar.keycardBPos = dw.keycardBPos;
     radar.masterKeycardPos = dw.masterKeycardPos;
     radar.alertLevel = radarAlert;
-    radar.alertTimer = this.alertTimer;
+    radar.alertTimer = this.alertPhase === 'EVASION' ? this.alertTimer : 0;
     radar.checkpointPos = dw.currentCheckpointPos;
     radar.checkpointName = dw.currentCheckpointName;
     return radar;

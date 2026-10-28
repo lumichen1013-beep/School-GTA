@@ -175,6 +175,10 @@ export class NPC {
 
   public lostSightTimer: number = 0; // 失去玩家視線計時器
   public lastKnownPos: THREE.Vector3 = new THREE.Vector3(); // 玩家最後被目擊位置
+  // 第二世界全域警戒 (由 DetentionMode 統一驅動)：本幀是否親眼看見玩家、是否處於全域搜捕 (ALERT/EVASION) 期間
+  public seesPlayerNow: boolean = false;
+  public detentionHuntActive: boolean = false;
+  private searchAnchor: THREE.Vector3 = new THREE.Vector3(); // 搜索期間以最後目擊點為中心巡查
 
   // NPC 多樣性行為與移動風格系統
   public movementStyle: NPCMovementStyle = 'CASUAL_WALK';
@@ -2238,6 +2242,35 @@ export class NPC {
     this.resetPose();
   }
 
+  // 過場動畫演員模式：隱藏血條、昏迷告示、護盾與衝撞預警，只保留角色外觀 (不加入 NPC 清單、不跑 AI)
+  public setCutsceneActor() {
+    this.hpBarGroup.visible = false;
+    this.koBadgeSprite.visible = false;
+    if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
+    if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
+  }
+
+  // 過場步行週期：speed > 0 時擺動雙腿與雙臂，停下時回到站姿 (0-GC)
+  public animateCutsceneWalk(delta: number, speed: number) {
+    if (speed <= 0.05) {
+      if (this.leftLeg) this.leftLeg.rotation.x = 0;
+      if (this.rightLeg) this.rightLeg.rotation.x = 0;
+      if (this.leftArm) this.leftArm.rotation.x = 0;
+      return;
+    }
+    this.animTimer += delta * Math.max(6.0, speed * 2.4);
+    const swing = Math.sin(this.animTimer) * Math.min(0.6, 0.25 + speed * 0.12);
+    if (this.leftLeg) this.leftLeg.rotation.x = swing;
+    if (this.rightLeg) this.rightLeg.rotation.x = -swing;
+    if (this.leftArm) this.leftArm.rotation.x = -swing * 0.7;
+    if (this.rightArm) this.rightArm.rotation.x = swing * 0.7;
+  }
+
+  // 過場右臂姿勢 (例：總長舉手吹哨)
+  public setCutsceneRightArm(pitch: number) {
+    if (this.rightArm) this.rightArm.rotation.set(pitch, 0, 0);
+  }
+
   // 重置 NPC 所有關節姿態至自然站立基準 (0-GC)
   public resetPose() {
     if (this.headMesh) {
@@ -2429,6 +2462,14 @@ export class NPC {
     if (this.umbrellaMesh?.visible && this.rightArm) {
       this.rightArm.rotation.set(-Math.PI * 0.65, 0.12, -0.12);
     }
+  }
+
+  // 第二世界無線電通報：其他守衛目擊時同步最後目擊位置 (自己正看見玩家時不覆寫)
+  public receiveSightingReport(pos: THREE.Vector3) {
+    if (!this.isChasing || this.seesPlayerNow) return;
+    this.lastKnownPos.copy(pos);
+    this.searchAnchor.copy(pos);
+    if (this.lostSightTimer <= 0) this.lostSightTimer = 0.01;
   }
 
   // 清除仇恨與追擊狀態
@@ -2734,15 +2775,19 @@ export class NPC {
         }
       }
 
-      // 1. 視覺發現判定 (正面 90 度視線錐 + 射線無障礙)
+      // 1. 視覺發現判定 (正面 90 度視線錐 + 射線無障礙)；全域警戒階段由 DetentionMode 依 seesPlayerNow 彙整
       if (seesPlayer) {
         if (this.isPaused) this.cancelPause();
+        const wasChasing = this.isChasing;
+        this.seesPlayerNow = true;
         this.setAlertState('ALERT');
         this.isChasing = true;
         this.lostSightTimer = 0;
         this.lastKnownPos.copy(playerPos);
+        this.searchAnchor.copy(playerPos);
 
-        if (this.whistleCooldown <= 0) {
+        // 僅在初次發現時吹哨/吠叫 (追捕中持續看見不重複鳴響)
+        if (!wasChasing && this.whistleCooldown <= 0) {
           if (this.role === 'DETENTION_WOLF') soundManager.playDogBark();
           else if (this.role === 'DETENTION_GUARD' || this.role === 'DETENTION_BOSS') soundManager.playWhistle();
           this.whistleCooldown = 8.0;
@@ -2778,11 +2823,20 @@ export class NPC {
       if (this.isChasing) {
         if (!seesPlayer) {
           this.lostSightTimer += delta;
-          const maxLostTime = isPlayerHiding ? 1.5 : (this.role === 'DETENTION_WOLF' ? 6.5 : 5.0);
-          const maxDistSq = 3600.0; // 60m 警報追捕搜索範圍
-          if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
-            this.resetAggro();
-            this.setAlertState('NORMAL');
+          if (this.detentionHuntActive) {
+            // 全域 ALERT/EVASION：不自行放棄，前往最後目擊點後在周邊 4m 內輪流搜索，何時收隊由 DetentionMode 決定
+            if (this.position.distanceToSquared(this.lastKnownPos) < 2.25) {
+              const a = Math.random() * Math.PI * 2;
+              const r = 1.5 + Math.random() * 2.5;
+              this.lastKnownPos.set(this.searchAnchor.x + Math.cos(a) * r, this.searchAnchor.y, this.searchAnchor.z + Math.sin(a) * r);
+            }
+          } else {
+            const maxLostTime = isPlayerHiding ? 1.5 : (this.role === 'DETENTION_WOLF' ? 6.5 : 5.0);
+            const maxDistSq = 3600.0; // 60m 警報追捕搜索範圍
+            if (this.lostSightTimer >= maxLostTime || distSq > maxDistSq) {
+              this.resetAggro();
+              this.setAlertState('NORMAL');
+            }
           }
         } else {
           this.lostSightTimer = 0;
@@ -2995,6 +3049,7 @@ export class NPC {
     isPlayerHiding: boolean = false
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
+    this.seesPlayerNow = false;
     this.lastColliders = colliders;
     if (this.role === 'DETENTION_BOSS') impactDust.update(delta);
 
