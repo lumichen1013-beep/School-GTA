@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { sharedLambert, freezeStaticMatrices } from './sceneUtils';
+import { sharedLambert, freezeStaticMatrices, bakeStatic } from './sceneUtils';
 
 export interface CollidableBox {
   min: THREE.Vector3;
@@ -95,6 +95,8 @@ export class CampusWorld {
       if (doors) { dynamicObjects.add(doors.left); dynamicObjects.add(doors.right); }
     }
     for (const spot of this.shootingHotspots) dynamicObjects.add(spot.ringMesh);
+    // 先合併靜態幾何 (同材質/陰影/空間格合為單一 draw call)，再凍結剩餘物件矩陣
+    bakeStatic(this.group, dynamicObjects);
     freezeStaticMatrices(this.group, dynamicObjects);
   }
 
