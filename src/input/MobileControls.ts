@@ -1,0 +1,189 @@
+import { InputManager } from '../core/InputManager';
+
+export interface MobileControlHandlers {
+  onAttackRelease: () => void;
+  onCycleWeapon: () => void;
+  onDodge: () => void;
+}
+
+// 手機虛擬搖桿與觸控按鍵綁定 (觸控/滑鼠雙支援)
+export function setupMobileControls(input: InputManager, handlers: MobileControlHandlers): void {
+  const container = document.getElementById('mobile-controls-container');
+  const toggleBtn = document.getElementById('toggle-mobile-mode-btn');
+  const joystickZone = document.getElementById('touch-joystick-zone');
+  const joystickThumb = document.getElementById('touch-joystick-thumb');
+
+  const btnAttack = document.getElementById('m-btn-attack');
+  const btnJump = document.getElementById('m-btn-jump');
+  const btnSprint = document.getElementById('m-btn-sprint');
+  const btnInteract = document.getElementById('m-btn-interact');
+  const btnWeapon = document.getElementById('m-btn-weapon');
+  const btnDodge = document.getElementById('m-btn-dodge');
+  const skillHudCard = document.getElementById('skill-hud-card');
+
+  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (isTouchDevice && container) {
+    container.style.display = 'block';
+    document.body.classList.add('touch-mode-active');
+    if (toggleBtn) toggleBtn.textContent = '📱 隱藏手機鍵盤';
+  }
+
+  if (toggleBtn && container) {
+    // 以狀態旗標切換 (手機 CSS 會強制顯示容器，故改用 body class 隱藏，不依賴 inline display 判斷)
+    let isControlsOpen = window.getComputedStyle(container).display !== 'none';
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isControlsOpen = !isControlsOpen;
+      container.style.display = isControlsOpen ? 'block' : 'none';
+      document.body.classList.toggle('touch-mode-active', isControlsOpen);
+      document.body.classList.toggle('touch-controls-hidden', !isControlsOpen);
+      toggleBtn.textContent = isControlsOpen ? '📱 隱藏手機鍵盤' : '📱 手機虛擬按鍵';
+    });
+  }
+
+  if (joystickZone && joystickThumb) {
+    let activeTouchId: number | null = null;
+    let zoneRect: DOMRect | null = null;
+    const maxRadius = 45;
+
+    const handleMove = (clientX: number, clientY: number) => {
+      if (!zoneRect) return;
+      const centerX = zoneRect.left + zoneRect.width / 2;
+      const centerY = zoneRect.top + zoneRect.height / 2;
+
+      let dx = clientX - centerX;
+      let dy = clientY - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > maxRadius) {
+        dx = (dx / dist) * maxRadius;
+        dy = (dy / dist) * maxRadius;
+      }
+
+      joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      input.setVirtualAxis(dx / maxRadius, dy / maxRadius);
+    };
+
+    const handleEnd = () => {
+      activeTouchId = null;
+      zoneRect = null;
+      joystickThumb.style.transform = 'translate(-50%, -50%)';
+      input.setVirtualAxis(0, 0);
+    };
+
+    joystickZone.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (activeTouchId !== null) return;
+      const touch = e.changedTouches[0];
+      activeTouchId = touch.identifier;
+      zoneRect = joystickZone.getBoundingClientRect();
+      handleMove(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (activeTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeTouchId) {
+          e.preventDefault();
+          handleMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (activeTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeTouchId) {
+          handleEnd();
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('touchend', handleTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    let isMouseDown = false;
+    joystickZone.addEventListener('mousedown', (e) => {
+      isMouseDown = true;
+      zoneRect = joystickZone.getBoundingClientRect();
+      handleMove(e.clientX, e.clientY);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (isMouseDown) handleMove(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', () => {
+      if (isMouseDown) {
+        isMouseDown = false;
+        handleEnd();
+      }
+    });
+  }
+
+  const bindButton = (
+    btn: HTMLElement | null,
+    onPress: () => void,
+    onRelease?: () => void
+  ) => {
+    if (!btn) return;
+    btn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onPress();
+    }, { passive: false });
+
+    if (onRelease) {
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onRelease();
+      }, { passive: false });
+      btn.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        onRelease();
+      }, { passive: false });
+    }
+
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onPress();
+
+      if (onRelease) {
+        const handleMouseUp = () => {
+          window.removeEventListener('mouseup', handleMouseUp);
+          onRelease();
+        };
+        window.addEventListener('mouseup', handleMouseUp);
+      }
+    });
+  };
+
+  bindButton(btnAttack, () => {
+    input.setVirtualAttack(true);
+  }, () => {
+    input.setVirtualAttack(false);
+    handlers.onAttackRelease();
+  });
+
+  bindButton(btnJump, () => {
+    input.setVirtualJump(true);
+  }, () => {
+    input.setVirtualJump(false);
+  });
+
+  bindButton(btnSprint, () => {
+    input.setVirtualSprint(true);
+  }, () => {
+    input.setVirtualSprint(false);
+  });
+
+  bindButton(btnInteract, () => {
+    input.triggerVirtualInteract();
+  });
+
+  bindButton(btnWeapon, handlers.onCycleWeapon);
+  bindButton(btnDodge, handlers.onDodge);
+  bindButton(skillHudCard, handlers.onDodge);
+}

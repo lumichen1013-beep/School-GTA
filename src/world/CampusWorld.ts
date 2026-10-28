@@ -1,17 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { sharedLambert, freezeStaticMatrices, bakeStatic } from './sceneUtils';
+import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 
-export interface CollidableBox {
-  min: THREE.Vector3;
-  max: THREE.Vector3;
-  isFloorOnly?: boolean; // Walkable slabs/ramps: provides groundY support, never blocks horizontal movement!
-  isRamp?: boolean;
-  rampMinZ?: number;
-  rampMaxZ?: number;
-  rampYAtMinZ?: number;
-  rampYAtMaxZ?: number;
-}
+export type { CollidableBox } from './ColliderRegistry';
 
 export interface ShootingHotspot {
   id: string;
@@ -100,35 +92,16 @@ export class CampusWorld {
     freezeStaticMatrices(this.group, dynamicObjects);
   }
 
-  // 註冊垂直阻擋物體 (牆面、立柱、鐵欄杆、球架等)
-  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY: number = 0, maxY: number = 4) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), minY, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), maxY, Math.max(minZ, maxZ))
-    });
+  // 碰撞體登記 (牆面預設高 4m；地板層板厚 0.4m 位於樓面下方)
+  private readonly colliderRegistry = new ColliderRegistry(this.colliders, { defaultWallHeight: 4, slabBelow: 0.4, slabAbove: 0, rampTopPad: 0 });
+  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY?: number, maxY?: number) {
+    return this.colliderRegistry.addCollider(minX, maxX, minZ, maxZ, minY, maxY);
   }
-
-  // 註冊可站立行走的地板層板 (Floor Slabs) - isFloorOnly 不阻礙水平位移
   public addFloorSlab(minX: number, maxX: number, minZ: number, maxZ: number, floorY: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), floorY - 0.4, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), floorY, Math.max(minZ, maxZ)),
-      isFloorOnly: true
-    });
+    this.colliderRegistry.addFloorSlab(minX, maxX, minZ, maxZ, floorY);
   }
-
-  // 註冊平滑上下樓階梯坡道 (Ramps) - 支援任意角度上下樓梯，不卡腳、不擋頭
   public addRamp(minX: number, maxX: number, minZ: number, maxZ: number, yAtMinZ: number, yAtMaxZ: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), Math.min(yAtMinZ, yAtMaxZ) - 0.4, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), Math.max(yAtMinZ, yAtMaxZ), Math.max(minZ, maxZ)),
-      isFloorOnly: true,
-      isRamp: true,
-      rampMinZ: Math.min(minZ, maxZ),
-      rampMaxZ: Math.max(minZ, maxZ),
-      rampYAtMinZ: yAtMinZ,
-      rampYAtMaxZ: yAtMaxZ
-    });
+    this.colliderRegistry.addRamp(minX, maxX, minZ, maxZ, yAtMinZ, yAtMaxZ);
   }
 
   // 建立地磚/鋪路石紋理 (Procedural Tile Texture)
@@ -644,288 +617,161 @@ export class CampusWorld {
 
     const totalHeight = (numFloors + 1) * floorH; // 樓梯間總高 (24.0m)
 
-    if (isNorthFacing) {
-      // 敬業樓 (向北延伸)：zAttach = 1.0，樓梯間從 1.0 往 -Z 延伸至 -8.8
-      const zFar = zAttach - stairDepth; // -8.8 (北側外牆)
-      const zMidLandingMin = zFar; // -8.8
-      const zMidLandingMax = zFar + landingDepth; // -6.0
-      const zFlightNorth = zMidLandingMax; // -6.0
-      const zFlightSouth = zAttach - 0.6; // 0.4
+    // 樓梯間延伸方向：敬業樓向北 (-Z，zAttach = 1.0 → -8.8)，樂群樓向南 (+Z，zAttach = 89.0 → 98.8)
+    const dir = isNorthFacing ? -1 : 1;
+    const zFar = zAttach + dir * stairDepth; // 遠端外牆
+    const zMidNear = zFar - dir * landingDepth; // 中繼平台靠近大樓側邊緣
+    const zMidLandingMin = Math.min(zFar, zMidNear);
+    const zMidLandingMax = Math.max(zFar, zMidNear);
+    const zFlightNear = zAttach + dir * 0.6; // 梯段靠近走廊端
+    const zFlightFar = zMidNear; // 梯段接中繼平台端
+    const zFlightNorth = Math.min(zFlightNear, zFlightFar);
+    const zFlightSouth = Math.max(zFlightNear, zFlightFar);
+    const zSideMin = Math.min(zFar, zFlightNear);
+    const zSideMax = Math.max(zFar, zFlightNear);
 
-      // 外圍實體外牆：
-      // 北側外牆 (Z = -8.8)
-      const northWall = new THREE.Mesh(new THREE.BoxGeometry(stairW + 0.6, totalHeight, 0.3), wallMat);
-      northWall.position.set(dividerX, totalHeight / 2, zFar);
-      northWall.castShadow = true;
-      this.group.add(northWall);
-      this.addCollider(stairMinX - 0.4, stairMaxX + 0.4, zFar - 0.25, zFar + 0.25, 0, totalHeight);
+    // 坡道碰撞體：依 Z 由小到大登記，兩端高度對應靠近走廊端 (yNear) 與中繼平台端 (yFar)
+    const addFlightRamp = (minX: number, maxX: number, yNear: number, yFar: number) => {
+      if (dir < 0) this.addRamp(minX, maxX, zFlightFar, zFlightNear, yFar, yNear);
+      else this.addRamp(minX, maxX, zFlightNear, zFlightFar, yNear, yFar);
+    };
 
-      // 西側外牆 (X = 27.05，碰撞體退讓至 26.8 ~ 27.2，止於 zAttach - 0.6，入口完全通暢)
-      const westWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
-      westWall.position.set(stairMinX - 0.2, totalHeight / 2, (zFar + zAttach) / 2);
-      westWall.castShadow = true;
-      this.group.add(westWall);
-      this.addCollider(stairMinX - 0.45, stairMinX, zFar, zAttach - 0.6, 0, totalHeight);
+    // 外圍實體外牆：遠端外牆
+    const farWall = new THREE.Mesh(new THREE.BoxGeometry(stairW + 0.6, totalHeight, 0.3), wallMat);
+    farWall.position.set(dividerX, totalHeight / 2, zFar);
+    farWall.castShadow = true;
+    this.group.add(farWall);
+    this.addCollider(stairMinX - 0.4, stairMaxX + 0.4, zFar - 0.25, zFar + 0.25, 0, totalHeight);
 
-      // 東側外牆 (X = 34.95，碰撞體退讓至 34.8 ~ 35.2，止於 zAttach - 0.6)
-      const eastWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
-      eastWall.position.set(stairMaxX + 0.2, totalHeight / 2, (zFar + zAttach) / 2);
-      eastWall.castShadow = true;
-      this.group.add(eastWall);
-      this.addCollider(stairMaxX, stairMaxX + 0.45, zFar, zAttach - 0.6, 0, totalHeight);
+    // 西側外牆 (碰撞體退讓並止於入口前 0.6m，入口完全通暢)
+    const westWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
+    westWall.position.set(stairMinX - 0.2, totalHeight / 2, (zFar + zAttach) / 2);
+    westWall.castShadow = true;
+    this.group.add(westWall);
+    this.addCollider(stairMinX - 0.45, stairMinX, zSideMin, zSideMax, 0, totalHeight);
 
-      // 屋頂頂蓋
-      const roofMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW + 1.0, 0.4, stairDepth + 0.8), wallMat);
-      roofMesh.position.set(dividerX, totalHeight + 0.2, (zFar + zAttach) / 2);
-      this.group.add(roofMesh);
+    // 東側外牆
+    const eastWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
+    eastWall.position.set(stairMaxX + 0.2, totalHeight / 2, (zFar + zAttach) / 2);
+    eastWall.castShadow = true;
+    this.group.add(eastWall);
+    this.addCollider(stairMaxX, stairMaxX + 0.45, zSideMin, zSideMax, 0, totalHeight);
 
-      // 逐層建造雙跑折返樓梯 (f = 0: 1F->2F, f = 1: 2F->3F, f = 2: 3F->頂樓天台)
-      for (let f = 0; f < numFloors; f++) {
-        const floorBaseY = f * floorH;
+    // 屋頂頂蓋
+    const roofMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW + 1.0, 0.4, stairDepth + 0.8), wallMat);
+    roofMesh.position.set(dividerX, totalHeight + 0.2, (zFar + zAttach) / 2);
+    this.group.add(roofMesh);
 
-        // 1. 樓層出發/抵達平整地板 (Floor Landing at Z: 0.2 ~ 2.0，寬闊跨越走廊接縫)
-        const fLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
-        fLanding.position.set(dividerX, floorBaseY + (f === 0 ? 0.05 : -0.175), (zFlightSouth + zAttach + 0.8) / 2);
-        fLanding.receiveShadow = true;
-        this.group.add(fLanding);
-        this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zFlightSouth - 0.2, zAttach + 1.2, floorBaseY);
+    // 樓層出發/抵達平整地板 (寬闊跨越走廊接縫)
+    const landingCenterZ = (zFlightNear + zAttach - dir * 0.8) / 2;
+    const landingSlabZ1 = zFlightNear + dir * 0.2;
+    const landingSlabZ2 = zAttach - dir * 1.2;
 
-        // 2. 中央防護隔牆 / 扶手 (分隔東跑與西跑，長 6.4m，止於 0.4m，前方留 1.6m 開闊轉折通道)
-        const dividerWall = new THREE.Mesh(new THREE.BoxGeometry(0.22, floorH + 0.6, flightLen), wallMat);
-        dividerWall.position.set(dividerX, floorBaseY + (floorH + 0.6) / 2, (zFlightNorth + zFlightSouth) / 2);
-        dividerWall.castShadow = true;
-        this.group.add(dividerWall);
-        this.addCollider(dividerX - 0.12, dividerX + 0.12, zFlightNorth, zFlightSouth, floorBaseY, floorBaseY + floorH + 0.6);
+    // 逐層建造雙跑折返樓梯 (f = 0: 1F->2F, f = 1: 2F->3F, f = 2: 3F->頂樓天台)
+    for (let f = 0; f < numFloors; f++) {
+      const floorBaseY = f * floorH;
 
-        // 3. 第一跑 (東側跑道 Flight 1)：從南端 (Z = zFlightSouth) 往北爬升至北端中繼平台 (Z = zFlightNorth)
-        for (let s = 0; s < numSteps; s++) {
-          const curY = floorBaseY + (s + 0.5) * stepH;
-          const curZ = zFlightSouth - (s + 0.5) * stepD;
+      // 1. 樓層出發/抵達平整地板
+      const fLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
+      fLanding.position.set(dividerX, floorBaseY + (f === 0 ? 0.05 : -0.175), landingCenterZ);
+      fLanding.receiveShadow = true;
+      this.group.add(fLanding);
+      this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, landingSlabZ1, landingSlabZ2, floorBaseY);
 
-          const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
-          step.position.set((flight1MinX + flight1MaxX) / 2, curY, curZ);
-          step.receiveShadow = true;
-          this.group.add(step);
+      // 2. 中央防護隔牆 / 扶手 (分隔東跑與西跑，止於入口前 0.6m，留出開闊轉折通道)
+      const dividerWall = new THREE.Mesh(new THREE.BoxGeometry(0.22, floorH + 0.6, flightLen), wallMat);
+      dividerWall.position.set(dividerX, floorBaseY + (floorH + 0.6) / 2, (zFlightNorth + zFlightSouth) / 2);
+      dividerWall.castShadow = true;
+      this.group.add(dividerWall);
+      this.addCollider(dividerX - 0.12, dividerX + 0.12, zFlightNorth, zFlightSouth, floorBaseY, floorBaseY + floorH + 0.6);
 
-          const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
-          nosing.position.set((flight1MinX + flight1MaxX) / 2, curY + stepH / 2 + 0.01, curZ - stepD / 2 + 0.04);
-          this.group.add(nosing);
-        }
+      // 3. 第一跑 (東側跑道 Flight 1)：從走廊端往遠端爬升至中繼平台
+      for (let s = 0; s < numSteps; s++) {
+        const curY = floorBaseY + (s + 0.5) * stepH;
+        const curZ = zFlightNear + dir * ((s + 0.5) * stepD);
 
-        // 東跑道平滑爬升坡道 Collider (At minZ = zFlightNorth, Y = floorBaseY + 3.0; at maxZ = zFlightSouth, Y = floorBaseY)
-        this.addRamp(flight1MinX, flight1MaxX, zFlightNorth, zFlightSouth, floorBaseY + halfFloorH, floorBaseY);
+        const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
+        step.position.set((flight1MinX + flight1MaxX) / 2, curY, curZ);
+        step.receiveShadow = true;
+        this.group.add(step);
 
-        // 東跑道外側防護欄杆
-        const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
-        rail1.position.set(flight1MaxX - 0.08, floorBaseY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
-        this.group.add(rail1);
-
-        // 4. 中繼轉折休息平台 (Mid-Landing Platform at Z: -8.8 ~ -6.0)
-        const midY = floorBaseY + halfFloorH; // 3.0m, 9.0m, 15.0m
-        const midLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, landingDepth), landingMat);
-        midLanding.position.set(dividerX, midY - 0.175, (zMidLandingMin + zMidLandingMax) / 2);
-        midLanding.receiveShadow = true;
-        this.group.add(midLanding);
-        this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zMidLandingMin, zMidLandingMax, midY);
-
-        // 中繼平台大採光玻璃窗
-        const windowMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW - 1.0, 1.8, 0.1), glassMat);
-        windowMesh.position.set(dividerX, midY + 1.2, zFar + 0.18);
-        this.group.add(windowMesh);
-
-        // 5. 第二跑 (西側跑道 Flight 2)：從北端中繼平台 (Z = zFlightNorth) 往南爬升抵達上一層樓走廊 (Z = zFlightSouth)
-        for (let s = 0; s < numSteps; s++) {
-          const curY = midY + (s + 0.5) * stepH;
-          const curZ = zFlightNorth + (s + 0.5) * stepD;
-
-          const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
-          step.position.set((flight2MinX + flight2MaxX) / 2, curY, curZ);
-          step.receiveShadow = true;
-          this.group.add(step);
-
-          const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
-          nosing.position.set((flight2MinX + flight2MaxX) / 2, curY + stepH / 2 + 0.01, curZ + stepD / 2 - 0.04);
-          this.group.add(nosing);
-        }
-
-        // 西跑道平滑爬升坡道 Collider (At minZ = zFlightNorth, Y = floorBaseY + 3.0; at maxZ = zFlightSouth, Y = floorBaseY + 6.0)
-        this.addRamp(flight2MinX, flight2MaxX, zFlightNorth, zFlightSouth, midY, floorBaseY + floorH);
-
-        // 西跑道外側防護欄杆
-        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
-        rail2.position.set(flight2MinX + 0.08, midY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
-        this.group.add(rail2);
-
-        // 各樓層入口發光導引看板
-        const signText = f === 0
-          ? '🟢 樓梯間 ➔ 2F ➔ 3F ➔ 天台 (靠右側東坡道上樓 ➔)'
-          : `🟢 ${f + 1}F 走廊 ➔ ${f === 1 ? '3F ➔ 天台' : '頂樓露天平台'}`;
-        this.addStairSignboard(dividerX, floorBaseY + 3.1, zAttach + 0.2, signText);
+        const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
+        nosing.position.set((flight1MinX + flight1MaxX) / 2, curY + stepH / 2 + 0.01, curZ + dir * (stepD / 2) - dir * 0.04);
+        this.group.add(nosing);
       }
 
-      // 6. 頂樓天台出入口梯屋 (Rooftop Penthouse at Y = 18.0m)
-      const topFloorY = numFloors * floorH; // 18.0m
-      const topLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
-      topLanding.position.set(dividerX, topFloorY - 0.175, (zFlightSouth + zAttach + 0.8) / 2);
-      this.group.add(topLanding);
-      this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zFlightSouth - 0.2, zAttach + 1.2, topFloorY);
+      // 東跑道平滑爬升坡道 Collider (走廊端 floorBaseY → 中繼平台端 floorBaseY + 3.0)
+      addFlightRamp(flight1MinX, flight1MaxX, floorBaseY, floorBaseY + halfFloorH);
 
-      // 梯屋天台門柱與頂樑
-      const doorPillarL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
-      doorPillarL.position.set(stairMinX + 0.2, topFloorY + 1.75, zAttach);
-      this.group.add(doorPillarL);
+      // 東跑道外側防護欄杆
+      const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
+      rail1.position.set(flight1MaxX - 0.08, floorBaseY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
+      this.group.add(rail1);
 
-      const doorPillarR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
-      doorPillarR.position.set(stairMaxX - 0.2, topFloorY + 1.75, zAttach);
-      this.group.add(doorPillarR);
+      // 4. 中繼轉折休息平台
+      const midY = floorBaseY + halfFloorH; // 3.0m, 9.0m, 15.0m
+      const midLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, landingDepth), landingMat);
+      midLanding.position.set(dividerX, midY - 0.175, (zMidLandingMin + zMidLandingMax) / 2);
+      midLanding.receiveShadow = true;
+      this.group.add(midLanding);
+      this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zMidLandingMin, zMidLandingMax, midY);
 
-      const doorArch = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.5, 0.4), wallMat);
-      doorArch.position.set(dividerX, topFloorY + 3.25, zAttach);
-      this.group.add(doorArch);
+      // 中繼平台大採光玻璃窗
+      const windowMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW - 1.0, 1.8, 0.1), glassMat);
+      windowMesh.position.set(dividerX, midY + 1.2, zFar - dir * 0.18);
+      this.group.add(windowMesh);
 
-      this.addStairSignboard(dividerX, topFloorY + 3.1, zAttach + 0.2, '⛅ 頂樓觀景露天平台 (俯瞰天天國中校園)');
+      // 5. 第二跑 (西側跑道 Flight 2)：從中繼平台往走廊端爬升抵達上一層樓
+      for (let s = 0; s < numSteps; s++) {
+        const curY = midY + (s + 0.5) * stepH;
+        const curZ = zFlightFar - dir * ((s + 0.5) * stepD);
 
-    } else {
-      // 樂群樓 (向南延伸)：zAttach = 89.0，樓梯間從 89.0 往 +Z 延伸至 98.8
-      const zFar = zAttach + stairDepth; // 98.8 (南側外牆)
-      const zMidLandingMin = zFar - landingDepth; // 96.0
-      const zMidLandingMax = zFar; // 98.8
-      const zFlightNorth = zAttach + 0.6; // 89.6
-      const zFlightSouth = zMidLandingMin; // 96.0
+        const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
+        step.position.set((flight2MinX + flight2MaxX) / 2, curY, curZ);
+        step.receiveShadow = true;
+        this.group.add(step);
 
-      // 外圍實體外牆：
-      // 南側外牆 (Z = 98.8)
-      const southWall = new THREE.Mesh(new THREE.BoxGeometry(stairW + 0.6, totalHeight, 0.3), wallMat);
-      southWall.position.set(dividerX, totalHeight / 2, zFar);
-      southWall.castShadow = true;
-      this.group.add(southWall);
-      this.addCollider(stairMinX - 0.4, stairMaxX + 0.4, zFar - 0.25, zFar + 0.25, 0, totalHeight);
-
-      // 西側外牆
-      const westWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
-      westWall.position.set(stairMinX - 0.2, totalHeight / 2, (zAttach + zFar) / 2);
-      westWall.castShadow = true;
-      this.group.add(westWall);
-      this.addCollider(stairMinX - 0.45, stairMinX, zAttach + 0.6, zFar, 0, totalHeight);
-
-      // 東側外牆
-      const eastWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, totalHeight, stairDepth), wallMat);
-      eastWall.position.set(stairMaxX + 0.2, totalHeight / 2, (zAttach + zFar) / 2);
-      eastWall.castShadow = true;
-      this.group.add(eastWall);
-      this.addCollider(stairMaxX, stairMaxX + 0.45, zAttach + 0.6, zFar, 0, totalHeight);
-
-      // 屋頂頂蓋
-      const roofMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW + 1.0, 0.4, stairDepth + 0.8), wallMat);
-      roofMesh.position.set(dividerX, totalHeight + 0.2, (zAttach + zFar) / 2);
-      this.group.add(roofMesh);
-
-      // 逐層建造雙跑折返樓梯
-      for (let f = 0; f < numFloors; f++) {
-        const floorBaseY = f * floorH;
-
-        // 1. 樓層出發/抵達平整地板 (Floor Landing at Z: 87.8 ~ 89.6)
-        const fLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
-        fLanding.position.set(dividerX, floorBaseY + (f === 0 ? 0.05 : -0.175), (zFlightNorth + zAttach - 0.8) / 2);
-        fLanding.receiveShadow = true;
-        this.group.add(fLanding);
-        this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zAttach - 1.2, zFlightNorth + 0.2, floorBaseY);
-
-        // 2. 中央防護隔牆
-        const dividerWall = new THREE.Mesh(new THREE.BoxGeometry(0.22, floorH + 0.6, flightLen), wallMat);
-        dividerWall.position.set(dividerX, floorBaseY + (floorH + 0.6) / 2, (zFlightNorth + zFlightSouth) / 2);
-        dividerWall.castShadow = true;
-        this.group.add(dividerWall);
-        this.addCollider(dividerX - 0.12, dividerX + 0.12, zFlightNorth, zFlightSouth, floorBaseY, floorBaseY + floorH + 0.6);
-
-        // 3. 第一跑 (東側跑道 Flight 1)：從北端 (Z = zFlightNorth) 往南爬升至南端中繼平台 (Z = zFlightSouth)
-        for (let s = 0; s < numSteps; s++) {
-          const curY = floorBaseY + (s + 0.5) * stepH;
-          const curZ = zFlightNorth + (s + 0.5) * stepD;
-
-          const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
-          step.position.set((flight1MinX + flight1MaxX) / 2, curY, curZ);
-          step.receiveShadow = true;
-          this.group.add(step);
-
-          const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
-          nosing.position.set((flight1MinX + flight1MaxX) / 2, curY + stepH / 2 + 0.01, curZ + stepD / 2 - 0.04);
-          this.group.add(nosing);
-        }
-
-        // 東跑道平滑爬升坡道 Collider (At minZ = zFlightNorth, Y = floorBaseY; at maxZ = zFlightSouth, Y = floorBaseY + 3.0)
-        this.addRamp(flight1MinX, flight1MaxX, zFlightNorth, zFlightSouth, floorBaseY, floorBaseY + halfFloorH);
-
-        // 東跑道外側欄杆
-        const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
-        rail1.position.set(flight1MaxX - 0.08, floorBaseY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
-        this.group.add(rail1);
-
-        // 4. 中繼轉折平台 (Mid-Landing at Z: 96.0 ~ 98.8)
-        const midY = floorBaseY + halfFloorH;
-        const midLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, landingDepth), landingMat);
-        midLanding.position.set(dividerX, midY - 0.175, (zMidLandingMin + zMidLandingMax) / 2);
-        midLanding.receiveShadow = true;
-        this.group.add(midLanding);
-        this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zMidLandingMin, zMidLandingMax, midY);
-
-        // 中繼平台大採光玻璃窗
-        const windowMesh = new THREE.Mesh(new THREE.BoxGeometry(stairW - 1.0, 1.8, 0.1), glassMat);
-        windowMesh.position.set(dividerX, midY + 1.2, zFar - 0.18);
-        this.group.add(windowMesh);
-
-        // 5. 第二跑 (西側跑道 Flight 2)：從南端中繼平台 (Z = zFlightSouth) 往北爬升抵達上一層樓走廊 (Z = zFlightNorth)
-        for (let s = 0; s < numSteps; s++) {
-          const curY = midY + (s + 0.5) * stepH;
-          const curZ = zFlightSouth - (s + 0.5) * stepD;
-
-          const step = new THREE.Mesh(new THREE.BoxGeometry(flightW, stepH, stepD + 0.06), stepMat);
-          step.position.set((flight2MinX + flight2MaxX) / 2, curY, curZ);
-          step.receiveShadow = true;
-          this.group.add(step);
-
-          const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
-          nosing.position.set((flight2MinX + flight2MaxX) / 2, curY + stepH / 2 + 0.01, curZ - stepD / 2 + 0.04);
-          this.group.add(nosing);
-        }
-
-        // 西跑道平滑爬升坡道 Collider (At minZ = zFlightNorth, Y = floorBaseY + 6.0; at maxZ = zFlightSouth, Y = floorBaseY + 3.0)
-        this.addRamp(flight2MinX, flight2MaxX, zFlightNorth, zFlightSouth, floorBaseY + floorH, midY);
-
-        // 西跑道外側欄杆
-        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
-        rail2.position.set(flight2MinX + 0.08, midY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
-        this.group.add(rail2);
-
-        // 各樓層入口發光導引看板
-        const signText = f === 0
-          ? '🟢 樓梯間 ➔ 2F ➔ 3F ➔ 天台 (靠右側東坡道上樓 ➔)'
-          : `🟢 ${f + 1}F 走廊 ➔ ${f === 1 ? '3F ➔ 天台' : '頂樓露天平台'}`;
-        this.addStairSignboard(dividerX, floorBaseY + 3.1, zAttach - 0.2, signText);
+        const nosing = new THREE.Mesh(new THREE.BoxGeometry(flightW, 0.02, 0.08), nosingMat);
+        nosing.position.set((flight2MinX + flight2MaxX) / 2, curY + stepH / 2 + 0.01, curZ - dir * (stepD / 2) + dir * 0.04);
+        this.group.add(nosing);
       }
 
-      // 6. 頂樓天台出入口梯屋 (Rooftop Penthouse at Y = 18.0m)
-      const topFloorY = numFloors * floorH; // 18.0m
-      const topLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
-      topLanding.position.set(dividerX, topFloorY - 0.175, (zFlightNorth + zAttach - 0.8) / 2);
-      this.group.add(topLanding);
-      this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, zAttach - 1.2, zFlightNorth + 0.2, topFloorY);
+      // 西跑道平滑爬升坡道 Collider (中繼平台端 midY → 走廊端 floorBaseY + 6.0)
+      addFlightRamp(flight2MinX, flight2MaxX, floorBaseY + floorH, midY);
 
-      // 梯屋天台門柱與頂樑
-      const doorPillarL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
-      doorPillarL.position.set(stairMinX + 0.2, topFloorY + 1.75, zAttach);
-      this.group.add(doorPillarL);
+      // 西跑道外側防護欄杆
+      const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, flightLen), railMat);
+      rail2.position.set(flight2MinX + 0.08, midY + halfFloorH / 2 + 0.55, (zFlightNorth + zFlightSouth) / 2);
+      this.group.add(rail2);
 
-      const doorPillarR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
-      doorPillarR.position.set(stairMaxX - 0.2, topFloorY + 1.75, zAttach);
-      this.group.add(doorPillarR);
-
-      const doorArch = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.5, 0.4), wallMat);
-      doorArch.position.set(dividerX, topFloorY + 3.25, zAttach);
-      this.group.add(doorArch);
-
-      this.addStairSignboard(dividerX, topFloorY + 3.1, zAttach - 0.2, '⛅ 頂樓觀景露天平台 (俯瞰天天國中校園)');
+      // 各樓層入口發光導引看板
+      const signText = f === 0
+        ? '🟢 樓梯間 ➔ 2F ➔ 3F ➔ 天台 (靠右側東坡道上樓 ➔)'
+        : `🟢 ${f + 1}F 走廊 ➔ ${f === 1 ? '3F ➔ 天台' : '頂樓露天平台'}`;
+      this.addStairSignboard(dividerX, floorBaseY + 3.1, zAttach - dir * 0.2, signText);
     }
+
+    // 6. 頂樓天台出入口梯屋 (Rooftop Penthouse at Y = 18.0m)
+    const topFloorY = numFloors * floorH; // 18.0m
+    const topLanding = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.35, 1.8), landingMat);
+    topLanding.position.set(dividerX, topFloorY - 0.175, landingCenterZ);
+    this.group.add(topLanding);
+    this.addFloorSlab(stairMinX - 0.2, stairMaxX + 0.2, landingSlabZ1, landingSlabZ2, topFloorY);
+
+    // 梯屋天台門柱與頂樑
+    const doorPillarL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
+    doorPillarL.position.set(stairMinX + 0.2, topFloorY + 1.75, zAttach);
+    this.group.add(doorPillarL);
+
+    const doorPillarR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 0.4), wallMat);
+    doorPillarR.position.set(stairMaxX - 0.2, topFloorY + 1.75, zAttach);
+    this.group.add(doorPillarR);
+
+    const doorArch = new THREE.Mesh(new THREE.BoxGeometry(stairW, 0.5, 0.4), wallMat);
+    doorArch.position.set(dividerX, topFloorY + 3.25, zAttach);
+    this.group.add(doorArch);
+
+    this.addStairSignboard(dividerX, topFloorY + 3.1, zAttach - dir * 0.2, '⛅ 頂樓觀景露天平台 (俯瞰天天國中校園)');
   }
 
   // 樓梯間入口立體發光導引看板

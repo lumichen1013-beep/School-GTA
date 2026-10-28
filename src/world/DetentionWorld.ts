@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CollidableBox } from './CampusWorld';
+import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 
 export interface SearchlightItem {
   id: number;
@@ -143,37 +143,16 @@ export class DetentionWorld {
     this.buildDetentionFacility();
   }
 
-  // 註冊垂直阻擋物體 (牆面、立柱、鐵欄杆、設施等)
-  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY: number = 0, maxY: number = 5): CollidableBox {
-    const box: CollidableBox = {
-      min: new THREE.Vector3(Math.min(minX, maxX), minY, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), maxY, Math.max(minZ, maxZ))
-    };
-    this.colliders.push(box);
-    return box;
+  // 碰撞體登記 (牆面預設高 5m；地板層板上下各 0.25m；坡道頂部延伸 0.4m)
+  private readonly colliderRegistry = new ColliderRegistry(this.colliders, { defaultWallHeight: 5, slabBelow: 0.25, slabAbove: 0.25, rampTopPad: 0.4 });
+  public addCollider(minX: number, maxX: number, minZ: number, maxZ: number, minY?: number, maxY?: number): CollidableBox {
+    return this.colliderRegistry.addCollider(minX, maxX, minZ, maxZ, minY, maxY);
   }
-
-  // 註冊可站立行走的地板層板 (Floor Slabs) - isFloorOnly 不阻礙水平位移
   public addFloorSlab(minX: number, maxX: number, minZ: number, maxZ: number, floorY: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), floorY - 0.25, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), floorY + 0.25, Math.max(minZ, maxZ)),
-      isFloorOnly: true
-    });
+    this.colliderRegistry.addFloorSlab(minX, maxX, minZ, maxZ, floorY);
   }
-
-  // 註冊可平滑行走的斜坡 (Ramps) - 支援上下樓梯坡道物理檢測
   public addRamp(minX: number, maxX: number, minZ: number, maxZ: number, yAtMinZ: number, yAtMaxZ: number) {
-    this.colliders.push({
-      min: new THREE.Vector3(Math.min(minX, maxX), Math.min(yAtMinZ, yAtMaxZ) - 0.4, Math.min(minZ, maxZ)),
-      max: new THREE.Vector3(Math.max(minX, maxX), Math.max(yAtMinZ, yAtMaxZ) + 0.4, Math.min(minZ, maxZ)),
-      isFloorOnly: true,
-      isRamp: true,
-      rampMinZ: Math.min(minZ, maxZ),
-      rampMaxZ: Math.max(minZ, maxZ),
-      rampYAtMinZ: yAtMinZ,
-      rampYAtMaxZ: yAtMaxZ
-    });
+    this.colliderRegistry.addRamp(minX, maxX, minZ, maxZ, yAtMinZ, yAtMaxZ);
   }
 
   private buildDetentionFacility() {

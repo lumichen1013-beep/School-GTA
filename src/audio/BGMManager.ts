@@ -2,6 +2,8 @@
 // Generates real-time dynamic soundtrack without requiring any external audio files.
 // Features seamless transition between "Campus Exploration Groove" and "High-Adrenaline Pursuit Chase".
 
+import { getAudioContext, resumeAudioContext } from './audioContext';
+
 export type BGMMode = 'EXPLORE' | 'PURSUIT';
 
 export class BGMManager {
@@ -30,40 +32,15 @@ export class BGMManager {
   // Status callback for UI updates
   public onModeChange?: (mode: BGMMode, isMuted: boolean) => void;
 
-  constructor() {
-    this.setupAutoResume();
-  }
-
-  // 鎖屏或切換分頁切回時自動喚醒 Web Audio
-  private setupAutoResume() {
-    const resumeAudio = () => {
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
-      }
-    };
-
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        resumeAudio();
-      }
-    });
-
-    window.addEventListener('click', resumeAudio, { passive: true });
-    window.addEventListener('touchstart', resumeAudio, { passive: true });
-  }
-
   public resume() {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
+    resumeAudioContext();
   }
 
   // Initialize Web Audio Context & Nodes
   private initContext() {
     if (this.ctx) return;
 
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AudioContextClass();
+    this.ctx = getAudioContext();
 
     // 1. Dynamics Compressor for punchy, balanced mix
     this.compressor = this.ctx.createDynamicsCompressor();

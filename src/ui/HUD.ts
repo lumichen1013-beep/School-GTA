@@ -863,6 +863,21 @@ export class HUD {
   }
 
   // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄與探索，含髒檢查 Dirty check)
+  // 任務項目完成狀態：切換 completed 樣式並更新狀態文字
+  private setQuestState(
+    item: HTMLElement | null,
+    statusEl: HTMLElement | null,
+    done: boolean,
+    doneText: string = '已達成 ✅',
+    pendingText: string = '進行中'
+  ) {
+    if (item) item.classList.toggle('completed', done);
+    if (statusEl) {
+      statusEl.textContent = done ? doneText : pendingText;
+      statusEl.className = done ? 'q-status done' : 'q-status';
+    }
+  }
+
   public updateMissionTracker(data: MissionTrackerData) {
     const campusWrapper = this.$('campus-quest-wrapper');
     const detentionWrapper = this.$('detention-quest-wrapper');
@@ -899,262 +914,76 @@ export class HUD {
     }
     this.lastMissionData = { ...data };
 
-    let completedCount = 0;
-
     // 1. 普通球棒 / 擊敗普通同學 (5位)
     const batDone = data.hasNormalBat || data.studentDefeated >= 5;
-    if (batDone) completedCount++;
-    if (this.qBatItem) {
-      if (batDone) this.qBatItem.classList.add('completed');
-      else this.qBatItem.classList.remove('completed');
-    }
-    if (this.qBatProgress) {
-      this.qBatProgress.textContent = `${Math.min(5, data.studentDefeated)}/5`;
-    }
-    if (this.qBatStatus) {
-      if (batDone) {
-        this.qBatStatus.textContent = '已達成 ✅';
-        this.qBatStatus.className = 'q-status done';
-      } else {
-        this.qBatStatus.textContent = '進行中';
-        this.qBatStatus.className = 'q-status';
-      }
-    }
+    if (this.qBatProgress) this.qBatProgress.textContent = `${Math.min(5, data.studentDefeated)}/5`;
+    this.setQuestState(this.qBatItem, this.qBatStatus, batDone);
 
     // 2. 特殊神兵球棒 / 校園霸王 (生教 x1, 校犬 x1, 單車巡邏 x5)
     const specialDone = data.hasSpecialBat || (data.teacherDefeated >= 1 && data.dogDefeated >= 1 && data.bikeDefeated >= 5);
-    if (specialDone) completedCount++;
-    if (this.qSpecialItem) {
-      if (specialDone) this.qSpecialItem.classList.add('completed');
-      else this.qSpecialItem.classList.remove('completed');
-    }
-    if (this.qTeacherProg) {
-      this.qTeacherProg.textContent = `${Math.min(1, data.teacherDefeated)}/1`;
-    }
-    if (this.qDogProg) {
-      this.qDogProg.textContent = `${Math.min(1, data.dogDefeated)}/1`;
-    }
-    if (this.qBikeProg) {
-      this.qBikeProg.textContent = `${Math.min(5, data.bikeDefeated)}/5`;
-    }
-    if (this.qSpecialStatus) {
-      if (specialDone) {
-        this.qSpecialStatus.textContent = '已達成 ✅';
-        this.qSpecialStatus.className = 'q-status done';
-      } else {
-        this.qSpecialStatus.textContent = '進行中';
-        this.qSpecialStatus.className = 'q-status';
-      }
-    }
+    if (this.qTeacherProg) this.qTeacherProg.textContent = `${Math.min(1, data.teacherDefeated)}/1`;
+    if (this.qDogProg) this.qDogProg.textContent = `${Math.min(1, data.dogDefeated)}/1`;
+    if (this.qBikeProg) this.qBikeProg.textContent = `${Math.min(5, data.bikeDefeated)}/5`;
+    this.setQuestState(this.qSpecialItem, this.qSpecialStatus, specialDone);
 
     // 2. 挑戰羽球大如老師
     const peDone = data.peBossDefeated;
-    if (peDone) completedCount++;
-    if (this.qPeItem) {
-      if (peDone) this.qPeItem.classList.add('completed');
-      else this.qPeItem.classList.remove('completed');
-    }
-    if (this.qPeStatus) {
-      if (peDone) {
-        this.qPeStatus.textContent = '已達成 ✅';
-        this.qPeStatus.className = 'q-status done';
-      } else {
-        this.qPeStatus.textContent = '進行中';
-        this.qPeStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qPeItem, this.qPeStatus, peDone);
 
     // 3. 挑戰溫室食人花 Boss
     const plantDone = data.plantBossDefeated;
-    if (plantDone) completedCount++;
-    if (this.qPlantItem) {
-      if (plantDone) this.qPlantItem.classList.add('completed');
-      else this.qPlantItem.classList.remove('completed');
-    }
-    if (this.qPlantStatus) {
-      if (plantDone) {
-        this.qPlantStatus.textContent = '已達成 ✅';
-        this.qPlantStatus.className = 'q-status done';
-      } else {
-        this.qPlantStatus.textContent = '進行中';
-        this.qPlantStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qPlantItem, this.qPlantStatus, plantDone);
 
     // 4. 擊倒教官與步巡隊
     const inspectorDone = data.inspectorDefeated > 0;
-    if (inspectorDone) completedCount++;
-    if (this.qInspectorItem) {
-      if (inspectorDone) this.qInspectorItem.classList.add('completed');
-      else this.qInspectorItem.classList.remove('completed');
-    }
-    if (this.qInspectorProg) {
-      this.qInspectorProg.textContent = `${Math.min(1, data.inspectorDefeated)}/1`;
-    }
-    if (this.qInspectorStatus) {
-      if (inspectorDone) {
-        this.qInspectorStatus.textContent = '已達成 ✅';
-        this.qInspectorStatus.className = 'q-status done';
-      } else {
-        this.qInspectorStatus.textContent = '進行中';
-        this.qInspectorStatus.className = 'q-status';
-      }
-    }
+    if (this.qInspectorProg) this.qInspectorProg.textContent = `${Math.min(1, data.inspectorDefeated)}/1`;
+    this.setQuestState(this.qInspectorItem, this.qInspectorStatus, inspectorDone);
 
     // 5. 經典三分球投籃挑戰
     const bballDone = data.basketballRecord > 0 || data.basketballStreak > 0;
-    if (bballDone) completedCount++;
-    if (this.qBasketballItem) {
-      if (bballDone) this.qBasketballItem.classList.add('completed');
-      else this.qBasketballItem.classList.remove('completed');
-    }
-    if (this.qBasketStreak) {
-      const displayScore = Math.max(data.basketballStreak, data.basketballRecord);
-      this.qBasketStreak.textContent = `${displayScore}顆`;
-    }
-    if (this.qBasketballStatus) {
-      if (bballDone) {
-        this.qBasketballStatus.textContent = '已達成 ✅';
-        this.qBasketballStatus.className = 'q-status done';
-      } else {
-        this.qBasketballStatus.textContent = '進行中';
-        this.qBasketballStatus.className = 'q-status';
-      }
-    }
+    if (this.qBasketStreak) this.qBasketStreak.textContent = `${Math.max(data.basketballStreak, data.basketballRecord)}顆`;
+    this.setQuestState(this.qBasketballItem, this.qBasketballStatus, bballDone);
 
     // 6. 操場跑道 400m 競速
     const trackDone = Boolean(data.trackRecordText && data.trackRecordText !== '未完成');
-    if (trackDone) completedCount++;
-    if (this.qTrackItem) {
-      if (trackDone) this.qTrackItem.classList.add('completed');
-      else this.qTrackItem.classList.remove('completed');
-    }
-    if (this.qTrackTime) {
-      this.qTrackTime.textContent = data.trackRecordText;
-    }
-    if (this.qTrackStatus) {
-      if (trackDone) {
-        this.qTrackStatus.textContent = '已達成 ✅';
-        this.qTrackStatus.className = 'q-status done';
-      } else {
-        this.qTrackStatus.textContent = '進行中';
-        this.qTrackStatus.className = 'q-status';
-      }
-    }
+    if (this.qTrackTime) this.qTrackTime.textContent = data.trackRecordText;
+    this.setQuestState(this.qTrackItem, this.qTrackStatus, trackDone);
 
     // 7. 25m 水上競速挑戰
     const swimDone = Boolean(data.swimRecordText && data.swimRecordText !== '未完成');
-    if (swimDone) completedCount++;
-    if (this.qSwimItem) {
-      if (swimDone) this.qSwimItem.classList.add('completed');
-      else this.qSwimItem.classList.remove('completed');
-    }
-    if (this.qSwimTime) {
-      this.qSwimTime.textContent = data.swimRecordText;
-    }
-    if (this.qSwimStatus) {
-      if (swimDone) {
-        this.qSwimStatus.textContent = '已達成 ✅';
-        this.qSwimStatus.className = 'q-status done';
-      } else {
-        this.qSwimStatus.textContent = '進行中';
-        this.qSwimStatus.className = 'q-status';
-      }
-    }
+    if (this.qSwimTime) this.qSwimTime.textContent = data.swimRecordText;
+    this.setQuestState(this.qSwimItem, this.qSwimStatus, swimDone);
 
     // 8. 自由騎乘校園自行車
     const bikeDone = data.hasRiddenBike;
-    if (bikeDone) completedCount++;
-    if (this.qBikeItem) {
-      if (bikeDone) this.qBikeItem.classList.add('completed');
-      else this.qBikeItem.classList.remove('completed');
-    }
-    if (this.qBikeStatus) {
-      if (bikeDone) {
-        this.qBikeStatus.textContent = '已達成 ✅';
-        this.qBikeStatus.className = 'q-status done';
-      } else {
-        this.qBikeStatus.textContent = '進行中';
-        this.qBikeStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qBikeItem, this.qBikeStatus, bikeDone);
 
     // 9. 擺脫校犬柴柴追捕
     const dogDone = data.hasEscapedDog;
-    if (dogDone) completedCount++;
-    if (this.qDogItem) {
-      if (dogDone) this.qDogItem.classList.add('completed');
-      else this.qDogItem.classList.remove('completed');
-    }
-    if (this.qDogStatus) {
-      if (dogDone) {
-        this.qDogStatus.textContent = '已達成 ✅';
-        this.qDogStatus.className = 'q-status done';
-      } else {
-        this.qDogStatus.textContent = '進行中';
-        this.qDogStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qDogItem, this.qDogStatus, dogDone);
 
     // 10. 生態池許願池投幣
     const pondDone = data.hasWishedPond;
-    if (pondDone) completedCount++;
-    if (this.qPondItem) {
-      if (pondDone) this.qPondItem.classList.add('completed');
-      else this.qPondItem.classList.remove('completed');
-    }
-    if (this.qPondStatus) {
-      if (pondDone) {
-        this.qPondStatus.textContent = '已達成 ✅';
-        this.qPondStatus.className = 'q-status done';
-      } else {
-        this.qPondStatus.textContent = '進行中';
-        this.qPondStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qPondItem, this.qPondStatus, pondDone);
 
     // 11. 天天合作社品嚐熱食
     const hotfoodDone = data.hasTastedHotFood;
-    if (hotfoodDone) completedCount++;
-    if (this.qHotfoodItem) {
-      if (hotfoodDone) this.qHotfoodItem.classList.add('completed');
-      else this.qHotfoodItem.classList.remove('completed');
-    }
-    if (this.qHotfoodStatus) {
-      if (hotfoodDone) {
-        this.qHotfoodStatus.textContent = '已達成 ✅';
-        this.qHotfoodStatus.className = 'q-status done';
-      } else {
-        this.qHotfoodStatus.textContent = '進行中';
-        this.qHotfoodStatus.className = 'q-status';
-      }
-    }
+    this.setQuestState(this.qHotfoodItem, this.qHotfoodStatus, hotfoodDone);
 
     // 12. 獨門技能修煉 (閃身步 / 狗熊哆嗦毛)
     const dodgeLvl = data.dodgeSkillLevel || 0;
     const dodgeDone = dodgeLvl >= 1;
-    if (dodgeDone) completedCount++;
-    if (this.qDodgeItem) {
-      if (dodgeDone) this.qDodgeItem.classList.add('completed');
-      else this.qDodgeItem.classList.remove('completed');
-    }
     if (this.qDodgeDesc) {
       if (dodgeLvl === 0) this.qDodgeDesc.textContent = '尋訪教學大樓「閃身步老師」學習技能【閃身步】 (0/2)';
       else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻5s)，可進階狗熊哆嗦毛 (1/2)';
       else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻2s，完全精通) (2/2)';
     }
-    if (this.qDodgeStatus) {
-      if (dodgeLvl === 0) {
-        this.qDodgeStatus.textContent = '未習得';
-        this.qDodgeStatus.className = 'q-status';
-      } else if (dodgeLvl === 1) {
-        this.qDodgeStatus.textContent = '閃身步 ✅';
-        this.qDodgeStatus.className = 'q-status done';
-      } else {
-        this.qDodgeStatus.textContent = '大成 🌟';
-        this.qDodgeStatus.className = 'q-status done';
-      }
-    }
+    this.setQuestState(this.qDodgeItem, this.qDodgeStatus, dodgeDone, dodgeLvl >= 2 ? '大成 🌟' : '閃身步 ✅', '未習得');
+
+    const completedCount = [
+      batDone, specialDone, peDone, plantDone, inspectorDone, bballDone, trackDone,
+      swimDone, bikeDone, dogDone, pondDone, hotfoodDone, dodgeDone
+    ].filter(Boolean).length;
 
     // 更新總進度與進度條 (任務小介面與大地圖側欄同步)
     this.setQuestSummary('📜 校園歷練', completedCount, 13);

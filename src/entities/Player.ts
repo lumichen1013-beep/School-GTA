@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { SkillBubble } from './shared/SkillBubble';
+import { AfterimagePool } from './shared/AfterimagePool';
+import { findSafeTeleportPos } from './shared/teleport';
+import { buildUmbrella } from './shared/umbrella';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
@@ -7,17 +11,14 @@ import { IndoorManager } from '../systems/IndoorManager';
 
 export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 
-interface AfterimageItem {
-  group: THREE.Group;
-  materials: THREE.MeshBasicMaterial[];
-  life: number;
-  maxLife: number;
-}
-
 // 模組頂層靜態共享 Scratch 物件 (0-GC 避免每幀垃圾回收引發微卡頓)
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
 const _safeTeleportResult = new THREE.Vector3();
+// 玩家瞬移落點取樣參數
+const PLAYER_TELEPORT_OPTS = { minRadius: 2.0, maxRadius: 4.2, attempts: 12, baseGroundY: 0 };
+// 玩家技能氣泡外觀 (固定大字級)
+const PLAYER_BUBBLE_STYLE = { fillAlpha: 0.82, strokeAlpha: 0.70, fontSize: () => 38 };
 const _sweepNear: CollidableBox[] = [];
 const _footprintNear: CollidableBox[] = [];
 
@@ -87,8 +88,7 @@ export class Player {
   private bearOriginCenter: THREE.Vector3 = new THREE.Vector3();
 
   // 0-GC 角色殘影物件池
-  private afterimages: AfterimageItem[] = [];
-  private afterimageIndex: number = 0;
+  private afterimagePool: AfterimagePool;
 
   // 擊飛與擊退物理系統 (Knockback & Launch-flying)
   public knockVelocity: THREE.Vector3 = new THREE.Vector3();
@@ -113,43 +113,21 @@ export class Player {
   private rightLeg: THREE.Mesh;
 
   // 頭頂技能名稱對話氣泡 (浮動微光膠囊框，0-GC 復用 Sprite)
-  private skillBubbleSprite: THREE.Sprite;
-  private skillBubbleCanvas: HTMLCanvasElement;
-  private skillBubbleContext: CanvasRenderingContext2D;
-  private skillBubbleTexture: THREE.CanvasTexture;
-  private skillBubbleTimer: number = 0;
-  private skillBubbleDuration: number = 1.35;
-  private skillBubbleBaseY: number = 2.35;
+  private skillBubble: SkillBubble;
 
   private animTimer: number = 0;
   private punchTimer: number = 0;
   public isAttacking: boolean = false;
 
   constructor(scene: THREE.Scene) {
+    (window as any).__TMPDBG_player = this; // TMPDBG
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ'; // 採用 Y(航向) -> X(俯仰) -> Z(側滾) 順序，避免自由式俯趴時歐拉角產生萬向節鎖(Gimbal Lock)並支援水中360度靈敏轉向
     this.mesh.position.copy(this.position);
 
     // 建立頭頂技能名稱對話方框 (3D Billboard Sprite)
-    this.skillBubbleCanvas = document.createElement('canvas');
-    this.skillBubbleCanvas.width = 380;
-    this.skillBubbleCanvas.height = 110;
-    this.skillBubbleContext = this.skillBubbleCanvas.getContext('2d')!;
-    this.skillBubbleTexture = new THREE.CanvasTexture(this.skillBubbleCanvas);
-    this.skillBubbleTexture.minFilter = THREE.LinearFilter;
-
-    const bubbleMat = new THREE.SpriteMaterial({
-      map: this.skillBubbleTexture,
-      transparent: true,
-      opacity: 0,
-      depthTest: false,
-      depthWrite: false
-    });
-    this.skillBubbleSprite = new THREE.Sprite(bubbleMat);
-    this.skillBubbleSprite.scale.set(2.2, 0.64, 1.0);
-    this.skillBubbleSprite.position.set(0, this.skillBubbleBaseY, 0);
-    this.skillBubbleSprite.visible = false;
-    this.mesh.add(this.skillBubbleSprite);
+    this.skillBubble = new SkillBubble(this.mesh, 2.35, PLAYER_BUBBLE_STYLE);
+    this.skillBubble.ensure();
 
     // 1. 建立角色外觀（台灣典型高校制服風格：深藍長褲、白襯衫配後背包）
     const uniformMat = new THREE.MeshLambertMaterial({ color: 0x1b263b }); // 深藍西裝褲
@@ -284,55 +262,7 @@ export class Player {
     scene.add(this.mesh);
 
     // 建立 0-GC 角色殘影物件池 (8 個 Group，常駐場景，避免每幀垃圾回收)
-    const afterimageTorsoGeo = new THREE.BoxGeometry(0.65, 0.75, 0.35);
-    const afterimageHeadGeo = new THREE.BoxGeometry(0.38, 0.4, 0.38);
-    const afterimageArmGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
-    const afterimageLegGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
-
-    for (let i = 0; i < 8; i++) {
-      const g = new THREE.Group();
-      g.rotation.order = 'YXZ';
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x38bdf8,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false
-      });
-
-      const bMesh = new THREE.Mesh(afterimageTorsoGeo, mat);
-      bMesh.position.y = 1.05;
-      g.add(bMesh);
-
-      const hMesh = new THREE.Mesh(afterimageHeadGeo, mat);
-      hMesh.position.y = 1.62;
-      g.add(hMesh);
-
-      const lArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
-      lArmMesh.position.set(-0.45, 1.05, 0);
-      g.add(lArmMesh);
-
-      const rArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
-      rArmMesh.position.set(0.45, 1.05, 0);
-      g.add(rArmMesh);
-
-      const lLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
-      lLegMesh.position.set(-0.18, 0.35, 0);
-      g.add(lLegMesh);
-
-      const rLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
-      rLegMesh.position.set(0.18, 0.35, 0);
-      g.add(rLegMesh);
-
-      g.visible = false;
-      scene.add(g);
-
-      this.afterimages.push({
-        group: g,
-        materials: [mat],
-        life: 0,
-        maxLife: 0.3
-      });
-    }
+    this.afterimagePool = new AfterimagePool(scene, 8);
   }
 
   public takeDamage(amount: number, reason: string = '受到傷害'): boolean {
@@ -537,193 +467,25 @@ export class Player {
 
   // 尋找瞬移安全目標點 (0-GC，檢測障礙物碰撞與地面高度，絕不穿牆)
   private findSafeTeleportPos(centerX: number, centerZ: number, currentY: number, colliders: CollidableBox[]): THREE.Vector3 {
-    const halfWidth = 0.45;
-    const height = 1.8;
-    const minRadius = 2.0;
-    const maxRadius = 4.2;
-
-    // 嘗試在周圍隨機尋找安全空曠落點 (最多嘗試 12 次取樣)
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = minRadius + Math.random() * (maxRadius - minRadius);
-      const candX = centerX + Math.cos(angle) * dist;
-      const candZ = centerZ + Math.sin(angle) * dist;
-
-      // 檢查是否與任何實體阻擋障礙物碰撞
-      let blocked = false;
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
-        if (box.isFloorOnly) continue;
-        if (
-          candX + halfWidth > box.min.x &&
-          candX - halfWidth < box.max.x &&
-          candZ + halfWidth > box.min.z &&
-          candZ - halfWidth < box.max.z &&
-          currentY + height > box.min.y &&
-          currentY + 0.3 < box.max.y
-        ) {
-          blocked = true;
-          break;
-        }
-      }
-
-      if (!blocked) {
-        // 找到安全水平座標，計算該點地面高度
-        let groundY = 0;
-        for (let i = 0; i < colliders.length; i++) {
-          const box = colliders[i];
-          if (
-            candX + halfWidth > box.min.x &&
-            candX - halfWidth < box.max.x &&
-            candZ + halfWidth > box.min.z &&
-            candZ - halfWidth < box.max.z
-          ) {
-            if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
-              const t = THREE.MathUtils.clamp((candZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
-              const rampY = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
-              if (rampY <= currentY + 0.85 && rampY > groundY) {
-                groundY = rampY;
-              }
-            } else {
-              if (box.max.y <= currentY + 0.85 && box.max.y > groundY) {
-                groundY = box.max.y;
-              }
-            }
-          }
-        }
-        _safeTeleportResult.set(candX, groundY, candZ);
-        return _safeTeleportResult;
-      }
-    }
-
-    // 若多次隨機取樣皆撞牆，退回當前起始中心安全點
-    _safeTeleportResult.set(centerX, currentY, centerZ);
-    return _safeTeleportResult;
+    return findSafeTeleportPos(_safeTeleportResult, centerX, centerZ, currentY, colliders, PLAYER_TELEPORT_OPTS);
   }
 
   // 產生 0-GC 角色殘影
   private spawnAfterimage(colorHex: number, duration: number) {
-    if (this.afterimages.length === 0) return;
-    const item = this.afterimages[this.afterimageIndex];
-    this.afterimageIndex = (this.afterimageIndex + 1) % this.afterimages.length;
-
-    item.materials[0].color.setHex(colorHex);
-    item.materials[0].opacity = 0.75;
-    item.life = duration;
-    item.maxLife = duration;
-
-    item.group.position.copy(this.position);
-    item.group.rotation.copy(this.mesh.rotation);
-
-    const children = item.group.children;
-    if (children[1]) children[1].rotation.copy(this.headMesh.rotation);
-    if (children[2]) children[2].rotation.copy(this.leftArm.rotation);
-    if (children[3]) children[3].rotation.copy(this.rightArm.rotation);
-    if (children[4]) children[4].rotation.copy(this.leftLeg.rotation);
-    if (children[5]) children[5].rotation.copy(this.rightLeg.rotation);
-
-    item.group.visible = true;
+    this.afterimagePool.spawn(colorHex, duration, this.position, this.mesh.rotation, this.headMesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
   }
 
   // 每幀更新殘影透明度與生命週期
   public updateAfterimages(delta: number) {
-    for (let i = 0; i < this.afterimages.length; i++) {
-      const item = this.afterimages[i];
-      if (item.life > 0) {
-        item.life -= delta;
-        if (item.life <= 0) {
-          item.life = 0;
-          item.group.visible = false;
-        } else {
-          const ratio = item.life / item.maxLife;
-          item.materials[0].opacity = 0.75 * Math.sin(ratio * Math.PI * 0.5);
-        }
-      }
-    }
-  }
-
-  // 繪製頭頂技能名稱對話方框 (CanvasTexture 0-GC)
-  private drawSkillBubble(text: string, isAdvanced: boolean) {
-    const ctx = this.skillBubbleContext;
-    const w = this.skillBubbleCanvas.width;
-    const h = this.skillBubbleCanvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    const bubbleW = w - 24;
-    const bubbleH = h - 28;
-    const x = 12;
-    const y = 8;
-    const r = 22;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + bubbleW - r, y);
-    ctx.quadraticCurveTo(x + bubbleW, y, x + bubbleW, y + r);
-    ctx.lineTo(x + bubbleW, y + bubbleH - r);
-    ctx.quadraticCurveTo(x + bubbleW, y + bubbleH, x + bubbleW - r, y + bubbleH);
-    // 底部小三角箭頭指向角色頭頂
-    ctx.lineTo(w / 2 + 12, y + bubbleH);
-    ctx.lineTo(w / 2, y + bubbleH + 16);
-    ctx.lineTo(w / 2 - 12, y + bubbleH);
-    ctx.lineTo(x + r, y + bubbleH);
-    ctx.quadraticCurveTo(x, y + bubbleH, x, y + bubbleH - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-
-    // 半透明優雅暗色磨砂底色 (低調自然、不刺眼、不搶眼)
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-    ctx.fill();
-
-    // 細緻低調微光邊框 (淡青 / 淡紫)
-    ctx.strokeStyle = isAdvanced ? 'rgba(168, 85, 247, 0.70)' : 'rgba(56, 189, 248, 0.70)';
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    // 技能文字 (簡潔柔白，微陰影提升辨識度)
-    ctx.font = 'bold 38px "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#f8fafc';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-    ctx.fillText(text, w / 2, y + bubbleH / 2 - 1);
-
-    ctx.restore();
-    this.skillBubbleTexture.needsUpdate = true;
+    this.afterimagePool.update(delta);
   }
 
   public showSkillBubble(text: string, isAdvanced: boolean) {
-    this.drawSkillBubble(text, isAdvanced);
-    this.skillBubbleTimer = this.skillBubbleDuration;
-    this.skillBubbleSprite.position.y = this.skillBubbleBaseY;
-    (this.skillBubbleSprite.material as THREE.SpriteMaterial).opacity = 0.95;
-    this.skillBubbleSprite.visible = true;
+    this.skillBubble.show(text, isAdvanced);
   }
 
   public updateSkillBubble(delta: number) {
-    if (this.skillBubbleTimer > 0) {
-      this.skillBubbleTimer -= delta;
-      const progress = 1.0 - (this.skillBubbleTimer / this.skillBubbleDuration);
-      // 輕微平緩上浮 (+0.25m)
-      this.skillBubbleSprite.position.y = this.skillBubbleBaseY + progress * 0.25;
-
-      // 前 60% 維持清晰，後 40% 平滑淡出 (Fade Out)
-      const mat = this.skillBubbleSprite.material as THREE.SpriteMaterial;
-      if (progress < 0.60) {
-        mat.opacity = 0.95;
-      } else {
-        mat.opacity = 0.95 * (1.0 - (progress - 0.60) / 0.40);
-      }
-
-      if (this.skillBubbleTimer <= 0) {
-        this.skillBubbleSprite.visible = false;
-        mat.opacity = 0;
-      }
-    }
+    this.skillBubble.update(delta);
   }
 
   public respawn(pos: THREE.Vector3 = DEFAULT_RESPAWN_POS) {
@@ -749,12 +511,8 @@ export class Player {
     this.mesh.rotation.x = 0;
     this.mesh.rotation.z = 0;
     this.velocity.set(0, 0, 0);
-    this.skillBubbleSprite.visible = false;
-    this.skillBubbleTimer = 0;
-    for (const item of this.afterimages) {
-      item.life = 0;
-      item.group.visible = false;
-    }
+    this.skillBubble.hide();
+    this.afterimagePool.hideAll();
   }
 
   // 裝備羽球拍造型 (4F 羽球比賽專用，只改變視覺外觀，比賽結束或搭電梯時還原)
@@ -809,51 +567,17 @@ export class Player {
     return 7.5;
   }
 
-  // 建立 3D Low-Poly 專屬雨傘模型 (傘中棒、握把、10 角多邊形傘帽、傘尖)
+  // 建立玩家專屬雨傘模型 (沉穩皇家海軍藍傘面，向角色右側補正使傘頂位於頭頂上方)
   private buildUmbrellaModel(): THREE.Group {
-    const umbrella = new THREE.Group();
-    umbrella.name = 'player_umbrella';
-
-    const shaftMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.7, roughness: 0.3 });
-    const handleMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, roughness: 0.8 });
-    const canopyMat = new THREE.MeshLambertMaterial({
-      color: 0x1e3799, // 沉穩大氣的皇家海軍藍 (高校制服系)
-      side: THREE.DoubleSide
+    return buildUmbrella({
+      name: 'player_umbrella',
+      canopyColor: 0x1e3799,
+      shaftMetalness: 0.7,
+      handleColor: 0x1e272e,
+      tipMetalness: 0.85,
+      rigX: 0.26,
+      rigZ: -0.08
     });
-    const tipMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.85, roughness: 0.2 });
-
-    // 內部微調容器 (向角色右側/中心補正，使傘頂中心精確懸浮於頭頂上方 0.4m 處)
-    const rig = new THREE.Group();
-    rig.position.set(0.26, 0, -0.08);
-
-    // 1. 傘中棒 (Shaft) - 向上延伸 1.15m
-    const shaftGeo = new THREE.CylinderGeometry(0.014, 0.014, 1.15, 8);
-    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-    shaft.position.y = 0.50;
-    rig.add(shaft);
-
-    // 2. 傘柄握把 (Grip)
-    const handleGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.14, 8);
-    const handle = new THREE.Mesh(handleGeo, handleMat);
-    handle.position.y = -0.05;
-    rig.add(handle);
-
-    // 3. 傘帽圓錐 (Canopy) - 10 角傘骨造型
-    const canopyGeo = new THREE.ConeGeometry(0.68, 0.34, 10, 1, true);
-    const canopy = new THREE.Mesh(canopyGeo, canopyMat);
-    canopy.position.y = 0.96;
-    canopy.castShadow = true;
-    rig.add(canopy);
-
-    // 4. 傘頂金屬尖端 (Ferrule Tip)
-    const tipGeo = new THREE.CylinderGeometry(0.01, 0.02, 0.10, 8);
-    const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = 1.16;
-    rig.add(tip);
-
-    umbrella.add(rig);
-    umbrella.visible = false;
-    return umbrella;
   }
 
   // 下雨天撐傘與收傘狀態機判定 (支援自行車騎乘、游泳、室內、擊飛與死亡自動收傘)
@@ -975,7 +699,7 @@ export class Player {
         this.isDodging = false;
         this.mesh.rotation.z = 0;
         this.mesh.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+          if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
             const m = (child as THREE.Mesh).material as THREE.Material;
             if (m) m.opacity = 1.0;
           }
@@ -995,7 +719,7 @@ export class Player {
         // 紫色幻影閃爍
         const purpleFlicker = 0.45 + Math.sin(shakePhase) * 0.35;
         this.mesh.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+          if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
             const m = (child as THREE.Mesh).material as THREE.Material;
             if (m) {
               m.transparent = true;
@@ -1098,7 +822,7 @@ export class Player {
     // 刺客草堆掩體半透明隱蔽視覺表現
     if (this.isHidingInCover) {
       this.mesh.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+        if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
           const m = (child as THREE.Mesh).material as THREE.Material;
           if (m) {
             m.transparent = true;
@@ -1108,7 +832,7 @@ export class Player {
       });
     } else if (!this.isDodging && !this.isBearShaking && this.hitCooldown <= 0) {
       this.mesh.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+        if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
           const m = (child as THREE.Mesh).material as THREE.Material;
           if (m && m.opacity < 0.99) {
             m.opacity = 1.0;
@@ -1142,7 +866,7 @@ export class Player {
           this.isDodging = false;
           this.mesh.rotation.z = 0;
           this.mesh.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+            if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
               const m = (child as THREE.Mesh).material as THREE.Material;
               if (m) m.opacity = 1.0;
             }
@@ -1165,7 +889,7 @@ export class Player {
           // 閃爍微光
           const flicker = 0.5 + Math.sin(this.dodgeTimer * 35.0) * 0.25;
           this.mesh.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && child !== this.skillBubbleSprite) {
+            if ((child as THREE.Mesh).isMesh && child !== this.skillBubble.sprite) {
               const m = (child as THREE.Mesh).material as THREE.Material;
               if (m) {
                 m.transparent = true;
@@ -1665,16 +1389,7 @@ export class Player {
         }
       }
     });
-    for (const item of this.afterimages) {
-      if (scene) {
-        scene.remove(item.group);
-      } else if (item.group.parent) {
-        item.group.parent.remove(item.group);
-      }
-      for (const m of item.materials) {
-        m.dispose();
-      }
-    }
+    this.afterimagePool.dispose(scene);
     if (scene) {
       scene.remove(this.mesh);
     } else if (this.mesh.parent) {

@@ -1,0 +1,323 @@
+import * as THREE from 'three';
+import { soundManager } from '../audio/SoundEffects';
+import type { NPC } from '../entities/NPC';
+import type { DetentionRadarData } from '../ui/HUD';
+import type { GameContext } from './GameContext';
+
+const _scratchCqcScreenPos = new THREE.Vector3();
+
+/**
+ * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
+ */
+export class DetentionMode {
+  // 越獄進度狀態
+  public escapeStartTime: number = 0;
+  public takedownCount: number = 0;
+  public alertCount: number = 0;
+  public alertTimer: number = 0;
+  public hasKeycardA: boolean = false;
+  public hasKeycardB: boolean = false;
+  public hasMasterKeycard: boolean = false;
+  public isBossDefeated: boolean = false;
+  public isEscapeComplete: boolean = false;
+  public spawnGraceTimer: number = 0;
+  public nearbyCqcTarget: NPC | null = null;
+  private searchlightAlertTimer: number = 0;
+
+  private readonly radarData: DetentionRadarData = {
+    isGateAOpen: false,
+    isGateBOpen: false,
+    isSouthGateOpen: false,
+    hasKeycardA: false,
+    hasKeycardB: false,
+    hasMasterKeycard: false,
+    keycardAPos: new THREE.Vector3(),
+    keycardBPos: new THREE.Vector3(),
+    masterKeycardPos: null,
+    alertLevel: 'NORMAL',
+    alertTimer: 0,
+    checkpointPos: new THREE.Vector3(),
+    checkpointName: 'A區安全崗亭'
+  };
+
+  constructor(private readonly ctx: GameContext) {}
+
+  // 進入特訓院時重置越獄進度、門禁與鑰匙卡
+  public reset() {
+    this.escapeStartTime = performance.now();
+    this.takedownCount = 0;
+    this.alertCount = 0;
+    this.alertTimer = 0;
+    this.hasKeycardA = false;
+    this.hasKeycardB = false;
+    this.hasMasterKeycard = false;
+    this.isBossDefeated = false;
+    this.isEscapeComplete = false;
+    this.spawnGraceTimer = 5.0;
+
+    const dw = this.ctx.detentionWorld;
+    dw.hasPickedKeycardA = false;
+    dw.hasPickedKeycardB = false;
+    dw.hasPickedMasterKeycard = false;
+    dw.keycardAMeshGroup.visible = true;
+    dw.keycardBMeshGroup.visible = true;
+    dw.masterKeycardMeshGroup.visible = false;
+    dw.isGateAOpen = false;
+    dw.isGateBOpen = false;
+    dw.isSouthGateOpen = false;
+    dw.gateAMeshGroup.position.set(0, 0, 0);
+    dw.gateBMeshGroup.position.set(0, 0, 0);
+    dw.southGateMeshGroup.position.set(0, 0, 0);
+    if (dw.gateACollider) {
+      dw.gateACollider.min.y = 0;
+      dw.gateACollider.max.y = 4.5;
+    }
+    if (dw.gateBCollider) {
+      dw.gateBCollider.min.y = 0;
+      dw.gateBCollider.max.y = 4.5;
+    }
+    if (dw.southGateCollider) {
+      dw.southGateCollider.min.y = 0;
+      dw.southGateCollider.max.y = 8.0;
+    }
+  }
+
+  public setCheckpoint(pos: THREE.Vector3, name: string) {
+    this.ctx.detentionWorld.setCheckpoint(pos, name);
+    this.ctx.wantedSystem.showBanner(`🚩 存檔點已更新：【${name}】！死亡後將在此處重生。`, 3500);
+    soundManager.playBroadcastChime();
+  }
+
+  // 守衛全體回到初始崗位並清除警戒 (玩家倒地與復甦時)
+  public resetGuards() {
+    for (const n of this.ctx.detentionNPCs) {
+      n.resetToInitialState();
+    }
+    this.alertTimer = 0;
+    this.alertCount = 0;
+    this.ctx.hud.updateMgsAlert(0);
+  }
+
+  // 攻擊守衛：打草驚蛇，全面進入警戒
+  public onPlayerAttackedGuard(npc: NPC) {
+    this.spawnGraceTimer = 0;
+    npc.setAlertState('ALERT');
+    npc.isChasing = true;
+    this.alertTimer = 15.0;
+    this.alertCount++;
+  }
+
+  // 每幀：草堆匿蹤、鑰匙卡/探照燈動畫、MGS 警戒倒數與背後暗殺目標鎖定
+  public update(delta: number, targetPosition: THREE.Vector3) {
+    const { player, hud, detentionWorld, wantedSystem } = this.ctx;
+
+    let inHidingSpot = false;
+    let hidingSpotName = '';
+    for (let i = 0; i < detentionWorld.hidingSpots.length; i++) {
+      const spot = detentionWorld.hidingSpots[i];
+      if (targetPosition.distanceTo(spot.position) < spot.radius) {
+        inHidingSpot = true;
+        hidingSpotName = spot.name;
+        break;
+      }
+    }
+    player.isHidingInCover = inHidingSpot;
+    player.currentHidingSpotName = hidingSpotName;
+    hud.updateStealthHiding(inHidingSpot, hidingSpotName);
+
+    detentionWorld.updateKeycards(delta);
+    const slState = detentionWorld.update(delta, targetPosition, inHidingSpot);
+    if (slState.isDetectedBySearchlight) {
+      this.searchlightAlertTimer += delta;
+      if (this.searchlightAlertTimer >= 0.25) {
+        if (this.alertTimer <= 0) {
+          this.alertCount++;
+          soundManager.playAlert();
+          soundManager.playWhistle();
+        }
+        this.alertTimer = 18.0; // 觸發 18 秒 MGS 警戒倒數
+        if (wantedSystem.stars < 2) {
+          wantedSystem.reportCrime(2, '探照燈高空鎖定！發布緊急圍剿警報！');
+        }
+        wantedSystem.showBanner('🚨 探照燈高空鎖定！已發布全場警報，守衛部隊全面包夾追捕！', 1000);
+
+        // 核心機制：被探照燈照到時，半徑 65m 內所有少年院 NPC 全力往玩家位置衝刺聚集追捕
+        for (const n of this.ctx.detentionNPCs) {
+          if (!n.isKnockedDown && !n.isPermanentlyKnockedOut) {
+            const d = n.position.distanceTo(targetPosition);
+            if (d < 65.0) {
+              if (n.isPaused) n.cancelPause();
+              n.setAlertState('ALERT');
+              n.isChasing = true;
+              n.isBurstSprinting = true;
+              n.lostSightTimer = 0;
+              n.lastKnownPos.copy(targetPosition);
+            }
+          }
+        }
+      }
+    } else {
+      this.searchlightAlertTimer = Math.max(0, this.searchlightAlertTimer - delta * 2.0);
+    }
+
+    // MGS 警戒倒數計時器
+    if (this.alertTimer > 0) {
+      this.alertTimer -= delta;
+      if (this.alertTimer <= 0) {
+        this.alertTimer = 0;
+        wantedSystem.showBanner('🌿 警戒解除，守衛恢復常態巡邏。', 2500);
+        for (const n of this.ctx.detentionNPCs) {
+          if (!n.isKnockedDown && !n.isPermanentlyKnockedOut) {
+            n.setAlertState('NORMAL');
+            n.isChasing = false;
+          }
+        }
+      }
+    }
+    hud.updateMgsAlert(this.alertTimer);
+
+    this.updateCqcTarget(targetPosition);
+  }
+
+  // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定
+  private updateCqcTarget(targetPosition: THREE.Vector3) {
+    const { player, hud } = this.ctx;
+    this.nearbyCqcTarget = null;
+    if (!player.isDead) {
+      for (const npc of this.ctx.detentionNPCs) {
+        if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
+
+        // 1. 若被 NPC 發現 (! 警戒狀態)，完全無法發動暗殺！
+        //    特殊破綻特例：總教官撞柱陷入重度眩暈硬直中 (isBossStunned) 且非無敵狀態除外
+        if (npc.alertState === 'ALERT') {
+          const isStunnedBoss = (npc.role === 'DETENTION_BOSS' && npc.isBossStunned && !npc.isBossInvulnerable && npc.bossInvulnerableTimer <= 0);
+          if (!isStunnedBoss) {
+            continue;
+          }
+        }
+
+        // 2. 總教官被暗殺後 3 秒金鐘護盾無敵期：無法被鎖定或暗殺 (防止連點擊殺)
+        if (npc.role === 'DETENTION_BOSS' && (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0)) {
+          continue;
+        }
+
+        const dist = npc.position.distanceTo(targetPosition);
+
+        if (player.isHidingInCover) {
+          // 刺客教條草堆暗殺：未發現玩家時，只要守衛經過草堆 3.0m 內，任意角度均可直接伏擊拖入刺殺！
+          if (dist <= 3.0) {
+            this.nearbyCqcTarget = npc;
+            break;
+          }
+        } else if (dist <= 2.3) {
+          // 正常潛行背刺：判定是否在身後盲區 (背後約 162 度視錐)
+          const guardFwdX = Math.sin(npc.rotationY);
+          const guardFwdZ = Math.cos(npc.rotationY);
+          const toPlayerX = (targetPosition.x - npc.position.x) / dist;
+          const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
+          const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
+
+          // 每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後空檔觸發暗殺擊昏
+          if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
+            this.nearbyCqcTarget = npc;
+            break;
+          }
+        }
+      }
+    }
+
+    const target = this.nearbyCqcTarget;
+    if (target && !target.isKnockedDown && !target.isPermanentlyKnockedOut) {
+      // 暗殺/擊昏提示：出現在 NPC 頭頂上方 (只需顯示「擊暈」)
+      const overheadOffset = (target.role === 'DOG' || target.role === 'DETENTION_WOLF') ? 1.30 : 2.45;
+      _scratchCqcScreenPos.copy(target.position);
+      _scratchCqcScreenPos.y += overheadOffset;
+      _scratchCqcScreenPos.project(this.ctx.cameraCtrl.camera);
+
+      if (_scratchCqcScreenPos.z < 1.0) {
+        const screenX = (_scratchCqcScreenPos.x * 0.5 + 0.5) * window.innerWidth;
+        const screenY = (-_scratchCqcScreenPos.y * 0.5 + 0.5) * window.innerHeight;
+        hud.updateCqcPrompt(true, screenX, screenY);
+      } else {
+        hud.updateCqcPrompt(false);
+      }
+    } else {
+      hud.updateCqcPrompt(false);
+    }
+  }
+
+  // 出生 5 秒保護計時，回傳本幀是否仍處於保護期
+  public updateSpawnGrace(delta: number): boolean {
+    if (this.spawnGraceTimer <= 0) return false;
+    this.spawnGraceTimer -= delta;
+    if (this.spawnGraceTimer <= 0) {
+      this.spawnGraceTimer = 0;
+      this.ctx.wantedSystem.showBanner('⚡ 5 秒隱蔽保護結束！特訓院守衛已恢復正常巡邏警戒！', 3000);
+    }
+    return true;
+  }
+
+  // 衝出南大門判定通關，顯示越獄結算
+  public checkEscapeVictory(targetPosition: THREE.Vector3) {
+    if (!this.ctx.detentionWorld.isSouthGateOpen || targetPosition.z < 95.0 || this.isEscapeComplete) return;
+    this.isEscapeComplete = true;
+    const totalTime = (performance.now() - this.escapeStartTime) / 1000;
+    this.ctx.hud.showDetentionVictory(
+      totalTime,
+      this.takedownCount,
+      this.alertCount,
+      () => {
+        this.ctx.switchWorld('DETENTION', true);
+      },
+      () => {
+        // 通關後回主畫面：重新載入頁面完整重置所有世界狀態，避免第二世界進度混入天天國中
+        window.location.reload();
+      }
+    );
+  }
+
+  public updateEscapeTracker(wardenBoss: NPC | undefined) {
+    const dw = this.ctx.detentionWorld;
+    this.ctx.hud.updateWorld2EscapeTracker(
+      this.takedownCount,
+      dw.isGateAOpen,
+      dw.isGateBOpen,
+      wardenBoss ? wardenBoss.hp : 0,
+      wardenBoss ? wardenBoss.maxHp : 300,
+      this.isBossDefeated,
+      this.isEscapeComplete
+    );
+  }
+
+  // 雷達小地圖資料 (重用同一物件，不於每幀配置)
+  public getRadarData(isAnyChasing: boolean): DetentionRadarData {
+    let radarAlert: 'NORMAL' | 'CAUTION' | 'ALERT' = 'NORMAL';
+    if (this.alertTimer > 0 || isAnyChasing) {
+      radarAlert = 'ALERT';
+    } else {
+      for (const n of this.ctx.detentionNPCs) {
+        if (n.alertState === 'CAUTION') {
+          radarAlert = 'CAUTION';
+          break;
+        }
+      }
+    }
+
+    const dw = this.ctx.detentionWorld;
+    const radar = this.radarData;
+    radar.isGateAOpen = dw.isGateAOpen;
+    radar.isGateBOpen = dw.isGateBOpen;
+    radar.isSouthGateOpen = dw.isSouthGateOpen;
+    radar.hasKeycardA = this.hasKeycardA;
+    radar.hasKeycardB = this.hasKeycardB;
+    radar.hasMasterKeycard = this.hasMasterKeycard;
+    radar.keycardAPos = dw.keycardAPos;
+    radar.keycardBPos = dw.keycardBPos;
+    radar.masterKeycardPos = dw.masterKeycardPos;
+    radar.alertLevel = radarAlert;
+    radar.alertTimer = this.alertTimer;
+    radar.checkpointPos = dw.currentCheckpointPos;
+    radar.checkpointName = dw.currentCheckpointName;
+    return radar;
+  }
+}
