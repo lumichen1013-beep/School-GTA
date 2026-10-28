@@ -324,7 +324,8 @@ export class HUD {
       ro.observe(hudTopEl);
       if (leftEl) ro.observe(leftEl);
       if (rightEl) ro.observe(rightEl);
-      window.addEventListener('resize', syncHudTopBottom);
+      // Engine 於縮放/翻轉後 (含穩定前的分段補量) 廣播 app-layout-change，位置改變但尺寸未變時也能重新同步
+      window.addEventListener('app-layout-change', syncHudTopBottom);
       syncHudTopBottom();
     }
 
@@ -340,7 +341,7 @@ export class HUD {
       this.minimapPixelScale = px / HUD.MINIMAP_LOGICAL_SIZE;
     };
     if ('ResizeObserver' in window) new ResizeObserver(syncMinimapResolution).observe(this.canvas);
-    window.addEventListener('resize', syncMinimapResolution);
+    window.addEventListener('app-layout-change', syncMinimapResolution);
     syncMinimapResolution();
 
     // 快捷鍵指南：點擊面板切換展開 / 收合

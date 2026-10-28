@@ -216,7 +216,15 @@ export class InputManager {
     window.addEventListener('touchend', clearLookTouch, { passive: false });
     window.addEventListener('touchcancel', clearLookTouch, { passive: false });
     window.addEventListener('orientationchange', () => this.resetTouchLook());
-    window.addEventListener('resize', () => this.resetTouchLook());
+    // 僅在直/橫屏真正切換時重置 (工具列伸縮造成的 resize 不應打斷進行中的滑動轉視角)
+    let lastLandscape = window.innerWidth > window.innerHeight;
+    window.addEventListener('resize', () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      if (landscape !== lastLandscape) {
+        lastLandscape = landscape;
+        this.resetTouchLook();
+      }
+    });
   }
 
   // 消耗跳躍輸入 (空白鍵跳過開場時避免同一按鍵讓主角跳起)：需放開再按才會再次觸發
