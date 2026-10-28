@@ -96,61 +96,19 @@ export class IndoorManager {
     // ==========================================
     // 第二世界：少年院 (Detention World)
     // ==========================================
-    // 7. 集訓營舍大樓 (兩層金屬鋼架結構建築、宿舍走廊與房間)
-    {
-      name: '少年院集訓營舍',
-      minX: -66.0,
-      maxX: -14.0,
-      minZ: -76.0,
-      maxZ: -44.0,
-      roofY: 8.8,
-      minY: -0.5,
-      world: 'DETENTION'
-    },
-    // 8. 特訓食堂與福利社
-    {
-      name: '特訓食堂與福利社',
-      minX: 24.0,
-      maxX: 76.0,
-      minZ: -76.0,
-      maxZ: -44.0,
-      roofY: 6.5,
-      minY: -0.5,
-      world: 'DETENTION'
-    },
-    // 9. 實習工廠大樓 (Workshop)
-    {
-      name: '少年院實習工廠',
-      minX: -76.0,
-      maxX: -29.0,
-      minZ: 29.0,
-      maxZ: 71.0,
-      roofY: 7.8,
-      minY: -0.5,
-      world: 'DETENTION'
-    },
-    // 10. 教官總部大樓 (Command HQ)
-    {
-      name: '教官總部大樓',
-      minX: 29.0,
-      maxX: 76.0,
-      minZ: 29.0,
-      maxZ: 71.0,
-      roofY: 9.5,
-      minY: -0.5,
-      world: 'DETENTION'
-    },
-    // 11. 總部前廊避雨雨遮 (Portico)
-    {
-      name: '總部前廊雨遮',
-      minX: 37.0,
-      maxX: 53.0,
-      minZ: 23.5,
-      maxZ: 30.5,
-      roofY: 5.6,
-      minY: -0.5,
-      world: 'DETENTION'
-    }
+    // 第二世界：特訓少年院 (建物範圍與 detentionLayout 配置同步；roofY = 屋頂高度)
+    ...[
+      { name: '西牢房舍', minX: -86, maxX: -54, minZ: -74, maxZ: -54, roofY: 8.3 },
+      { name: '東牢房舍', minX: 54, maxX: 86, minZ: -74, maxZ: -54, roofY: 8.3 },
+      { name: '醫務室', minX: -86, maxX: -60, minZ: -48, maxZ: -38, roofY: 5.3 },
+      { name: '食堂', minX: 60, maxX: 86, minZ: -48, maxZ: -38, roofY: 5.8 },
+      { name: '洗衣房', minX: 22, maxX: 38, minZ: -74, maxZ: -62, roofY: 4.8 },
+      { name: '中央警衛室', minX: -6, maxX: 6, minZ: -66, maxZ: -56, roofY: 3.85 },
+      { name: '職訓工坊', minX: -86, maxX: -58, minZ: -22, maxZ: 2, roofY: 6.3 },
+      { name: '器材庫', minX: 58, maxX: 86, minZ: -8, maxZ: 18, roofY: 5.45 },
+      { name: '行政大樓', minX: -86, maxX: -46, minZ: 46, maxZ: 78, roofY: 9.3 },
+      { name: '軍械庫', minX: 46, maxX: 86, minZ: 46, maxZ: 78, roofY: 6.3 }
+    ].map((z): IndoorZone => ({ ...z, minY: -0.5, world: 'DETENTION' }))
   ];
 
   // 依世界預先篩選的區域清單 (雨滴粒子每幀數千次查詢，避免逐一略過其他世界的區域)
@@ -158,6 +116,16 @@ export class IndoorManager {
     CAMPUS: IndoorManager.ZONES.filter(z => z.world === 'ALL' || z.world === 'CAMPUS'),
     DETENTION: IndoorManager.ZONES.filter(z => z.world === 'ALL' || z.world === 'DETENTION')
   };
+
+  // 各世界最高屋頂高度：雨滴高於此值時必不在任何屋頂之下，可略過逐區查詢
+  private static readonly maxRoofByWorld: Record<'CAMPUS' | 'DETENTION', number> = {
+    CAMPUS: Math.max(...IndoorManager.zonesByWorld.CAMPUS.map(z => z.roofY)),
+    DETENTION: Math.max(...IndoorManager.zonesByWorld.DETENTION.map(z => z.roofY))
+  };
+
+  public static maxRoofY(currentWorld: 'CAMPUS' | 'DETENTION'): number {
+    return this.maxRoofByWorld[currentWorld];
+  }
 
   private static zonesFor(currentWorld: 'CAMPUS' | 'DETENTION'): IndoorZone[] {
     return this.zonesByWorld[currentWorld];

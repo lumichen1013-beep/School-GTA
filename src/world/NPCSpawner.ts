@@ -262,39 +262,66 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
 // 第二世界【特訓少年院】NPC 生成配置數據
 // ============================================================================
 const DETENTION_NPC_DEFS: NPCSpawnDef[] = [
-  // A 區：牢房生活長廊迷宮 (Z: -90 ~ -28)
-  { role: 'DETENTION_GUARD', pos: [-16, 0, -84], waypoints: [[-26, 0, -84], [-10, 0, -84]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [18, 0, -60], waypoints: [[18, 0, -70], [18, 0, -50]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [-4, 0, -60], waypoints: [[-4, 0, -68], [-4, 0, -52]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [0, 0, -32], waypoints: [[-5, 0, -32], [5, 0, -32]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [-72, 0, -54], waypoints: [[-72, 0, -66], [-72, 0, -42]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [82, 0, -60], waypoints: [[82, 0, -75], [82, 0, -45]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [-15, 0, -32], waypoints: [[-22, 0, -32], [-10, 0, -32]], style: 'OFFICER_PATROL' },
+  // ===== A 區：監區 (Z: -95 ~ -28) =====
+  // 收容車道巡邏 (開局第一道視線；可利用卸貨木箱與彈藥箱掩護通過)
+  { role: 'DETENTION_GUARD', pos: [-20, 0, -88.5], waypoints: [[-40, 0, -88.5], [-8, 0, -88.5]], style: 'OFFICER_PATROL' },
+  // 中央檢查哨駐守 (主線正面)
+  { role: 'DETENTION_GUARD', pos: [6, 0, -76.5], waypoints: [[5, 0, -76.5], [9, 0, -76.5]], style: 'OFFICER_PATROL' },
+  // 放風庭院環狀巡邏 (繞行中央警衛室外圍)
+  { role: 'DETENTION_SENIOR', pos: [-20, 0, -70], waypoints: [[-20, 0, -70], [20, 0, -70], [20, 0, -46], [-20, 0, -46]], style: 'OFFICER_PATROL' },
+  // 中央警衛室門口站崗 (看守門禁卡 A)
+  { role: 'DETENTION_GUARD', pos: [0, 0, -53], waypoints: [[-3, 0, -53], [3, 0, -53]], style: 'OFFICER_PATROL' },
+  // 西外圍巡邏路 (西潛行路線)
+  { role: 'DETENTION_GUARD', pos: [-90, 0, -60], waypoints: [[-90, 0, -82], [-90, 0, -34]], style: 'OFFICER_PATROL' },
+  // 東服務巷巡邏 (東潛行路線)
+  { role: 'DETENTION_GUARD', pos: [47.5, 0, -60], waypoints: [[47.5, 0, -76], [47.5, 0, -40]], style: 'OFFICER_PATROL' },
+  // 醫務室門口站崗
+  { role: 'DETENTION_GUARD', pos: [-73, 0, -35], waypoints: [[-76, 0, -35], [-70, 0, -35]], style: 'OFFICER_PATROL' },
+  // 食堂門口站崗
+  { role: 'DETENTION_SENIOR', pos: [79, 0, -35], waypoints: [[76, 0, -35], [82, 0, -35]], style: 'OFFICER_PATROL' },
+  // 閘門 1 前站崗
+  { role: 'DETENTION_GUARD', pos: [8, 0, -31], waypoints: [[7, 0, -31], [10, 0, -31]], style: 'OFFICER_PATROL' },
+  // 庭院西半部狼犬
+  { role: 'DETENTION_WOLF', pos: [-24, 0, -64], waypoints: [[-36, 0, -66], [-12, 0, -64]] },
 
-  // B 區：操場重裝軍規貨櫃迷宮 (Z: -28 ~ 35)
-  { role: 'DETENTION_GUARD', pos: [-22, 0, -6], waypoints: [[-22, 0, -12], [-22, 0, 0]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [22, 0, -6], waypoints: [[22, 0, -12], [22, 0, 0]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_HEAVY', pos: [0, 0, 0], waypoints: [[-6, 0, 0], [6, 0, 0]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [24, 0, 4], waypoints: [[24, 0, 0], [24, 0, 8]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [0, 0, 30], waypoints: [[-5, 0, 30], [5, 0, 30]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_WOLF', pos: [-30, 0, -5], waypoints: [[-30, 0, -12], [-30, 0, 16], [-18, 0, 16], [-18, 0, -12]] },
-  { role: 'DETENTION_SENIOR', pos: [0, 0, -12], waypoints: [[-6, 0, -12], [6, 0, -12]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [0, 0, 14], waypoints: [[-8, 0, 14], [8, 0, 14]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_WOLF', pos: [32, 0, -5], waypoints: [[32, 0, -12], [32, 0, 16], [20, 0, 16], [20, 0, -12]] },
+  // ===== B 區：訓練場 (Z: -28 ~ 35) =====
+  // 西外圍巡邏路
+  { role: 'DETENTION_GUARD', pos: [-90, 0, 0], waypoints: [[-90, 0, -24], [-90, 0, 30]], style: 'OFFICER_PATROL' },
+  // 職訓工坊東側站崗
+  { role: 'DETENTION_GUARD', pos: [-55, 0, -16], waypoints: [[-55, 0, -20], [-55, 0, -12]], style: 'OFFICER_PATROL' },
+  // 貨櫃北巷巡邏
+  { role: 'DETENTION_GUARD', pos: [0, 0, -14], waypoints: [[-24, 0, -14], [24, 0, -14]], style: 'OFFICER_PATROL' },
+  // 貨櫃南巷巡邏
+  { role: 'DETENTION_SENIOR', pos: [0, 0, 17], waypoints: [[-24, 0, 17], [24, 0, 17]], style: 'OFFICER_PATROL' },
+  // 探照燈塔下重裝守衛
+  { role: 'DETENTION_HEAVY', pos: [0, 0, -2], waypoints: [[-6, 0, -2], [6, 0, -2]], style: 'OFFICER_PATROL' },
+  // 障礙訓練場狼犬
+  { role: 'DETENTION_WOLF', pos: [-36, 0, 10], waypoints: [[-42, 0, 10], [-30, 0, 10]] },
+  // 器材庫捲門口站崗 (看守門禁卡 B)
+  { role: 'DETENTION_GUARD', pos: [55, 0, 6], waypoints: [[55, 0, 3], [55, 0, 9]], style: 'OFFICER_PATROL' },
+  // 東外圍巡邏路
+  { role: 'DETENTION_GUARD', pos: [90, 0, 0], waypoints: [[90, 0, -24], [90, 0, 30]], style: 'OFFICER_PATROL' },
+  // 閘門 2 前站崗
+  { role: 'DETENTION_GUARD', pos: [8, 0, 30], waypoints: [[7, 0, 30], [10, 0, 30]], style: 'OFFICER_PATROL' },
 
-  // C 區：終極禁閉高牆與絕境逃脫大門庭 (Z: 35 ~ 95)
-  { role: 'DETENTION_GUARD', pos: [-14, 0, 50], waypoints: [[-14, 0, 42], [-14, 0, 58]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [14, 0, 50], waypoints: [[14, 0, 42], [14, 0, 58]], style: 'OFFICER_PATROL' },
-  { role: 'DETENTION_GUARD', pos: [0, 0, 88], waypoints: [[-8, 0, 88], [8, 0, 88]], style: 'OFFICER_PATROL' },
+  // ===== C 區：決戰區 (Z: 35 ~ 95) =====
+  // 行政大樓門口站崗
+  { role: 'DETENTION_GUARD', pos: [-44, 0, 62], waypoints: [[-44, 0, 58], [-44, 0, 66]], style: 'OFFICER_PATROL' },
+  // 軍械庫門口站崗
+  { role: 'DETENTION_HEAVY', pos: [44, 0, 62], waypoints: [[44, 0, 58], [44, 0, 66]], style: 'OFFICER_PATROL' },
+  // 南側道路巡邏
+  { role: 'DETENTION_GUARD', pos: [0, 0, 85], waypoints: [[-30, 0, 85], [30, 0, 85]], style: 'OFFICER_PATROL' },
+  // 南大門檢查亭站崗
+  { role: 'DETENTION_GUARD', pos: [0, 0, 90.5], waypoints: [[-5, 0, 90.5], [5, 0, 90.5]], style: 'OFFICER_PATROL' },
 
-  // 11. C 區小 Boss【鐵面總教官】(駐守在 Z = 63, X: -10 ~ 10 橫向巡視)
+  // C 區小 Boss【鐵面總教官】(駐守決戰庭院中央，X: -10 ~ 10 橫向巡視；5 次暗殺擊破)
   {
     role: 'DETENTION_BOSS',
     pos: [0, 0, 63],
     waypoints: [[-10, 0, 63], [10, 0, 63]],
     style: 'OFFICER_PATROL',
-    hp: 300,
-    maxHp: 300
+    hp: 500,
+    maxHp: 500
   }
 ];
 

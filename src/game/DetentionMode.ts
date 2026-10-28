@@ -7,7 +7,7 @@ import type { GameContext } from './GameContext';
 const _scratchCqcScreenPos = new THREE.Vector3();
 
 // 第二世界全域警戒階段 (MGS 式)：NORMAL → ALERT (有守衛看見) → EVASION (失去目標、搜索最後目擊點並倒數) → CAUTION (提高戒備回崗) → NORMAL
-export type AlertPhase = 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION';
+type AlertPhase = 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION';
 const ALERT_HOLD_TIME = 1.0; // 短暫失去視線 (如總教官衝撞、轉角) 不立即轉入搜索，避免警戒橫幅閃爍
 const EVASION_TIME = 10.0;
 const CAUTION_TIME = 8.0;
@@ -15,6 +15,20 @@ const CAUTION_TIME = 8.0;
 /**
  * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
  */
+// 總教官撞柱硬直且非護盾無敵期：唯一可在 ALERT 狀態下被暗殺的破綻
+export function isBossStunOpening(npc: NPC): boolean {
+  return npc.role === 'DETENTION_BOSS' && npc.isBossStunned && !npc.isBossInvulnerable && npc.bossInvulnerableTimer <= 0;
+}
+
+// 指定位置是否位於 NPC 背後盲區 (面向與指向該點夾角 dot < -0.15，約背後 162 度)
+export function isBehindNpc(npc: NPC, x: number, z: number): boolean {
+  const dx = x - npc.position.x;
+  const dz = z - npc.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist <= 0.001) return false;
+  return (Math.sin(npc.rotationY) * dx + Math.cos(npc.rotationY) * dz) / dist < -0.15;
+}
+
 export class DetentionMode {
   // 越獄進度狀態
   public escapeStartTime: number = 0;
@@ -47,7 +61,7 @@ export class DetentionMode {
     alertLevel: 'NORMAL',
     alertTimer: 0,
     checkpointPos: new THREE.Vector3(),
-    checkpointName: 'A區安全崗亭'
+    checkpointName: 'A區中央警衛室'
   };
 
   constructor(private readonly ctx: GameContext) {}
@@ -301,8 +315,7 @@ export class DetentionMode {
         // 1. 若被 NPC 發現 (! 警戒狀態)，完全無法發動暗殺！
         //    特殊破綻特例：總教官撞柱陷入重度眩暈硬直中 (isBossStunned) 且非無敵狀態除外
         if (npc.alertState === 'ALERT') {
-          const isStunnedBoss = (npc.role === 'DETENTION_BOSS' && npc.isBossStunned && !npc.isBossInvulnerable && npc.bossInvulnerableTimer <= 0);
-          if (!isStunnedBoss) {
+          if (!isBossStunOpening(npc)) {
             continue;
           }
         }
@@ -321,15 +334,8 @@ export class DetentionMode {
             break;
           }
         } else if (dist <= 2.3) {
-          // 正常潛行背刺：判定是否在身後盲區 (背後約 162 度視錐)
-          const guardFwdX = Math.sin(npc.rotationY);
-          const guardFwdZ = Math.cos(npc.rotationY);
-          const toPlayerX = (targetPosition.x - npc.position.x) / dist;
-          const toPlayerZ = (targetPosition.z - npc.position.z) / dist;
-          const dot = guardFwdX * toPlayerX + guardFwdZ * toPlayerZ;
-
-          // 每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後空檔觸發暗殺擊昏
-          if (dot < -0.15 || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
+          // 正常潛行背刺：每個未發現玩家的 NPC (或總教官撞柱眩暈時) 均可在背後盲區觸發暗殺擊昏
+          if (isBehindNpc(npc, targetPosition.x, targetPosition.z) || (npc.role === 'DETENTION_BOSS' && npc.isBossStunned)) {
             this.nearbyCqcTarget = npc;
             break;
           }
@@ -394,7 +400,7 @@ export class DetentionMode {
       dw.isGateAOpen,
       dw.isGateBOpen,
       wardenBoss ? wardenBoss.hp : 0,
-      wardenBoss ? wardenBoss.maxHp : 300,
+      wardenBoss ? wardenBoss.maxHp : 500,
       this.isBossDefeated,
       this.isEscapeComplete
     );

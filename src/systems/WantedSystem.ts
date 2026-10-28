@@ -117,10 +117,11 @@ export class WantedSystem {
   // 處分徽章與狀態標籤 DOM 快取，以及上次繪製的狀態 (星數/躲藏中/世界未變時略過 DOM 寫入)
   private demeritBadgeEls: NodeListOf<Element> | null = null;
   private demeritStatusTitleEl: HTMLElement | null = null;
-  private lastHUDStarsKey = '';
+  private lastHUDStarsKey = -1;
 
   public updateHUDStars() {
-    const stateKey = `${this.stars}|${this.isEvading}|${this._currentWorld}`;
+    // 數值狀態鍵 (星級 / 逃脫中 / 世界)：每幀呼叫時不組字串
+    const stateKey = this.stars * 4 + (this.isEvading ? 2 : 0) + (this._currentWorld === 'DETENTION' ? 1 : 0);
     if (stateKey === this.lastHUDStarsKey) return;
     this.lastHUDStarsKey = stateKey;
 

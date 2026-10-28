@@ -5,7 +5,7 @@ import { IndoorManager } from './IndoorManager';
 
 export type WeatherType = 'SUNNY' | 'RAIN' | 'THUNDERSTORM' | 'FOG' | 'SUNSET';
 
-export interface WeatherPreset {
+interface WeatherPreset {
   type: WeatherType;
   name: string;
   badgeText: string;
@@ -26,7 +26,7 @@ export interface WeatherPreset {
   hasThunder: boolean;
 }
 
-export const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
+const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
   SUNNY: {
     type: 'SUNNY',
     name: '晴朗校園',
@@ -220,10 +220,6 @@ export class WeatherSystem {
 
   public getCurrentPreset(): WeatherPreset {
     return WEATHER_PRESETS[this.currentWeather];
-  }
-
-  public getTargetPreset(): WeatherPreset {
-    return WEATHER_PRESETS[this.targetWeather];
   }
 
   // 手動循環切換下一種天氣 (按 [P] 鍵或點擊 HUD 天氣按鈕)
@@ -421,6 +417,7 @@ export class WeatherSystem {
       const maxY = playerPos.y + 26.0;
       const rangeX = 30.0;
       const rangeZ = 30.0;
+      const maxRoofY = IndoorManager.maxRoofY(this.currentWorld);
 
       for (let i = 0; i < count; i++) {
         const idx = i * 3;
@@ -431,11 +428,13 @@ export class WeatherSystem {
         // 檢查該粒子所在 (X, Z) 地面投影上方是否有建築物屋頂
         const px = pos[idx];
         const pz = pos[idx + 2];
-        const roofY = IndoorManager.getRoofHeightAt(px, pz, this.currentWorld);
+        // 高於最高屋頂與地面下限的雨滴必定未觸底，略過逐區屋頂查詢 (雷雨數千顆粒子每幀的主要成本)
+        const py = pos[idx + 1];
+        const roofY = (py > maxRoofY && py > minY) ? null : IndoorManager.getRoofHeightAt(px, pz, this.currentWorld);
         const effectiveFloorY = (roofY !== null) ? roofY : minY;
 
         // 觸地/觸及建築屋頂循環重置回天空隨機位置 (雨水落到屋頂即被阻擋吸收，絕不滲透落入室內！)
-        if (pos[idx + 1] <= effectiveFloorY) {
+        if (py <= effectiveFloorY) {
           const newX = playerPos.x + (Math.random() - 0.5) * rangeX * 2.0;
           const newZ = playerPos.z + (Math.random() - 0.5) * rangeZ * 2.0;
           pos[idx] = newX;

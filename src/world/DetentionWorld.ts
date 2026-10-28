@@ -1,7 +1,18 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import {
+  DETENTION_ROADS, DETENTION_BUILDINGS, DETENTION_TOWERS, DETENTION_CORNER_POSTS, SEARCHLIGHT_TOWER, DETENTION_CONTAINERS,
+  CONTAINER_LONG, CONTAINER_SHORT, OBSTACLE_WALLS, DETENTION_BARRIERS, BOSS_ARENA, GATE_KIOSK, GUARD_HOUSE, EQUIPMENT_STORE,
+  INTAKE_BOOTH, YARD_WATCHPOST, INTAKE_FENCE_Z0, INTAKE_FENCE_Z1, INTAKE_FENCE_SEGMENTS, FENCE_BREACH, INTAKE_CHECKPOINT, SERVICE_GATE,
+  GATE_WALLS, GATE_WALL_H, GENERATOR_PILLARS, GENERATOR_PILLAR_SIZE,
+  DetentionHall, DoorSide, Rect
+} from './detentionLayout';
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 import { isBlockedXZ } from '../physics/aabb';
+import { sharedLambert } from './sceneUtils';
+
+// 管制閘門 1、2 門板共用材質 (外觀相同，閘門開啟只移動群組不改材質)
+const GATE_PANEL_MAT = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 });
 
 // 越獄起點 (北側牢房後方通風口)：首次進入與「重新挑戰」皆由此出發
 export const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
@@ -15,11 +26,6 @@ export interface SearchlightItem {
   groundSpot: THREE.Mesh;
   currentGroundPos: THREE.Vector3;
   angle: number;
-  speed: number;
-  radiusX: number;
-  radiusZ: number;
-  centerX: number;
-  centerZ: number;
   isDetecting: boolean;
   waypointIndex?: number;
   dwellTimer?: number;
@@ -28,34 +34,34 @@ export interface SearchlightItem {
 
 // 探照燈慢速廣域巡查路徑點 (全面均勻涵蓋 A區牢房、B區貨櫃迷宮、C區競技場與南大門，絕不作弊黏著玩家)
 const SEARCHLIGHT_SWEEP_WAYPOINTS: { x: number; z: number }[] = [
-  // A 區 (牢房生活長廊區)
-  { x: -28, z: -76 },
-  { x: 0,   z: -72 },
-  { x: 28,  z: -68 },
-  { x: -4,  z: -56 },
-  { x: -28, z: -44 },
-  { x: 26,  z: -44 },
-  { x: 0,   z: -32 }, // 管制閘門 1 哨戒口
+  // A 區 (收容車道、庭院、服務巷、閘前廣場)
+  { x: -30, z: -84 },
+  { x: 24, z: -84 },
+  { x: 0, z: -70 },
+  { x: -24, z: -56 },
+  { x: 24, z: -52 },
+  { x: -47, z: -60 },
+  { x: 47, z: -50 },
+  { x: -40, z: -34 },
+  { x: 40, z: -34 },
 
-  // B 區 (操場重裝貨櫃迷宮區)
-  { x: -22, z: -10 },
-  { x: 0,   z: -8 },
-  { x: 24,  z: -4 },
-  { x: 24,  z: 6 },   // 門禁卡 B 藏寶走廊
-  { x: 0,   z: 2 },   // 貨櫃中央十字路口
-  { x: -26, z: 12 },
-  { x: 0,   z: 16 },
-  { x: 24,  z: 18 },
-  { x: 0,   z: 30 },  // 管制閘門 2 哨戒口
+  // B 區 (貨櫃堆置場、障礙訓練場、器材庫前、閘前廣場)
+  { x: -20, z: -14 },
+  { x: 20, z: -14 },
+  { x: 0, z: 0 },
+  { x: -40, z: 6 },
+  { x: -34, z: 20 },
+  { x: 46, z: 6 },
+  { x: 30, z: 26 },
+  { x: -24, z: 30 },
 
-  // C 區 (終極決鬥競技場與南大門)
-  { x: -16, z: 48 },
-  { x: 0,   z: 62 },  // 總教官中央決鬥競技場
-  { x: 16,  z: 48 },
-  { x: -12, z: 75 },
-  { x: 12,  z: 75 },
-  { x: 0,   z: 88 },  // 逃脫南大門
-  { x: 0,   z: 10 },  // 中央瞭望塔前庭
+  // C 區 (決戰庭院、建物側翼、南側道路)
+  { x: -20, z: 48 },
+  { x: 0, z: 62 },
+  { x: 20, z: 48 },
+  { x: -38, z: 66 },
+  { x: 38, z: 66 },
+  { x: 0, z: 84 }
 ];
 
 export interface ACHidingSpot {
@@ -93,7 +99,7 @@ export class DetentionWorld {
   public resetCheckpoint() {
     this.setCheckpoint(INITIAL_SPAWN, INITIAL_CHECKPOINT_NAME);
   }
-  public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
+  public commissaryPos: THREE.Vector3 = new THREE.Vector3(66, 0, -35.0); // 特訓小賣部取餐/補給窗口
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
   public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(-48, 0, -8); // 西側體能區：臥推訓練
   public tireStationPos: THREE.Vector3 = new THREE.Vector3(-49, 0, 8); // 西側體能區：巨型輪胎翻滾
@@ -104,17 +110,12 @@ export class DetentionWorld {
   public southGateConsolePos: THREE.Vector3 = new THREE.Vector3(-7.5, 0, 93); // 南大門終端控制台
 
   // 鑰匙卡點位
-  public keycardAPos: THREE.Vector3 = new THREE.Vector3(5, 0.8, -60);  // 藍色門禁卡 A (中央空地安全崗亭)
-  public keycardBPos: THREE.Vector3 = new THREE.Vector3(24, 0.8, 14);  // 黃色門禁卡 B (B 區貨櫃迷宮東側掩體)
+  public keycardAPos: THREE.Vector3 = new THREE.Vector3(0, 0.95, -61);  // 藍色門禁卡 A (中央警衛室辦公桌)
+  public keycardBPos: THREE.Vector3 = new THREE.Vector3(66, 0.95, 7.2);  // 黃色門禁卡 B (B 區器材庫工作檯)
   public masterKeycardPos: THREE.Vector3 | null = null;                // 萬能逃脫鑰匙卡 (Boss 擊敗後掉落)
 
   // C 區發電機混凝土防護柱 (供玩家誘使 Boss 衝撞硬直破盾)
-  public generatorPillars: THREE.Vector3[] = [
-    new THREE.Vector3(-16, 0, 52),
-    new THREE.Vector3(16, 0, 52),
-    new THREE.Vector3(-16, 0, 74),
-    new THREE.Vector3(16, 0, 74)
-  ];
+  public generatorPillars: THREE.Vector3[] = GENERATOR_PILLARS.map((gp) => new THREE.Vector3(gp.x, 0, gp.z));
 
   // 門禁動態模型與碰撞體
   public isGateAOpen: boolean = false;
@@ -189,28 +190,19 @@ export class DetentionWorld {
     baseGroundGeo.rotateX(-Math.PI / 2);
     groundMudGeos.push(baseGroundGeo);
 
-    // 操場外環紅泥粗砂跑道 (寬 6m，140m × 140m 圓角矩形/環狀)
-    const trackStraight1 = new THREE.BoxGeometry(6, 0.03, 110);
-    trackStraight1.translate(-60, 0.015, 0);
-    const trackStraight2 = new THREE.BoxGeometry(6, 0.03, 110);
-    trackStraight2.translate(60, 0.015, 0);
-    const trackStraight3 = new THREE.BoxGeometry(110, 0.03, 6);
-    trackStraight3.translate(0, 0.015, -55);
-    const trackStraight4 = new THREE.BoxGeometry(110, 0.03, 6);
-    trackStraight4.translate(0, 0.015, 55);
-    groundTrackGeos.push(trackStraight1, trackStraight2, trackStraight3, trackStraight4);
+    // 道路骨架 (北側收容車道、外圍巡邏路、中軸路、橫向廣場路與 A 區服務巷；配置資料與雷達/大地圖共用)
+    for (const r of DETENTION_ROADS) {
+      const roadGeo = new THREE.BoxGeometry(r.maxX - r.minX, 0.03, r.maxZ - r.minZ);
+      roadGeo.translate((r.minX + r.maxX) / 2, 0.015, (r.minZ + r.maxZ) / 2);
+      groundTrackGeos.push(roadGeo);
+    }
 
-    // 南大門主幹道泥石路 (寬 10m，長 70m，Z: 30 ~ 95)
-    const roadGeo = new THREE.BoxGeometry(10, 0.04, 65);
-    roadGeo.translate(0, 0.02, 62.5);
-    groundTrackGeos.push(roadGeo);
-
-    // 泥水積水坑窪 (凹凸泥潭質感，平貼地表帶有微光)
+    // 泥水積水坑窪 (訓練場與庭院零星積水，平貼地表帶有微光)
     const puddlePositions = [
-      { x: -5, z: 2, w: 12, h: 8 },
-      { x: 8, z: -18, w: 14, h: 10 },
-      { x: -22, z: -8, w: 10, h: 7 },
-      { x: 18, z: 12, w: 9, h: 9 }
+      { x: -12, z: 4, w: 10, h: 7 },
+      { x: 38, z: -12, w: 12, h: 8 },
+      { x: -18, z: -52, w: 9, h: 6 },
+      { x: 24, z: 60, w: 10, h: 7 }
     ];
     for (const p of puddlePositions) {
       const puddle = new THREE.BoxGeometry(p.w, 0.02, p.h);
@@ -316,8 +308,9 @@ export class DetentionWorld {
 
     // 雙扇重型鋼柵防暴南大門 (動態解鎖升起大門，擊敗小Boss取得萬能鑰匙卡後開門逃脫)
     this.southGateMeshGroup = new THREE.Group();
-    const darkSteelMatSingle = new THREE.MeshLambertMaterial({ color: 0x5c728a });
-    const yellowMatSingle = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
+    // 與合併網格的鍍鋅鋼架/警示黃同色：共用材質實例
+    const darkSteelMatSingle = sharedLambert(0x5c728a);
+    const yellowMatSingle = sharedLambert(0xf1c40f);
     const rustMatSingle = new THREE.MeshLambertMaterial({ color: 0x8b0000 });
 
     const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(10.2, 6.6, 0.25), darkSteelMatSingle);
@@ -349,14 +342,9 @@ export class DetentionWorld {
     this.group.add(southTerminal);
 
     // ==========================================
-    // 3. 四座高聳瞭望塔 (四角 Watchtowers)
+    // 3. 四座高聳瞭望塔 (北側收容車道兩端、南側道路兩端)
     // ==========================================
-    const towerCoords = [
-      { x: -78, z: -78 },
-      { x: 78, z: -78 },
-      { x: -78, z: 78 },
-      { x: 78, z: 78 }
-    ];
+    const towerCoords = DETENTION_TOWERS;
 
     for (let i = 0; i < towerCoords.length; i++) {
       const tc = towerCoords[i];
@@ -419,229 +407,139 @@ export class DetentionWorld {
     }
 
     // 建立全場唯一動態探照燈：中央高空立體監視燈塔 (Y = 18.0m，俯視掃描整個特訓院大操場)
+    const slX = SEARCHLIGHT_TOWER.x, slZ = SEARCHLIGHT_TOWER.z;
     const slMast = new THREE.CylinderGeometry(0.35, 0.5, 18.0, 8);
-    slMast.translate(0, 9.0, 10.0);
+    slMast.translate(slX, 9.0, slZ);
     darkSteelGeos.push(slMast);
     const slPlatform = new THREE.BoxGeometry(3.2, 0.35, 3.2);
-    slPlatform.translate(0, 17.8, 10.0);
+    slPlatform.translate(slX, 17.8, slZ);
     darkSteelGeos.push(slPlatform);
-    this.addCollider(-0.6, 0.6, 9.4, 10.6, 0, 18.0);
-    this.createSearchlight(0, new THREE.Vector3(0, 18.0, 10.0));
+    const slBase = new THREE.BoxGeometry(2.2, 0.8, 2.2);
+    slBase.translate(slX, 0.4, slZ);
+    concreteGeos.push(slBase);
+    this.addCollider(slX - 1.1, slX + 1.1, slZ - 1.1, slZ + 1.1, 0, 18.0);
+    this.createSearchlight(0, new THREE.Vector3(slX, 18.0, slZ));
 
     // ==========================================
-    // 4. 集訓營舍大樓 (2層鋼構大樓，X: -65 ~ -15, Z: -75 ~ -45)
+    // 4. 院區建築 (配置資料與雷達/大地圖共用)
+    //    實心樓房：外牆 + 窗戶列 (牢房含鐵窗欄) + 主入口鋼門與雨遮 + 屋頂女兒牆
+    //    空心建物 (中央警衛室、器材庫)：四面牆含門洞，內部可行走、取卡與藏匿
     // ==========================================
-    const bW = 50, bH = 8.5, bD = 30;
-    const bCx = -40, bCz = -60;
+    const pushBox = (bucket: THREE.BufferGeometry[], w: number, h: number, d: number, x: number, y: number, z: number) => {
+      const g = new THREE.BoxGeometry(w, h, d);
+      g.translate(x, y, z);
+      bucket.push(g);
+    };
 
-    // 1F 地面混凝土基台
-    const bBase = new THREE.BoxGeometry(bW + 2, 0.5, bD + 2);
-    bBase.translate(bCx, 0.25, bCz);
-    concreteGeos.push(bBase);
-
-    // 主建築主體牆面
-    const bMain = new THREE.BoxGeometry(bW, bH, bD);
-    bMain.translate(bCx, bH / 2 + 0.5, bCz);
-    concreteGeos.push(bMain);
-    this.addCollider(bCx - bW / 2, bCx + bW / 2, bCz - bD / 2, bCz + bD / 2, 0, bH + 0.5);
-
-    // 2F 外掛鋼架走廊平台 (Floor Y = 4.5m，延伸到南側面向操場 Z: -45)
-    const walkwayW = bW - 4;
-    const walkwayD = 4.2;
-    const walkwayY = 4.5;
-    const walkwayZ = bCz + bD / 2 + walkwayD / 2;
-    const walkwayFloor = new THREE.BoxGeometry(walkwayW, 0.35, walkwayD);
-    walkwayFloor.translate(bCx, walkwayY, walkwayZ);
-    darkSteelGeos.push(walkwayFloor);
-    this.addFloorSlab(bCx - walkwayW / 2, bCx + walkwayW / 2, walkwayZ - walkwayD / 2, walkwayZ + walkwayD / 2, walkwayY);
-
-    // 2F 走廊外圍安全鐵欄杆 (在樓梯口留出順暢通行開口，絕不擋住玩家上樓)
-    const stairX = bCx + walkwayW / 2 - 1.5;
-    const stairW = 3.2;
-    const railW = (stairX - stairW / 2) - (bCx - walkwayW / 2);
-    const railCx = (bCx - walkwayW / 2) + railW / 2;
-    const wRail = new THREE.BoxGeometry(railW, 1.2, 0.08);
-    wRail.translate(railCx, walkwayY + 0.7, walkwayZ + walkwayD / 2);
-    fenceWireGeos.push(wRail);
-    this.addCollider(bCx - walkwayW / 2, stairX - stairW / 2, walkwayZ + walkwayD / 2 - 0.15, walkwayZ + walkwayD / 2 + 0.15, walkwayY, walkwayY + 1.4);
-
-    // 2F 支撐鋼立柱 (從地面延伸支撐 2F 走廊)
-    for (let x = bCx - walkwayW / 2 + 3; x <= bCx + walkwayW / 2 - 3; x += 7) {
-      const pCol = new THREE.CylinderGeometry(0.16, 0.16, walkwayY, 8);
-      pCol.translate(x, walkwayY / 2, walkwayZ + walkwayD / 2);
-      darkSteelGeos.push(pCol);
-      this.addCollider(x - 0.25, x + 0.25, walkwayZ + walkwayD / 2 - 0.25, walkwayZ + walkwayD / 2 + 0.25, 0, walkwayY);
-    }
-
-    // 通往 2F 的重型工業鋼架樓梯 (從地面 Y: 0 爬升至 Y: 4.5, 寬 3.0m, 長 8.5m)
-    const stairStartZ = walkwayZ + walkwayD / 2 + 8.5; // Z = -32.3 (地面起點)
-    const stairEndZ = walkwayZ + walkwayD / 2;         // Z = -40.8 (2F 頂端)
-    const numSteps = 18;
-    for (let s = 0; s < numSteps; s++) {
-      const t = s / numSteps;
-      const stepY = t * walkwayY;
-      const stepZ = THREE.MathUtils.lerp(stairStartZ, stairEndZ, t);
-      const stepMesh = new THREE.BoxGeometry(3.0, 0.25, 8.5 / numSteps + 0.05);
-      stepMesh.translate(stairX, stepY + 0.12, stepZ);
-      darkSteelGeos.push(stepMesh);
-    }
-    // 樓梯斜坡碰撞體 (Z: -40.8 ~ -32.3，MinZ 處高度為 4.5m，MaxZ 處高度為 0m，平滑上下樓如履平地)
-    this.addRamp(stairX - 1.6, stairX + 1.6, stairEndZ, stairStartZ, walkwayY, 0);
-
-    // 宿舍窗戶安全鐵護欄 (每間宿舍窗口有粗鐵欄杆)
-    for (let x = bCx - bW / 2 + 4; x <= bCx + bW / 2 - 4; x += 5.5) {
-      const bars1F = new THREE.BoxGeometry(2.2, 1.8, 0.12);
-      bars1F.translate(x, 2.5, bCz + bD / 2 + 0.08);
-      const bars2F = new THREE.BoxGeometry(2.2, 1.8, 0.12);
-      bars2F.translate(x, walkwayY + 2.2, bCz + bD / 2 + 0.08);
-      darkSteelGeos.push(bars1F, bars2F);
-    }
-
-    // 營舍大樓金屬門楣看板「特訓第一營舍」
-    const bSign = new THREE.BoxGeometry(10, 1.2, 0.3);
-    bSign.translate(bCx, bH + 0.2, bCz + bD / 2 + 0.2);
-    rustedMetalGeos.push(bSign);
-
-    // ==========================================
-    // 5. 特訓食堂與福利社 (X: 25 ~ 75, Z: -75 ~ -45)
-    // ==========================================
-    const cW = 50, cH = 6.2, cD = 30;
-    const cCx = 50, cCz = -60;
-
-    const cBase = new THREE.BoxGeometry(cW + 1, 0.4, cD + 1);
-    cBase.translate(cCx, 0.2, cCz);
-    concreteGeos.push(cBase);
-
-    const cMain = new THREE.BoxGeometry(cW, cH, cD);
-    cMain.translate(cCx, cH / 2 + 0.4, cCz);
-    concreteGeos.push(cMain);
-    this.addCollider(cCx - cW / 2, cCx + cW / 2, cCz - cD / 2, cCz + cD / 2, 0, cH + 0.4);
-
-    // 戶外特訓小賣部與補給窗口 (提供止血繃帶、高能葡萄糖液、壓縮乾糧等物資)
-    const counter = new THREE.BoxGeometry(5.5, 1.1, 1.2);
-    counter.translate(38, 0.55, -44.5);
-    concreteGeos.push(counter);
-    this.addCollider(35.0, 41.0, -45.2, -43.8, 0, 1.5);
-
-    // 小賣部展示架與醫療補給箱
-    const supplyShelf = new THREE.BoxGeometry(4.8, 0.9, 0.5);
-    supplyShelf.translate(38, 1.45, -44.8);
-    darkSteelGeos.push(supplyShelf);
-
-    const medBox = new THREE.BoxGeometry(0.8, 0.5, 0.5);
-    medBox.translate(36.8, 1.35, -44.3);
-    yellowHazardGeos.push(medBox);
-
-    // 小賣部遮雨棚架
-    const cCanopy = new THREE.BoxGeometry(8.5, 0.25, 3.8);
-    cCanopy.translate(38, 3.2, -43.0);
-    corrugatedIronGeos.push(cCanopy);
-
-    // 小賣部招牌「🏪 特訓小賣部 · 戰術物資補給站」
-    const cSign = new THREE.BoxGeometry(8.5, 1.0, 0.2);
-    cSign.translate(38, 3.8, -42.8);
-    yellowHazardGeos.push(cSign);
-
-    // 長條鋼製餐桌與金屬圓凳組 (8 組)
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        const tx = 28 + col * 5.5;
-        const tz = -38 + row * 4.5;
-        const table = new THREE.BoxGeometry(3.6, 0.85, 1.2);
-        table.translate(tx, 0.42, tz);
-        darkSteelGeos.push(table);
-        this.addCollider(tx - 1.9, tx + 1.9, tz - 0.7, tz + 0.7, 0, 1.0);
-
-        // 圓凳
-        const stool1 = new THREE.CylinderGeometry(0.24, 0.24, 0.5, 8);
-        stool1.translate(tx, 0.25, tz - 0.9);
-        const stool2 = new THREE.CylinderGeometry(0.24, 0.24, 0.5, 8);
-        stool2.translate(tx, 0.25, tz + 0.9);
-        darkSteelGeos.push(stool1, stool2);
+    // 沿牆面排列窗戶 (side 為牆面朝向；from/to 為沿牆座標範圍)
+    const addWindowRow = (side: DoorSide, b: Rect, y: number, skipFrom: number, skipTo: number, barred: boolean) => {
+      const alongX = side === 'N' || side === 'S';
+      const from = alongX ? b.minX : b.minZ;
+      const to = alongX ? b.maxX : b.maxZ;
+      const facePos = side === 'N' ? b.minZ - 0.05 : side === 'S' ? b.maxZ + 0.05 : side === 'W' ? b.minX - 0.05 : b.maxX + 0.05;
+      for (let t = from + 2.5; t <= to - 2.5; t += 4) {
+        if (t > skipFrom - 1.6 && t < skipTo + 1.6) continue;
+        if (alongX) pushBox(glassGeos, 1.5, 1.0, 0.08, t, y, facePos);
+        else pushBox(glassGeos, 0.08, 1.0, 1.5, facePos, y, t);
+        if (barred) {
+          for (const k of [-0.45, 0, 0.45]) {
+            if (alongX) pushBox(darkSteelGeos, 0.06, 1.0, 0.1, t + k, y, facePos);
+            else pushBox(darkSteelGeos, 0.1, 1.0, 0.06, facePos, y, t + k);
+          }
+        }
       }
+    };
+
+    for (const b of DETENTION_BUILDINGS) {
+      const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+      const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+      const wallBucket = b.mat === 'metal' ? corrugatedIronGeos : concreteGeos;
+      // 主體與勒腳
+      pushBox(wallBucket, w, b.h, d, cx, b.h / 2, cz);
+      pushBox(concreteGeos, w + 0.3, 0.5, d + 0.3, cx, 0.25, cz);
+      // 屋頂板與女兒牆
+      pushBox(rustedMetalGeos, w + 0.4, 0.25, d + 0.4, cx, b.h + 0.12, cz);
+      pushBox(concreteGeos, w + 0.4, 0.6, 0.3, cx, b.h + 0.55, b.minZ - 0.05);
+      pushBox(concreteGeos, w + 0.4, 0.6, 0.3, cx, b.h + 0.55, b.maxZ + 0.05);
+      pushBox(concreteGeos, 0.3, 0.6, d + 0.4, b.minX - 0.05, b.h + 0.55, cz);
+      pushBox(concreteGeos, 0.3, 0.6, d + 0.4, b.maxX + 0.05, b.h + 0.55, cz);
+      // 屋頂通風設備
+      pushBox(darkSteelGeos, 2.2, 1.0, 1.6, cx - w * 0.25, b.h + 0.75, cz);
+      pushBox(darkSteelGeos, 1.6, 0.8, 1.6, cx + w * 0.22, b.h + 0.65, cz - d * 0.2);
+
+      // 主入口：鋼門 + 黃色雨遮 (位於門面中央)
+      const doorAlongX = b.door === 'N' || b.door === 'S';
+      const doorCenter = doorAlongX ? cx : cz;
+      const doorFace = b.door === 'N' ? b.minZ - 0.08 : b.door === 'S' ? b.maxZ + 0.08 : b.door === 'W' ? b.minX - 0.08 : b.maxX + 0.08;
+      const awningOut = b.door === 'N' || b.door === 'W' ? -0.8 : 0.8;
+      if (doorAlongX) {
+        pushBox(darkSteelGeos, 3.0, 2.9, 0.12, doorCenter, 1.45, doorFace);
+        pushBox(yellowHazardGeos, 4.2, 0.18, 1.6, doorCenter, 3.25, doorFace + awningOut);
+      } else {
+        pushBox(darkSteelGeos, 0.12, 2.9, 3.0, doorFace, 1.45, doorCenter);
+        pushBox(yellowHazardGeos, 1.6, 0.18, 4.2, doorFace + awningOut, 3.25, doorCenter);
+      }
+
+      // 各樓層窗戶列 (四面；主入口兩側留空)
+      const barred = b.name.includes('牢房');
+      for (let f = 0; f < b.floors; f++) {
+        const wy = 1.9 + f * 3.4;
+        for (const side of ['N', 'S', 'E', 'W'] as DoorSide[]) {
+          const skip = side === b.door && f === 0;
+          addWindowRow(side, b, wy, skip ? doorCenter : 1e9, skip ? doorCenter : 1e9, barred);
+        }
+      }
+
+      // 牢房舍外牆黃色樓層警示帶
+      if (b.floors > 1) {
+        pushBox(yellowHazardGeos, w + 0.12, 0.25, d + 0.12, cx, 3.6, cz);
+      }
+      this.addCollider(b.minX, b.maxX, b.minZ, b.maxZ, 0, b.h + 0.9);
     }
 
-    // ==========================================
-    // 6. 實習工廠 (Workshop, X: -75 ~ -30, Z: 30 ~ 70)
-    // ==========================================
-    const wkW = 45, wkH = 7.5, wkD = 40;
-    const wkCx = -52.5, wkCz = 50;
-
-    const wkBase = new THREE.BoxGeometry(wkW + 1, 0.4, wkD + 1);
-    wkBase.translate(wkCx, 0.2, wkCz);
-    concreteGeos.push(wkBase);
-
-    // 鐵皮外牆
-    const wkMain = new THREE.BoxGeometry(wkW, wkH, wkD);
-    wkMain.translate(wkCx, wkH / 2 + 0.4, wkCz);
-    corrugatedIronGeos.push(wkMain);
-    this.addCollider(wkCx - wkW / 2, wkCx + wkW / 2, wkCz - wkD / 2, wkCz + wkD / 2, 0, wkH + 0.4);
-
-    // 工廠大捲門 (寬 8m, 高 4.5m)
-    const rollDoor = new THREE.BoxGeometry(8.2, 4.5, 0.3);
-    rollDoor.translate(-40, 2.25, 29.8);
-    rustedMetalGeos.push(rollDoor);
-
-    // 堆疊木質貨物棧板與金屬工件箱
-    const palletPositions = [
-      { x: -35, z: 25, h: 1.5 },
-      { x: -32, z: 24, h: 2.2 },
-      { x: -28, z: 32, h: 1.8 }
-    ];
-    for (const p of palletPositions) {
-      const pallet = new THREE.BoxGeometry(2.4, p.h, 2.4);
-      pallet.translate(p.x, p.h / 2, p.z);
-      woodPlankGeos.push(pallet);
-      this.addCollider(p.x - 1.3, p.x + 1.3, p.z - 1.3, p.z + 1.3, 0, p.h);
-    }
-
-    // 招牌「第一機械實習工廠」
-    const wkSign = new THREE.BoxGeometry(10, 1.2, 0.2);
-    wkSign.translate(-40, 5.2, 29.8);
-    yellowHazardGeos.push(wkSign);
-
-    // ==========================================
-    // 7. 教官總部大樓 (Command HQ, X: 30 ~ 75, Z: 30 ~ 70)
-    // ==========================================
-    const hqW = 45, hqH = 9.0, hqD = 40;
-    const hqCx = 52.5, hqCz = 50;
-
-    const hqBase = new THREE.BoxGeometry(hqW + 2, 0.6, hqD + 2);
-    hqBase.translate(hqCx, 0.3, hqCz);
-    concreteGeos.push(hqBase);
-
-    const hqMain = new THREE.BoxGeometry(hqW, hqH, hqD);
-    hqMain.translate(hqCx, hqH / 2 + 0.6, hqCz);
-    concreteGeos.push(hqMain);
-    this.addCollider(hqCx - hqW / 2, hqCx + hqW / 2, hqCz - hqD / 2, hqCz + hqD / 2, 0, hqH + 0.6);
-
-    // 莊嚴門廊立柱與雙層雨棚
-    const portico = new THREE.BoxGeometry(14, 0.5, 6);
-    portico.translate(45, 5.5, 27);
-    concreteGeos.push(portico);
-
-    const hqPillar1 = new THREE.CylinderGeometry(0.35, 0.35, 5.5, 12);
-    hqPillar1.translate(40, 2.75, 25);
-    const hqPillar2 = new THREE.CylinderGeometry(0.35, 0.35, 5.5, 12);
-    hqPillar2.translate(50, 2.75, 25);
-    concreteGeos.push(hqPillar1, hqPillar2);
-    this.addCollider(39.5, 40.5, 24.5, 25.5, 0, 5.5);
-    this.addCollider(49.5, 50.5, 24.5, 25.5, 0, 5.5);
-
-    // 總部銘牌「第七少年特訓院 · 嚴格訓育指揮總部」
-    const hqSign = new THREE.BoxGeometry(12, 1.2, 0.2);
-    hqSign.translate(45, 6.4, 27);
-    rustedMetalGeos.push(hqSign);
-
-    // 樓頂警戒通訊雷達與旗桿
-    const radarPole = new THREE.CylinderGeometry(0.08, 0.12, 6.0, 8);
-    radarPole.translate(hqCx, hqH + 3.6, hqCz);
-    darkSteelGeos.push(radarPole);
-
-    const radarDish = new THREE.CylinderGeometry(1.6, 0.4, 0.3, 16);
-    radarDish.rotateX(Math.PI / 4);
-    radarDish.translate(hqCx, hqH + 6.0, hqCz);
-    darkSteelGeos.push(radarDish);
+    // 空心建物：四面牆 (厚 0.4m) + 門洞 + 屋頂；牆面各自為碰撞體，內部可行走
+    const buildHall = (hb: DetentionHall) => {
+      const t = 0.4;
+      const cx = (hb.minX + hb.maxX) / 2, cz = (hb.minZ + hb.maxZ) / 2;
+      const w = hb.maxX - hb.minX, d = hb.maxZ - hb.minZ;
+      const wall = (x0: number, x1: number, z0: number, z1: number) => {
+        pushBox(concreteGeos, x1 - x0, hb.h, z1 - z0, (x0 + x1) / 2, hb.h / 2, (z0 + z1) / 2);
+        this.addCollider(x0, x1, z0, z1, 0, hb.h);
+      };
+      // N/S 牆沿 X，E/W 牆沿 Z；門洞所在牆分兩段
+      const sides: { side: DoorSide; along: [number, number]; at: [number, number] }[] = [
+        { side: 'N', along: [hb.minX, hb.maxX], at: [hb.minZ, hb.minZ + t] },
+        { side: 'S', along: [hb.minX, hb.maxX], at: [hb.maxZ - t, hb.maxZ] },
+        { side: 'W', along: [hb.minZ + t, hb.maxZ - t], at: [hb.minX, hb.minX + t] },
+        { side: 'E', along: [hb.minZ + t, hb.maxZ - t], at: [hb.maxX - t, hb.maxX] }
+      ];
+      for (const sd of sides) {
+        const segs: [number, number][] = sd.side === hb.doorSide
+          ? [[sd.along[0], hb.doorFrom], [hb.doorTo, sd.along[1]]]
+          : [sd.along];
+        for (const [a0, a1] of segs) {
+          if (a1 - a0 < 0.05) continue;
+          if (sd.side === 'N' || sd.side === 'S') wall(a0, a1, sd.at[0], sd.at[1]);
+          else wall(sd.at[0], sd.at[1], a0, a1);
+        }
+        // 門楣
+        if (sd.side === hb.doorSide) {
+          const lintelH = 0.8;
+          const span = hb.doorTo - hb.doorFrom;
+          const mid = (hb.doorFrom + hb.doorTo) / 2;
+          if (sd.side === 'N' || sd.side === 'S') pushBox(concreteGeos, span, lintelH, t, mid, hb.h - lintelH / 2, (sd.at[0] + sd.at[1]) / 2);
+          else pushBox(concreteGeos, t, lintelH, span, (sd.at[0] + sd.at[1]) / 2, hb.h - lintelH / 2, mid);
+          if (sd.side === 'N' || sd.side === 'S') pushBox(yellowHazardGeos, span + 0.4, 0.25, t + 0.1, mid, hb.h - lintelH - 0.12, (sd.at[0] + sd.at[1]) / 2);
+          else pushBox(yellowHazardGeos, t + 0.1, 0.25, span + 0.4, (sd.at[0] + sd.at[1]) / 2, hb.h - lintelH - 0.12, mid);
+        }
+      }
+      // 屋頂 (不設碰撞體：鏡頭與玩家皆在屋頂下方活動)
+      pushBox(rustedMetalGeos, w + 0.6, 0.25, d + 0.6, cx, hb.h + 0.12, cz);
+      pushBox(yellowHazardGeos, w + 0.62, 0.3, 0.12, cx, hb.h - 0.2, hb.minZ - 0.3);
+      pushBox(yellowHazardGeos, w + 0.62, 0.3, 0.12, cx, hb.h - 0.2, hb.maxZ + 0.3);
+      // 室內地坪
+      pushBox(concreteGeos, w - 2 * t, 0.06, d - 2 * t, cx, 0.03, cz);
+    };
 
     // ==========================================
     // 8. 西側重訓體能專區 (單槓、臥推、巨型輪胎組，集中於 X: -56 ~ -44，絕不干擾中央操場與巡邏動線)
@@ -743,80 +641,111 @@ export class DetentionWorld {
     }
 
     // ==========================================
-    // 8.5 潛龍諜影三段式戰術立體迷宮體系 (Tactical Stealth Labyrinth)
+    // 8.5 三區戰術動線 (A 區監區 / B 區訓練場 / C 區決戰區)
     // ==========================================
-    // --- 【A 區：牢房生活長廊迷宮 (Z: -85 ~ -28)】---
-    // 北走廊檢查哨屏障 (X = -10, Z: -90 ~ -78, 迫使從北側繞道中央庭院)
-    const northCheckWall = new THREE.BoxGeometry(0.6, 3.8, 12);
-    northCheckWall.translate(-10, 1.9, -84);
-    concreteGeos.push(northCheckWall);
-    this.addCollider(-10.4, -9.6, -90, -78, 0, 3.8);
+    // --- 【A 區：監區 (Z: -95 ~ -28)】---
+    // 動線：主線 = 收容車道 → 中央檢查哨 → 中央警衛室取卡 → 閘前廣場 → 閘門 1
+    //       西潛行 = 收容車道西段 → 剪破圍籬 → 瞭望哨陰影 → 警衛室西側 → 醫務室後方 → 廣場
+    //       東潛行 = 收容車道東段 → 服務門 → 東服務巷 → 洗衣房旁 → 警衛室東側 → 廣場
+    // 收容圍籬 (三個出入口：西側破洞、中央檢查哨、東側服務門)
+    const fenceZ = (INTAKE_FENCE_Z0 + INTAKE_FENCE_Z1) / 2;
+    for (const [x0, x1] of INTAKE_FENCE_SEGMENTS) {
+      const len = x1 - x0;
+      pushBox(fenceWireGeos, len, 3.0, 0.08, (x0 + x1) / 2, 1.6, fenceZ);
+      pushBox(concreteGeos, len, 0.3, 0.5, (x0 + x1) / 2, 0.15, fenceZ);
+      for (let x = x0; x <= x1 + 0.01; x += 5) {
+        const post = new THREE.CylinderGeometry(0.09, 0.09, 3.4, 6);
+        post.translate(Math.min(x, x1), 1.7, fenceZ);
+        darkSteelGeos.push(post);
+      }
+      this.addCollider(x0, x1, INTAKE_FENCE_Z0, INTAKE_FENCE_Z1, 0, 3.4);
+    }
+    // 西側剪破的圍籬：兩側捲曲外翻的斷網
+    for (const [x, rot] of [[FENCE_BREACH.x0 + 0.5, 0.6], [FENCE_BREACH.x1 - 0.5, -0.6]] as [number, number][]) {
+      const curl = new THREE.BoxGeometry(1.2, 1.6, 0.06);
+      curl.rotateY(rot);
+      curl.translate(x, 0.9, fenceZ + 0.4);
+      fenceWireGeos.push(curl);
+    }
+    // 中央檢查哨：門柱、升起的黃黑柵欄桿與上方警示橫樑
+    for (const x of [INTAKE_CHECKPOINT.x0 - 0.3, INTAKE_CHECKPOINT.x1 + 0.3]) {
+      pushBox(concreteGeos, 0.6, 4.0, 0.6, x, 2.0, fenceZ);
+      this.addCollider(x - 0.3, x + 0.3, fenceZ - 0.3, fenceZ + 0.3, 0, 4.0);
+    }
+    pushBox(yellowHazardGeos, INTAKE_CHECKPOINT.x1 - INTAKE_CHECKPOINT.x0 + 1.2, 0.5, 0.3, 0, 4.25, fenceZ);
+    const boom = new THREE.BoxGeometry(0.18, 4.0, 0.18);
+    boom.translate(INTAKE_CHECKPOINT.x1 - 0.2, 2.6, fenceZ - 0.6);
+    yellowHazardGeos.push(boom);
+    // 東側服務門：向內敞開的鐵網門扇
+    {
+      const leaf = new THREE.BoxGeometry(SERVICE_GATE.x1 - SERVICE_GATE.x0, 2.8, 0.08);
+      leaf.translate(-(SERVICE_GATE.x1 - SERVICE_GATE.x0) / 2, 0, 0);
+      leaf.rotateY(-1.2);
+      leaf.translate(SERVICE_GATE.x1, 1.5, fenceZ);
+      fenceWireGeos.push(leaf);
+    }
+    // 收容檢查哨亭 (監看收容車道與檢查哨口)
+    {
+      const k = INTAKE_BOOTH;
+      const kx = (k.minX + k.maxX) / 2, kz = (k.minZ + k.maxZ) / 2;
+      pushBox(concreteGeos, k.maxX - k.minX, k.h, k.maxZ - k.minZ, kx, k.h / 2, kz);
+      pushBox(glassGeos, k.maxX - k.minX - 0.6, 1.0, 0.08, kx, 1.9, k.minZ - 0.04);
+      pushBox(glassGeos, 0.08, 1.0, k.maxZ - k.minZ - 0.6, k.minX - 0.04, 1.9, kz);
+      pushBox(yellowHazardGeos, k.maxX - k.minX + 0.8, 0.2, k.maxZ - k.minZ + 0.8, kx, k.h + 0.1, kz);
+      this.addCollider(k.minX, k.maxX, k.minZ, k.maxZ, 0, k.h + 0.2);
+    }
+    // 中央警衛室 (門禁卡 A 存放於室內辦公桌)：辦公桌、監視器櫃、檔案櫃
+    buildHall(GUARD_HOUSE);
+    {
+      const g = GUARD_HOUSE;
+      const gx = (g.minX + g.maxX) / 2;
+      pushBox(woodPlankGeos, 3.0, 0.8, 1.2, gx, 0.4, -61);
+      this.addCollider(gx - 1.5, gx + 1.5, -61.6, -60.4, 0, 0.85);
+      pushBox(darkSteelGeos, 4.0, 2.2, 0.6, gx, 1.1, g.minZ + 0.75);
+      pushBox(glassGeos, 3.6, 1.0, 0.06, gx, 1.5, g.minZ + 1.08);
+      this.addCollider(gx - 2.0, gx + 2.0, g.minZ + 0.4, g.minZ + 1.05, 0, 2.2);
+      pushBox(darkSteelGeos, 0.6, 1.8, 2.4, g.maxX - 0.75, 0.9, -61);
+      this.addCollider(g.maxX - 1.05, g.maxX - 0.4, -62.2, -59.8, 0, 1.8);
+      // 南面門洞兩側窗戶
+      pushBox(glassGeos, 2.0, 1.0, 0.08, g.minX + 2.0, 1.9, g.maxZ + 0.02);
+      pushBox(glassGeos, 2.0, 1.0, 0.08, g.maxX - 2.0, 1.9, g.maxZ + 0.02);
+    }
+    // 庭院瞭望哨 (矮型哨塔：混凝土塔身 + 頂部哨亭)
+    {
+      const p = YARD_WATCHPOST;
+      const px = (p.minX + p.maxX) / 2, pz = (p.minZ + p.maxZ) / 2;
+      pushBox(concreteGeos, p.maxX - p.minX, p.h - 2.2, p.maxZ - p.minZ, px, (p.h - 2.2) / 2, pz);
+      pushBox(corrugatedIronGeos, p.maxX - p.minX + 0.6, 2.0, p.maxZ - p.minZ + 0.6, px, p.h - 1.2, pz);
+      pushBox(glassGeos, p.maxX - p.minX + 0.62, 0.8, p.maxZ - p.minZ + 0.62, px, p.h - 1.0, pz);
+      pushBox(rustedMetalGeos, p.maxX - p.minX + 1.2, 0.2, p.maxZ - p.minZ + 1.2, px, p.h + 0.1, pz);
+      this.addCollider(p.minX, p.maxX, p.minZ, p.maxZ, 0, p.h + 0.2);
+    }
+    // 食堂前戶外補給窗口 (特訓小賣部)
+    {
+      const sx = this.commissaryPos.x, sz = this.commissaryPos.z;
+      pushBox(woodPlankGeos, 3.6, 1.1, 0.8, sx, 0.55, sz - 1.4);
+      this.addCollider(sx - 1.8, sx + 1.8, sz - 1.8, sz - 1.0, 0, 1.1);
+      pushBox(yellowHazardGeos, 4.4, 0.15, 2.2, sx, 2.9, sz - 1.6);
+      for (const ox of [-2.0, 2.0]) pushBox(darkSteelGeos, 0.1, 2.9, 0.1, sx + ox, 1.45, sz - 0.6);
+    }
+    // 閘前廣場與南側道路低矮護欄
+    for (const bx of DETENTION_BARRIERS) {
+      pushBox(concreteGeos, bx.maxX - bx.minX, bx.h, bx.maxZ - bx.minZ, (bx.minX + bx.maxX) / 2, bx.h / 2, (bx.minZ + bx.maxZ) / 2);
+      this.addCollider(bx.minX, bx.maxX, bx.minZ, bx.maxZ, 0, bx.h);
+    }
 
-    // 新增：北走廊暗殺拐角 L 型隔牆 (形成隱密通風暗道與雙轉角，避開巡邏視線)
-    const alleyWall1 = new THREE.BoxGeometry(0.6, 3.8, 12);
-    alleyWall1.translate(-34, 1.9, -82);
-    const alleyWall2 = new THREE.BoxGeometry(10, 3.8, 0.6);
-    alleyWall2.translate(-29, 1.9, -76);
-    concreteGeos.push(alleyWall1, alleyWall2);
-    this.addCollider(-34.4, -33.6, -88, -76, 0, 3.8);
-    this.addCollider(-34, -24, -76.4, -75.6, 0, 3.8);
-
-    // 中央安全崗亭 (存放藍色門禁卡 A，X = 5, Z = -60)
-    const boothWallW = new THREE.BoxGeometry(0.5, 3.2, 4);
-    boothWallW.translate(2, 1.6, -60);
-    const boothWallE = new THREE.BoxGeometry(0.5, 3.2, 4);
-    boothWallE.translate(8, 1.6, -60);
-    const boothWallN = new THREE.BoxGeometry(6.5, 3.2, 0.5);
-    boothWallN.translate(5, 1.6, -62);
-    concreteGeos.push(boothWallW, boothWallE, boothWallN);
-    this.addCollider(1.7, 2.3, -62, -58, 0, 3.2);
-    this.addCollider(7.7, 8.3, -62, -58, 0, 3.2);
-    this.addCollider(1.7, 8.3, -62.3, -61.7, 0, 3.2);
-
-    // 新增：中央庭院 S 彎戰術隔牆 (掩護崗亭側面，形成多重暗角掩護)
-    const courtL1 = new THREE.BoxGeometry(0.6, 3.8, 14);
-    courtL1.translate(-10, 1.9, -63);
-    const courtL2 = new THREE.BoxGeometry(7, 3.8, 0.6);
-    courtL2.translate(-6.5, 1.9, -70);
-    concreteGeos.push(courtL1, courtL2);
-    this.addCollider(-10.4, -9.6, -70, -56, 0, 3.8);
-    this.addCollider(-10, -3, -70.4, -69.6, 0, 3.8);
-
-    // 東側巡邏盲區阻隔壁 (X = 14, Z: -55 ~ -45)
-    const eastCourtyardWall = new THREE.BoxGeometry(0.6, 3.8, 10);
-    eastCourtyardWall.translate(14, 1.9, -50);
-    concreteGeos.push(eastCourtyardWall);
-    this.addCollider(13.6, 14.4, -55, -45, 0, 3.8);
-
-    // 南前庭防暴折返隔板 (Z = -38, X: -25 ~ -6 與 X: 6 ~ 25，留出中央寬闊通路 X: -6 ~ 6)
-    const southChicaneW = new THREE.BoxGeometry(19, 3.8, 0.6);
-    southChicaneW.translate(-15.5, 1.9, -38);
-    const southChicaneE = new THREE.BoxGeometry(19, 3.8, 0.6);
-    southChicaneE.translate(15.5, 1.9, -38);
-    concreteGeos.push(southChicaneW, southChicaneE);
-    this.addCollider(-25, -6, -38.4, -37.6, 0, 3.8);
-    this.addCollider(6, 25, -38.4, -37.6, 0, 3.8);
-
-    // 新增：南前庭閘門前防暴 S 型交錯隔板 (Z = -33.5，強制雙 90° 迂迴轉角抵達閘門 1)
-    const chicaneZ33 = new THREE.BoxGeometry(10, 3.8, 0.6);
-    chicaneZ33.translate(0, 1.9, -33.5);
-    concreteGeos.push(chicaneZ33);
-    this.addCollider(-5, 5, -33.9, -33.1, 0, 3.8);
-
-    // 管制閘門 1 隔斷牆 (Z = -28, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
-    const gateA_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateA_WallW.translate(-50.0, 2.75, -28);
-    const gateA_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateA_WallE.translate(50.0, 2.75, -28);
-    concreteGeos.push(gateA_WallW, gateA_WallE);
-    this.addCollider(-96.5, -3.5, -28.6, -27.4, 0, 8.0);
-    this.addCollider(3.5, 96.5, -28.6, -27.4, 0, 8.0);
+    // 管制閘門 1、2 隔斷牆 (Z = -28 / 35，橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
+    for (const w of GATE_WALLS) {
+      const cz = (w.minZ + w.maxZ) / 2;
+      pushBox(concreteGeos, w.maxX - w.minX, GATE_WALL_H, w.maxZ - w.minZ, (w.minX + w.maxX) / 2, GATE_WALL_H / 2, cz);
+      this.addCollider(w.minX, w.maxX, cz - 0.6, cz + 0.6, 0, 8.0);
+    }
 
     // 動態管制閘門 1 (需藍色門禁卡 A 開啟)
     this.gateAMeshGroup = new THREE.Group();
     const gateADoor = new THREE.Mesh(
       new THREE.BoxGeometry(7.2, 4.5, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 })
+      GATE_PANEL_MAT
     );
     gateADoor.position.set(0, 2.25, -28);
     const gateAStripe = new THREE.Mesh(
@@ -833,91 +762,53 @@ export class DetentionWorld {
     terminalA.position.set(4.2, 0, -27.2);
     this.group.add(terminalA);
 
-    // --- 【B 區：操場重裝軍規貨櫃與掩體迷宮 (Z: -28 ~ 35)】---
-    // 豐富化海運集裝箱貨櫃矩陣 (18 座軍規貨櫃 + 轉角暗道，營造多重盲角與潛行挑戰)
-    const containers = [
-      // 第一排 (Z = -18)
-      { x: -22, z: -18, isZ: false, color: 0x2b4c7e },
-      { x: 22, z: -18, isZ: false, color: 0x8b3a3a },
-      // Gate 1 正前方中央遮擋貨櫃 (強迫分流至東西通道)
-      { x: 0, z: -21, isZ: false, color: 0x3d405b },
-
-      // 第二排 (Z = -6)
-      { x: -12, z: -6, isZ: true, color: 0x5c677d },
-      { x: 12, z: -6, isZ: true, color: 0x2d6a4f },
-      // 西側外廊平行貨櫃 (形成長達 18m 狹長潛行暗道)
-      { x: -28, z: -6, isZ: true, color: 0x2b4c7e },
-      // 東側外廊平行貨櫃
-      { x: 28, z: -6, isZ: true, color: 0x8b3a3a },
-
-      // 中央轉角連通掩體 (Z = 1)
-      { x: -6, z: 1, isZ: false, color: 0x5c677d },
-      { x: 6, z: 1, isZ: false, color: 0x2d6a4f },
-
-      // 第三排 (Z = 8)
-      { x: -22, z: 8, isZ: false, color: 0x3d405b },
-      { x: 0, z: 8, isZ: false, color: 0x2b4c7e },
-      { x: 22, z: 8, isZ: false, color: 0x8b3a3a },
-
-      // 第四排 (Z = 20)
-      { x: -12, z: 20, isZ: true, color: 0x2d6a4f },
-      { x: 12, z: 20, isZ: true, color: 0x5c677d },
-      // 西南潛行貨櫃
-      { x: -26, z: 20, isZ: true, color: 0x3d405b },
-      // Keycard B 側翼包圍貨櫃 (形成死角藏匿口袋)
-      { x: 24, z: 20, isZ: false, color: 0x2b4c7e },
-
-      // 東側藏寶盲區 (Z = 14, 掩護 Keycard B)
-      { x: 30, z: 14, isZ: true, color: 0x3d405b },
-
-      // Gate 2 正前方中央 S 型屏障貨櫃 (Z = 27)
-      { x: 0, z: 27, isZ: false, color: 0x8b3a3a }
-    ];
-
-    for (const c of containers) {
-      const w = c.isZ ? 2.8 : 10.0;
-      const d = c.isZ ? 10.0 : 2.8;
+    // --- 【B 區：訓練場 (Z: -28 ~ 35)】---
+    // 動線：主線 = 閘門 1 → 貨櫃堆置場 (探照燈下) → 器材庫取卡 B → 閘前廣場 → 閘門 2
+    //       西潛行 = 西外圍巡邏路 → 職訓工坊後方 → 閘門 2；東潛行 = 東外圍巡邏路 → 器材庫後側 → 閘門 2
+    // 軍規海運貨櫃堆置場 (配置資料與雷達/大地圖共用)
+    for (const c of DETENTION_CONTAINERS) {
+      const w = c.isZ ? CONTAINER_SHORT : CONTAINER_LONG;
+      const d = c.isZ ? CONTAINER_LONG : CONTAINER_SHORT;
       const h = 3.2;
-      const cGeo = new THREE.BoxGeometry(w, h, d);
-      cGeo.translate(c.x, h / 2, c.z);
-      corrugatedIronGeos.push(cGeo);
+      pushBox(corrugatedIronGeos, w, h, d, c.x, h / 2, c.z);
       this.addCollider(c.x - w / 2, c.x + w / 2, c.z - d / 2, c.z + d / 2, 0, h);
     }
-
-    // 混凝土防暴澤西護欄掩體 (提供戰術半高掩護，絕不擋死過道)
-    const jerseyBarriers = [
-      { x: -22, z: -2, isZ: false },
-      { x: 22, z: -2, isZ: false },
-      { x: -6, z: 14, isZ: true },
-      { x: 6, z: 14, isZ: true },
-      { x: -16, z: -14, isZ: true },
-      { x: 16, z: -14, isZ: true },
-      { x: -18, z: 26, isZ: false },
-      { x: 18, z: 26, isZ: false }
-    ];
-    for (const jb of jerseyBarriers) {
-      const jbW = jb.isZ ? 0.6 : 3.6;
-      const jbD = jb.isZ ? 3.6 : 0.6;
-      const jbGeo = new THREE.BoxGeometry(jbW, 1.4, jbD);
-      jbGeo.translate(jb.x, 0.7, jb.z);
-      concreteGeos.push(jbGeo);
-      this.addCollider(jb.x - jbW / 2, jb.x + jbW / 2, jb.z - jbD / 2, jb.z + jbD / 2, 0, 1.5);
+    // 障礙訓練場矮牆 (可蹲伏掩護)
+    for (const ow of OBSTACLE_WALLS) {
+      pushBox(woodPlankGeos, ow.maxX - ow.minX, 1.1, ow.maxZ - ow.minZ, (ow.minX + ow.maxX) / 2, 0.55, (ow.minZ + ow.maxZ) / 2);
+      this.addCollider(ow.minX, ow.maxX, ow.minZ, ow.maxZ, 0, 1.1);
     }
-
-    // 管制閘門 2 隔斷牆 (Z = 35, 橫跨全院嚴密封鎖至東西圍牆 X: ±96.5，杜絕任何側翼偷渡通道，僅在中央留出閘口)
-    const gateB_WallW = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateB_WallW.translate(-50.0, 2.75, 35);
-    const gateB_WallE = new THREE.BoxGeometry(93.0, 5.5, 1.0);
-    gateB_WallE.translate(50.0, 2.75, 35);
-    concreteGeos.push(gateB_WallW, gateB_WallE);
-    this.addCollider(-96.5, -3.5, 34.4, 35.6, 0, 8.0);
-    this.addCollider(3.5, 96.5, 34.4, 35.6, 0, 8.0);
+    // 器材庫 (門禁卡 B 存放於庫內；西側捲門敞開)：沿東牆貨架與器材木箱
+    buildHall(EQUIPMENT_STORE);
+    {
+      const e = EQUIPMENT_STORE;
+      for (const sz of [-4, 2, 8, 14]) {
+        pushBox(darkSteelGeos, 1.2, 2.6, 4.0, e.maxX - 1.2, 1.3, sz);
+        this.addCollider(e.maxX - 1.8, e.maxX - 0.6, sz - 2.0, sz + 2.0, 0, 2.6);
+      }
+      for (const [bx, bz] of [[72, -4], [74, 14], [66, 14]] as [number, number][]) {
+        pushBox(woodPlankGeos, 2.0, 1.4, 2.0, bx, 0.7, bz);
+        this.addCollider(bx - 1.0, bx + 1.0, bz - 1.0, bz + 1.0, 0, 1.4);
+      }
+      // 門禁卡 B 所在工作檯
+      pushBox(woodPlankGeos, 2.4, 0.8, 1.0, 66, 0.4, 7.2);
+      this.addCollider(64.8, 67.2, 6.7, 7.7, 0, 0.85);
+      // 捲門 (捲起於門洞上方)
+      pushBox(rustedMetalGeos, 0.3, 0.9, e.doorTo - e.doorFrom, e.minX + 0.2, e.h - 1.3, (e.doorFrom + e.doorTo) / 2);
+    }
+    // B 區角樓 (矮型哨塔)
+    for (const cp of DETENTION_CORNER_POSTS) {
+      const px = (cp.minX + cp.maxX) / 2, pz = (cp.minZ + cp.maxZ) / 2;
+      pushBox(concreteGeos, cp.maxX - cp.minX, cp.h, cp.maxZ - cp.minZ, px, cp.h / 2, pz);
+      pushBox(corrugatedIronGeos, cp.maxX - cp.minX + 0.8, 0.25, cp.maxZ - cp.minZ + 0.8, px, cp.h + 0.12, pz);
+      this.addCollider(cp.minX, cp.maxX, cp.minZ, cp.maxZ, 0, cp.h + 0.3);
+    }
 
     // 動態管制閘門 2 (需黃色門禁卡 B 開啟)
     this.gateBMeshGroup = new THREE.Group();
     const gateBDoor = new THREE.Mesh(
       new THREE.BoxGeometry(7.2, 4.5, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 })
+      GATE_PANEL_MAT
     );
     gateBDoor.position.set(0, 2.25, 35);
     const gateBStripe = new THREE.Mesh(
@@ -938,7 +829,7 @@ export class DetentionWorld {
     // 4 座巨型發電機混凝土加固防護柱 (供誘使 Boss 衝撞陷入硬直破盾)
     for (const gp of this.generatorPillars) {
       // 柱身
-      const pilGeo = new THREE.BoxGeometry(3.4, 5.5, 3.4);
+      const pilGeo = new THREE.BoxGeometry(GENERATOR_PILLAR_SIZE, 5.5, GENERATOR_PILLAR_SIZE);
       pilGeo.translate(gp.x, 2.75, gp.z);
       concreteGeos.push(pilGeo);
       this.addCollider(gp.x - 1.8, gp.x + 1.8, gp.z - 1.8, gp.z + 1.8, 0, 5.5);
@@ -954,32 +845,25 @@ export class DetentionWorld {
       darkSteelGeos.push(conduitGeo);
     }
 
-    // 新增：C 區兩側戰術防爆側翼壁與 90° 轉角拐角掩體 (便於躲避 Boss 橫向衝撞)
-    const arenaWallW = new THREE.BoxGeometry(0.8, 3.2, 20);
-    arenaWallW.translate(-22, 1.6, 56);
-    const arenaWingW = new THREE.BoxGeometry(6, 3.2, 0.8);
-    arenaWingW.translate(-19, 1.6, 46);
-    const arenaWallE = new THREE.BoxGeometry(0.8, 3.2, 20);
-    arenaWallE.translate(22, 1.6, 56);
-    const arenaWingE = new THREE.BoxGeometry(6, 3.2, 0.8);
-    arenaWingE.translate(19, 1.6, 46);
-    concreteGeos.push(arenaWallW, arenaWingW, arenaWallE, arenaWingE);
-    this.addCollider(-22.4, -21.6, 46, 66, 0, 3.2);
-    this.addCollider(-22, -16, 45.6, 46.4, 0, 3.2);
-    this.addCollider(21.6, 22.4, 46, 66, 0, 3.2);
-    this.addCollider(16, 22, 45.6, 46.4, 0, 3.2);
-
-    // 新增：南大門前哨戰術防爆 S 彎工事 (Z = 82 與 Z = 87)
-    const southChicaneL = new THREE.BoxGeometry(12, 3.2, 0.8);
-    southChicaneL.translate(-10, 1.6, 82);
-    const southChicaneR = new THREE.BoxGeometry(12, 3.2, 0.8);
-    southChicaneR.translate(10, 1.6, 82);
-    const southCenterBaffle = new THREE.BoxGeometry(10, 3.2, 0.8);
-    southCenterBaffle.translate(0, 1.6, 87);
-    concreteGeos.push(southChicaneL, southChicaneR, southCenterBaffle);
-    this.addCollider(-16, -4, 81.6, 82.4, 0, 3.2);
-    this.addCollider(4, 16, 81.6, 82.4, 0, 3.2);
-    this.addCollider(-5, 5, 86.6, 87.4, 0, 3.2);
+    // 決戰庭院混凝土地坪與黃色邊線 (行政大樓與軍械庫由院區建築統一建模)
+    {
+      const a = BOSS_ARENA;
+      const ax = (a.minX + a.maxX) / 2, az = (a.minZ + a.maxZ) / 2;
+      pushBox(concreteGeos, a.maxX - a.minX, 0.04, a.maxZ - a.minZ, ax, 0.035, az);
+      pushBox(yellowHazardGeos, a.maxX - a.minX, 0.05, 0.4, ax, 0.06, a.minZ);
+      pushBox(yellowHazardGeos, a.maxX - a.minX, 0.05, 0.4, ax, 0.06, a.maxZ);
+      pushBox(yellowHazardGeos, 0.4, 0.05, a.maxZ - a.minZ, a.minX, 0.06, az);
+      pushBox(yellowHazardGeos, 0.4, 0.05, a.maxZ - a.minZ, a.maxX, 0.06, az);
+    }
+    // 南大門檢查亭
+    {
+      const k = GATE_KIOSK;
+      const cx = (k.minX + k.maxX) / 2, cz = (k.minZ + k.maxZ) / 2;
+      pushBox(concreteGeos, k.maxX - k.minX, k.h, k.maxZ - k.minZ, cx, k.h / 2, cz);
+      pushBox(glassGeos, k.maxX - k.minX - 0.6, 1.0, 0.08, cx, 1.9, k.minZ - 0.04);
+      pushBox(yellowHazardGeos, k.maxX - k.minX + 0.8, 0.2, k.maxZ - k.minZ + 0.8, cx, k.h + 0.1, cz);
+      this.addCollider(k.minX, k.maxX, k.minZ, k.maxZ, 0, k.h + 0.2);
+    }
 
     // ==========================================
     // 8.6 刺客教條經典藏匿點矩陣 (Assassin's Creed Interactive Hiding Spots - 18 處)
@@ -987,29 +871,29 @@ export class DetentionWorld {
     // 玩家進入半徑內即自動匿蹤隱形，警衛視線與探照燈完全無法發現，並可發動刺客草堆暗殺
     // ==========================================
     this.hidingSpots = [
-      // A 區 (Zone A: 牢房生活長廊迷宮 Z: -90 ~ -28)
+      // A 區 (監區：收容車道、庭院、東西服務巷與閘前廣場)
       { id: 'spot-1', name: '開局逃生乾草車', position: new THREE.Vector3(-52, 0, -84), radius: 1.8, type: 'HAY_CART' },
-      { id: 'spot-2', name: '西側監舍後巷草堆', position: new THREE.Vector3(-68, 0, -55), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-3', name: '中央崗亭西側草堆', position: new THREE.Vector3(-10, 0, -60), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-4', name: '東側庭院維修草車', position: new THREE.Vector3(14, 0, -65), radius: 1.8, type: 'HAY_CART' },
-      { id: 'spot-5', name: '東食堂外廊草堆', position: new THREE.Vector3(78, 0, -60), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-6', name: '管制閘門 1 側翼草車', position: new THREE.Vector3(-8, 0, -32), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-2', name: '西外圍巡邏路草堆', position: new THREE.Vector3(-88.5, 0, -60), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-3', name: '警衛室西側草堆', position: new THREE.Vector3(-14, 0, -58), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-4', name: '洗衣房外草車', position: new THREE.Vector3(16, 0, -58), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-5', name: '東服務巷草堆', position: new THREE.Vector3(51.5, 0, -64), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-6', name: '食堂前廣場草車', position: new THREE.Vector3(55, 0, -34), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-7', name: '閘門 1 側翼草車', position: new THREE.Vector3(-12, 0, -33), radius: 1.8, type: 'HAY_CART' },
 
-      // B 區 (Zone B: 操場重裝軍規貨櫃迷宮 Z: -28 ~ 35)
-      { id: 'spot-7', name: 'B 區北貨櫃夾角草堆', position: new THREE.Vector3(-10, 0, -12), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-8', name: '貨櫃西側通廊草車', position: new THREE.Vector3(-18, 0, -6), radius: 1.8, type: 'HAY_CART' },
-      { id: 'spot-9', name: '貨櫃東側通廊草車', position: new THREE.Vector3(18, 0, -6), radius: 1.8, type: 'HAY_CART' },
-      { id: 'spot-10', name: '黃色門禁卡 B 藏匿草堆', position: new THREE.Vector3(21, 0, 4), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-11', name: '西側操場訓練架草堆', position: new THREE.Vector3(-25, 0, 10), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-12', name: '東側看台外緣草堆', position: new THREE.Vector3(28, 0, 10), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-13', name: '貨櫃南通道草車', position: new THREE.Vector3(11, 0, 14), radius: 1.8, type: 'HAY_CART' },
-      { id: 'spot-14', name: '管制閘門 2 側翼草車', position: new THREE.Vector3(-8, 0, 30), radius: 1.8, type: 'HAY_CART' },
+      // B 區 (訓練場：工坊、障礙場、貨櫃堆置場、器材庫)
+      { id: 'spot-8', name: '職訓工坊南側草堆', position: new THREE.Vector3(-64, 0, 5), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-9', name: '障礙訓練場草堆', position: new THREE.Vector3(-36, 0, 18), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-10', name: '貨櫃北巷草車', position: new THREE.Vector3(-10, 0, -9), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-11', name: '貨櫃東巷草堆', position: new THREE.Vector3(10, 0, 6), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-12', name: '器材庫外草車', position: new THREE.Vector3(53, 0, -10), radius: 1.8, type: 'HAY_CART' },
+      { id: 'spot-13', name: '東外圍巡邏路草堆', position: new THREE.Vector3(88.5, 0, 10), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-14', name: '閘門 2 側翼草車', position: new THREE.Vector3(-12, 0, 30), radius: 1.8, type: 'HAY_CART' },
 
-      // C 區 (Zone C: 終極哨戒門庭與決戰競技場 Z: 35 ~ 95)
-      { id: 'spot-15', name: '競技場西配電房草堆', position: new THREE.Vector3(-18, 0, 50), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-16', name: '競技場東庫房草堆', position: new THREE.Vector3(18, 0, 50), radius: 1.6, type: 'HAY_BALE' },
-      { id: 'spot-17', name: '決戰競技場中央刺客突襲草車', position: new THREE.Vector3(0, 0, 56), radius: 2.0, type: 'HAY_CART' },
-      { id: 'spot-18', name: '逃脫南大門終端草車', position: new THREE.Vector3(-11, 0, 88), radius: 1.8, type: 'HAY_CART' },
+      // C 區 (決戰區：行政大樓、軍械庫、決戰庭院、南大門)
+      { id: 'spot-15', name: '行政大樓前草堆', position: new THREE.Vector3(-40, 0, 50), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-16', name: '軍械庫前草堆', position: new THREE.Vector3(40, 0, 50), radius: 1.6, type: 'HAY_BALE' },
+      { id: 'spot-17', name: '決戰庭院刺客突襲草車', position: new THREE.Vector3(0, 0, 56), radius: 2.0, type: 'HAY_CART' },
+      { id: 'spot-18', name: '南側道路草車', position: new THREE.Vector3(-22, 0, 89.5), radius: 1.8, type: 'HAY_CART' },
     ];
 
     for (let i = 0; i < this.hidingSpots.length; i++) {
@@ -1107,49 +991,47 @@ export class DetentionWorld {
     // 射線穿透檢測將完全受阻，提供玩家絕佳暗殺伏擊走位
     // ==========================================
     const tacticalCovers = [
-      // 1. 開局出生點東向混泥土防爆隔音牆 + 補給木箱 (完全遮斷 G1 視線)
-      { minX: -46.6, maxX: -45.4, minZ: -86.8, maxZ: -81.2, h: 2.8, type: 'CONCRETE_CRATE' },
-      // 2. 開局出生點西向高壓變電箱 + 雙層沙包掩體 (完全遮斷 G12 視線)
+      // A 區
+      // 1. 收容車道卸貨區堆疊補給木箱 (遮斷開局點東向視線；押送過場動線依此避讓)
+      { minX: -46.6, maxX: -45.4, minZ: -86.8, maxZ: -81.2, h: 2.4, type: 'WOOD_CRATES' },
+      // 2. 開局點西側高壓變電箱 + 雙層沙包
       { minX: -64.4, maxX: -59.6, minZ: -82.6, maxZ: -81.4, h: 2.6, type: 'TRANSFORMER_SANDBAG' },
-      // 3. 開局出生點南向轉角托盤障礙物
-      { minX: -56.8, maxX: -53.2, minZ: -79.8, maxZ: -78.2, h: 1.6, type: 'PALLETS' },
-      // 4. G1 巡邏北走廊軍規彈藥箱堆 (X = -20, Z = -81.5)
+      // 3. 收容車道中段彈藥箱堆
       { minX: -21.5, maxX: -18.5, minZ: -82.1, maxZ: -80.9, h: 1.4, type: 'WOOD_CRATES' },
-      // 5. G12 監舍西外牆水泥支撐柱 (X = -66, Z = -55)
-      { minX: -66.8, maxX: -65.2, minZ: -56.0, maxZ: -54.0, h: 3.5, type: 'CONCRETE_WALL' },
-      // 6. G3 崗亭沙包工事 (X = -1, Z = -60)
-      { minX: -1.6, maxX: -0.4, minZ: -61.8, maxZ: -58.2, h: 1.3, type: 'SANDBAG' },
-      // 7. G2 東庭院托盤木箱堆 (X = 22, Z = -60)
-      { minX: 20.8, maxX: 23.2, minZ: -61.2, maxZ: -58.8, h: 1.5, type: 'PALLETS' },
-      // 8. G13 東食堂金屬垃圾子車 (X = 82, Z = -62)
-      { minX: 80.9, maxX: 83.1, minZ: -63.6, maxZ: -60.4, h: 1.8, type: 'STEEL_DUMPSTER' },
-      // 9. G14 南前庭防暴折角路障 (X = -16, Z = -35)
-      { minX: -17.6, maxX: -14.4, minZ: -35.5, maxZ: -34.5, h: 1.5, type: 'JERSEY_BARRIER' },
-      // 10. G4 閘門 1 側翼沙包掩體 (X = -2, Z = -35)
-      { minX: -3.8, maxX: -0.2, minZ: -35.5, maxZ: -34.5, h: 1.4, type: 'SANDBAG' },
-      // 11. G15 B 區北走道鐵製工具箱 (X = 0, Z = -15)
-      { minX: -1.2, maxX: 1.2, minZ: -15.8, maxZ: -14.2, h: 1.4, type: 'STEEL_DUMPSTER' },
-      // 12. G5 貨櫃西直道軍規貨箱 (X = -25, Z = -6)
-      { minX: -25.8, maxX: -24.2, minZ: -7.8, maxZ: -4.2, h: 2.2, type: 'WOOD_CRATES' },
-      // 13. G6 貨櫃東直道軍規貨箱 (X = 25, Z = -6)
-      { minX: 24.2, maxX: 25.8, minZ: -7.8, maxZ: -4.2, h: 2.2, type: 'WOOD_CRATES' },
-      // 14. G7 中央十字路口沙包掩體 (X = 0, Z = -3.5)
-      { minX: -1.8, maxX: 1.8, minZ: -4.0, maxZ: -3.0, h: 1.4, type: 'SANDBAG' },
-      // 15. G8 盲區高層鐵架 (X = 25, Z = -2)
-      { minX: 24.4, maxX: 25.6, minZ: -3.5, maxZ: -0.5, h: 3.0, type: 'STEEL_DUMPSTER' },
-      // 16. G16 貨櫃南走廊木箱金字塔 (X = -10, Z = 14)
-      { minX: -11.0, maxX: -9.0, minZ: 13.0, maxZ: 15.0, h: 2.0, type: 'WOOD_CRATES' },
-      // 17. G9 閘門 2 澤西防暴水泥墩 (X = -2, Z = 27)
+      // 4. 庭院西側防暴矮牆 (西潛行掩護)
+      { minX: -28, maxX: -22, minZ: -62.5, maxZ: -61.5, h: 1.3, type: 'JERSEY_BARRIER' },
+      // 5. 警衛室西側沙包工事
+      { minX: -9.2, maxX: -8.2, minZ: -63, maxZ: -59, h: 1.3, type: 'SANDBAG' },
+      // 6. 洗衣房南側待洗托盤堆 (東潛行掩護)
+      { minX: 10, maxX: 17, minZ: -51.5, maxZ: -50.5, h: 1.5, type: 'PALLETS' },
+      // 7. 庭院南側防暴矮牆
+      { minX: -20, maxX: -12, minZ: -41.5, maxZ: -40.5, h: 1.3, type: 'JERSEY_BARRIER' },
+      // 8. 西服務巷洗衣推車木箱
+      { minX: -50, maxX: -48, minZ: -70, maxZ: -66, h: 1.4, type: 'WOOD_CRATES' },
+      // 9. 東服務巷金屬垃圾子車
+      { minX: 43.6, maxX: 45.6, minZ: -62, maxZ: -58, h: 1.8, type: 'STEEL_DUMPSTER' },
+      // 10. 西外圍巡邏路垃圾子車
+      { minX: -94, maxX: -92, minZ: -70, maxZ: -66, h: 1.8, type: 'STEEL_DUMPSTER' },
+      // B 區
+      // 11. 器材庫前防暴矮牆 (東路線掩護)
+      { minX: 44, maxX: 50, minZ: -2.5, maxZ: -1.5, h: 1.3, type: 'JERSEY_BARRIER' },
+      { minX: 44, maxX: 50, minZ: 13.5, maxZ: 14.5, h: 1.3, type: 'JERSEY_BARRIER' },
+      // 12. 職訓工坊東側器材木箱
+      { minX: -57.8, maxX: -56.2, minZ: 2.5, maxZ: 5.5, h: 1.8, type: 'WOOD_CRATES' },
+      // 13. 貨櫃區中央沙包工事
+      { minX: -1.8, maxX: 1.8, minZ: -9, maxZ: -8, h: 1.4, type: 'SANDBAG' },
+      // 14. 西側輪胎堆 (障礙場入口)
+      { minX: -45.1, maxX: -42.9, minZ: 21.9, maxZ: 24.1, h: 2.0, type: 'TIRE_STACK' },
+      // 15. 閘門 2 澤西防暴水泥墩
       { minX: -3.8, maxX: -0.2, minZ: 26.5, maxZ: 27.5, h: 1.5, type: 'JERSEY_BARRIER' },
-      // 18. 狼犬 1 西側訓練重訓輪胎金字塔 (X = -22, Z = 16)
-      { minX: -23.1, maxX: -20.9, minZ: 14.9, maxZ: 17.1, h: 2.2, type: 'TIRE_STACK' },
-      // 19. 狼犬 2 東側看台設備櫃 (X = 22, Z = 16)
-      { minX: 21.0, maxX: 23.0, minZ: 15.0, maxZ: 17.0, h: 2.2, type: 'CONCRETE_WALL' },
-      // 20. G18 競技場西翼防爆牆 (X = -16, Z = 42)
-      { minX: -16.5, maxX: -15.5, minZ: 40.0, maxZ: 44.0, h: 2.8, type: 'CONCRETE_WALL' },
-      // 21. G19 競技場東翼防爆牆 (X = 16, Z = 42)
-      { minX: 15.5, maxX: 16.5, minZ: 40.0, maxZ: 44.0, h: 2.8, type: 'CONCRETE_WALL' },
-      // 22. G20 南大門終端沙包工事 (X = 10, Z = 88)
+      // C 區
+      // 16. 決戰庭院西/東入口沙包工事
+      { minX: -16.5, maxX: -15.5, minZ: 40.0, maxZ: 44.0, h: 1.3, type: 'SANDBAG' },
+      { minX: 15.5, maxX: 16.5, minZ: 40.0, maxZ: 44.0, h: 1.3, type: 'SANDBAG' },
+      // 17. 行政大樓/軍械庫側翼沙包 (側翼潛行掩護)
+      { minX: -36, maxX: -34, minZ: 56, maxZ: 60, h: 1.3, type: 'SANDBAG' },
+      { minX: 34, maxX: 36, minZ: 56, maxZ: 60, h: 1.3, type: 'SANDBAG' },
+      // 18. 南大門終端沙包工事
       { minX: 9.4, maxX: 10.6, minZ: 86.2, maxZ: 89.8, h: 1.4, type: 'SANDBAG' },
     ];
 
@@ -1161,16 +1043,7 @@ export class DetentionWorld {
       const d = tc.maxZ - tc.minZ;
       this.addCollider(tc.minX, tc.maxX, tc.minZ, tc.maxZ, 0, tc.h);
 
-      if (tc.type === 'CONCRETE_CRATE') {
-        const wallG = new THREE.BoxGeometry(w, tc.h, d);
-        wallG.translate(cx, tc.h / 2, cz);
-        concreteGeos.push(wallG);
-        const cr1 = new THREE.BoxGeometry(w * 0.9, 0.8, 1.2);
-        cr1.translate(cx, tc.h + 0.4, cz - 0.5);
-        const cr2 = new THREE.BoxGeometry(w * 0.9, 0.8, 1.2);
-        cr2.translate(cx, tc.h + 0.4, cz + 0.5);
-        woodPlankGeos.push(cr1, cr2);
-      } else if (tc.type === 'TRANSFORMER_SANDBAG') {
+      if (tc.type === 'TRANSFORMER_SANDBAG') {
         const tfG = new THREE.BoxGeometry(w, tc.h, d * 0.6);
         tfG.translate(cx, tc.h / 2, cz - d * 0.2);
         darkSteelGeos.push(tfG);
@@ -1217,12 +1090,12 @@ export class DetentionWorld {
     }
 
     // 建立 3D 鑰匙卡模型並加入場景
-    // 1. 藍色門禁卡 A (放置於 A 區營舍長桌 X = -45, Z = -50)
+    // 1. 藍色門禁卡 A (A 區中央警衛室辦公桌)
     this.keycardAMeshGroup = this.createKeycardMesh(0x38bdf8);
     this.keycardAMeshGroup.position.copy(this.keycardAPos);
     this.group.add(this.keycardAMeshGroup);
 
-    // 2. 黃色門禁卡 B (放置於 B 區貨櫃死角 X = 30, Z = 5)
+    // 2. 黃色門禁卡 B (B 區器材庫工作檯)
     this.keycardBMeshGroup = this.createKeycardMesh(0xfacc15);
     this.keycardBMeshGroup.position.copy(this.keycardBPos);
     this.group.add(this.keycardBMeshGroup);
@@ -1240,14 +1113,12 @@ export class DetentionWorld {
       color: 0xc2b5a3 // 明亮溫潤的特訓校場沙洲礫石地表 (反射率高、寬闊明朗)
     });
     const trackMat = new THREE.MeshLambertMaterial({
-      color: 0xc05d43 // 鮮明亮麗的紅土/磚紅專業體能環形跑道
+      color: 0x6b6b66 // 院區道路骨架：深灰柏油路面 (與泥地操場明顯區隔，動線一目了然)
     });
     const concreteMat = new THREE.MeshLambertMaterial({
       color: 0xdfe6ec // 現代工業建築淺灰白色石灰石混泥土 (營舍、總部、工廠大樓全面明亮化)
     });
-    const darkSteelMat = new THREE.MeshLambertMaterial({
-      color: 0x5c728a // 清晰鍍鋅金屬藍灰鋼架 (瞭望塔柱、樓梯、單槓立柱，具備金屬高光)
-    });
+    const darkSteelMat = sharedLambert(0x5c728a); // 清晰鍍鋅金屬藍灰鋼架 (瞭望塔柱、樓梯、單槓立柱，具備金屬高光)
     const rustedMetalMat = new THREE.MeshLambertMaterial({
       color: 0x5dade2 // 清澈天藍反射水窪積水鏡面與鍍鋅鋼板
     });
@@ -1260,9 +1131,7 @@ export class DetentionWorld {
     const corrugatedMat = new THREE.MeshLambertMaterial({
       color: 0x4a779d // 醒目鮮明的地中海海軍鋼藍波浪鐵皮頂棚
     });
-    const yellowHazardMat = new THREE.MeshLambertMaterial({
-      color: 0xf1c40f // 亮麗警示高光金黃色 (招牌、防撞邊緣)
-    });
+    const yellowHazardMat = sharedLambert(0xf1c40f); // 亮麗警示高光金黃色 (招牌、防撞邊緣)
     const woodPlankMat = new THREE.MeshLambertMaterial({
       color: 0xd7ccc8 // 明亮淺色松木/白樺木質棧板與長椅
     });
@@ -1298,11 +1167,11 @@ export class DetentionWorld {
     createMergedMesh(concreteGeos, concreteMat);
     createMergedMesh(darkSteelGeos, darkSteelMat);
     createMergedMesh(rustedMetalGeos, rustedMetalMat);
-    createMergedMesh(fenceWireGeos, fenceWireMat);
+    createMergedMesh(fenceWireGeos, fenceWireMat, false); // 半透明鐵網：陰影 pass 會當成不透明而投出實心牆影
     createMergedMesh(corrugatedIronGeos, corrugatedMat);
     createMergedMesh(yellowHazardGeos, yellowHazardMat);
     createMergedMesh(woodPlankGeos, woodPlankMat);
-    createMergedMesh(glassGeos, glassMat);
+    createMergedMesh(glassGeos, glassMat, false); // 半透明玻璃同上，不投射陰影
     createMergedMesh(tireRubberGeos, tireRubberMat);
     createMergedMesh(hayStrawGeos, hayStrawMat);
     createMergedMesh(sandbagGeos, sandbagMat);
@@ -1372,11 +1241,6 @@ export class DetentionWorld {
       groundSpot,
       currentGroundPos: new THREE.Vector3(0, 0.06, -72),
       angle: 0,
-      speed: 0.45,
-      radiusX: 36,
-      radiusZ: 32,
-      centerX: 0,
-      centerZ: 0,
       isDetecting: false,
       waypointIndex: 0,
       dwellTimer: 0,
@@ -1404,9 +1268,6 @@ export class DetentionWorld {
       if (sl.dwellTimer === undefined) sl.dwellTimer = 0;
       if (sl.alertLostTimer === undefined) sl.alertLostTimer = 0;
 
-      // 檢查光線路徑是否遭到任何掩體或建築實體碰撞箱遮擋
-      const isOccludedByCover = this.isRayBlockedByColliders(sl.towerPos, playerPos);
-
       // 計算與玩家平面距離
       const pDx = playerPos.x - sl.currentGroundPos.x;
       const pDz = playerPos.z - sl.currentGroundPos.z;
@@ -1417,7 +1278,8 @@ export class DetentionWorld {
       }
 
       // 判定是否真正被光束捕捉：在光圈半徑 4.2m 內、身處室外地面 (Y < 3.0)、且無掩體遮擋、且未身處刺客草堆掩體中
-      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isOccludedByCover && !isPlayerHiding;
+      // 光線遮蔽射線測試成本高 (掃描全部碰撞箱)：僅在玩家已進入光圈範圍時才檢查 (短路求值)
+      const isPlayerCaught = distToPlayer < 4.2 && isPlayerOutdoors && !isPlayerHiding && !this.isRayBlockedByColliders(sl.towerPos, playerPos);
 
       if (isPlayerCaught) {
         sl.isDetecting = true;
@@ -1573,7 +1435,7 @@ export class DetentionWorld {
       metalness: 0.85,
       roughness: 0.2,
       emissive: colorHex,
-      emissiveIntensity: 0.5
+      emissiveIntensity: 0.9 // 不再附掛點光源 (撿卡/掉卡時切換光源數量會觸發全場材質 shader 重編譯卡頓)，改以較強自發光呈現
     });
     const card = new THREE.Mesh(cardGeo, cardMat);
     grp.add(card);
@@ -1584,10 +1446,6 @@ export class DetentionWorld {
     chip.position.y = 0.01;
     grp.add(chip);
 
-    const pLight = new THREE.PointLight(colorHex, 1.4, 4.5);
-    pLight.position.y = 0.35;
-    grp.add(pLight);
-
     return grp;
   }
 
@@ -1596,14 +1454,14 @@ export class DetentionWorld {
     const grp = new THREE.Group();
     const stand = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 1.2, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0x334155 })
+      sharedLambert(0x334155)
     );
     stand.position.y = 0.6;
     grp.add(stand);
 
     const head = new THREE.Mesh(
       new THREE.BoxGeometry(0.46, 0.35, 0.35),
-      new THREE.MeshLambertMaterial({ color: 0x1e293b })
+      sharedLambert(0x1e293b)
     );
     head.position.set(0, 1.2, 0);
     head.rotation.x = -0.3;

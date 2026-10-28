@@ -67,7 +67,7 @@
         </div>
 
         <!-- 地點卡片 + 任務膠囊群組：桌面為 display:contents (維持左欄排列)；手機移至頂部中央，層級低於警戒列/橫幅 (出現時覆蓋其上) -->
-        <div class="hud-info-group" id="hud-info-group">
+        <div class="hud-info-group">
         <!-- Player Location Block -->
         <div class="hud-title-zone">
           <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
@@ -83,13 +83,13 @@
               <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
             </div>
             <div class="quest-header-right">
-              <span class="quest-toggle-indicator" id="quest-toggle-indicator">🗺️</span>
+              <span class="quest-toggle-indicator">🗺️</span>
               <span class="quest-key-badge">J</span>
             </div>
           </div>
 
           <!-- 細緻的總進度條 -->
-          <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
+          <div class="quest-total-bar-wrap">
             <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
           </div>
 
@@ -168,7 +168,7 @@
     </div>
 
     <!-- 暗殺/擊昏動作提示 (動態浮動於目標 NPC 頭頂上方，僅精準顯示「擊暈」) -->
-    <div id="cqc-prompt-container" style="display:none; position:fixed; z-index:var(--z-hud-prompt); pointer-events:none; will-change:transform, top, left;">
+    <div id="cqc-prompt-container" style="display:none;">
       <div class="cqc-prompt-pill">
         <span class="cqc-prompt-icon">💥</span>
         <span id="cqc-btn-text">擊暈</span>
@@ -178,8 +178,8 @@
     </div>
 
     <!-- 刺客教條草堆匿蹤狀態徽章 (AC Stealth Blend Badge) -->
-    <div id="ac-stealth-badge" style="display:none; position:fixed; top:110px; left:50%; transform:translateX(-50%); z-index:var(--z-hud-prompt); pointer-events:none;">
-      <div style="background:rgba(15, 23, 42, 0.92); border:2px solid #eab308; color:#fef08a; font-size:15px; font-weight:800; padding:8px 22px; border-radius:24px; box-shadow:0 0 20px rgba(234,179,8,0.65); backdrop-filter:blur(6px); display:flex; align-items:center; gap:8px;">
+    <div id="ac-stealth-badge" style="display:none;">
+      <div class="stealth-badge-pill">
         <span id="ac-stealth-badge-text">🥷 刺客匿蹤中 (NPC 與探照燈無視)</span>
       </div>
     </div>
@@ -216,7 +216,7 @@
 
       <!-- 技能狀態快捷展示卡 (Skill HUD Card) -->
       <div id="skill-hud-card" class="skill-hud-card locked">
-        <div class="skill-icon-wrapper" id="skill-icon-wrapper">
+        <div class="skill-icon-wrapper">
           <span class="skill-icon" id="skill-icon">🔒</span>
           <div class="skill-cooldown-overlay" id="skill-cooldown-overlay"></div>
           <span class="skill-cd-number" id="skill-cd-number">5.0</span>
@@ -276,7 +276,7 @@
       </div>
       <div class="tennis-dialog-body">
         <div class="tennis-dialog-avatar">🏸</div>
-        <div class="tennis-dialog-text" id="tennis-dialog-text">
+        <div class="tennis-dialog-text">
           大如老師：「同學，準備好來一場 4F 羽球回擊挑戰賽了嗎？規則是搶 5 分勝制，接發球揮拍得分！」
         </div>
       </div>
@@ -314,7 +314,7 @@
       <div class="fullmap-header">
         <div class="fullmap-title-group">
           <div class="fullmap-title" id="fullmap-title">🗺️ 全域態勢戰術大地圖</div>
-          <div class="fullmap-subtitle" id="fullmap-subtitle">⌨️ [J] / [ESC] 或點擊右上角關閉，返回遊戲</div>
+          <div class="fullmap-subtitle">⌨️ [J] / [ESC] 或點擊右上角關閉，返回遊戲</div>
         </div>
         <!-- 大地圖工具列 (標題列右側)：背景音樂 / 天氣 / 世界切換 (B / P / M 鍵同效) -->
         <div class="fullmap-toolbar">
@@ -349,7 +349,7 @@
         </div>
 
         <!-- 任務清單側欄 (由主畫面任務小介面整合進大地圖) -->
-        <aside class="fullmap-quest-panel" id="fullmap-quest-panel">
+        <aside class="fullmap-quest-panel">
           <div class="fullmap-quest-header">
             <span class="quest-title-text" id="fm-quest-title">📜 校園歷練</span>
             <span class="quest-progress-badge">進度 <span id="fm-q-total-progress">0/13</span></span>
@@ -531,15 +531,15 @@
                   <span class="q-icon">💳</span>
                   <div class="q-info">
                     <span class="q-name">【管制閘門 1】取得藍色卡 A</span>
-                    <span class="q-desc">營舍辦公室取得門禁卡 A 開啟閘門</span>
+                    <span class="q-desc">中央警衛室取得門禁卡 A 開啟閘門 1</span>
                   </div>
                   <span class="q-status" id="det-gate1-status">未解鎖</span>
                 </div>
                 <div class="quest-item">
                   <span class="q-icon">📦</span>
                   <div class="q-info">
-                    <span class="q-name">【管制閘門 2】穿越貨櫃取得黃色卡 B</span>
-                    <span class="q-desc">躲避探照燈與巡邏，取得卡 B 開啟閘門</span>
+                    <span class="q-name">【管制閘門 2】器材庫取得黃色卡 B</span>
+                    <span class="q-desc">穿越訓練場前往東側器材庫，取得卡 B 開啟閘門 2</span>
                   </div>
                   <span class="q-status" id="det-gate2-status">未解鎖</span>
                 </div>
@@ -630,24 +630,24 @@
   </div>
 
   <!-- 絕境越獄通關結算對話框 (Tactical Escape Victory Modal) -->
-  <div id="detention-victory-modal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(2, 6, 23, 0.90); z-index:var(--z-top-modal); align-items:center; justify-content:center; backdrop-filter:blur(8px); pointer-events:auto !important;">
-    <div style="background:#0f172a; border:2px solid #22c55e; border-radius:18px; padding:28px 32px; max-width:480px; width:92%; color:#fff; text-align:center; box-shadow:0 0 50px rgba(34,197,94,0.6); pointer-events:auto;">
-      <div style="font-size:26px; font-weight:900; color:#22c55e; margin-bottom:6px;">🏆 成功逃離第七少年院！</div>
-      <div style="font-size:12.5px; color:#94a3b8; letter-spacing:1px; margin-bottom:16px;">MISSION ACCOMPLISHED · ESCAPE COMPLETE</div>
-      <div id="escape-rank-badge" style="font-size:54px; font-weight:900; color:#fbbf24; text-shadow:0 0 25px rgba(251,191,36,0.8); margin:4px 0;">S</div>
-      <div id="escape-rank-title" style="font-size:18px; color:#38bdf8; font-weight:bold; margin-bottom:20px;">傳奇特務 (BIG BOSS)</div>
-      <div style="background:#1e293b; border-radius:12px; padding:14px 20px; text-align:left; font-size:14.5px; margin-bottom:20px; line-height:2.0; border:1px solid rgba(255,255,255,0.08);">
-        <div>⏱️ 逃脫耗時：<b id="stat-escape-time" style="color:#f8fafc; float:right;">00:00</b></div>
-        <div>🥷 潛行擊昏守衛：<b id="stat-escape-takedowns" style="color:#4ade80; float:right;">0 人</b></div>
-        <div>🚨 觸發警報次數：<b id="stat-escape-alerts" style="color:#f87171; float:right;">0 次</b></div>
+  <div id="detention-victory-modal" class="modal-backdrop" style="display:none;">
+    <div class="victory-card">
+      <div class="victory-title">🏆 成功逃離第七少年院！</div>
+      <div class="victory-subtitle">MISSION ACCOMPLISHED · ESCAPE COMPLETE</div>
+      <div id="escape-rank-badge" class="victory-rank-badge">S</div>
+      <div id="escape-rank-title" class="victory-rank-title">傳奇特務 (BIG BOSS)</div>
+      <div class="victory-stats">
+        <div>⏱️ 逃脫耗時：<b id="stat-escape-time" class="victory-stat stat-time">00:00</b></div>
+        <div>🥷 潛行擊昏守衛：<b id="stat-escape-takedowns" class="victory-stat stat-takedowns">0 人</b></div>
+        <div>🚨 觸發警報次數：<b id="stat-escape-alerts" class="victory-stat stat-alerts">0 次</b></div>
       </div>
       <!-- 主按鈕：空白鍵 (PC) 或點擊任意處 (MOBILE) 回主畫面 -->
-      <button id="btn-return-campus" style="width:100%; padding:14px; background:linear-gradient(135deg, #22c55e, #16a34a); color:#0f172a; font-weight:900; font-size:16px; border-radius:12px; border:none; cursor:pointer; box-shadow:0 0 22px rgba(34,197,94,0.55); transition:transform 0.1s; margin-bottom:8px;">
+      <button id="btn-return-campus" class="victory-btn-return">
         ⌨️【按 空白鍵 (SPACE) 回主畫面】
       </button>
-      <div style="font-size:12.5px; color:#86efac; margin-bottom:14px; font-weight:bold;">📱 手機端：點擊螢幕任意處立即返回主畫面</div>
-      <div style="display:flex; justify-content:center;">
-        <button id="btn-replay-detention" style="padding:8px 18px; background:rgba(255,255,255,0.06); color:#94a3b8; font-weight:600; font-size:13px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); cursor:pointer;">🔄 重新挑戰特訓院</button>
+      <div class="victory-mobile-hint">📱 手機端：點擊螢幕任意處立即返回主畫面</div>
+      <div class="victory-replay-row">
+        <button id="btn-replay-detention" class="victory-btn-replay">🔄 重新挑戰特訓院</button>
       </div>
     </div>
   </div>
@@ -681,7 +681,6 @@
       <div class="loading-hint">⚡ 載入完成後請選擇想要探索的世界</div>
     </div>
 
-    <button class="btn-start" id="btn-start" disabled style="display: none;">載入資源中 (0%)...</button>
 
     <!-- 雙世界選擇卡片 (載入完成後展開) -->
     <div id="world-select-container" style="display: none;">
@@ -723,7 +722,7 @@
   <!-- 劇情動畫結束提示文字 (Mission Center Directive Toast) -->
   <div id="mission-center-prompt" class="mission-center-prompt">
     <div class="mission-center-badge">✦ 任務提示 · MISSION DIRECTIVE ✦</div>
-    <div class="mission-center-text" id="mission-center-text">尋找門禁卡進入下一個區域吧</div>
+    <div class="mission-center-text" id="mission-center-text">前往中央警衛室取得門禁卡 A</div>
     <div class="mission-center-sub" id="mission-center-sub">COLLECT KEYCARD TO ACCESS NEXT ZONE</div>
   </div>
 

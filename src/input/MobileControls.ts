@@ -45,22 +45,34 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
   if (joystickZone && joystickThumb) {
     let activeTouchId: number | null = null;
     let zoneRect: DOMRect | null = null;
-    const maxRadius = 45;
+    // 搖桿行程半徑依當下實際尺寸計算 (直/橫屏 CSS 尺寸不同，翻轉後不可沿用舊值)，比例同原本 45px / 115px
+    const RADIUS_RATIO = 45 / 115;
+    let maxRadius = 45;
 
     // 潛行範圍提示環 (半徑 80%)：特訓院中按住搖桿時顯示，推桿在環內為潛行 (綠)，超出改為步行 (淡白)
     const sneakRing = document.createElement('div');
-    const ringSize = Math.round(maxRadius * 2 * JOYSTICK_SNEAK_RADIUS);
-    sneakRing.style.cssText = `position:absolute;left:50%;top:50%;width:${ringSize}px;height:${ringSize}px;` +
+    const ringPct = (RADIUS_RATIO * 2 * JOYSTICK_SNEAK_RADIUS * 100).toFixed(1);
+    sneakRing.style.cssText = `position:absolute;left:50%;top:50%;width:${ringPct}%;height:${ringPct}%;` +
       'transform:translate(-50%,-50%);border-radius:50%;border:2px dashed rgba(52,211,153,0.75);' +
       'pointer-events:none;display:none;transition:border-color 0.12s;';
     joystickZone.appendChild(sneakRing);
+    // 狀態 (0 隱藏 / 1 潛行區內 / 2 潛行區外) 變化時才寫入 style，避免每次 touchmove 重寫
+    let sneakRingState = -1;
     const updateSneakRing = (active: boolean) => {
       const show = active && input.joystickSneakEnabled;
-      sneakRing.style.display = show ? 'block' : 'none';
-      if (show) {
-        const inSneak = input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS;
-        sneakRing.style.borderColor = inSneak ? 'rgba(52,211,153,0.9)' : 'rgba(255,255,255,0.35)';
+      const state = !show ? 0 : (input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS ? 1 : 2);
+      if (state === sneakRingState) return;
+      sneakRingState = state;
+      sneakRing.style.display = state === 0 ? 'none' : 'block';
+      if (state !== 0) {
+        sneakRing.style.borderColor = state === 1 ? 'rgba(52,211,153,0.9)' : 'rgba(255,255,255,0.35)';
       }
+    };
+
+    // 每次按下時重新量測搖桿位置與尺寸 (翻轉/縮放後版面已改變)
+    const captureZone = () => {
+      zoneRect = joystickZone.getBoundingClientRect();
+      maxRadius = Math.max(20, zoneRect.width * RADIUS_RATIO);
     };
 
     const handleMove = (clientX: number, clientY: number) => {
@@ -95,7 +107,7 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
       if (activeTouchId !== null) return;
       const touch = e.changedTouches[0];
       activeTouchId = touch.identifier;
-      zoneRect = joystickZone.getBoundingClientRect();
+      captureZone();
       handleMove(touch.clientX, touch.clientY);
     }, { passive: false });
 
@@ -122,11 +134,18 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
 
     window.addEventListener('touchend', handleTouchEnd, { passive: false });
     window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    // 翻轉螢幕時手指可能未送出 touchend：放開搖桿，避免角色持續朝舊方向移動
+    window.addEventListener('orientationchange', () => {
+      if (activeTouchId !== null || isMouseDown) {
+        isMouseDown = false;
+        handleEnd();
+      }
+    });
 
     let isMouseDown = false;
     joystickZone.addEventListener('mousedown', (e) => {
       isMouseDown = true;
-      zoneRect = joystickZone.getBoundingClientRect();
+      captureZone();
       handleMove(e.clientX, e.clientY);
     });
     window.addEventListener('mousemove', (e) => {

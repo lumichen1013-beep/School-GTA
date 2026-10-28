@@ -120,8 +120,4 @@ export class ColliderGrid {
     for (let k = 0; k < n; k++) out.push(boxes[idx[k]]);
     return out;
   }
-
-  public queryAround(x: number, z: number, r: number, out: CollidableBox[]): CollidableBox[] {
-    return this.query(x - r, x + r, z - r, z + r, out);
-  }
 }

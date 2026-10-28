@@ -1,7 +1,47 @@
 import * as THREE from 'three';
-import { NPC } from '../entities/NPC';
+import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, GATE_WALLS, GATE_A_Z, GATE_B_Z, DetentionMapKind } from '../world/detentionLayout';
+
+// 第二世界雷達與大地圖的場景分類配色
+const DETENTION_RADAR_COLORS: Record<DetentionMapKind, string> = {
+  building: '#10b981', structure: '#38bdf8', fence: '#34d399', barrier: '#a3e635', container: '#059669', pillar: '#eab308'
+};
+const DETENTION_FULLMAP_STYLES: Record<DetentionMapKind, { fill: string; stroke: string }> = {
+  building: { fill: 'rgba(6, 78, 59, 0.65)', stroke: '#10b981' },
+  structure: { fill: 'rgba(56, 189, 248, 0.3)', stroke: '#38bdf8' },
+  fence: { fill: 'rgba(16, 185, 129, 0.5)', stroke: '#34d399' },
+  barrier: { fill: 'rgba(163, 230, 53, 0.35)', stroke: '#a3e635' },
+  container: { fill: 'rgba(5, 150, 105, 0.45)', stroke: '#059669' },
+  pillar: { fill: 'rgba(234, 179, 8, 0.4)', stroke: '#eab308' }
+};
+import { NPC, NPCRole } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
+
+// 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
+const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
+  DETENTION_BOSS: { color: '#ff2222', radius: 6.5 },
+  DETENTION_GUARD: { color: '#2563eb', radius: 5.2 },
+  DETENTION_HEAVY: { color: '#7c3aed', radius: 5.8 },
+  DETENTION_SENIOR: { color: '#f59e0b', radius: 4.5 },
+  DETENTION_WOLF: { color: '#ea580c', radius: 4.6 },
+  TEACHER: { color: '#dc2626', radius: 5.5 },
+  INSTRUCTOR: { color: '#b91c1c', radius: 5.5 },
+  BANDIT: { color: '#be123c', radius: 5.0 },
+  DOG: { color: '#f59e0b', radius: 4.5 },
+  BIKE_PATROL: { color: '#8b5cf6', radius: 5.0 },
+  INSPECTOR: { color: '#ef4444', radius: 4.0 }
+};
+const DEFAULT_NPC_MAP_STYLE = { color: '#cbd5e1', radius: 3.5 };
+
+// 特訓院守衛雷達/大地圖警戒色階：0 正常、1 追捕/警戒、2 疑惑、3 Boss (正常狀態)
+function guardAlertTier(npc: NPC): number {
+  if (npc.alertState === 'ALERT' || npc.isChasing) return 1;
+  if (npc.alertState === 'CAUTION') return 2;
+  return npc.role === 'DETENTION_BOSS' ? 3 : 0;
+}
+const GUARD_DOT_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#ff2222'];
+const GUARD_CONE_COLORS_RADAR = ['rgba(34, 197, 94, 0.24)', 'rgba(239, 68, 68, 0.38)', 'rgba(245, 158, 11, 0.32)', 'rgba(255, 34, 34, 0.28)'];
+const GUARD_CONE_COLORS_FULLMAP = ['rgba(34, 197, 94, 0.22)', 'rgba(239, 68, 68, 0.35)', 'rgba(245, 158, 11, 0.28)', 'rgba(255, 34, 34, 0.25)'];
 
 export interface CommissaryItem {
   id: string;
@@ -149,6 +189,14 @@ export class HUD {
   private worldBadgeEl: HTMLElement | null;
   private worldTextEl: HTMLElement | null;
   public onWorldToggle?: () => void;
+  // 每幀更新的 HUD 髒檢查快取
+  private lastSkillKey: number = -1;
+  private lastBossShown: boolean | null = null;
+  private lastBossHp: number = -2;
+  private lastBossMaxHp: number = -1;
+  private lastBossName: string | undefined = undefined;
+  // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
+  public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
   private worldModalCloseBtnEl: HTMLElement | null;
   private modalBtnCampusEl: HTMLElement | null;
@@ -238,7 +286,7 @@ export class HUD {
       // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 (與 M 鍵同流程)
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.closeFullMap();
+        this.closeFullMap(false); // 接著開啟世界選擇視窗，維持滑鼠解鎖以便點選
         if (this.onWorldToggle) this.onWorldToggle();
       });
     }
@@ -322,7 +370,8 @@ export class HUD {
       ro.observe(hudTopEl);
       if (leftEl) ro.observe(leftEl);
       if (rightEl) ro.observe(rightEl);
-      window.addEventListener('resize', syncHudTopBottom);
+      // Engine 於縮放/翻轉後 (含穩定前的分段補量) 廣播 app-layout-change，位置改變但尺寸未變時也能重新同步
+      window.addEventListener('app-layout-change', syncHudTopBottom);
       syncHudTopBottom();
     }
 
@@ -338,7 +387,7 @@ export class HUD {
       this.minimapPixelScale = px / HUD.MINIMAP_LOGICAL_SIZE;
     };
     if ('ResizeObserver' in window) new ResizeObserver(syncMinimapResolution).observe(this.canvas);
-    window.addEventListener('resize', syncMinimapResolution);
+    window.addEventListener('app-layout-change', syncMinimapResolution);
     syncMinimapResolution();
 
     // 快捷鍵指南：點擊面板切換展開 / 收合
@@ -810,11 +859,13 @@ export class HUD {
   }
 
   // 關閉全螢幕大地圖
-  public closeFullMap() {
+  public closeFullMap(relockPointer: boolean = true) {
     this.isFullMapOpen = false;
     if (this.fullmapModalEl) {
       this.fullmapModalEl.style.display = 'none';
     }
+    // 關閉地圖 (J 鍵或點擊關閉鈕) 時重新鎖定滑鼠，PC 玩家不需再點一次畫面即可轉動視角
+    if (relockPointer && this.onRequestPointerLock) this.onRequestPointerLock();
   }
 
   // 切換全螢幕大地圖
@@ -842,7 +893,16 @@ export class HUD {
   public setBossHealth(currentHp: number, maxHp: number, visible: boolean, bossName?: string, bossIcon?: string) {
     if (!this.bossHudEl || !this.bossHpTextEl || !this.bossBarFillEl) return;
 
-    if (!visible || currentHp <= 0) {
+    // 髒檢查：每幀呼叫，僅在顯示狀態、血量 (取整) 或名稱變動時寫入 DOM
+    const shown = visible && currentHp > 0;
+    const hpKey = shown ? Math.ceil(currentHp) : -1;
+    if (shown === this.lastBossShown && hpKey === this.lastBossHp && maxHp === this.lastBossMaxHp && bossName === this.lastBossName) return;
+    this.lastBossShown = shown;
+    this.lastBossHp = hpKey;
+    this.lastBossMaxHp = maxHp;
+    this.lastBossName = bossName;
+
+    if (!shown) {
       this.bossHudEl.style.display = 'none';
       return;
     }
@@ -1200,6 +1260,10 @@ export class HUD {
   public openWorldModal(currentWorld: 'CAMPUS' | 'DETENTION', onSwitch: (world: 'CAMPUS' | 'DETENTION') => void) {
     if (!this.worldModalEl) return;
     this.isWorldModalOpen = true;
+    // 解除滑鼠指標鎖定，使 PC 玩家 (含按 M 開啟時) 可點選世界卡片
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
     this.onWorldSwitchCallback = onSwitch;
 
     if (this.modalCurrentCampusEl && this.modalCurrentDetentionEl) {
@@ -1231,6 +1295,10 @@ export class HUD {
     if (!this.skillHudCardEl || !this.skillIconEl || !this.skillNameEl || !this.skillDescEl || !this.skillCdNumberEl || !this.skillCooldownOverlayEl) {
       return;
     }
+    // 髒檢查：每幀呼叫，僅在技能等級或冷卻顯示值 (0.1s 精度) 變動時寫入 DOM
+    const skillKey = skillLevel * 100000 + (cdRemaining > 0 ? Math.ceil(cdRemaining * 10) : 0);
+    if (skillKey === this.lastSkillKey) return;
+    this.lastSkillKey = skillKey;
 
     if (skillLevel === 0) {
       this.skillIconEl.textContent = '🔒';
@@ -1403,11 +1471,11 @@ export class HUD {
     let zone: string;
     if (currentWorld === 'DETENTION') {
       if (pos.z < -28) {
-        zone = '⛓️ A 區：牢房走廊迷宮 (獲取門禁卡 A)';
+        zone = '⛓️ A 區：監區庭院 (中央警衛室取門禁卡 A)';
       } else if (pos.z >= -28 && pos.z <= 35) {
-        zone = '📦 B 區：操場貨櫃掩體迷宮 (獲取門禁卡 B)';
+        zone = '📦 B 區：訓練場 (東側器材庫取門禁卡 B)';
       } else if (pos.z > 35 && pos.z <= 95) {
-        zone = '⚡ C 區：終極哨戒門庭 (小 Boss 決戰)';
+        zone = '⚡ C 區：決戰庭院 (擊破總教官取得萬能鑰匙卡)';
       } else {
         zone = '🚪 絕境安全脫逃通道 (任務完成)';
       }
@@ -1490,59 +1558,17 @@ export class HUD {
       ctx.lineWidth = 2;
       ctx.strokeRect((-95 - playerPos.x) * mapScale, (-95 - playerPos.z) * mapScale, 190 * mapScale, 190 * mapScale);
 
-      // A 區建築：營舍與食堂
-      drawTacticalBox(-40, -60, 50, 30, '#10b981');
-      drawTacticalBox(50, -60, 50, 30, '#10b981');
-
-      // A 區走廊迷宮隔牆、安全崗亭與新增戰術拐角隔牆
-      drawTacticalBox(-10, -84, 0.6, 12, '#34d399'); // 北走廊屏障
-      drawTacticalBox(-34, -82, 0.6, 12, '#34d399'); // 北走廊暗殺 L 牆
-      drawTacticalBox(-29, -76, 10, 0.6, '#34d399'); // 北走廊拐角翼壁
-      drawTacticalBox(-10, -63, 0.6, 14, '#34d399'); // 庭院 S 彎戰術隔牆
-      drawTacticalBox(-6.5, -70, 7, 0.6, '#34d399'); // 庭院側翼折板
-      drawTacticalBox(5, -60, 6.5, 4, '#38bdf8');   // 中央安全崗亭 (Keycard A)
-      drawTacticalBox(14, -50, 0.6, 10, '#34d399');  // 東側巡邏盲區阻隔壁
-      drawTacticalBox(-15.5, -38, 19, 0.6, '#34d399'); // 南前庭西折返隔板
-      drawTacticalBox(15.5, -38, 19, 0.6, '#34d399');  // 南前庭東折返隔板
-      drawTacticalBox(0, -33.5, 10, 0.6, '#34d399');  // 閘門 1 前防暴 S 型交錯隔板
-
-      // 管制閘門 1 (Z = -28)
-      const gate1Color = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
-      drawTacticalBox(-46.75, -28, 86.5, 1.5, '#34d399');
-      drawTacticalBox(46.75, -28, 86.5, 1.5, '#34d399');
-      drawTacticalBox(0, -28, 7.2, 1.2, gate1Color);
-
-      // B 區貨櫃迷宮群 (18 座軍規重裝海運集裝箱)
-      const conts = [
-        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
-        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
-        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
-        [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
-        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
-        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
-      ];
-      for (const [cx, cz, cw, cd] of conts) {
-        drawTacticalBox(cx, cz, cw, cd, '#059669');
+      // 場景建物、圍籬、貨櫃與掩體 (與 DetentionWorld 共用配置資料)
+      for (const f of DETENTION_MAP_FEATURES) {
+        drawTacticalBox((f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, f.maxX - f.minX, f.maxZ - f.minZ, DETENTION_RADAR_COLORS[f.kind]);
       }
 
-      // 管制閘門 2 (Z = 35)
-      const gate2Color = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
-      drawTacticalBox(-46.75, 35, 86.5, 1.5, '#34d399');
-      drawTacticalBox(46.75, 35, 86.5, 1.5, '#34d399');
-      drawTacticalBox(0, 35, 7.2, 1.2, gate2Color);
-
-      // C 區：4 座發電機掩體柱、防爆翼壁與南大門工事
-      drawTacticalBox(-16, 52, 3.4, 3.4, '#eab308');
-      drawTacticalBox(16, 52, 3.4, 3.4, '#eab308');
-      drawTacticalBox(-16, 74, 3.4, 3.4, '#eab308');
-      drawTacticalBox(16, 74, 3.4, 3.4, '#eab308');
-      drawTacticalBox(-22, 56, 0.8, 20, '#eab308');
-      drawTacticalBox(22, 56, 0.8, 20, '#eab308');
-      drawTacticalBox(-19, 46, 6, 0.8, '#eab308');
-      drawTacticalBox(19, 46, 6, 0.8, '#eab308');
-      drawTacticalBox(-10, 82, 12, 0.8, '#eab308');
-      drawTacticalBox(10, 82, 12, 0.8, '#eab308');
-      drawTacticalBox(0, 87, 10, 0.8, '#eab308');
+      // 管制閘門 1 (Z = -28) 與閘門 2 (Z = 35) 隔斷牆
+      for (const w of GATE_WALLS) {
+        drawTacticalBox((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, 1.5, '#34d399');
+      }
+      drawTacticalBox(0, GATE_A_Z, 7.2, 1.2, detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8');
+      drawTacticalBox(0, GATE_B_Z, 7.2, 1.2, detentionData?.isGateBOpen ? '#22c55e' : '#facc15');
 
       // 南側脫逃大門 (Z = 95)
       const southGateColor = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
@@ -1556,120 +1582,32 @@ export class HUD {
         if (!detentionData.hasKeycardA) {
           const kx = (detentionData.keycardAPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardAPos.z - playerPos.z) * mapScale;
-
-          // 動態擴散外圈
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心光點
-          ctx.fillStyle = '#38bdf8';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#38bdf8';
-          ctx.fillText('🔑KEY A', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#38bdf8', 'rgba(56, 189, 248, 0.65)', 6.5 * pulse, 1.8, 4.2, 1.2);
+          HUD.drawMarkerLabel(ctx, '🔑KEY A', kx, kz - 8, 'bold 9px sans-serif', '#38bdf8');
         }
 
         // 2. 黃色門禁卡 B
         if (!detentionData.hasKeycardB) {
           const kx = (detentionData.keycardBPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.keycardBPos.z - playerPos.z) * mapScale;
-
-          // 動態擴散外圈
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 6.5 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心光點
-          ctx.fillStyle = '#facc15';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 4.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#facc15';
-          ctx.fillText('🔑KEY B', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#facc15', 'rgba(250, 204, 21, 0.65)', 6.5 * pulse, 1.8, 4.2, 1.2);
+          HUD.drawMarkerLabel(ctx, '🔑KEY B', kx, kz - 8, 'bold 9px sans-serif', '#facc15');
         }
 
         // 3. 萬能逃脫鑰匙卡 (金黃色傳奇標記)
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
           const kx = (detentionData.masterKeycardPos.x - playerPos.x) * mapScale;
           const kz = (detentionData.masterKeycardPos.z - playerPos.z) * mapScale;
-
-          // 金色耀眼動態光環
-          ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
-          ctx.lineWidth = 2.2;
-          ctx.beginPath();
-          ctx.arc(kx, kz, 8.0 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // 核心金鑽
-          ctx.fillStyle = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(kx, kz, 5.0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-
-          // 直立文字標籤
-          ctx.save();
-          ctx.translate(kx, kz);
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ffd700';
-          ctx.fillText('★MASTER KEY', 0, -10);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, kx, kz, '#ffd700', 'rgba(255, 215, 0, 0.85)', 8.0 * pulse, 2.2, 5.0, 1.5);
+          HUD.drawMarkerLabel(ctx, '★MASTER KEY', kx, kz - 10, 'bold 10px sans-serif', '#ffd700');
         }
 
         // 4. 重生存檔點 (綠色旗幟標記)
         if (detentionData.checkpointPos) {
           const cpx = (detentionData.checkpointPos.x - playerPos.x) * mapScale;
           const cpz = (detentionData.checkpointPos.z - playerPos.z) * mapScale;
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.75)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(cpx, cpz, 6.0 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-
-          ctx.fillStyle = '#22c55e';
-          ctx.beginPath();
-          ctx.arc(cpx, cpz, 3.8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-
-          ctx.save();
-          ctx.translate(cpx, cpz);
-          ctx.font = 'bold 8.5px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#22c55e';
-          ctx.fillText('🚩CP', 0, -8);
-          ctx.restore();
+          HUD.drawPulseMarker(ctx, cpx, cpz, '#22c55e', 'rgba(34, 197, 94, 0.75)', 6.0 * pulse, 1.5, 3.8, 1);
+          HUD.drawMarkerLabel(ctx, '🚩CP', cpx, cpz - 8, 'bold 8.5px sans-serif', '#22c55e');
         }
       }
 
@@ -1693,20 +1631,9 @@ export class HUD {
 
         // 存活守衛
         const isBoss = npc.role === 'DETENTION_BOSS';
-        const alertState = npc.alertState || 'NORMAL';
-
-        let dotColor = '#22c55e';
-        let coneColor = 'rgba(34, 197, 94, 0.24)';
-        if (alertState === 'ALERT' || npc.isChasing) {
-          dotColor = '#ef4444';
-          coneColor = 'rgba(239, 68, 68, 0.38)';
-        } else if (alertState === 'CAUTION') {
-          dotColor = '#f59e0b';
-          coneColor = 'rgba(245, 158, 11, 0.32)';
-        } else if (isBoss) {
-          dotColor = '#ff2222';
-          coneColor = 'rgba(255, 34, 34, 0.28)';
-        }
+        const tier = guardAlertTier(npc);
+        const dotColor = GUARD_DOT_COLORS[tier];
+        const coneColor = GUARD_CONE_COLORS_RADAR[tier];
 
         const ang = npc.rotationY;
         const coneDist = (isBoss ? 24 : 18) * mapScale;
@@ -1731,13 +1658,7 @@ export class HUD {
 
         // 若 Boss 存活且尚未掉落萬能鑰匙卡，在雷達上直立標示 ★BOSS [KEY]
         if (isBoss && detentionData && !detentionData.hasMasterKeycard && !detentionData.masterKeycardPos) {
-          ctx.save();
-          ctx.translate(nx, nz);
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ff4444';
-          ctx.fillText('★BOSS [KEY]', 0, -10);
-          ctx.restore();
+          HUD.drawMarkerLabel(ctx, '★BOSS [KEY]', nx, nz - 10, 'bold 9px sans-serif', '#ff4444');
         }
       }
 
@@ -1758,15 +1679,15 @@ export class HUD {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.2;
       ctx.stroke();
-      ctx.restore();
 
-      // 潛行模式指示 (外圍柔和虛線圈)
+      // 潛行模式指示 (玩家外圍柔和虛線圈；仍在玩家平移座標內，畫完重設虛線避免外洩至下一幀網格)
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.arc(0, 0, 10, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
 
       // 警戒閃爍外框
@@ -1821,44 +1742,10 @@ export class HUD {
     for (const npc of npcs) {
       const nx = (npc.position.x - playerPos.x) * mapScale;
       const nz = (npc.position.z - playerPos.z) * mapScale;
-      let dotColor = '#e2e8f0';
-      let dotRadius = 3.5;
-
-      if (npc.role === 'DETENTION_BOSS') {
-        dotColor = '#ff2222';
-        dotRadius = 6.5;
-      } else if (npc.role === 'DETENTION_GUARD') {
-        dotColor = '#2563eb';
-        dotRadius = 5.2;
-      } else if (npc.role === 'DETENTION_HEAVY') {
-        dotColor = '#7c3aed';
-        dotRadius = 5.8;
-      } else if (npc.role === 'DETENTION_SENIOR') {
-        dotColor = '#f59e0b';
-        dotRadius = 4.5;
-      } else if (npc.role === 'DETENTION_WOLF') {
-        dotColor = '#ea580c';
-        dotRadius = 4.6;
-      } else if (npc.role === 'TEACHER' || npc.role === 'INSTRUCTOR') {
-        dotColor = '#dc2626';
-        dotRadius = 5.5;
-      } else if (npc.role === 'BANDIT') {
-        dotColor = '#be123c';
-        dotRadius = 5.0;
-      } else if (npc.role === 'DOG') {
-        dotColor = '#f97316';
-        dotRadius = 4.5;
-      } else if (npc.role === 'BIKE_PATROL') {
-        dotColor = '#a855f7';
-        dotRadius = 5.0;
-      } else if (npc.role === 'INSPECTOR') {
-        dotColor = '#ef4444';
-        dotRadius = 4.0;
-      }
-
-      ctx.fillStyle = dotColor;
+      const style = NPC_ROLE_MAP_STYLE[npc.role] || DEFAULT_NPC_MAP_STYLE;
+      ctx.fillStyle = style.color;
       ctx.beginPath();
-      ctx.arc(nx, nz, dotRadius, 0, Math.PI * 2);
+      ctx.arc(nx, nz, style.radius, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -1901,8 +1788,8 @@ export class HUD {
 
     // 可見時僅於座標變動才更新位置；可見狀態切換才更新顯示與手機攻擊鈕
     if (el && visible && (x !== this.lastCqcX || y !== this.lastCqcY || !this.lastCqcVisible)) {
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
+      // 以 transform 定位 (僅合成層更新，不觸發版面重排)；錨點為提示框底部中央
+      el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
       this.lastCqcX = x;
       this.lastCqcY = y;
     }
@@ -1915,8 +1802,6 @@ export class HUD {
     if (el) {
       if (visible) {
         el.style.display = 'flex';
-        el.style.bottom = 'auto';
-        el.style.transform = 'translate(-50%, -100%)';
         if (textEl) {
           textEl.textContent = '擊暈';
         }
@@ -1976,24 +1861,28 @@ export class HUD {
         banner.style.display = 'none';
         return;
       }
-      const style = HUD.MGS_PHASE_STYLE[phase];
       banner.style.display = 'flex';
-      banner.style.background = style.bg;
-      banner.style.borderColor = style.border;
-      banner.style.boxShadow = `0 0 25px ${style.glow}`;
-      label.textContent = style.label;
+      banner.classList.remove('mgs-phase-alert', 'mgs-phase-evasion', 'mgs-phase-caution');
+      banner.classList.add(`mgs-phase-${phase.toLowerCase()}`);
+      label.textContent = HUD.MGS_PHASE_LABEL[phase];
       if (phase === 'ALERT') val.textContent = '';
+      this.lastMgsTimerTenths = -1;
     }
     if (phase === 'EVASION' || phase === 'CAUTION') {
-      const text = Math.max(0, timer).toFixed(2);
-      if (val.textContent !== text) val.textContent = text;
+      // 倒數顯示 0.1 秒精度：僅在顯示值變動時才格式化字串並寫入 DOM
+      const tenths = Math.ceil(Math.max(0, timer) * 10);
+      if (tenths !== this.lastMgsTimerTenths) {
+        this.lastMgsTimerTenths = tenths;
+        val.textContent = (tenths / 10).toFixed(1);
+      }
     }
   }
+  private lastMgsTimerTenths: number = -1;
 
-  private static readonly MGS_PHASE_STYLE = {
-    ALERT: { label: '🚨 ALERT', bg: 'rgba(220, 38, 38, 0.92)', border: '#fca5a5', glow: 'rgba(239, 68, 68, 0.85)' },
-    EVASION: { label: '⚠️ EVASION', bg: 'rgba(234, 88, 12, 0.92)', border: '#fdba74', glow: 'rgba(249, 115, 22, 0.8)' },
-    CAUTION: { label: '❓ CAUTION', bg: 'rgba(202, 138, 4, 0.92)', border: '#fde68a', glow: 'rgba(234, 179, 8, 0.7)' }
+  private static readonly MGS_PHASE_LABEL = {
+    ALERT: '🚨 ALERT',
+    EVASION: '⚠️ EVASION',
+    CAUTION: '❓ CAUTION'
   } as const;
 
   // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
@@ -2137,7 +2026,7 @@ export class HUD {
   }
 
   // 更新特訓院越獄任務面板
-  private lastEscapeTrackerKey = '';
+  private lastEscapeTrackerKey = -1;
 
   public updateWorld2EscapeTracker(
     takedowns: number,
@@ -2149,7 +2038,9 @@ export class HUD {
     isEscapeComplete: boolean
   ) {
     // 每幀呼叫：所有輸入值未變時略過 DOM 寫入
-    const stateKey = `${takedowns}|${gateAOpen}|${gateBOpen}|${bossHp}|${bossMaxHp}|${isBossDefeated}|${isEscapeComplete}`;
+    // 數值鍵 (不產生每幀字串)：擊昏數、Boss 血量/上限與四個旗標
+    const flags = (gateAOpen ? 1 : 0) | (gateBOpen ? 2 : 0) | (isBossDefeated ? 4 : 0) | (isEscapeComplete ? 8 : 0);
+    const stateKey = ((takedowns * 10000 + Math.ceil(bossHp)) * 10000 + bossMaxHp) * 16 + flags;
     const campusWrapper = this.$('campus-quest-wrapper');
     const detentionWrapper = this.$('detention-quest-wrapper');
     if (stateKey === this.lastEscapeTrackerKey && detentionWrapper && detentionWrapper.style.display === 'block') return;
@@ -2208,6 +2099,35 @@ export class HUD {
   private static readonly FULLMAP_LOGICAL = 700;
 
   // 大地圖標籤字級：隨地圖尺寸放大，且不低於 13px (窄螢幕 11px) 的實際顯示字級
+  // 雷達/大地圖共用的脈衝標記 (外圈擴散環 + 核心光點；coreStrokeWidth > 0 時核心加白色描邊)
+  private static drawPulseMarker(
+    ctx: CanvasRenderingContext2D, x: number, y: number, color: string,
+    ringColor: string, ringR: number, ringWidth: number, coreR: number, coreStrokeWidth: number
+  ) {
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = ringWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, coreR, 0, Math.PI * 2);
+    ctx.fill();
+    if (coreStrokeWidth > 0) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = coreStrokeWidth;
+      ctx.stroke();
+    }
+  }
+
+  // 雷達直立文字標籤 (雷達畫面不旋轉，直接置中繪製，無需 save/translate/restore)
+  private static drawMarkerLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color: string) {
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
   private fmFont(size: number): string {
     const minCss = this.fullmapCssSide < 520 ? 11 : 13;
     const minLogical = minCss * HUD.FULLMAP_LOGICAL / this.fullmapCssSide;
@@ -2281,7 +2201,8 @@ export class HUD {
     const h = HUD.FULLMAP_LOGICAL;
     const cx = w / 2;
     const cy = h / 2;
-    const scale = 3.15; // 縮放比：全地圖 200m 映射到約 630px
+    // 縮放比：校園全圖 200m 映射到約 630px；特訓院依院區範圍 (±97m) 自動貼合畫布
+    const scale = currentWorld === 'DETENTION' ? (w - 20) / 194 : 3.15;
 
     // 更新抬頭元資訊
     const coordsText = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
@@ -2359,95 +2280,77 @@ export class HUD {
       ctx.lineWidth = 2.5;
       ctx.strokeRect(toScreenX(-95), toScreenY(-95), 190 * scale, 190 * scale);
 
-      // 四角瞭望塔
-      const towers = [
-        { x: -78, z: -78 }, { x: 78, z: -78 },
-        { x: -78, z: 78 }, { x: 78, z: 78 }
-      ];
-      for (const tw of towers) {
-        drawBox(tw.x, tw.z, 7, 7, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = this.fmFont(9);
-        ctx.textAlign = 'center';
-        this.fmText(ctx, '瞭望塔', toScreenX(tw.x), toScreenY(tw.z) + 3);
+      // 道路骨架 (收容車道、外圍巡邏路、中軸路、廣場路與服務巷)
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+      for (const r of DETENTION_ROADS) {
+        ctx.fillRect(toScreenX(r.minX), toScreenY(r.minZ), (r.maxX - r.minX) * scale, (r.maxZ - r.minZ) * scale);
       }
 
-      // 中央高空探照燈塔
-      drawBox(0, 10, 4, 4, 'rgba(250, 204, 21, 0.3)', '#facc15');
+      // 瞭望塔與中央探照燈塔
+      for (const tw of DETENTION_TOWERS) {
+        drawBox(tw.x, tw.z, 6.5, 6.5, 'rgba(56, 189, 248, 0.25)', '#38bdf8');
+      }
+      drawBox(SEARCHLIGHT_TOWER.x, SEARCHLIGHT_TOWER.z, 4, 4, 'rgba(250, 204, 21, 0.3)', '#facc15');
 
-      // A 區建築：生活營舍與食堂
-      drawBox(-40, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      drawBox(50, -60, 50, 30, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      ctx.fillStyle = '#34d399';
-      ctx.font = this.fmFont(11);
+      // 場景建物、圍籬、貨櫃與掩體 (與 DetentionWorld 共用配置資料)
+      for (const f of DETENTION_MAP_FEATURES) {
+        const style = DETENTION_FULLMAP_STYLES[f.kind];
+        drawBox((f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, f.maxX - f.minX, f.maxZ - f.minZ, style.fill, style.stroke);
+      }
+
+      // 標籤碰撞迴避：依序嘗試置中/上/下/左/右，與已放置標籤重疊則換位，全部重疊則省略
+      const placedLabels: { x0: number; x1: number; y0: number; y1: number }[] = [];
+      const reserveLabel = (x: number, y: number, halfW: number, halfH: number) => {
+        placedLabels.push({ x0: x - halfW, x1: x + halfW, y0: y - halfH, y1: y + halfH });
+      };
+      // 閘門與南大門狀態標籤稍後繪製，先保留其位置
+      reserveLabel(toScreenX(0), toScreenY(-28) - 10, 85, 9);
+      reserveLabel(toScreenX(0), toScreenY(35) - 10, 85, 9);
+      reserveLabel(toScreenX(0), toScreenY(95) + 10, 110, 9);
+      const placeLabel = (text: string, x: number, y: number, size: number, color: string) => {
+        ctx.font = this.fmFont(size);
+        const halfW = ctx.measureText(text).width / 2 + 3;
+        const halfH = (parseFloat(ctx.font.split(' ')[1]) || 12) * 0.6;
+        const offsets = [[0, 0], [0, -halfH * 2.2], [0, halfH * 2.2], [halfW + 4, 0], [-halfW - 4, 0]];
+        for (const [ox, oy] of offsets) {
+          const lx = x + ox, ly = y + oy;
+          if (lx - halfW < 0 || lx + halfW > w || ly - halfH < 0 || ly + halfH > h) continue;
+          if (placedLabels.some((o) => !(lx + halfW < o.x0 || lx - halfW > o.x1 || ly + halfH < o.y0 || ly - halfH > o.y1))) continue;
+          placedLabels.push({ x0: lx - halfW, x1: lx + halfW, y0: ly - halfH, y1: ly + halfH });
+          ctx.fillStyle = color;
+          this.fmText(ctx, text, lx, ly + halfH * 0.55);
+          return;
+        }
+      };
       ctx.textAlign = 'center';
-      this.fmText(ctx, '第一集訓營舍', toScreenX(-40), toScreenY(-60));
-      this.fmText(ctx, '特訓食堂與補給站', toScreenX(50), toScreenY(-60));
-
-      // A 區迷宮隔牆與新增戰術拐角牆
-      drawBox(-10, -84, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-34, -82, 0.6, 12, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-29, -76, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-10, -63, 0.6, 14, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-6.5, -70, 7, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(5, -60, 6.5, 4, 'rgba(56, 189, 248, 0.35)', '#38bdf8');
-      drawBox(14, -50, 0.6, 10, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(-15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(15.5, -38, 19, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
-      drawBox(0, -33.5, 10, 0.6, 'rgba(16, 185, 129, 0.5)', '#34d399');
+      // 字級依建物面積：大型樓房較大、小型崗哨較小
+      const labeled = DETENTION_MAP_FEATURES.filter((f) => f.label)
+        .map((f) => ({ f, area: (f.maxX - f.minX) * (f.maxZ - f.minZ) }))
+        .sort((a, b) => b.area - a.area);
+      for (const { f, area } of labeled) {
+        const size = Math.min(12, Math.max(8, 6.5 + Math.sqrt(area) / 4));
+        placeLabel(f.label!, toScreenX((f.minX + f.maxX) / 2), toScreenY((f.minZ + f.maxZ) / 2), size, f.kind === 'building' ? '#34d399' : '#a7f3d0');
+      }
+      for (const al of DETENTION_MAP_AREA_LABELS) {
+        placeLabel(al.text, toScreenX(al.x), toScreenY(al.z), 8.5, 'rgba(203, 213, 225, 0.85)');
+      }
 
       // 管制閘門 1 (Z = -28)
       const gate1Col = detentionData?.isGateAOpen ? '#22c55e' : '#38bdf8';
-      drawBox(-50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(50, -28, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(0, -28, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
+      for (const w of GATE_WALLS) {
+        drawBox((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
+      }
+      drawBox(0, GATE_A_Z, 7.2, 1.4, detentionData?.isGateAOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(56, 189, 248, 0.5)', gate1Col);
       ctx.fillStyle = gate1Col;
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateAOpen ? '閘門 1 [已解鎖]' : '閘門 1 [需 KEY A]', toScreenX(0), toScreenY(-28) - 6);
 
-      // B 區貨櫃迷宮群 (18 座軍規貨櫃)
-      const fullConts = [
-        [-22, -18, 10, 2.8], [22, -18, 10, 2.8], [0, -21, 8, 2.8],
-        [-12, -6, 2.8, 10], [12, -6, 2.8, 10], [-28, -6, 2.8, 10], [28, -6, 2.8, 10],
-        [-6, 1, 8, 2.8], [6, 1, 8, 2.8],
-        [-22, 8, 10, 2.8], [0, 8, 10, 2.8], [22, 8, 10, 2.8],
-        [-12, 20, 2.8, 10], [12, 20, 2.8, 10], [-26, 20, 2.8, 10], [24, 20, 10, 2.8],
-        [30, 14, 2.8, 10], [0, 27, 8, 2.8]
-      ];
-      for (const [cx, cz, cw, cd] of fullConts) {
-        drawBox(cx, cz, cw, cd, 'rgba(5, 150, 105, 0.45)', '#059669');
-      }
-
       // 管制閘門 2 (Z = 35)
       const gate2Col = detentionData?.isGateBOpen ? '#22c55e' : '#facc15';
-      drawBox(-50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(50, 35, 93, 1.2, 'rgba(6, 78, 59, 0.8)', '#34d399');
-      drawBox(0, 35, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
+      drawBox(0, GATE_B_Z, 7.2, 1.4, detentionData?.isGateBOpen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(250, 204, 21, 0.5)', gate2Col);
       ctx.fillStyle = gate2Col;
       ctx.font = this.fmFont(9.5);
       this.fmText(ctx, detentionData?.isGateBOpen ? '閘門 2 [已解鎖]' : '閘門 2 [需 KEY B]', toScreenX(0), toScreenY(35) - 6);
-
-      // C 區：教官總部與實習工廠
-      drawBox(-52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      drawBox(52.5, 50, 45, 40, 'rgba(6, 78, 59, 0.65)', '#10b981');
-      ctx.fillStyle = '#34d399';
-      ctx.font = this.fmFont(11);
-      ctx.textAlign = 'center';
-      this.fmText(ctx, '實習機械工廠', toScreenX(-52.5), toScreenY(50));
-      this.fmText(ctx, '教官總部指揮所', toScreenX(52.5), toScreenY(50));
-
-      // C 區防爆側翼壁與發電機柱
-      drawBox(-22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(-19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(22, 56, 0.8, 20, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(19, 46, 6, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      const gens = [[-16, 52], [16, 52], [-16, 74], [16, 74]];
-      for (const [gx, gz] of gens) {
-        drawBox(gx, gz, 3.4, 3.4, 'rgba(234, 179, 8, 0.4)', '#eab308');
-      }
-      drawBox(-10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(10, 82, 12, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
-      drawBox(0, 87, 10, 0.8, 'rgba(234, 179, 8, 0.35)', '#eab308');
 
       // 南側脫逃大門 (Z = 95)
       const southCol = detentionData?.isSouthGateOpen ? '#22c55e' : '#ef4444';
@@ -2455,6 +2358,37 @@ export class HUD {
       ctx.fillStyle = southCol;
       ctx.font = this.fmFont(10);
       this.fmText(ctx, detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
+      // 指北針圖標 (Compass North，靜態元素併入快取圖層，不再每幀重繪)
+      ctx.save();
+      ctx.translate(w - 38, 42);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.moveTo(0, 14);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = this.fmFont(9);
+      this.fmText(ctx, 'N', 0, -17);
+      ctx.restore();
       ctx = outCtx;
       }
       outCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2468,15 +2402,7 @@ export class HUD {
         if (!detentionData.hasKeycardA) {
           const kx = toScreenX(detentionData.keycardAPos.x);
           const ky = toScreenY(detentionData.keycardAPos.z);
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#38bdf8';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#38bdf8', '#38bdf8', 8 * pulse, 2, 5, 0);
           ctx.font = this.fmFont(10);
           this.fmText(ctx, '🔑 KEY A', kx, ky - 10);
         }
@@ -2484,15 +2410,7 @@ export class HUD {
         if (!detentionData.hasKeycardB) {
           const kx = toScreenX(detentionData.keycardBPos.x);
           const ky = toScreenY(detentionData.keycardBPos.z);
-          ctx.strokeStyle = '#facc15';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 8 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#facc15';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 5, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#facc15', '#facc15', 8 * pulse, 2, 5, 0);
           ctx.font = this.fmFont(10);
           this.fmText(ctx, '🔑 KEY B', kx, ky - 10);
         }
@@ -2500,15 +2418,7 @@ export class HUD {
         if (detentionData.masterKeycardPos && !detentionData.hasMasterKeycard) {
           const kx = toScreenX(detentionData.masterKeycardPos.x);
           const ky = toScreenY(detentionData.masterKeycardPos.z);
-          ctx.strokeStyle = '#ffd700';
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.arc(kx, ky, 10 * pulse, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(kx, ky, 6, 0, Math.PI * 2);
-          ctx.fill();
+          HUD.drawPulseMarker(ctx, kx, ky, '#ffd700', '#ffd700', 10 * pulse, 2.5, 6, 0);
           ctx.font = this.fmFont(10.5);
           this.fmText(ctx, '★ MASTER KEY', kx, ky - 12);
         }
@@ -2518,15 +2428,7 @@ export class HUD {
       if (detentionData?.checkpointPos) {
         const cpx = toScreenX(detentionData.checkpointPos.x);
         const cpy = toScreenY(detentionData.checkpointPos.z);
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(cpx, cpy, 9 * pulse, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(cpx, cpy, 5.5, 0, Math.PI * 2);
-        ctx.fill();
+        HUD.drawPulseMarker(ctx, cpx, cpy, '#22c55e', '#22c55e', 9 * pulse, 2.5, 5.5, 0);
         ctx.fillStyle = '#ffffff';
         ctx.font = this.fmFont(9.5);
         this.fmText(ctx, `🚩 重生點 [${detentionData.checkpointName || '存檔點'}]`, cpx, cpy + 16);
@@ -2550,19 +2452,9 @@ export class HUD {
         }
 
         const isBoss = npc.role === 'DETENTION_BOSS';
-        const alertState = npc.alertState || 'NORMAL';
-        let dotColor = '#22c55e';
-        let coneColor = 'rgba(34, 197, 94, 0.22)';
-        if (alertState === 'ALERT' || npc.isChasing) {
-          dotColor = '#ef4444';
-          coneColor = 'rgba(239, 68, 68, 0.35)';
-        } else if (alertState === 'CAUTION') {
-          dotColor = '#f59e0b';
-          coneColor = 'rgba(245, 158, 11, 0.28)';
-        } else if (isBoss) {
-          dotColor = '#ff2222';
-          coneColor = 'rgba(255, 34, 34, 0.25)';
-        }
+        const tier = guardAlertTier(npc);
+        const dotColor = GUARD_DOT_COLORS[tier];
+        const coneColor = GUARD_CONE_COLORS_FULLMAP[tier];
 
         const ang = npc.rotationY;
         const coneDist = (isBoss ? 24 : 18) * scale;
@@ -2620,38 +2512,6 @@ export class HUD {
       ctx.font = this.fmFont(11);
       ctx.textAlign = 'center';
       this.fmText(ctx, 'YOU (主角)', px, py - 14);
-
-      // 指北針圖標 (Compass North)
-      ctx.save();
-      ctx.translate(w - 38, 42);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.moveTo(0, -14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(0, 14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.font = this.fmFont(9);
-      this.fmText(ctx, 'N', 0, -17);
-      ctx.restore();
 
       return;
     }
@@ -2714,13 +2574,7 @@ export class HUD {
     for (const npc of npcs) {
       const nx = toScreenX(npc.position.x);
       const nz = toScreenY(npc.position.z);
-      let dotColor = '#cbd5e1';
-      if (npc.role === 'TEACHER') dotColor = '#dc2626';
-      else if (npc.role === 'INSTRUCTOR') dotColor = '#b91c1c';
-      else if (npc.role === 'DOG') dotColor = '#f59e0b';
-      else if (npc.role === 'BIKE_PATROL') dotColor = '#8b5cf6';
-
-      ctx.fillStyle = dotColor;
+      ctx.fillStyle = (NPC_ROLE_MAP_STYLE[npc.role] || DEFAULT_NPC_MAP_STYLE).color;
       ctx.beginPath();
       ctx.arc(nx, nz, 4, 0, Math.PI * 2);
       ctx.fill();

@@ -36,18 +36,82 @@ export class Engine {
     // 3. 校園日光與環境光照
     this.setupLighting();
 
-    // 4. 視窗縮放與螢幕翻轉自適應
-    // 行動裝置翻轉後 visualViewport 尺寸需數百毫秒才穩定，分段補量確保最終尺寸正確
-    window.addEventListener('resize', () => this.handleResize());
-    window.addEventListener('orientationchange', () => {
-      this.handleResize();
-      setTimeout(() => this.handleResize(), 100);
-      setTimeout(() => this.handleResize(), 300);
-      setTimeout(() => this.handleResize(), 500);
-    });
+    // 4. 視窗縮放與螢幕翻轉自適應：統一由 scheduleLayoutSync 處理 (翻轉後尺寸需數百毫秒才穩定，分段補量)
+    // 以 rAF 合併同一幀內的大量事件 (iOS 工具列伸縮時 visualViewport scroll/resize 連續觸發)
+    const onLayoutChange = () => {
+      if (this.layoutRaf) return;
+      this.layoutRaf = requestAnimationFrame(() => {
+        this.layoutRaf = 0;
+        this.scheduleLayoutSync();
+      });
+    };
+    window.addEventListener('resize', onLayoutChange);
+    window.addEventListener('orientationchange', onLayoutChange);
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', () => this.handleResize());
+      window.visualViewport.addEventListener('resize', onLayoutChange);
+      window.visualViewport.addEventListener('scroll', onLayoutChange);
     }
+    this.syncLayout();
+  }
+
+  private layoutSyncTimers: number[] = [];
+  private layoutRaf = 0;
+  private lastLayoutW = 0;
+  private lastLayoutH = 0;
+  private viewportMetaContent: string | null = null;
+
+  // 版面變更 (縮放/翻轉/瀏覽器工具列伸縮) 後立即同步，並於 100~1000ms 間補量直到尺寸穩定
+  public scheduleLayoutSync() {
+    for (const t of this.layoutSyncTimers) clearTimeout(t);
+    this.syncLayout();
+    this.layoutSyncTimers = [100, 300, 600, 1000].map((ms) => window.setTimeout(() => this.syncLayout(), ms));
+  }
+
+  // 以實際可視區 (visualViewport) 尺寸驅動整個版面：
+  // 1. 歸零翻轉後殘留的頁面捲動偏移 (iOS 翻轉常留下 scrollY，所有絕對定位按鈕整體位移)
+  // 2. 意外的雙指縮放 (iOS 忽略 user-scalable=no) 透過重設 viewport meta 還原為 1 倍
+  // 3. 寫入 --app-w / --app-h 讓 body 與 HUD 精準貼齊可視區 (避開工具列遮擋與翻轉後殘留舊高度)
+  // 4. 廣播 app-layout-change 讓 HUD 等以 JS 量測的版面數值重新同步
+  // 僅在尺寸改變或曾修正捲動/縮放時才寫入 CSS 變數並廣播，避免無變化時觸發 HUD 量測造成同步重排
+  private syncLayout() {
+    let corrected = false;
+    if (window.scrollX !== 0 || window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+      corrected = true;
+    }
+    if (document.documentElement.scrollTop !== 0) { document.documentElement.scrollTop = 0; corrected = true; }
+    if (document.body.scrollTop !== 0) { document.body.scrollTop = 0; corrected = true; }
+
+    const vv = window.visualViewport;
+    if (vv && Math.abs(vv.scale - 1) > 0.01) {
+      this.resetPageZoom();
+      corrected = true;
+    }
+
+    const width = Math.round(vv ? vv.width : window.innerWidth);
+    const height = Math.round(vv ? vv.height : window.innerHeight);
+    if (width <= 0 || height <= 0) return;
+    const sizeChanged = width !== this.lastLayoutW || height !== this.lastLayoutH;
+    if (!sizeChanged && !corrected) return;
+
+    if (sizeChanged) {
+      const rootStyle = document.documentElement.style;
+      rootStyle.setProperty('--app-w', `${width}px`);
+      rootStyle.setProperty('--app-h', `${height}px`);
+      this.lastLayoutW = width;
+      this.lastLayoutH = height;
+      this.resize(width, height);
+    }
+    window.dispatchEvent(new Event('app-layout-change'));
+  }
+
+  // 重新套用 viewport meta 迫使 iOS Safari 將頁面縮放還原為 1 倍
+  private resetPageZoom() {
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+    if (this.viewportMetaContent === null) this.viewportMetaContent = meta.getAttribute('content') || '';
+    meta.setAttribute('content', `${this.viewportMetaContent}, maximum-scale=1.0001`);
+    window.setTimeout(() => meta.setAttribute('content', this.viewportMetaContent || ''), 50);
   }
 
   public static isMobileDevice(): boolean {
@@ -92,18 +156,20 @@ export class Engine {
   public resize(width: number = window.innerWidth, height: number = window.innerHeight) {
     const safeWidth = Math.max(width, 1);
     const safeHeight = Math.max(height, 1);
-    this.renderer.setSize(safeWidth, safeHeight);
+    // 先設像素比再設尺寸：setPixelRatio 內部會以舊尺寸再呼叫一次 setSize，順序顛倒會重複配置繪圖緩衝區
     const isMobile = Engine.isMobileDevice();
     const maxPixelRatio = isMobile ? 1.5 : 2;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+    this.renderer.setSize(safeWidth, safeHeight);
     if (this.onResizeCallback) {
       this.onResizeCallback(safeWidth, safeHeight, safeWidth / safeHeight);
     }
   }
 
+  // 強制重新套用尺寸 (例如外部接上 onResizeCallback 後需立即同步鏡頭比例)
   public handleResize() {
-    const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-    const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    this.resize(width, height);
+    this.lastLayoutW = 0;
+    this.lastLayoutH = 0;
+    this.scheduleLayoutSync();
   }
 }

@@ -4,6 +4,7 @@ import { queryColliders } from '../physics/aabb';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
 import type { GameContext } from './GameContext';
+import { isBehindNpc, isBossStunOpening } from './DetentionMode';
 
 const _scratchPlayerForward = new THREE.Vector3();
 const _scratchImpactDir = new THREE.Vector3();
@@ -26,6 +27,12 @@ export class CombatSystem {
   private wasBossStunned: boolean = false;
 
   constructor(private readonly ctx: GameContext) {}
+
+  // 切換世界時清除慢動作與暗殺後跳計時，避免在另一個世界觸發
+  public resetTransientState() {
+    this.bulletTimeTimer = 0;
+    this.bossJumpDelayTimer = 0;
+  }
 
   // 套用慢動作時間膨脹後的模擬時間步長
   public scaleDelta(rawDelta: number): number {
@@ -128,14 +135,8 @@ export class CombatSystem {
             }
           }
 
-          // 判定是否為正面攻擊 (dot >= -0.15，非背後盲區)：技能間隔 0.5 秒且擊退效果減半
-          const guardFwdX = Math.sin(npc.rotationY);
-          const guardFwdZ = Math.cos(npc.rotationY);
-          const toPlayerX = player.position.x - npc.position.x;
-          const toPlayerZ = player.position.z - npc.position.z;
-          const dist = Math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
-          const dot = dist > 0.001 ? guardFwdX * (toPlayerX / dist) + guardFwdZ * (toPlayerZ / dist) : 1;
-          if (dot >= -0.15) {
+          // 正面攻擊 (非背後盲區)：技能間隔 0.5 秒且擊退效果減半
+          if (!isBehindNpc(npc, player.position.x, player.position.z)) {
             actualKnockback = knockback * 0.5;
             player.setAttackCooldown(0.5);
             wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
@@ -163,8 +164,7 @@ export class CombatSystem {
 
     // 嚴格暗殺判定：若已被敵人發現 (! 警戒狀態)，完全無法發動暗殺！
     if (target.alertState === 'ALERT') {
-      const isStunnedBoss = (target.role === 'DETENTION_BOSS' && target.isBossStunned && !target.isBossInvulnerable && target.bossInvulnerableTimer <= 0);
-      if (!isStunnedBoss) {
+      if (!isBossStunOpening(target)) {
         wantedSystem.showBanner('⚠️ 敵人已發現你 (! 狀態)！無法發動暗殺！需脫離視線或誘敵硬直！', 2000);
         return;
       }
@@ -194,7 +194,7 @@ export class CombatSystem {
       target.position.addScaledVector(_scratchImpactDir, 0.45);
       target.mesh.position.copy(target.position);
 
-      // 每次精確造成 100 傷害，300 HP 需暗殺 3 次才能擊破
+      // 每次精確造成 100 傷害，500 HP 需暗殺 5 次才能擊破
       target.isBossStunned = false;
       target.bossStunTimer = 0;
       target.applyAssassinationDamage(100);
@@ -204,7 +204,7 @@ export class CombatSystem {
         : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
       const qteSub = isFinalBlow
         ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總教官倒地癱瘓 2 秒！)`;
+        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/${target.maxHp}，總教官倒地癱瘓 2 秒！)`;
       hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
 
       if (target.hp <= 0) {
@@ -214,7 +214,7 @@ export class CombatSystem {
         wantedSystem.showBanner(
           isFromHiding
             ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-            : '🏆 狂賀！第三次終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+            : '🏆 狂賀！終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
           5000
         );
         soundManager.playSchoolBell();
@@ -223,8 +223,8 @@ export class CombatSystem {
         target.knockdownBoss(2.0);
         wantedSystem.showBanner(
           isFromHiding
-            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`
-            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`,
+            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`
+            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`,
           3000
         );
       }

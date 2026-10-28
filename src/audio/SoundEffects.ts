@@ -337,6 +337,9 @@ export class SoundEffects {
   private rainSource: AudioBufferSourceNode | null = null;
   private rainGain: GainNode | null = null;
   private rainFilter: BiquadFilterNode | null = null;
+  // 上次排程的雨聲目標值：目標未變 (每幀呼叫) 時不重排 AudioParam
+  private rainTargetVol = -1;
+  private rainTargetFreq = -1;
 
   public setRainIntensity(intensity: number, rampTime: number = 2.0, isIndoors: boolean = false) {
     const ctx = this.audio();
@@ -365,13 +368,21 @@ export class SoundEffects {
       // 若在室內：雨聲音量衰減至 22%，呈現隔著實體屋頂與牆壁聽雨的沉悶真實音效
       const volMultiplier = isIndoors ? 0.22 : 1.0;
       const targetVol = Math.max(0, Math.min(0.42, intensity * 0.42 * volMultiplier));
-      this.rainGain.gain.cancelScheduledValues(now);
-      this.rainGain.gain.linearRampToValueAtTime(targetVol, now + rampTime);
-
       // 雨勢越強，濾波器截止頻率越高；室內則大幅降至 360Hz（低通沉悶聽雨）
       const targetFreq = isIndoors ? 360 : (700 + intensity * 1100);
-      this.rainFilter.frequency.cancelScheduledValues(now);
-      this.rainFilter.frequency.linearRampToValueAtTime(targetFreq, now + rampTime);
+      if (Math.abs(targetVol - this.rainTargetVol) < 0.003 && Math.abs(targetFreq - this.rainTargetFreq) < 8) return;
+      this.rainTargetVol = targetVol;
+      this.rainTargetFreq = targetFreq;
+
+      // 先以目前值錨定起點再漸變，避免漸變起點落在過去的事件導致音量瞬間跳變
+      const gain = this.rainGain.gain;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(gain.value, now);
+      gain.linearRampToValueAtTime(targetVol, now + rampTime);
+      const freq = this.rainFilter.frequency;
+      freq.cancelScheduledValues(now);
+      freq.setValueAtTime(freq.value, now);
+      freq.linearRampToValueAtTime(targetFreq, now + rampTime);
     }
   }
 

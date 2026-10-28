@@ -1,3 +1,23 @@
+// 觸控落在這些 UI 上時不作為視角旋轉手指 (開始畫面、開場動畫、操作按鈕、搖桿與各面板)
+const TOUCH_LOOK_EXCLUDE_SELECTOR = [
+  '#start-screen',
+  '#cutscene-overlay',
+  '#touch-joystick-zone',
+  '#mobile-action-buttons',
+  '.mobile-btn',
+  '#commissary-modal',
+  '#bgm-badge',
+  '#toggle-mobile-mode-btn',
+  '#btn-fullscreen',
+  '#hud-action-pills',
+  '#quest-tracker-panel',
+  '#fullmap-modal',
+  '.demerit-container',
+  '.hud-top-right',
+  '.minimap-wrapper',
+  'button'
+].join(', ');
+
 export class InputManager {
   public keys: { [key: string]: boolean } = {};
   public mouseDeltaX: number = 0;
@@ -42,6 +62,8 @@ export class InputManager {
         e.preventDefault();
       }
       this.keys[e.code] = true;
+      // 長按自動重複的 keydown 不重複觸發動作 (F 保留長按連續攻擊)
+      if (e.repeat && e.code !== 'KeyF') return;
       if (e.code === 'KeyE') {
         if (this.onInteractCallback) this.onInteractCallback();
       }
@@ -112,6 +134,11 @@ export class InputManager {
     window.addEventListener('blur', () => {
       this.mouseButtons.left = false;
       this.mouseButtons.right = false;
+      // 失焦時收不到 keyup：清空按鍵與虛擬搖桿，避免角色持續移動
+      for (const code in this.keys) this.keys[code] = false;
+      this.setVirtualAxis(0, 0);
+      this.virtualSprint = false;
+      this.virtualJump = false;
     });
 
     // Mouse movement
@@ -147,26 +174,19 @@ export class InputManager {
   // 手機全螢幕觸控滑動旋轉視角 (右半螢幕滑動)
   private initTouchControls() {
     window.addEventListener('touchstart', (e) => {
+      // 視角手指已不在螢幕上 (其 touchend 被 UI 的 stopPropagation 攔截而未清除)：釋放，避免視角永久鎖死
+      if (this.touchLookId !== null) {
+        let stillDown = false;
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].identifier === this.touchLookId) { stillDown = true; break; }
+        }
+        if (!stillDown) this.resetTouchLook();
+      }
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         const target = touch.target as HTMLElement;
-        // 如果點在操作按鈕、搖桿或 UI 面板上，不觸發視角旋轉
-        if (
-          target.closest('#touch-joystick-zone') ||
-          target.closest('#mobile-action-buttons') ||
-          target.closest('.mobile-btn') ||
-          target.closest('#commissary-modal') ||
-          target.closest('#bgm-badge') ||
-          target.closest('#toggle-mobile-mode-btn') ||
-          target.closest('#btn-fullscreen') ||
-          target.closest('#hud-action-pills') ||
-          target.closest('#quest-tracker-panel') ||
-          target.closest('#fullmap-modal') ||
-          target.closest('.demerit-container') ||
-          target.closest('.hud-top-right') ||
-          target.closest('.minimap-wrapper') ||
-          target.closest('button')
-        ) {
+        // 如果點在操作按鈕、搖桿、UI 面板、開始畫面或開場動畫 (跳過鈕) 上，不觸發視角旋轉
+        if (target.closest(TOUCH_LOOK_EXCLUDE_SELECTOR)) {
           continue;
         }
         // 右側螢幕區域 (避開左側搖桿區) 作為攝影機滑動旋轉視角控制
@@ -206,18 +226,37 @@ export class InputManager {
     window.addEventListener('touchend', clearLookTouch, { passive: false });
     window.addEventListener('touchcancel', clearLookTouch, { passive: false });
     window.addEventListener('orientationchange', () => this.resetTouchLook());
-    window.addEventListener('resize', () => this.resetTouchLook());
+    // 僅在直/橫屏真正切換時重置 (工具列伸縮造成的 resize 不應打斷進行中的滑動轉視角)
+    let lastLandscape = window.innerWidth > window.innerHeight;
+    window.addEventListener('resize', () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      if (landscape !== lastLandscape) {
+        lastLandscape = landscape;
+        this.resetTouchLook();
+      }
+    });
   }
 
-  public resetTouchLook() {
+  // 消耗跳躍輸入 (空白鍵跳過開場時避免同一按鍵讓主角跳起)：需放開再按才會再次觸發
+  public consumeJump() {
+    this.keys['Space'] = false;
+    this.virtualJump = false;
+  }
+
+  private resetTouchLook() {
     this.touchLookId = null;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
   }
 
+  // 需在使用者手勢 (點擊/按鍵) 中呼叫；瀏覽器拒絕時 (無手勢或冷卻中) 靜默忽略，玩家點擊畫面即可再鎖定
   public requestPointerLock() {
-    if (!this.isTouchDevice) {
-      this.canvas.requestPointerLock();
+    if (this.isTouchDevice || document.pointerLockElement === this.canvas) return;
+    try {
+      const result = this.canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (result && typeof result.catch === 'function') result.catch(() => { });
+    } catch {
+      // 舊版瀏覽器同步拋錯時忽略
     }
   }
 
@@ -307,10 +346,6 @@ export class InputManager {
 
   public get jump(): boolean {
     return !!(this.keys['Space'] || this.virtualJump);
-  }
-
-  public get interact(): boolean {
-    return !!this.keys['KeyE'];
   }
 
   public get horn(): boolean {

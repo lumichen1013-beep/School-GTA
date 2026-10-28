@@ -3164,15 +3164,16 @@ export class CampusWorld {
 
     const poolSignTex = new THREE.CanvasTexture(poolSignCanvas);
     const poolSign = new THREE.Mesh(new THREE.BoxGeometry(6.0, 1.5, 0.2), new THREE.MeshBasicMaterial({ map: poolSignTex }));
-    poolSign.position.set(0, 2.6, -15.5);
+    // 招牌橫跨北端入口通道上方：底緣抬高至約 3.4m，高於角色 (1.8m) 與第三人稱鏡頭 (約 2.4m)，避免擋路與遮擋視角
+    poolSign.position.set(0, 4.15, -15.5);
     poolGroup.add(poolSign);
 
-    const signPoleGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8);
+    const signPoleGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.9, 8);
     const signPoleL = new THREE.Mesh(signPoleGeo, metalMat);
-    signPoleL.position.set(-2.5, 1.3, -15.5);
+    signPoleL.position.set(-2.5, 2.45, -15.5);
     poolGroup.add(signPoleL);
     const signPoleR = new THREE.Mesh(signPoleGeo, metalMat);
-    signPoleR.position.set(2.5, 1.3, -15.5);
+    signPoleR.position.set(2.5, 2.45, -15.5);
     poolGroup.add(signPoleR);
 
     // 地面互動發光圈 (青藍色出發台挑戰標記)

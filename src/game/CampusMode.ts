@@ -31,6 +31,8 @@ export class CampusMode {
   private readonly stolenBikes: Bicycle[] = [];
   private swimSplashTimer: number = 0;
   private wasDogChasing: boolean = false;
+  private lastTrackRecord: number | null | undefined = undefined;
+  private lastSwimRecord: number | null | undefined = undefined;
 
   private readonly missionTracker: MissionTrackerData = {
     studentDefeated: 0,
@@ -66,6 +68,15 @@ export class CampusMode {
   };
 
   constructor(private readonly ctx: GameContext) {}
+
+  // 切換世界時中止電梯過場並復位電梯門，清除校犬追捕旗標 (避免回到校園時過場續跑或誤判脫逃)
+  public resetTransientState() {
+    if (this.elevatorTransition) {
+      this.elevatorTransition = null;
+      this.ctx.world.setElevatorDoorsOpen(1.0);
+    }
+    this.wasDogChasing = false;
+  }
 
   // ===== 電梯 =====
 
@@ -329,6 +340,11 @@ export class CampusMode {
   // 校犬脫逃判定 (逃進教學大樓或甩開追捕)
   public updateDogEscape(dog: NPC | undefined, targetPosition: THREE.Vector3) {
     if (!dog) return;
+    // 死亡時 NPC 仇恨被重置，不可誤判為成功甩開校犬
+    if (this.ctx.player.isDead) {
+      this.wasDogChasing = false;
+      return;
+    }
     if (dog.isChasing) {
       this.wasDogChasing = true;
     } else if (this.wasDogChasing) {
@@ -367,8 +383,15 @@ export class CampusMode {
     tracker.hasSpecialBat = player.hasSpecialBat;
     tracker.plantBossDefeated = ecologicalGarden.boss.isDead;
     tracker.peBossDefeated = tennisGame.coachDefeated || (peCoach ? peCoach.hp <= 0 : false);
-    tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
-    tracker.swimRecordText = racingGame.bestSwimTime ? `${racingGame.bestSwimTime.toFixed(1)}s` : '未完成';
+    // 紀錄文字僅在最佳成績變動時重新格式化
+    if (racingGame.bestTrackTime !== this.lastTrackRecord) {
+      this.lastTrackRecord = racingGame.bestTrackTime;
+      tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
+    }
+    if (racingGame.bestSwimTime !== this.lastSwimRecord) {
+      this.lastSwimRecord = racingGame.bestSwimTime;
+      tracker.swimRecordText = racingGame.bestSwimTime ? `${racingGame.bestSwimTime.toFixed(1)}s` : '未完成';
+    }
     tracker.basketballStreak = basketballGame.scoreStreak;
     tracker.basketballRecord = basketballGame.bestStreak;
     tracker.hasRiddenBike = progression.hasRiddenBike;

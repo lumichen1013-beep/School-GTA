@@ -23,6 +23,10 @@ interface Interaction {
  */
 export class InteractionSystem {
   private readonly interactions: Interaction[];
+  // 上一幀顯示提示的互動項與競速提示快取 (切換顯示項時失效，確保提示文字重新寫入)
+  private lastPromptIt: Interaction | null = null;
+  private raceHudKey = -1;
+  private raceHudStanding = '';
 
   constructor(private readonly ctx: GameContext) {
     this.interactions = [...this.buildDetentionInteractions(), ...this.buildCampusInteractions()];
@@ -33,10 +37,24 @@ export class InteractionSystem {
     const world = this.ctx.currentWorldType;
     for (const it of this.interactions) {
       if (!it.prompt || (it.world && it.world !== world) || !it.when(pos)) continue;
+      if (it !== this.lastPromptIt) {
+        this.lastPromptIt = it;
+        this.raceHudKey = -1;
+      }
       it.prompt();
       return;
     }
+    this.lastPromptIt = null;
     this.ctx.hud.hidePrompt();
+  }
+
+  // 競速提示：計時 (0.1 秒)、檢查點或名次文字變化時才回傳 true
+  private raceHudChanged(timer: number, checkpointIdx: number, standing: string): boolean {
+    const key = Math.floor(timer * 10) * 1000 + checkpointIdx;
+    if (key === this.raceHudKey && standing === this.raceHudStanding) return false;
+    this.raceHudKey = key;
+    this.raceHudStanding = standing;
+    return true;
   }
 
   // E 鍵：執行第一個符合條件的互動動作
@@ -72,7 +90,7 @@ export class InteractionSystem {
           dw().hasPickedKeycardA = true;
           dw().keycardAMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【藍色門禁卡 A】！可用於開啟管制閘門 1！', 4000);
-          det().setCheckpoint(new THREE.Vector3(5, 0, -60), 'A區安全崗亭');
+          det().setCheckpoint(new THREE.Vector3(0, 0, -51), 'A區中央警衛室');
           soundManager.playPunch();
         }
       },
@@ -85,7 +103,7 @@ export class InteractionSystem {
           dw().hasPickedKeycardB = true;
           dw().keycardBMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【黃色門禁卡 B】！可用於開啟管制閘門 2！', 4000);
-          det().setCheckpoint(new THREE.Vector3(24, 0, 14), 'B區貨櫃掩體');
+          det().setCheckpoint(new THREE.Vector3(61, 0, 4), 'B區器材庫');
           soundManager.playPunch();
         }
       },
@@ -112,8 +130,8 @@ export class InteractionSystem {
         act: () => {
           if (det().hasKeycardA) {
             dw().openGateA();
-            ctx.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區貨櫃掩體迷宮！', 3500);
-            det().setCheckpoint(new THREE.Vector3(0, 0, -22), 'B區門前安全區');
+            ctx.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區訓練場，前往東側器材庫取得門禁卡 B！', 3500);
+            det().setCheckpoint(new THREE.Vector3(0, 0, -25), 'B區閘門內側');
             soundManager.playSchoolBell();
           } else {
             ctx.wantedSystem.showBanner('🔒 門禁鎖死！需要【藍色門禁卡 A】才能開啟閘門 1！', 3000);
@@ -225,6 +243,8 @@ export class InteractionSystem {
         when: () => ctx.racingGame.isRacingTrack,
         prompt: () => {
           const rg = ctx.racingGame;
+          // 顯示內容 (0.1 秒計時、檢查點、名次) 有變化時才組字串
+          if (!this.raceHudChanged(rg.raceTimer, rg.raceCheckpointIdx, rg.trackStandingText)) return;
           this.showPrompt(`${rg.trackStandingText} | 操場計時: ${rg.raceTimer.toFixed(1)}s (檢查點 ${rg.raceCheckpointIdx + 1}/${ctx.world.trackCheckpoints.length})`, '⏱️');
         }
       },
@@ -233,6 +253,7 @@ export class InteractionSystem {
         when: () => ctx.racingGame.isSwimmingRace,
         prompt: () => {
           const rg = ctx.racingGame;
+          if (!this.raceHudChanged(rg.swimRaceTimer, rg.swimCheckpointIdx, rg.swimStandingText)) return;
           this.showPrompt(`${rg.swimStandingText} | 泳池計時: ${rg.swimRaceTimer.toFixed(1)}s (檢查點 ${rg.swimCheckpointIdx + 1}/${ctx.world.swimCheckpoints.length})`, '🏊');
         }
       },

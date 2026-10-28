@@ -34,6 +34,7 @@ const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
 // 精力環投影用暫存向量 (避免每幀配置)
 const _scratchStaminaAnchor = new THREE.Vector3();
+const _campusRespawnPos = new THREE.Vector3(0, 0, 15); // 天天國中保健室復活點
 
 /**
  * 主程式：建置引擎與兩個世界、組裝各子系統，並調度每幀更新順序。
@@ -148,7 +149,7 @@ class SchoolGTASandbox implements GameContext {
       this.weatherSystem.setWeather('SUNNY', true, false);
       this.detention.startEscape();
       this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
-      this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
+      this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     };
     await nextFrame();
 
@@ -197,6 +198,7 @@ class SchoolGTASandbox implements GameContext {
       }
     };
     this.hud = new HUD();
+    this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
       this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
     };
@@ -281,10 +283,9 @@ class SchoolGTASandbox implements GameContext {
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
     this.forceDismount();
 
-    this.wantedSystem.clearWanted();
-    for (const n of this.npcs) {
-      n.resetAggro();
-    }
+    this.wantedSystem.clearWanted(); // onWantedCleared 會一併重置所有 NPC 仇恨
+    this.campus.resetTransientState();
+    this.combat.resetTransientState();
     // 進入世界時展開快捷鍵指南，30 秒後自動收合
     this.hud.showControlsGuide();
 
@@ -383,7 +384,7 @@ class SchoolGTASandbox implements GameContext {
       // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
       this.detention.startEscape();
       this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
-      this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
+      this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     }
   }
 
@@ -401,6 +402,8 @@ class SchoolGTASandbox implements GameContext {
       this.basketballGame.drop(this.player, this.hud, this.wantedSystem);
     }
     this.tennisGame.startMatch(this.hud, this.peCoachNpc, this.engine.scene, this.player, this.cameraCtrl);
+    // 對話時已釋放滑鼠鎖定：開賽 (點擊開始或按 E) 時重新鎖定，賽後不需再點一次畫面才能轉動視角
+    this.input.requestPointerLock();
   }
 
   // 投籃出手 (滑鼠左鍵鬆開 / 手機攻擊鍵放開，僅天天國中)
@@ -427,7 +430,7 @@ class SchoolGTASandbox implements GameContext {
 
     // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、J 大地圖任務、K 快捷鍵指南、P 天氣、ESC/Enter 對話框、R 重置籃球
     window.addEventListener('keydown', (e) => {
-      if (!this.isGameRunning) return;
+      if (!this.isGameRunning || e.repeat) return;
       const hud = this.hud;
       if (e.code === 'Digit1') {
         this.progression.selectWeaponSlot(1);
@@ -488,16 +491,13 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.duckVolume(3.2);
 
     this.wantedSystem.clearWanted();
-    for (const n of this.npcs) {
-      n.resetAggro();
-    }
     if (!isCampus) {
       this.detention.resetGuards();
     }
 
-    const respawnPos = isCampus ? new THREE.Vector3(0, 0, 15) : this.detentionWorld.spawnPos.clone();
-
     setTimeout(() => {
+      // 復活點於復活當下依所在世界計算 (死亡 3 秒內切換世界時避免在另一世界的座標重生)
+      const respawnPos = this.currentWorldType === 'CAMPUS' ? _campusRespawnPos : this.detentionWorld.spawnPos;
       this.player.respawn(respawnPos);
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
@@ -505,9 +505,6 @@ class SchoolGTASandbox implements GameContext {
         this.detention.resetGuards();
       }
       this.wantedSystem.clearWanted();
-      for (const n of this.npcs) {
-        n.resetAggro();
-      }
       this.isHandlingDeath = false;
       const recoverMsg = this.currentWorldType === 'CAMPUS'
         ? '已在保健室休養恢復，全校警報全面解除'
@@ -550,6 +547,7 @@ class SchoolGTASandbox implements GameContext {
     this.isHighDanger = false;
     // 被搶單車數量超過上限 (含玩家下車後閒置者) 時回收最舊的路邊單車
     if (isCampus) this.campus.enforceStolenBikeCap();
+    NPC.updateSharedEffects(delta);
 
     for (const npc of this.npcs) {
       if (isCampus) this.campus.updateBikeOwner(npc, targetPosition);
@@ -591,6 +589,7 @@ class SchoolGTASandbox implements GameContext {
     if (this.detentionCutscene.isActive) {
       if (this.input.jump) {
         this.detentionCutscene.skip();
+        this.input.consumeJump();
       } else {
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
