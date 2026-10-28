@@ -38,52 +38,76 @@
 
   <!-- HUD Interface -->
   <div id="hud-overlay">
-    <!-- Top Bar -->
+    <!-- 精力環：衝刺/游泳消耗時浮現於角色身旁，回滿後淡出 (位置由 HUD.updateStaminaRing 每幀以 transform 定位) -->
+    <div id="stamina-ring" aria-hidden="true">
+      <svg viewBox="0 0 40 40">
+        <circle class="stamina-ring-track" cx="20" cy="20" r="16" pathLength="100"></circle>
+        <circle class="stamina-ring-fill" id="stamina-ring-fill" cx="20" cy="20" r="16" pathLength="100"></circle>
+      </svg>
+      <span class="stamina-ring-icon">⚡</span>
+    </div>
+    <!-- Top Bar：左欄 (空間資訊：雷達 → 地點 → 任務膠囊)、中央留空 (橫幅/比分板)、右欄 (個人狀態：零用錢 + ⚙️ → 校規處分) -->
     <div class="hud-top">
-      <!-- 左上角 (Top-Left)：小地圖 (Minimap) + 地點分區標題 + 體力 (HP) / 精力 (Stamina) 條 -->
+      <!-- 左上角 (Top-Left)：雷達 (外圈體力弧) → 地點卡片 → 任務膠囊 -->
       <div class="hud-top-left" id="hud-top-left">
-        <div class="radar-container">
+        <!-- 雷達外框：體力 (HP) 以 3/4 弧環繞雷達，視線集中於雷達時即可一併掌握血量 -->
+        <div class="radar-frame">
           <!-- Circular Minimap -->
           <div class="minimap-wrapper" id="minimap-wrapper" title="點擊展開全域大地圖 (Click to Open Full Map)">
             <canvas id="minimap-canvas" width="120" height="120"></canvas>
             <div class="radar-center-ring"></div>
             <div class="minimap-expand-badge">⛶</div>
           </div>
+          <svg class="hp-ring" id="hp-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="hp-ring-track" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+            <circle class="hp-ring-trail" id="hp-ring-trail" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+            <circle class="hp-ring-fill" id="hp-ring-fill" cx="50" cy="50" r="47.5" pathLength="100"></circle>
+          </svg>
+          <div class="hp-ring-label"><span class="hp-ring-icon">♥</span><span id="hp-ring-num">100</span></div>
+        </div>
 
-          <!-- Player Location & Health / Stamina Status Block -->
-          <div class="player-status-block">
-            <div class="hud-title-zone">
-              <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
-              <div class="location-name" id="current-zone">教學大樓前 中庭廣場</div>
+        <!-- Player Location Block -->
+        <div class="hud-title-zone">
+          <div class="school-badge">新北市立天天國中 · 自由沙盒</div>
+          <div class="location-name" id="current-zone">教學大樓前 中庭廣場</div>
+        </div>
+
+        <!-- 任務小介面 (Compact Quest Widget)：完整任務清單已整合進大地圖，點擊或按 J 開啟 -->
+        <div id="quest-tracker-panel" title="開啟大地圖任務清單 (J)">
+          <!-- 頂部 Header -->
+          <div class="quest-tracker-header">
+            <div class="quest-header-left">
+              <span class="quest-title-text" id="q-title-text">📜 校園歷練</span>
+              <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
             </div>
-
-            <div class="bars-container">
-              <div class="meter-group">
-                <div class="meter-label">
-                  <span class="meter-title">💚 體力</span>
-                  <span class="meter-val" id="hp-num">100%</span>
-                </div>
-                <div class="meter-bar">
-                  <div class="meter-fill fill-hp" id="hp-bar" style="width: 100%;"></div>
-                </div>
-              </div>
-
-              <div class="meter-group">
-                <div class="meter-label">
-                  <span class="meter-title">⚡ 精力</span>
-                  <span class="meter-val" id="stamina-num">100%</span>
-                </div>
-                <div class="meter-bar">
-                  <div class="meter-fill fill-stamina" id="stamina-bar" style="width: 100%;"></div>
-                </div>
-              </div>
+            <div class="quest-header-right">
+              <span class="quest-toggle-indicator" id="quest-toggle-indicator">🗺️</span>
+              <span class="quest-key-badge">J</span>
             </div>
           </div>
+
+          <!-- 細緻的總進度條 -->
+          <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
+            <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
+          </div>
+
         </div>
       </div>
 
-      <!-- 右上角 (Top-Right)：通緝星級處分 (Wanted Demerits) + 金幣/時間 + 觸控/音樂按鈕 + 武器裝備槽 -->
+      <!-- 右上角 (Top-Right)：零用錢 + ⚙️ 設定選單 → 校規處分 -->
       <div class="hud-top-right">
+        <div class="hud-status-row">
+          <div class="cash-badge">💰 <span class="cash-val" id="cash-text">NT$ 250</span></div>
+          <div class="hud-action-pills" id="hud-action-pills">
+            <!-- ⚙️ 設定選單：收納全螢幕 / 觸控操作 (BGM、天氣、世界切換已移至大地圖) -->
+            <button type="button" id="hud-settings-btn" class="hud-pill-btn hud-settings-btn" title="設定選單" aria-expanded="false">⚙️</button>
+            <div class="hud-settings-menu" id="hud-settings-menu">
+              <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
+              <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 學校懲戒記過等級 (School Disciplinary Demerits) -->
         <div class="demerit-container">
           <div class="demerit-header">
@@ -99,59 +123,7 @@
             <span class="demerit-badge danger-badge" data-level="5" title="記大過 2 次 (留校察看)">留校察看</span>
           </div>
         </div>
-
-        <!-- 狀態資訊列：零用錢、時間、功能按鈕 -->
-        <div class="hud-status-row">
-          <div class="status-badge">
-            <span class="badge-item">💰 <span class="cash-val" id="cash-text">NT$ 250</span></span>
-            <span class="badge-item">⏰ <span class="time-val" id="clock-text">12:15 PM</span></span>
-            <span class="badge-item world-badge" id="world-badge" title="點擊切換世界 (或按 M 鍵)">
-              <span id="world-text">🏫 天天國中</span>
-              <span class="world-key-hint">M</span>
-            </span>
-            <span class="badge-item weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
-              <span id="weather-text">☀️ 晴朗</span>
-              <span class="weather-key-hint">P</span>
-            </span>
-          </div>
-
-          <div class="hud-action-pills" id="hud-action-pills">
-            <!-- ⚙️ 設定選單按鈕：僅手機端顯示，收納全螢幕 / 觸控 / BGM 三顆功能鍵 -->
-            <button type="button" id="hud-settings-btn" class="hud-pill-btn hud-settings-btn" title="設定選單" aria-expanded="false">⚙️</button>
-            <div class="hud-settings-menu" id="hud-settings-menu">
-              <button id="btn-fullscreen" class="hud-pill-btn" title="切換全螢幕">⛶ 全螢幕</button>
-              <button id="toggle-mobile-mode-btn" class="hud-pill-btn" title="切換手機虛擬搖桿與觸控按鈕">📱 觸控操作</button>
-              <div class="bgm-badge" id="bgm-badge" title="點擊切換音樂開關 (或按 B 鍵)">
-                <span id="bgm-icon">🎵</span>
-                <span id="bgm-text">BGM: 校園漫步</span>
-                <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
-                <span class="bgm-key-hint">B</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-    </div>
-
-    <!-- 任務小介面 (Compact Quest Widget)：完整任務清單已整合進大地圖，點擊或按 J 開啟 -->
-    <div id="quest-tracker-panel" title="開啟大地圖任務清單 (J)">
-      <!-- 頂部 Header -->
-      <div class="quest-tracker-header">
-        <div class="quest-header-left">
-          <span class="quest-title-text" id="q-title-text">📜 校園歷練</span>
-          <span class="quest-progress-badge">進度 <span id="q-total-progress">0/13</span></span>
-        </div>
-        <div class="quest-header-right">
-          <span class="quest-toggle-indicator" id="quest-toggle-indicator">🗺️</span>
-          <span class="quest-key-badge">J</span>
-        </div>
-      </div>
-
-      <!-- 細緻的總進度條 -->
-      <div class="quest-total-bar-wrap" id="quest-total-bar-wrap">
-        <div class="quest-total-bar" id="q-total-bar" style="width: 0%;"></div>
-      </div>
-
     </div>
 
     <!-- 秘境霸主：變異食人花王 Boss 血條 -->
@@ -346,6 +318,24 @@
           <div class="fullmap-coords" id="fullmap-coords">坐標：X: 0.0, Z: 0.0</div>
           <button class="commissary-close" id="fullmap-close-btn" title="關閉大地圖 (ESC)">&times;</button>
         </div>
+      </div>
+      <!-- 大地圖工具列：背景音樂 / 天氣 / 世界切換 (B / P / M 鍵同效) -->
+      <div class="fullmap-toolbar">
+        <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關 (或按 B 鍵)">
+          <span id="bgm-icon">🎵</span>
+          <span id="bgm-text">BGM: 校園漫步</span>
+          <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+          <span class="bgm-key-hint">B</span>
+        </div>
+        <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣 (或按 P 鍵)">
+          <span id="weather-text">☀️ 晴朗</span>
+          <span class="tool-key-hint">P</span>
+        </button>
+        <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界 (或按 M 鍵)">
+          <span>🔁 切換世界</span>
+          <span class="world-current" id="world-text">🏫 天天國中</span>
+          <span class="tool-key-hint">M</span>
+        </button>
       </div>
       <div class="fullmap-body">
         <div class="fullmap-canvas-wrap">

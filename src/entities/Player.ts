@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
@@ -21,6 +22,180 @@ const PLAYER_TELEPORT_OPTS = { minRadius: 2.0, maxRadius: 4.2, attempts: 12, bas
 const PLAYER_BUBBLE_STYLE = { fillAlpha: 0.82, strokeAlpha: 0.70, fontSize: () => 38 };
 const _sweepNear: CollidableBox[] = [];
 const _footprintNear: CollidableBox[] = [];
+
+// ==========================================================
+// 主角造型配色 (方案 A 灰藍運動風)：灰藍外套 × 霧金黃後背包 × 灰白球鞋
+// 低彩度、中明度，長時間遊玩不刺眼；與校園 NPC (米白深綠 / 藍紫運動服) 色相明度皆有區隔，背影以霧金黃背包辨識
+// ==========================================================
+const OUTFIT = {
+  skin: 0xfad390,
+  tee: 0xe8e4dc,      // 米灰 T 恤 (兼泳衣上身)
+  jacket: 0x4a5d73,   // 灰藍外套 (身、袖同色) 與泳褲
+  trim: 0x3a4a5e,     // 深灰藍：衣領、拉鍊滾邊、耳罩
+  cream: 0xe8e4dc,    // 米白：袖口、下襬條紋、背包反光條
+  dark: 0x2e3238,     // 深灰：背帶、鞋底、耳機頭帶、護腕
+  pack: 0xc9a227,     // 霧金黃後背包 (背影辨識重點)
+  packDark: 0xa88a22,
+  badge: 0x4a5d73,    // 背包灰藍閃電徽章
+  pants: 0x3a3f47,    // 深灰長褲
+  cuff: 0x4b515a,     // 反摺褲管
+  shoe: 0xeceae4,     // 灰白球鞋
+  hair: 0x2a1a12,     // 深棕刺蝟頭
+  eye: 0x1a1a1a,
+  mouth: 0x9c4a3a
+};
+
+type OutfitLayer = 'base' | 'gear' | 'swim';
+interface OutfitPart {
+  w: number; h: number; d: number;
+  color: number;
+  x: number; y: number; z: number;
+  rx: number; ry: number; rz: number;
+}
+
+// 方塊零件收集器：base = 常駐 (身體、T 恤、髮型)，gear = 陸上服裝 (外套、背包、長褲、球鞋、耳機)，
+// swim = 僅游泳時出現 (泳褲、短袖)。被陸上服裝包覆的零件不可放在 base，否則表面過近會產生 Z-fighting 閃爍
+class OutfitBuilder {
+  private parts: Record<OutfitLayer, OutfitPart[]> = { base: [], gear: [], swim: [] };
+
+  public box(layer: OutfitLayer, w: number, h: number, d: number, color: number,
+    x: number, y: number, z: number, rx: number = 0, ry: number = 0, rz: number = 0) {
+    this.parts[layer].push({ w, h, d, color, x, y, z, rx, ry, rz });
+  }
+
+  public get hasGear(): boolean {
+    return this.parts.gear.length > 0 || this.parts.swim.length > 0;
+  }
+
+  // 烘焙為單一頂點色幾何體 (非索引、position/normal/color)
+  public build(includeGear: boolean): THREE.BufferGeometry {
+    const list = includeGear ? [...this.parts.base, ...this.parts.gear] : [...this.parts.base, ...this.parts.swim];
+    const euler = new THREE.Euler();
+    const quat = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scale = new THREE.Vector3(1, 1, 1);
+    const matrix = new THREE.Matrix4();
+    const color = new THREE.Color();
+    const geos = list.map((p) => {
+      const geo = new THREE.BoxGeometry(p.w, p.h, p.d).toNonIndexed();
+      geo.deleteAttribute('uv');
+      matrix.compose(pos.set(p.x, p.y, p.z), quat.setFromEuler(euler.set(p.rx, p.ry, p.rz)), scale);
+      geo.applyMatrix4(matrix);
+      color.setHex(p.color);
+      const count = geo.attributes.position.count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      return geo;
+    });
+    const merged = mergeGeometries(geos, false)!;
+    for (const g of geos) g.dispose();
+    merged.computeBoundingSphere();
+    return merged;
+  }
+}
+
+// 軀幹 (節點原點為軀幹中心，正面朝 +Z、背面 -Z)
+function buildTorsoParts(b: OutfitBuilder) {
+  const c = OUTFIT;
+  // 米灰 T 恤 (敞開外套中央露出)
+  b.box('base', 0.65, 0.75, 0.35, c.tee, 0, 0, 0);
+
+  // 灰藍外套 (前襟敞開)：背片、側片、左右前襟、深灰藍拉鍊滾邊、米白下襬條紋、深灰藍衣領
+  b.box('gear', 0.69, 0.72, 0.04, c.jacket, 0, -0.005, -0.185);
+  for (const s of [-1, 1]) {
+    b.box('gear', 0.04, 0.72, 0.39, c.jacket, s * 0.345, -0.005, 0);
+    b.box('gear', 0.2, 0.72, 0.04, c.jacket, s * 0.245, -0.005, 0.185);
+    b.box('gear', 0.02, 0.72, 0.046, c.trim, s * 0.15, -0.005, 0.186);
+    b.box('gear', 0.2, 0.05, 0.045, c.cream, s * 0.245, -0.33, 0.186);
+  }
+  b.box('gear', 0.69, 0.05, 0.045, c.cream, 0, -0.33, -0.186);
+  b.box('gear', 0.56, 0.07, 0.4, c.trim, 0, 0.365, 0);
+
+  // 霧金黃後背包：主體、頂蓋、前袋與拉鍊、反光底條、灰藍閃電徽章 (背影辨識重點)
+  b.box('gear', 0.5, 0.52, 0.22, c.pack, 0, 0, -0.31);
+  b.box('gear', 0.46, 0.06, 0.2, c.packDark, 0, 0.28, -0.31);
+  b.box('gear', 0.38, 0.2, 0.06, c.packDark, 0, -0.12, -0.445);
+  b.box('gear', 0.34, 0.02, 0.065, c.dark, 0, -0.04, -0.447);
+  b.box('gear', 0.5, 0.03, 0.225, c.cream, 0, -0.235, -0.31);
+  b.box('gear', 0.06, 0.14, 0.012, c.badge, 0.025, 0.16, -0.426, 0, 0, -0.45);
+  b.box('gear', 0.13, 0.04, 0.012, c.badge, 0, 0.1, -0.426);
+  b.box('gear', 0.06, 0.14, 0.012, c.badge, -0.025, 0.04, -0.426, 0, 0, -0.45);
+
+  // 背包肩帶 (跨肩 + 胸前垂帶)
+  for (const s of [-1, 1]) {
+    b.box('gear', 0.07, 0.05, 0.42, c.dark, s * 0.17, 0.39, -0.03);
+    b.box('gear', 0.07, 0.42, 0.03, c.dark, s * 0.17, 0.17, 0.205);
+  }
+
+  // 頸掛耳機：深灰頭帶 + 深灰藍耳罩
+  b.box('gear', 0.44, 0.05, 0.05, c.dark, 0, 0.39, 0.2);
+  for (const s of [-1, 1]) {
+    b.box('gear', 0.07, 0.13, 0.13, c.trim, s * 0.24, 0.38, 0.12);
+  }
+}
+
+// 頭部 (節點原點為頭部中心)：臉部五官 + 深棕刺蝟頭
+function buildHeadParts(b: OutfitBuilder) {
+  const c = OUTFIT;
+  b.box('base', 0.38, 0.4, 0.38, c.skin, 0, 0, 0);
+  for (const s of [-1, 1]) {
+    b.box('base', 0.06, 0.065, 0.02, c.eye, s * 0.085, 0.02, 0.19);
+    b.box('base', 0.11, 0.03, 0.02, c.hair, s * 0.09, 0.1, 0.192, 0, 0, s * 0.2);
+    b.box('base', 0.04, 0.09, 0.06, c.skin, s * 0.2, 0, 0);
+    b.box('base', 0.04, 0.16, 0.32, c.hair, s * 0.205, 0.12, -0.03);
+  }
+  b.box('base', 0.09, 0.02, 0.02, c.mouth, 0.03, -0.1, 0.191, 0, 0, 0.12);
+
+  // 髮量基底 (頂、後腦、瀏海)
+  b.box('base', 0.42, 0.12, 0.42, c.hair, 0, 0.2, 0);
+  b.box('base', 0.42, 0.26, 0.07, c.hair, 0, 0.06, -0.19);
+  b.box('base', 0.4, 0.07, 0.06, c.hair, 0, 0.165, 0.19);
+
+  // 刺蝟尖刺 (向外斜翹)
+  b.box('base', 0.12, 0.17, 0.12, c.hair, 0, 0.3, -0.06, -0.35, 0, 0);
+  b.box('base', 0.12, 0.17, 0.12, c.hair, -0.13, 0.29, 0.02, 0, 0, 0.55);
+  b.box('base', 0.12, 0.17, 0.12, c.hair, 0.13, 0.29, 0.02, 0, 0, -0.55);
+  b.box('base', 0.12, 0.17, 0.12, c.hair, -0.1, 0.27, -0.15, -0.6, 0, 0.35);
+  b.box('base', 0.12, 0.17, 0.12, c.hair, 0.1, 0.27, -0.15, -0.6, 0, -0.35);
+  b.box('base', 0.11, 0.16, 0.11, c.hair, 0.08, 0.29, 0.11, 0.55, 0, -0.2);
+  b.box('base', 0.11, 0.16, 0.11, c.hair, -0.06, 0.29, 0.12, 0.55, 0, 0.15);
+}
+
+// 手臂 (節點原點為手臂中心，手掌在 -Y 端)；side = -1 左 / 1 右
+function buildArmParts(b: OutfitBuilder, side: number) {
+  const c = OUTFIT;
+  // 裸臂 + T 恤短袖 (僅游泳時出現，陸上由外套袖覆蓋)
+  b.box('base', 0.18, 0.65, 0.18, c.skin, 0, 0, 0);
+  b.box('swim', 0.2, 0.2, 0.2, c.tee, 0, 0.225, 0);
+
+  // 灰藍外套袖、深灰與米白羅紋袖口
+  b.box('gear', 0.21, 0.5, 0.21, c.jacket, 0, 0.085, 0);
+  b.box('gear', 0.215, 0.025, 0.215, c.dark, 0, -0.115, 0);
+  b.box('gear', 0.22, 0.06, 0.22, c.cream, 0, -0.15, 0);
+  // 左手腕黑色護腕
+  if (side < 0) b.box('gear', 0.2, 0.05, 0.2, c.dark, 0, -0.22, 0);
+}
+
+// 腿部 (節點原點為腿部中心，腳掌在 -Y 端)；side = -1 左 / 1 右 (泳褲側邊條紋)
+function buildLegParts(b: OutfitBuilder, side: number) {
+  const c = OUTFIT;
+  // 裸腿 + 灰藍泳褲 (僅游泳時出現；陸上由長褲、褲管與球鞋完整覆蓋，避免頂面共面閃爍)
+  b.box('swim', 0.24, 0.7, 0.24, c.skin, 0, 0, 0);
+  b.box('swim', 0.25, 0.26, 0.25, c.jacket, 0, 0.22, 0);
+  b.box('swim', 0.012, 0.24, 0.06, c.cream, side * 0.126, 0.22, 0);
+
+  // 炭灰長褲與反摺褲管
+  b.box('gear', 0.26, 0.58, 0.26, c.pants, 0, 0.06, 0);
+  b.box('gear', 0.28, 0.07, 0.28, c.cuff, 0, -0.215, 0);
+  // 灰白球鞋：鞋身、深灰鞋底
+  b.box('gear', 0.27, 0.11, 0.36, c.shoe, 0, -0.29, 0.05);
+  b.box('gear', 0.28, 0.035, 0.37, c.dark, 0, -0.35, 0.05);
+}
 
 export class Player {
   public mesh: THREE.Group;
@@ -112,6 +287,11 @@ export class Player {
   private leftLeg: THREE.Mesh;
   private rightLeg: THREE.Mesh;
 
+  // 主角造型：所有骨架節點共用一個頂點色材質 (玩家專屬，閃爍半透明特效改其 opacity 不影響 NPC)
+  private outfitMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+  private outfitNodes: { mesh: THREE.Mesh; land: THREE.BufferGeometry; swim: THREE.BufferGeometry }[] = [];
+  private isSwimOutfit: boolean = false;
+
   // 頭頂技能名稱對話氣泡 (浮動微光膠囊框，0-GC 復用 Sprite)
   private skillBubble: SkillBubble;
 
@@ -120,7 +300,6 @@ export class Player {
   public isAttacking: boolean = false;
 
   constructor(scene: THREE.Scene) {
-    (window as any).__TMPDBG_player = this; // TMPDBG
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ'; // 採用 Y(航向) -> X(俯仰) -> Z(側滾) 順序，避免自由式俯趴時歐拉角產生萬向節鎖(Gimbal Lock)並支援水中360度靈敏轉向
     this.mesh.position.copy(this.position);
@@ -129,42 +308,12 @@ export class Player {
     this.skillBubble = new SkillBubble(this.mesh, 2.35, PLAYER_BUBBLE_STYLE);
     this.skillBubble.ensure();
 
-    // 1. 建立角色外觀（台灣典型高校制服風格：深藍長褲、白襯衫配後背包）
-    const uniformMat = new THREE.MeshLambertMaterial({ color: 0x1b263b }); // 深藍西裝褲
-    const shirtMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa }); // 白襯衫
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xfad390 }); // 膚色
-    const hairMat = new THREE.MeshLambertMaterial({ color: 0x222222 }); // 黑髮
-    const bagMat = new THREE.MeshLambertMaterial({ color: 0x00b894 }); // 綠色校園斜背包
-
-    // 身體軀幹 (Torso)
-    const bodyGeo = new THREE.BoxGeometry(0.65, 0.75, 0.35);
-    this.bodyMesh = new THREE.Mesh(bodyGeo, shirtMat);
-    this.bodyMesh.position.y = 1.05;
-    this.bodyMesh.castShadow = true;
-    this.mesh.add(this.bodyMesh);
-
-    // 校園側背包 (School Bag)
-    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 0.2), bagMat);
-    bag.position.set(0, 0, -0.22);
-    bag.castShadow = true;
-    this.bodyMesh.add(bag);
-
-    // 頭部與頭髮
-    this.headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), skinMat);
-    this.headMesh.position.y = 1.62;
-    this.headMesh.castShadow = true;
-    this.mesh.add(this.headMesh);
-
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.42), hairMat);
-    hair.position.set(0, 0.16, 0);
-    this.headMesh.add(hair);
-
-    // 手臂 (Arms)
-    const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
-    this.leftArm = new THREE.Mesh(armGeo, shirtMat);
-    this.leftArm.position.set(-0.45, 1.05, 0);
-    this.leftArm.castShadow = true;
-    this.mesh.add(this.leftArm);
+    // 1. 主角造型 (方案 A 灰藍運動風)：灰藍外套敞開、米灰 T 恤、深灰反摺長褲、灰白球鞋、
+    //    霧金黃閃電後背包 (第三人稱背影最醒目)、深棕刺蝟頭、頸掛耳機
+    //    每個骨架節點 (軀幹/頭/雙臂/雙腿) 將零件烘焙為頂點色單一 Mesh；陸上與游泳各一份幾何體，入水時切換為泳裝造型
+    this.bodyMesh = this.createOutfitNode(buildTorsoParts, 0, 1.05, 0);
+    this.headMesh = this.createOutfitNode(buildHeadParts, 0, 1.62, 0);
+    this.leftArm = this.createOutfitNode((b) => buildArmParts(b, -1), -0.45, 1.05, 0);
 
     // 建立下雨天專屬雨傘 3D 模型並掛載於左手 (leftArm，右手依然可正常揮棒或揮拳)
     this.umbrellaMesh = this.buildUmbrellaModel();
@@ -172,10 +321,7 @@ export class Player {
     this.umbrellaMesh.rotation.set(Math.PI * 0.65, 0.12, -0.12);
     this.leftArm.add(this.umbrellaMesh);
 
-    this.rightArm = new THREE.Mesh(armGeo, shirtMat);
-    this.rightArm.position.set(0.45, 1.05, 0);
-    this.rightArm.castShadow = true;
-    this.mesh.add(this.rightArm);
+    this.rightArm = this.createOutfitNode((b) => buildArmParts(b, 1), 0.45, 1.05, 0);
 
     // 建立球棒武器 3D 模型並掛載於右手 (Attached to right arm)
     // 1. 普通木質棒球棍 (Normal Wooden Baseball Bat)
@@ -248,21 +394,35 @@ export class Player {
     this.rightArm.add(this.racketMesh);
 
     // 雙腿 (Legs)
-    const legGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
-    this.leftLeg = new THREE.Mesh(legGeo, uniformMat);
-    this.leftLeg.position.set(-0.18, 0.35, 0);
-    this.leftLeg.castShadow = true;
-    this.mesh.add(this.leftLeg);
-
-    this.rightLeg = new THREE.Mesh(legGeo, uniformMat);
-    this.rightLeg.position.set(0.18, 0.35, 0);
-    this.rightLeg.castShadow = true;
-    this.mesh.add(this.rightLeg);
+    this.leftLeg = this.createOutfitNode((b) => buildLegParts(b, -1), -0.18, 0.35, 0);
+    this.rightLeg = this.createOutfitNode((b) => buildLegParts(b, 1), 0.18, 0.35, 0);
 
     scene.add(this.mesh);
 
     // 建立 0-GC 角色殘影物件池 (8 個 Group，常駐場景，避免每幀垃圾回收)
     this.afterimagePool = new AfterimagePool(scene, 8);
+  }
+
+  // 建立單一骨架節點：零件烘焙為「陸上 (含外套/背包/長褲/球鞋)」與「游泳 (泳裝)」兩份幾何體
+  private createOutfitNode(build: (b: OutfitBuilder) => void, x: number, y: number, z: number): THREE.Mesh {
+    const builder = new OutfitBuilder();
+    build(builder);
+    const land = builder.build(true);
+    const swim = builder.hasGear ? builder.build(false) : land;
+    const node = new THREE.Mesh(land, this.outfitMaterial);
+    node.position.set(x, y, z);
+    node.castShadow = true;
+    this.mesh.add(node);
+    this.outfitNodes.push({ mesh: node, land, swim });
+    return node;
+  }
+
+  // 入水換上泳裝 (隱藏外套、背包、長褲與球鞋)，上岸恢復；僅切換幾何體參考，無額外 Draw Call
+  private setSwimOutfit(swimming: boolean) {
+    this.isSwimOutfit = swimming;
+    for (const node of this.outfitNodes) {
+      node.mesh.geometry = swimming ? node.swim : node.land;
+    }
   }
 
   public takeDamage(amount: number, reason: string = '受到傷害'): boolean {
@@ -1150,6 +1310,7 @@ export class Player {
   }
 
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean, currentSpeed: number = 5.0) {
+    if (this.isSwimming !== this.isSwimOutfit) this.setSwimOutfit(this.isSwimming);
     if (this.isSwimming) {
       // 1. 身體俯仰趴平姿態 (Prone Freestyle vs Treading Water)
       // 自由式划水衝刺/前進時：前傾俯趴約 70~75 度 (1.20 ~ 1.28 rad)
@@ -1376,6 +1537,11 @@ export class Player {
 
   // 資源釋放處置 (Resource Disposal)
   public dispose(scene?: THREE.Scene) {
+    // 未掛載中的陸上/泳裝備用幾何體需一併釋放
+    for (const node of this.outfitNodes) {
+      if (node.mesh.geometry !== node.land) node.land.dispose();
+      if (node.mesh.geometry !== node.swim) node.swim.dispose();
+    }
     this.mesh.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;

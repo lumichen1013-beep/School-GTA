@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { IndoorManager } from '../systems/IndoorManager';
 import { queryColliders } from '../physics/aabb';
+import { consumeCameraShake } from '../effects/cameraShake';
 
 const _cameraSegNear: CollidableBox[] = [];
 
@@ -349,6 +350,13 @@ export class ThirdPersonCamera {
     }
 
     this.camera.position.copy(this.currentPosition);
+    // 撞擊震動 (例如總教官衝撞撞柱)：僅偏移輸出鏡頭位置，不影響平滑插值狀態
+    const shake = consumeCameraShake(delta) * 0.35;
+    if (shake > 0) {
+      this.camera.position.x += (Math.random() - 0.5) * shake;
+      this.camera.position.y += (Math.random() - 0.5) * shake;
+      this.camera.position.z += (Math.random() - 0.5) * shake;
+    }
     this.camera.lookAt(this.currentLookAt);
   }
 

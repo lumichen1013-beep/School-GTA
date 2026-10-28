@@ -68,10 +68,13 @@ export class HUD {
   private static readonly MINIMAP_LOGICAL_SIZE = 120;
   private minimapPixelScale: number = 1;
 
-  private hpBar: HTMLElement | null;
-  private hpNum: HTMLElement | null;
-  private staminaBar: HTMLElement | null;
-  private staminaNum: HTMLElement | null;
+  // 雷達外圈 HP 弧 (數值變化才更新) 與角色身旁精力環
+  private hpRingEl: Element | null;
+  private hpRingFillEl: Element | null;
+  private hpRingTrailEl: Element | null;
+  private hpRingNumEl: HTMLElement | null;
+  private staminaRingEl: HTMLElement | null;
+  private staminaRingFillEl: Element | null;
   private locationEl: HTMLElement | null;
   private actionPrompt: HTMLElement | null;
   private promptKey: HTMLElement | null;
@@ -179,10 +182,12 @@ export class HUD {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
 
-    this.hpBar = document.getElementById('hp-bar');
-    this.hpNum = document.getElementById('hp-num');
-    this.staminaBar = document.getElementById('stamina-bar');
-    this.staminaNum = document.getElementById('stamina-num');
+    this.hpRingEl = document.getElementById('hp-ring');
+    this.hpRingFillEl = document.getElementById('hp-ring-fill');
+    this.hpRingTrailEl = document.getElementById('hp-ring-trail');
+    this.hpRingNumEl = document.getElementById('hp-ring-num');
+    this.staminaRingEl = document.getElementById('stamina-ring');
+    this.staminaRingFillEl = document.getElementById('stamina-ring-fill');
     this.locationEl = document.getElementById('current-zone');
     this.actionPrompt = document.getElementById('action-prompt');
     this.promptKey = document.getElementById('prompt-key');
@@ -195,15 +200,6 @@ export class HUD {
     this.crosshairEl = document.getElementById('crosshair');
     this.cashTextEl = document.getElementById('cash-text');
 
-    // 狀態列時鐘：顯示裝置本地時間 (每 30 秒更新一次，原為寫死的 12:15 PM)
-    const clockEl = document.getElementById('clock-text');
-    if (clockEl) {
-      const updateClock = () => {
-        clockEl.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      };
-      updateClock();
-      setInterval(updateClock, 30000);
-    }
     this.poisonVignetteEl = document.getElementById('poison-vignette');
     this.weatherBadgeEl = document.getElementById('weather-badge');
     this.weatherTextEl = document.getElementById('weather-text');
@@ -215,7 +211,7 @@ export class HUD {
       });
     }
 
-    // ⚙️ 設定選單 (手機端)：點擊展開/收合，點選單外任意處自動收合
+    // ⚙️ 設定選單 (全螢幕 / 觸控操作)：點擊展開/收合，點選單外任意處自動收合
     const settingsBtnEl = document.getElementById('hud-settings-btn');
     const settingsMenuEl = document.getElementById('hud-settings-menu');
     if (settingsBtnEl && settingsMenuEl) {
@@ -239,8 +235,10 @@ export class HUD {
     this.worldBadgeEl = document.getElementById('world-badge');
     this.worldTextEl = document.getElementById('world-text');
     if (this.worldBadgeEl) {
+      // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 (與 M 鍵同流程)
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
+        this.closeFullMap();
         if (this.onWorldToggle) this.onWorldToggle();
       });
     }
@@ -292,18 +290,25 @@ export class HUD {
     this.fullmapLegendDetentionEl = document.getElementById('fullmap-legend-detention');
     this.minimapWrapperEl = document.getElementById('minimap-wrapper');
 
-    // 頂部狀態列實際底緣寫入 CSS 變數 --hud-top-bottom，供任務膠囊與橫幅定位於其下方 (各尺寸與換行皆不重疊)
+    // 頂部兩欄尺寸寫入 CSS 變數供橫幅定位：--hud-top-bottom (兩欄底緣，直屏橫幅置於其下)、
+    // --hud-side-w (較寬欄位寬度，桌面/橫屏橫幅置於兩欄之間的中央留白)
     const hudTopEl = document.querySelector('.hud-top') as HTMLElement | null;
     if (hudTopEl && 'ResizeObserver' in window) {
+      const leftEl = document.getElementById('hud-top-left');
+      const rightEl = hudTopEl.querySelector('.hud-top-right') as HTMLElement | null;
       const syncHudTopBottom = () => {
+        const rootStyle = document.documentElement.style;
         const bottom = Math.round(hudTopEl.getBoundingClientRect().bottom);
-        if (bottom > 0) document.documentElement.style.setProperty('--hud-top-bottom', `${bottom}px`);
-        // 左上雷達區塊底緣：任務膠囊 (桌面/橫屏) 緊貼其下方
-        const leftEl = document.getElementById('hud-top-left');
-        const leftBottom = leftEl ? Math.round(leftEl.getBoundingClientRect().bottom) : 0;
-        if (leftBottom > 0) document.documentElement.style.setProperty('--hud-left-bottom', `${leftBottom}px`);
+        if (bottom > 0) rootStyle.setProperty('--hud-top-bottom', `${bottom}px`);
+        const leftR = leftEl ? leftEl.getBoundingClientRect() : null;
+        const rightR = rightEl ? rightEl.getBoundingClientRect() : null;
+        const sideW = Math.round(Math.max(leftR ? leftR.right : 0, rightR ? window.innerWidth - rightR.left : 0));
+        if (sideW > 0) rootStyle.setProperty('--hud-side-w', `${sideW}px`);
       };
-      new ResizeObserver(syncHudTopBottom).observe(hudTopEl);
+      const ro = new ResizeObserver(syncHudTopBottom);
+      ro.observe(hudTopEl);
+      if (leftEl) ro.observe(leftEl);
+      if (rightEl) ro.observe(rightEl);
       window.addEventListener('resize', syncHudTopBottom);
       syncHudTopBottom();
     }
@@ -583,7 +588,11 @@ export class HUD {
   private lastCash: number = -1;
   private lastMissionData: MissionTrackerData | null = null;
   private lastHp: number = -1;
+  private lastHpLevel: string = '';
   private lastStamina: number = -1;
+  private staminaRingVisible: boolean = false;
+  private staminaFullTimer: number = 0;
+  private lastStaminaExhausted: boolean = false;
   private lastLocationZone: string = '';
   private lastBeingChased: boolean | null = null;
   private lastHighDanger: boolean | null = null;
@@ -1253,6 +1262,50 @@ export class HUD {
     }
   }
 
+  // 精力環：精力未滿時浮現於角色身旁 (screenX/Y 為角色肩部投影座標)，回滿 0.8 秒後淡出；
+  // 僅可見期間每幀以 transform 定位，隱藏時不觸碰 DOM
+  public updateStaminaRing(screenX: number, screenY: number, allowed: boolean, delta: number) {
+    const el = this.staminaRingEl;
+    if (!el) return;
+    const stamina = this.lastStamina;
+    let want = false;
+    if (allowed) {
+      if (stamina < 99.5) {
+        this.staminaFullTimer = 0.8;
+        want = true;
+      } else if (this.staminaFullTimer > 0) {
+        this.staminaFullTimer -= delta;
+        want = this.staminaFullTimer > 0;
+      }
+    } else {
+      this.staminaFullTimer = 0;
+    }
+
+    if (want !== this.staminaRingVisible) {
+      this.staminaRingVisible = want;
+      el.classList.toggle('visible', want);
+    }
+    if (!want) return;
+
+    // 錨點已位於角色右側 (main.ts 以世界座標偏移)，此處再外推半個環寬並夾持於畫面內
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.min(vw - 28, Math.max(28, screenX + 20));
+    const y = Math.min(vh - 28, Math.max(28, screenY));
+    el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+
+    const rounded = Math.round(stamina);
+    if (this.staminaRingFillEl && this.staminaRingFillEl.getAttribute('data-v') !== `${rounded}`) {
+      this.staminaRingFillEl.setAttribute('data-v', `${rounded}`);
+      this.staminaRingFillEl.setAttribute('style', `stroke-dasharray:${rounded} 100`);
+    }
+    const exhausted = stamina < 20;
+    if (exhausted !== this.lastStaminaExhausted) {
+      this.lastStaminaExhausted = exhausted;
+      el.classList.toggle('exhausted', exhausted);
+    }
+  }
+
   public update(
     playerPos: THREE.Vector3,
     playerRotY: number,
@@ -1266,20 +1319,23 @@ export class HUD {
     currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
     detentionData?: DetentionRadarData
   ) {
-    // 1. 生命值與體力數值 (髒檢查：數值變化時才更新 DOM，避免幀重繪 layout thrashing)
+    // 1. 雷達外圈 HP 弧 (髒檢查：數值變化時才更新 DOM，避免幀重繪 layout thrashing)
+    //    hp 為百分比；弧長佔圓周 3/4 (pathLength=100 → 滿血 75)
     const roundedHp = Math.round(Math.max(0, Math.min(100, hp)));
     if (this.lastHp !== roundedHp) {
       this.lastHp = roundedHp;
-      if (this.hpBar) this.hpBar.style.width = `${roundedHp}%`;
-      if (this.hpNum) this.hpNum.textContent = `${roundedHp}%`;
+      const dash = `${(roundedHp * 0.75).toFixed(2)} 100`;
+      this.hpRingFillEl?.setAttribute('style', `stroke-dasharray:${dash}`);
+      this.hpRingTrailEl?.setAttribute('style', `stroke-dasharray:${dash}`);
+      if (this.hpRingNumEl) this.hpRingNumEl.textContent = `${roundedHp}`;
+      const level = roundedHp > 50 ? '' : (roundedHp > 25 ? 'hp-mid' : 'hp-low');
+      if (level !== this.lastHpLevel) {
+        this.lastHpLevel = level;
+        this.hpRingEl?.classList.remove('hp-mid', 'hp-low');
+        if (level) this.hpRingEl?.classList.add(level);
+      }
     }
-
-    const roundedStamina = Math.round(Math.max(0, Math.min(100, stamina)));
-    if (this.lastStamina !== roundedStamina) {
-      this.lastStamina = roundedStamina;
-      if (this.staminaBar) this.staminaBar.style.width = `${roundedStamina}%`;
-      if (this.staminaNum) this.staminaNum.textContent = `${roundedStamina}%`;
-    }
+    this.lastStamina = Math.max(0, Math.min(100, stamina));
 
     // 2. 地點分區偵測 (髒檢查)
     this.updateLocationZone(playerPos, currentWorld);

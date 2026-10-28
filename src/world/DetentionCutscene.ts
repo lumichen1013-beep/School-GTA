@@ -3,6 +3,23 @@ import { Player } from '../entities/Player';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { soundManager } from '../audio/SoundEffects';
 
+// 開場場景佈局：南大門 (Z: 94.2 ~ 95.8) 外側的開闊地帶 (Z: 95.8 ~ 105)，
+// 院內 NPC 皆在高牆內，專車沿圍牆由東向西 (-X) 駛入並停靠於大門外，車身與牆面、人物皆保持安全距離
+const VAN_Z = 101.5;            // 專車行駛與停靠中線 (車身佔 Z: 99.82 ~ 103.18)
+const VAN_START_X = 70;         // 分鏡 1 起點
+const VAN_SHOT1_END_X = 26.6;   // 分鏡 1 終點 (等速 ≈10.3 m/s，與分鏡 2 減速初速銜接)
+const VAN_STOP_X = 6;           // 分鏡 2 線性減速停車點 (無煞車超衝)
+const VAN_HEADING = Math.PI / 2; // 車頭朝 -X，右側滑門朝北 (-Z) 面向大門
+const DOOR_CLOSED_X = 1.45;
+const DOOR_CLOSED_Z = 0.8;
+const DOOR_OPEN_X = 1.62;       // 滑門外推量
+const DOOR_OPEN_Z = -0.75;      // 滑門向車頭方向滑開後位置
+const PLAYER_EXIT_START_LX = 1.15; // 主角於門洞內車廂起步 (車身本地 X)
+const PLAYER_EXIT_END_LX = 3.6;    // 踏出車門後站定位置 (與車身保持 ≥1.5m)
+const WARDEN_START_X = -14;     // 總長沿圍牆由西側走來
+const WARDEN_END_X = 1.6;
+const WARDEN_Z = 97.3;
+
 export class DetentionCutscene {
   public scene: THREE.Scene;
   public isActive: boolean = false;
@@ -16,7 +33,8 @@ export class DetentionCutscene {
   // 特訓專車 (3D Tactical Van / Bus)
   private vanGroup: THREE.Group = new THREE.Group();
   private vanWheels: THREE.Mesh[] = [];
-  private vanDoor?: THREE.Mesh;
+  private vanDoor?: THREE.Group; // 右側滑門 (先外推再向車頭方向滑開，露出車廂門洞)
+  private lastVanX: number = 0;
   private vanHeadlights: THREE.SpotLight[] = [];
   private vanStrobeLight?: THREE.PointLight;
 
@@ -45,11 +63,33 @@ export class DetentionCutscene {
   private buildVanModel() {
     this.vanGroup = new THREE.Group();
 
-    // 1. 車身主體 (長 7.6m, 寬 2.8m, 高 2.6m)
+    // 1. 車身主體 (長 7.2m, 寬 2.8m, 車廂 Y: 0.5 ~ 2.7)
+    // 右側車身挖出滑門門洞 (Z: 0.1 ~ 1.5, Y: 0.5 ~ 2.35)，主角由門洞踏出而非穿過車殼
     const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3d4e61 }); // 現代特訓戰術亮藍灰
-    const vanBody = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.2, 7.2), bodyMat);
-    vanBody.position.y = 1.6;
-    this.vanGroup.add(vanBody);
+    const addBodyPart = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material = bodyMat) => {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      part.position.set(x, y, z);
+      this.vanGroup.add(part);
+    };
+    addBodyPart(2.3, 2.2, 7.2, -0.25, 1.6, 0);      // 車廂主體 (X: -1.4 ~ 0.9)
+    addBodyPart(0.5, 2.2, 3.7, 1.15, 1.6, -1.75);   // 右側車壁 (門洞前段)
+    addBodyPart(0.5, 2.2, 2.1, 1.15, 1.6, 2.55);    // 右側車壁 (門洞後段)
+    addBodyPart(0.5, 0.35, 1.4, 1.15, 2.525, 0.8);  // 門洞上方門楣
+
+    // 門洞內側昏暗車廂 (避免開門後看見中空車殼)
+    const interiorMat = new THREE.MeshLambertMaterial({ color: 0x0d1117 });
+    addBodyPart(0.02, 1.85, 1.4, 0.91, 1.425, 0.8, interiorMat); // 車廂內壁
+    addBodyPart(0.5, 0.04, 1.4, 1.15, 0.52, 0.8, interiorMat);   // 車廂地板
+    addBodyPart(0.5, 0.04, 1.4, 1.15, 2.33, 0.8, interiorMat);   // 車廂頂板
+
+    // 門框深色飾條
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x1f2a36 });
+    addBodyPart(0.04, 1.9, 0.08, 1.41, 1.425, 0.06, frameMat);
+    addBodyPart(0.04, 1.9, 0.08, 1.41, 1.425, 1.54, frameMat);
+    addBodyPart(0.04, 0.08, 1.56, 1.41, 2.39, 0.8, frameMat);
+
+    // 門下防滑踏板
+    addBodyPart(0.35, 0.08, 1.6, 1.55, 0.35, 0.8, new THREE.MeshLambertMaterial({ color: 0x222222 }));
 
     // 2. 駕駛艙車頭前斜切
     const noseMat = new THREE.MeshLambertMaterial({ color: 0x2e3d4f });
@@ -68,13 +108,16 @@ export class DetentionCutscene {
     windshield.position.set(0, 1.95, -3.2);
     this.vanGroup.add(windshield);
 
-    // 4. 車側雙開防暴條紋窗
+    // 4. 車側雙開防暴條紋窗 (右側中段為滑門門洞，不設窗)
     for (let z = -1.5; z <= 2.5; z += 1.8) {
       const winL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 1.2), glassMat);
       winL.position.set(-1.41, 1.85, z);
-      const winR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 1.2), glassMat);
-      winR.position.set(1.41, 1.85, z);
-      this.vanGroup.add(winL, winR);
+      this.vanGroup.add(winL);
+      if (Math.abs(z - 0.3) > 0.01) {
+        const winR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 1.2), glassMat);
+        winR.position.set(1.41, 1.85, z);
+        this.vanGroup.add(winR);
+      }
     }
 
     // 5. 車身黃黑警示防撞條紋
@@ -83,10 +126,16 @@ export class DetentionCutscene {
     bumper.position.set(0, 0.7, -4.9);
     this.vanGroup.add(bumper);
 
-    // 6. 右側滑動車門 (分鏡 3 開啟)
+    // 6. 右側滑動車門 (分鏡 3 先外推再向車頭方向滑開；車頭方向無車輪，不會穿模)
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x4a607a });
-    this.vanDoor = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.9, 1.4), doorMat);
-    this.vanDoor.position.set(1.42, 1.4, 0.8);
+    this.vanDoor = new THREE.Group();
+    const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.85, 1.42), doorMat);
+    const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.9), glassMat);
+    doorWin.position.set(0, 0.45, 0);
+    const doorHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.25), frameMat);
+    doorHandle.position.set(0.06, 0.0, -0.45);
+    this.vanDoor.add(doorPanel, doorWin, doorHandle);
+    this.vanDoor.position.set(DOOR_CLOSED_X, 1.425, DOOR_CLOSED_Z);
     this.vanGroup.add(this.vanDoor);
 
     // 7. 四只重型防爆泥地大輪胎 (半徑 0.6m)
@@ -237,37 +286,25 @@ export class DetentionCutscene {
     this.timer = 0;
     this.cutsceneGroup.visible = true;
 
-    // 專車起始點：位於南大門外 (0, 0, 95)，車頭朝向操場北邊 (-Z 方向)
-    this.vanGroup.position.set(0, 0, 95);
-    this.vanGroup.rotation.y = 0; // 車頭正向朝向 -Z 前進
+    // 專車起始點：南大門外東側圍牆邊，車頭朝 -X 沿牆駛向大門
+    this.vanGroup.position.set(VAN_START_X, 0, VAN_Z);
+    this.vanGroup.rotation.y = VAN_HEADING;
+    this.lastVanX = VAN_START_X;
 
     if (this.vanDoor) {
-      this.vanDoor.position.set(1.42, 1.4, 0.8); // 關閉狀態
+      this.vanDoor.position.set(DOOR_CLOSED_X, 1.425, DOOR_CLOSED_Z); // 關閉狀態
     }
 
-    // 隱藏玩家本體 (待第 3 幕踏出車廂)
+    // 隱藏玩家本體 (待第 3 幕由車門踏出)；過場期間玩家不跑 update，需同步 mesh
     if (this.playerRef) {
       this.playerRef.mesh.visible = false;
-      this.playerRef.position.set(3.0, 0, 16.8);
-      this.playerRef.rotationY = 0;
+      this.placePlayerAtVanLocal(PLAYER_EXIT_START_LX, 0.5, Math.PI);
     }
 
-    // 鐵面總長與隨行教官位置初始化在操場北側暗處 (Z: 0 ~ 2)
-    if (this.wardenMesh) {
-      this.wardenMesh.position.set(3.0, 0, 0);
-      this.wardenMesh.rotation.y = Math.PI; // 面向南方主角
-      this.wardenMesh.visible = false;
-    }
-    if (this.guardMeshes[0]) {
-      this.guardMeshes[0].position.set(1.4, 0, -1.2);
-      this.guardMeshes[0].rotation.y = Math.PI;
-      this.guardMeshes[0].visible = false;
-    }
-    if (this.guardMeshes[1]) {
-      this.guardMeshes[1].position.set(4.6, 0, -1.2);
-      this.guardMeshes[1].rotation.y = Math.PI;
-      this.guardMeshes[1].visible = false;
-    }
+    // 鐵面總長與隨行教官：分鏡 4 才沿圍牆由西側走來 (面向東方的專車與主角)
+    this.placeWardenGroup(WARDEN_START_X);
+    if (this.wardenMesh) this.wardenMesh.visible = false;
+    for (const g of this.guardMeshes) g.visible = false;
 
     // 播放夜雨背景雷鳴聲效
     soundManager.playThunder();
@@ -298,28 +335,63 @@ export class DetentionCutscene {
     return true;
   }
 
+  // 車身本地座標 (lx 朝右側車門、lz 朝車尾) 換算世界座標；車頭固定朝 -X (VAN_HEADING)
+  private vanLocalToWorld(lx: number, lz: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.vanGroup.position.x + lz, 0, this.vanGroup.position.z - lx);
+  }
+
+  // 過場期間玩家不執行 update，需同時同步邏輯位置與模型
+  private placePlayerAtVanLocal(lx: number, y: number, rotationY: number) {
+    if (!this.playerRef) return;
+    this.vanLocalToWorld(lx, DOOR_CLOSED_Z, this.playerRef.position);
+    this.playerRef.position.y = y;
+    this.playerRef.rotationY = rotationY;
+    this.playerRef.mesh.position.copy(this.playerRef.position);
+    this.playerRef.mesh.rotation.set(0, rotationY, 0);
+  }
+
+  // 總長居中、兩名教官隨行於後方兩側 (全程位於圍牆與專車之間的空地)
+  private placeWardenGroup(wardenX: number) {
+    if (this.wardenMesh) {
+      this.wardenMesh.position.set(wardenX, 0, WARDEN_Z);
+      this.wardenMesh.rotation.y = Math.PI / 2; // 面向東方 (+X)
+    }
+    if (this.guardMeshes[0]) {
+      this.guardMeshes[0].position.set(wardenX - 1.3, 0, WARDEN_Z - 0.7);
+      this.guardMeshes[0].rotation.y = Math.PI / 2;
+    }
+    if (this.guardMeshes[1]) {
+      this.guardMeshes[1].position.set(wardenX - 1.3, 0, WARDEN_Z + 0.6);
+      this.guardMeshes[1].rotation.y = Math.PI / 2;
+    }
+  }
+
+  // 專車沿 X 軸移動並依實際位移滾動車輪
+  private setVanX(x: number) {
+    this.vanGroup.position.set(x, 0, VAN_Z);
+    const dx = this.lastVanX - x;
+    this.lastVanX = x;
+    for (const w of this.vanWheels) {
+      w.rotation.x -= dx / 0.6;
+    }
+  }
+
   // 分鏡導演邏輯 (5 大電影級分鏡)
   private updateShot(time: number) {
     if (!this.cameraCtrlRef) return;
     const cam = this.cameraCtrlRef.camera;
 
     // ========================================================
-    // 分鏡 1 (0.0s ~ 4.2s)：夜雨雷鳴，特訓專車大燈照地駛入鋼鐵大門
+    // 分鏡 1 (0.0s ~ 4.2s)：夜雨雷鳴，特訓專車大燈照地沿高牆駛向南大門
     // ========================================================
     if (time < 4.2) {
       const t = time / 4.2;
-      // 專車由 Z: 95 行駛至 Z: 55
-      const currentZ = THREE.MathUtils.lerp(95, 55, t);
-      this.vanGroup.position.set(0, 0, currentZ);
+      const currentX = THREE.MathUtils.lerp(VAN_START_X, VAN_SHOT1_END_X, t);
+      this.setVanX(currentX);
 
-      // 車輪隨前進向前滾動
-      for (const w of this.vanWheels) {
-        w.rotation.x -= 14.0 * (1.0 - t * 0.3) * 0.016;
-      }
-
-      // 鏡頭：門外低角度仰角固定監視鏡頭，仰望專車霸氣駛入
-      this._camPos.set(6.5, 1.2, 60);
-      this._camTarget.set(0, 1.8, currentZ - 5);
+      // 鏡頭：大門旁牆腳低角度固定鏡頭，仰望專車沿牆駛來
+      this._camPos.set(14, 1.2, 97.2);
+      this._camTarget.set(currentX - 5, 1.8, VAN_Z);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -328,85 +400,87 @@ export class DetentionCutscene {
       }
     }
     // ========================================================
-    // 分鏡 2 (4.2s ~ 8.2s)：專車在操場中央急煞停下，瞭望塔探照燈掃向車身
+    // 分鏡 2 (4.2s ~ 8.2s)：專車於南大門外等減速煞停，車身與高牆保持 4m 間距
     // ========================================================
     else if (time < 8.2) {
       const t = (time - 4.2) / 4.0;
-      // 專車從 Z: 55 減速急煞停至 Z: 16 (預留充足安全間距，絕不碰撞前哨守衛)
-      const currentZ = THREE.MathUtils.lerp(55, 16, Math.sin(t * Math.PI / 2));
-      this.vanGroup.position.set(0, 0, currentZ);
-
-      // 車輪緩慢向前滾動並平穩停轉
-      for (const w of this.vanWheels) {
-        w.rotation.x -= 10.0 * (1.0 - t) * 0.016;
-      }
+      // 等減速 (初速銜接分鏡 1，末速為 0，單調不超衝)
+      const eased = 1 - (1 - t) * (1 - t);
+      const currentX = THREE.MathUtils.lerp(VAN_SHOT1_END_X, VAN_STOP_X, eased);
+      this.setVanX(currentX);
 
       // 急煞音效 (在剛煞停時觸發一次)
       if (t > 0.4 && t < 0.45) {
         soundManager.playBanditSlash();
       }
 
-      // 相機環繞跟隨專車弧線平滑拍攝
-      const angle = 0.5 + t * 1.5;
-      const radius = 11.0;
-      this._camPos.set(Math.cos(angle) * radius, 3.2 - t * 0.8, 16 + Math.sin(angle) * radius);
-      this._camTarget.set(0, 1.6, 16);
+      // 相機沿牆前空地橫移跟拍
+      this._camPos.set(THREE.MathUtils.lerp(18, -3, t), 3.0 - t * 0.6, 97.0);
+      this._camTarget.set(currentX, 1.6, VAN_Z);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
       if (this.onSubtitleChange) {
-        this.onSubtitleChange('「警戒提高！全員就位！」—— 特訓專車急煞入操場');
+        this.onSubtitleChange('「警戒提高！全員就位！」—— 特訓專車急煞於南大門前');
       }
     }
     // ========================================================
-    // 分鏡 3 (8.2s ~ 12.0s)：車門滑動開啟，主角挺立走下車階
+    // 分鏡 3 (8.2s ~ 12.0s)：滑門外推滑開，主角由門洞踏下踏板站定
     // ========================================================
     else if (time < 12.0) {
       const t = (time - 8.2) / 3.8;
-      this.vanGroup.position.set(0, 0, 16);
+      this.setVanX(VAN_STOP_X);
 
-      // 車側門平滑向後滑開
+      // 滑門：先外推 (t 0 ~ 0.12) 再向車頭方向滑開 (t 0.12 ~ 0.42)
       if (this.vanDoor) {
-        const doorZ = THREE.MathUtils.lerp(0.8, 2.3, Math.min(1.0, t * 1.8));
-        this.vanDoor.position.z = doorZ;
+        const pop = THREE.MathUtils.clamp(t / 0.12, 0, 1);
+        const slide = THREE.MathUtils.clamp((t - 0.12) / 0.3, 0, 1);
+        this.vanDoor.position.x = THREE.MathUtils.lerp(DOOR_CLOSED_X, DOOR_OPEN_X, pop);
+        this.vanDoor.position.z = THREE.MathUtils.lerp(DOOR_CLOSED_Z, DOOR_OPEN_Z, slide);
       }
 
-      // 主角現身並走下車階 (位於 X: 3.0, Z: 16.8)
+      // 主角於門洞內現身並踏出 (t 0.4 ~ 0.8)，經踏板落地後站定面向大門
       if (this.playerRef) {
-        this.playerRef.mesh.visible = true;
-        const playerX = THREE.MathUtils.lerp(1.8, 3.0, Math.min(1.0, t * 1.5));
-        this.playerRef.position.set(playerX, 0, 16.8);
-        this.playerRef.rotationY = Math.PI; // 堅毅挺立面對前方
+        this.playerRef.mesh.visible = t >= 0.4;
+        const walk = THREE.MathUtils.clamp((t - 0.4) / 0.4, 0, 1);
+        const lx = THREE.MathUtils.lerp(PLAYER_EXIT_START_LX, PLAYER_EXIT_END_LX, walk);
+        const y = THREE.MathUtils.lerp(0.5, 0, THREE.MathUtils.clamp((lx - 1.5) / 0.6, 0, 1));
+        this.placePlayerAtVanLocal(lx, y, Math.PI);
       }
 
-      // 鏡頭近身特寫：由地面主角腳步緩緩上推至面部與挺拔身影
+      // 鏡頭：大門前低角度特寫車門，由腳步緩緩上推
       const camY = THREE.MathUtils.lerp(0.6, 1.8, t);
-      this._camPos.set(5.5 - t * 0.5, camY, 16.8 - t * 1.2);
-      this._camTarget.set(3.0, 1.4, 16.8);
+      this._camPos.set(3.8 - t * 0.4, camY, 96.9);
+      this.vanLocalToWorld(1.6, DOOR_CLOSED_Z, this._camTarget);
+      this._camTarget.y = 1.3;
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
       if (this.onSubtitleChange) {
-        this.onSubtitleChange('特訓學員已押送至特訓操場，第一天特訓即將開始...');
+        this.onSubtitleChange('特訓學員已押送至特訓院南大門，第一天特訓即將開始...');
       }
     }
     // ========================================================
-    // 分鏡 4 (12.0s ~ 15.8s)：鐵面總長率教官踏步上前，吹響刺耳警哨
+    // 分鏡 4 (12.0s ~ 15.8s)：鐵面總長率教官沿圍牆走來，吹響刺耳警哨
     // ========================================================
     else if (time < 15.8) {
       const t = (time - 12.0) / 3.8;
-      this.vanGroup.position.set(0, 0, 16);
+      this.setVanX(VAN_STOP_X);
 
-      // 總長與教官大步走上前 (停於 Z = 10.5 左右開闊處，與專車車頭保持 5m 安全距離，絕不碰撞)
+      // 主角轉身面向西側走來的總長
+      if (this.playerRef) {
+        this.playerRef.mesh.visible = true;
+        const turn = THREE.MathUtils.clamp(t / 0.3, 0, 1);
+        this.placePlayerAtVanLocal(PLAYER_EXIT_END_LX, 0, THREE.MathUtils.lerp(Math.PI, Math.PI * 1.5, turn));
+      }
+
       if (this.wardenMesh && this.guardMeshes[0] && this.guardMeshes[1]) {
         this.wardenMesh.visible = true;
         this.guardMeshes[0].visible = true;
         this.guardMeshes[1].visible = true;
 
-        const wardenZ = THREE.MathUtils.lerp(2.0, 10.5, Math.min(1.0, t * 1.4));
-        this.wardenMesh.position.set(3.0, 0, wardenZ);
-        this.guardMeshes[0].position.set(1.4, 0, wardenZ - 1.2);
-        this.guardMeshes[1].position.set(4.6, 0, wardenZ - 1.2);
+        // 停於主角前方約 5m 處
+        this.placeWardenGroup(THREE.MathUtils.lerp(WARDEN_START_X, WARDEN_END_X, Math.min(1.0, t * 1.4)));
 
         // 總長舉手吹哨動作
         if (t > 0.45 && this.wardenArm) {
@@ -419,9 +493,12 @@ export class DetentionCutscene {
         }
       }
 
-      // 鏡頭過肩視角：由主角背後望向氣勢威嚴的鐵面總長
-      this._camPos.set(3.2, 1.85, 18.2);
-      this._camTarget.set(3.0, 1.5, 10.5);
+      // 鏡頭過肩視角：由主角背後 (東側) 望向氣勢威嚴的鐵面總長
+      this.vanLocalToWorld(PLAYER_EXIT_END_LX, DOOR_CLOSED_Z, this._camPos);
+      this._camPos.x += 1.9;
+      this._camPos.y = 1.95;
+      this._camPos.z -= 0.9; // 偏向主角左肩 (大門側)，避免頭部擋住總長
+      this._camTarget.set(WARDEN_END_X, 1.5, WARDEN_Z);
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -434,19 +511,18 @@ export class DetentionCutscene {
     // ========================================================
     else {
       const t = (time - 15.8) / 2.7;
-      this.vanGroup.position.set(0, 0, 16);
+      this.setVanX(VAN_STOP_X);
 
-      // 相機由特寫位置平滑拉回玩家身後 5.2m，Y: 2.4m 的標準第三人稱跟隨視角
-      const targetCamX = 3.0;
-      const targetCamY = 2.4;
-      const targetCamZ = 22.0;
-
+      // 相機由過肩位置平滑拉回主角身後 4.4m、Y: 2.4m 的標準第三人稱跟隨視角
+      const playerPos = this.vanLocalToWorld(PLAYER_EXIT_END_LX, DOOR_CLOSED_Z, this._camTarget);
+      const fromX = playerPos.x + 1.9;
+      const fromZ = playerPos.z - 0.9;
       this._camPos.set(
-        THREE.MathUtils.lerp(3.2, targetCamX, t),
-        THREE.MathUtils.lerp(1.85, targetCamY, t),
-        THREE.MathUtils.lerp(18.2, targetCamZ, t)
+        THREE.MathUtils.lerp(fromX, playerPos.x + 4.4, t),
+        THREE.MathUtils.lerp(1.95, 2.4, t),
+        THREE.MathUtils.lerp(fromZ, playerPos.z, t)
       );
-      this._camTarget.set(3.0, 1.2, 16.8);
+      this._camTarget.y = 1.2;
       cam.position.copy(this._camPos);
       cam.lookAt(this._camTarget);
 
@@ -467,10 +543,8 @@ export class DetentionCutscene {
     this.isActive = false;
     this.cutsceneGroup.visible = false;
 
-    // 將專車停放至操場邊緣 (X: 18, Z: 50)，不阻礙操場中央戰鬥
-    this.vanGroup.position.set(18, 0, 50);
-    this.vanGroup.rotation.y = Math.PI * 0.85;
-    this.cutsceneGroup.visible = true; // 保留邊緣專車作為靜態場景裝飾
+    // 過場群組直接掛在場景根節點、不隨世界切換移除，結束後整組隱藏，
+    // 避免專車殘留於院內 NPC 巡邏路線 (原停放點 18,50 與教官巡邏重疊) 或切回校園時出現
 
     // 移除過場專用總長與教官模型 (因為世界中會生成實體 AI NPC)
     if (this.wardenMesh) this.wardenMesh.visible = false;

@@ -161,7 +161,7 @@ export class InputManager {
           target.closest('#quest-tracker-panel') ||
           target.closest('#fullmap-modal') ||
           target.closest('.demerit-container') ||
-          target.closest('.status-badge') ||
+          target.closest('.hud-top-right') ||
           target.closest('.minimap-wrapper') ||
           target.closest('button')
         ) {

@@ -6,6 +6,13 @@ import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import type { Bicycle } from '../vehicles/Bicycle';
 import { bakeNode, bakeStaticParts, disposeNonShared, getHpBarMaterial, getHpBarResources } from './npc/modelCache';
+import { SkillBubble } from './shared/SkillBubble';
+import { AfterimagePool } from './shared/AfterimagePool';
+import { findSafeTeleportPos } from './shared/teleport';
+import { buildUmbrella } from './shared/umbrella';
+import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
+import { impactDust } from '../effects/ImpactDust';
+import { requestCameraShake } from '../effects/cameraShake';
 
 export type NPCRole =
   | 'STUDENT'
@@ -35,18 +42,19 @@ export interface ShuttlecockProjectile {
   isReturned?: boolean;
 }
 
-export interface NPCAfterimageItem {
-  group: THREE.Group;
-  materials: THREE.MeshBasicMaterial[];
-  life: number;
-  maxLife: number;
-}
-
 // 模組頂層靜態共享 Scratch Vectors (0-GC 避免每幀垃圾回收引發微卡頓)
 const _npcMoveDir = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
+// NPC 技能/對話氣泡外觀 (字級依文字長度縮放)
+const NPC_BUBBLE_STYLE = { fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: (text: string) => (text.length > 9 ? 24 : (text.length > 6 ? 28 : 34)) };
 const _npcSightNear: CollidableBox[] = [];
+const _bossNear: CollidableBox[] = [];
+const _bossKnockDir = new THREE.Vector3();
+const _bossImpactPoint = new THREE.Vector3();
+// 總教官硬直頭頂旋轉星星 (所有實例共用幾何與材質)
+let _stunStarGeo: THREE.OctahedronGeometry | null = null;
+let _stunStarMat: THREE.MeshBasicMaterial | null = null;
 
 // 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
 export interface AttackSpec {
@@ -136,8 +144,14 @@ export class NPC {
   public bossStunTimer: number = 0;
   public bossInvulnerableTimer: number = 0;
   public isBossInvulnerable: boolean = false;
-  public bossChargeCooldown: number = 5.0;
+  public bossChargeCooldown: number = 3.0; // 進入戰鬥後約 3 秒即可發動首次衝撞
   public isBossWindingUp: boolean = false;
+  private bossMeleeTimer: number = 0; // 玩家持續貼身纏鬥的累計秒數 (超過門檻即後撤拉開距離後衝撞)
+  private bossBackstepTimer: number = 0; // 後撤步剩餘時間 (結束後進入衝撞蓄力)
+  private bossBackstepDir: THREE.Vector3 = new THREE.Vector3();
+  private bossStunElapsed: number = 0; // 本次硬直已經過秒數 (驅動後仰與暈眩搖晃動畫)
+  private bossRecoverTimer: number = 0; // 硬直結束後甩頭回神的剩餘時間
+  private bossStunStars?: THREE.Group;
   public bossWindupTimer: number = 0;
   public bossIsCharging: boolean = false;
   public bossChargeTraveled: number = 0;
@@ -241,8 +255,7 @@ export class NPC {
   private dodgeTeacherNextPracticeTime: number = 10.0;
 
   // 0-GC 殘影物件池
-  private afterimages: NPCAfterimageItem[] = [];
-  private afterimageIndex: number = 0;
+  private afterimagePool?: AfterimagePool;
 
   // 下雨天撐傘與避雨行為
   public hasUmbrella: boolean = false;
@@ -254,13 +267,12 @@ export class NPC {
   public static readonly DOG_SHELTER_POS = new THREE.Vector3(24.0, 0, 15.0);
 
   // 頭頂技能名稱對話氣泡 (3D Billboard Sprite)
-  private skillBubbleSprite?: THREE.Sprite;
-  private skillBubbleCanvas?: HTMLCanvasElement;
-  private skillBubbleContext?: CanvasRenderingContext2D;
-  private skillBubbleTexture?: THREE.CanvasTexture;
-  private skillBubbleTimer: number = 0;
-  private skillBubbleDuration: number = 1.35;
-  private skillBubbleBaseY: number = 2.45;
+  private skillBubble!: SkillBubble;
+
+  // 目前角色的數值設定 (角色可於執行期切換，如單車巡邏被搶車後改為徒步)
+  private get cfg(): NPCRoleConfig {
+    return ROLE_CONFIG[this.role];
+  }
 
   constructor(
     scene: THREE.Scene,
@@ -278,165 +290,40 @@ export class NPC {
     // 隨機速度自然微擾動 (+/- 0.25 m/s)，破除千篇一律的僵硬同速
     const speedJitter = (Math.random() - 0.5) * 0.5;
 
-    // 初始化各角色數值與多樣性風格
-    if (role === 'DODGE_TEACHER') {
-      // 閃身步老師 (教學大樓身法宗師)：血量 9999，行走 4.5，跑步 9.0
-      this.maxHp = 9999;
-      this.speed = 4.5;
-      this.chaseSpeed = 9.0;
-      this.attackPower = 0;
-      this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.50;
-    } else if (role === 'PE_TEACHER_BOSS') {
-      // 大如老師 (4F 羽球教練)：血量 950，行走 4.2，跑步 8.5，近戰 28，反擊範圍 2.4
-      this.maxHp = 950;
-      this.speed = 4.2;
-      this.chaseSpeed = 8.5;
-      this.attackPower = 28;
-      this.attackRange = 2.4;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.40;
-    } else if (role === 'TEACHER' || role === 'INSTRUCTOR') {
-      // 生教組長 / 教官：血量 315，威嚴步巡
-      this.maxHp = 315;
-      this.speed = 4.8 + speedJitter;
-      this.chaseSpeed = 10.0;
-      this.attackPower = 36;
-      this.attackRange = 1.8;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.55;
-    } else if (role === 'BANDIT') {
-      // 校外強盜：手持砍刀在圍牆外徘徊
-      this.maxHp = 180;
-      this.speed = 8.5 + speedJitter * 0.6;
-      this.chaseSpeed = 16.5;
-      this.attackPower = 44;
-      this.attackRange = 1.9;
-      this.movementStyle = movementStyle || 'CASUAL_WALK';
-      this.pauseChance = 0.40;
-    } else if (role === 'DOG') {
-      // 校犬柴柴：敏捷四足犬，草皮漫步嗅聞與端坐休養
-      this.maxHp = 630;
-      this.speed = 3.8 + speedJitter * 0.4;
-      this.chaseSpeed = 11.5;
-      this.attackPower = 30;
-      this.attackRange = 2.0;
-      this.movementStyle = 'CASUAL_WALK';
-      this.pauseChance = 0.65;
-    } else if (role === 'BIKE_PATROL') {
-      // 火柴人自行車騎士：巡邏與追捕速度統一為 15.0
-      this.maxHp = 225;
-      this.speed = 15.0;
-      this.chaseSpeed = 15.0;
-      this.attackPower = 26;
-      this.attackRange = 2.4;
-      this.movementStyle = 'CASUAL_WALK';
-      this.pauseChance = 0.30;
-    } else if (role === 'DETENTION_GUARD') {
-      // 特訓教官：血量 160，防暴海綿盾與指揮棒，格擋免傷 35%，慢速規律巡邏 (1.45 m/s，玩家潛行 2.4 m/s 可順暢追近背刺)
-      this.maxHp = 160;
-      this.speed = 1.45;
-      this.chaseSpeed = 7.6;
-      this.attackPower = 12;
-      this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 1.0;
-    } else if (role === 'DETENTION_SENIOR') {
-      // 特訓資深學長：血量 130，慢速規律步巡 (1.50 m/s)，遵循切磋規矩 (不主動圍毆)
-      this.maxHp = 130;
-      this.speed = 1.50;
-      this.chaseSpeed = 8.2;
-      this.attackPower = 14;
-      this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 1.0;
-    } else if (role === 'DETENTION_HEAVY') {
-      // 重訓霸榜生：血量 220，重拳霸體，沉穩慢步巡邏 (1.30 m/s)
-      this.maxHp = 220;
-      this.speed = 1.30;
-      this.chaseSpeed = 6.6;
-      this.attackPower = 18;
-      this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 1.0;
-    } else if (role === 'DETENTION_WOLF') {
-      // 特訓狼犬：血量 105 (脆皮敏捷)，巡邏沉穩慢行 (1.80 m/s)，追擊 8.6 m/s
-      this.maxHp = 105;
-      this.speed = 1.80;
-      this.chaseSpeed = 8.6;
-      this.attackPower = 10;
-      this.attackRange = 2.0;
-      this.movementStyle = 'JOGGING';
-      this.pauseChance = 1.0;
-    } else if (role === 'DETENTION_BOSS') {
-      // 總教官 Boss【鐵面總長】：血量 420，威嚴寸勁重拳與身法反擊，沉穩步巡 (1.35 m/s)
-      this.maxHp = 420;
-      this.speed = 1.35;
-      this.chaseSpeed = 7.8;
-      this.attackPower = 20;
-      this.attackRange = 2.0;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 1.0;
-    } else if (role === 'INSPECTOR') {
-      // 風紀糾察 (步巡)：雙手負後巡查校園
-      this.maxHp = 158;
-      this.speed = 4.9 + speedJitter;
-      this.chaseSpeed = 10.0;
-      this.attackPower = 18;
-      this.attackRange = 1.8;
-      this.movementStyle = movementStyle || 'OFFICER_PATROL';
-      this.pauseChance = 0.55;
-    } else {
+    // 初始化各角色數值與多樣性風格 (數值集中於 ROLE_CONFIG 設定表)
+    const cfg = ROLE_CONFIG[role];
+    this.maxHp = cfg.maxHp;
+    this.attackPower = cfg.attackPower;
+    this.attackRange = cfg.attackRange;
+    if (cfg.defaultStyle === null) {
       // 平民學生 (多樣風格：散步、疾走、慢跑等)
-      this.maxHp = 112;
       this.movementStyle = movementStyle || (Math.random() < 0.25 ? 'HURRIED_WALK' : 'CASUAL_WALK');
-      if (this.movementStyle === 'JOGGING') {
-        this.speed = 7.6 + speedJitter * 0.8; // 7.2 ~ 8.0 m/s
-        this.chaseSpeed = 10.8;
-        this.pauseChance = 0.25;
-      } else if (this.movementStyle === 'HURRIED_WALK') {
-        this.speed = 5.9 + speedJitter * 0.6; // 5.6 ~ 6.2 m/s
-        this.chaseSpeed = 10.0;
-        this.pauseChance = 0.45;
-      } else if (this.movementStyle === 'OFFICER_PATROL') {
-        this.speed = 4.8 + speedJitter;
-        this.chaseSpeed = 10.0;
-        this.pauseChance = 0.55;
-      } else {
-        // CASUAL_WALK 輕鬆散步學生
-        this.speed = 4.4 + speedJitter * 0.6; // 4.1 ~ 4.7 m/s
-        this.chaseSpeed = 9.8;
-        this.pauseChance = 0.60;
-      }
-      this.attackPower = 12;
-      this.attackRange = 1.6;
+      const styleStats = STUDENT_STYLE_STATS[this.movementStyle];
+      this.speed = styleStats.speed + speedJitter * styleStats.jitterScale;
+      this.chaseSpeed = styleStats.chaseSpeed;
+      this.pauseChance = styleStats.pauseChance;
+    } else {
+      this.movementStyle = cfg.styleFixed ? cfg.defaultStyle : (movementStyle || cfg.defaultStyle);
+      this.speed = cfg.baseSpeed + speedJitter * cfg.jitterScale;
+      this.chaseSpeed = cfg.chaseSpeed;
+      this.pauseChance = cfg.pauseChance;
     }
     this.hp = this.maxHp;
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
     this.dynamicSpeed = this.speed;
 
     // 下雨天隨身攜帶雨傘機率 (平民學生與師長約 75% 攜傘，25% 無傘；少年院特訓群不持傘)
-    if (
-      role !== 'DOG' &&
-      role !== 'BIKE_PATROL' &&
-      role !== 'BANDIT' &&
-      role !== 'PE_TEACHER_BOSS' &&
-      role !== 'DETENTION_GUARD' &&
-      role !== 'DETENTION_SENIOR' &&
-      role !== 'DETENTION_HEAVY' &&
-      role !== 'DETENTION_WOLF' &&
-      role !== 'DETENTION_BOSS'
-    ) {
+    if (cfg.canCarryUmbrella) {
       this.hasUmbrella = Math.random() < 0.75;
     }
 
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ';
     this.mesh.position.copy(this.position);
+    this.skillBubble = new SkillBubble(this.mesh, 2.45, NPC_BUBBLE_STYLE);
 
     // 依角色建造不同 3D 外觀模型
-    if (role === 'DOG' || role === 'DETENTION_WOLF') {
+    if (cfg.isCanine) {
       this.buildDogModel();
     } else if (role === 'BIKE_PATROL') {
       this.isOriginalBikePatrol = true;
@@ -467,8 +354,7 @@ export class NPC {
     }
 
     // 頭頂 3D 浮動血條與昏迷倒數告示牌組 (面朝攝影機視角，清晰易辨)
-    // 大如老師爆炸頭頂約 2.19m，血條需抬高至髮頂上方避免被頭髮遮擋
-    const hpY = (role === 'DOG' || role === 'DETENTION_WOLF') ? 1.05 : (role === 'PE_TEACHER_BOSS' ? 2.4 : 2.05);
+    const hpY = cfg.hpBarY;
     this.hpBarGroup = new THREE.Group();
     this.hpBarGroup.position.set(0, hpY, 0);
 
@@ -496,58 +382,9 @@ export class NPC {
     scene.add(this.mesh);
     // 閃身步老師 (DODGE_TEACHER) 專屬技能對話氣泡與 0-GC 殘影物件池
     if (this.role === 'DODGE_TEACHER') {
-      this.initSkillBubble();
-
+      this.skillBubble.ensure();
       // 初始化 8 組常駐殘影物件池 (0-GC，常駐場景)
-      const afterimageTorsoGeo = new THREE.BoxGeometry(0.65, 0.75, 0.35);
-      const afterimageHeadGeo = new THREE.BoxGeometry(0.38, 0.4, 0.38);
-      const afterimageArmGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
-      const afterimageLegGeo = new THREE.BoxGeometry(0.24, 0.7, 0.24);
-
-      for (let i = 0; i < 8; i++) {
-        const g = new THREE.Group();
-        g.rotation.order = 'YXZ';
-        const mat = new THREE.MeshBasicMaterial({
-          color: 0x38bdf8,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false
-        });
-
-        const bMesh = new THREE.Mesh(afterimageTorsoGeo, mat);
-        bMesh.position.y = 1.05;
-        g.add(bMesh);
-
-        const hMesh = new THREE.Mesh(afterimageHeadGeo, mat);
-        hMesh.position.y = 1.62;
-        g.add(hMesh);
-
-        const lArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
-        lArmMesh.position.set(-0.45, 1.05, 0);
-        g.add(lArmMesh);
-
-        const rArmMesh = new THREE.Mesh(afterimageArmGeo, mat);
-        rArmMesh.position.set(0.45, 1.05, 0);
-        g.add(rArmMesh);
-
-        const lLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
-        lLegMesh.position.set(-0.18, 0.35, 0);
-        g.add(lLegMesh);
-
-        const rLegMesh = new THREE.Mesh(afterimageLegGeo, mat);
-        rLegMesh.position.set(0.18, 0.35, 0);
-        g.add(rLegMesh);
-
-        g.visible = false;
-        scene.add(g);
-
-        this.afterimages.push({
-          group: g,
-          materials: [mat],
-          life: 0,
-          maxLife: 0.3
-        });
-      }
+      this.afterimagePool = new AfterimagePool(scene, 8);
     }
   }
 
@@ -722,7 +559,7 @@ export class NPC {
     if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
     if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
 
-    if (this.role === 'DETENTION_WOLF' || this.role === 'DOG') {
+    if (this.cfg.isCanine) {
       this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
       this.mesh.position.y = this.baseFloorY + 0.2;
     } else {
@@ -732,14 +569,124 @@ export class NPC {
   }
 
   // 總教官撞柱硬直機制 (Stunned)
+  private static readonly BOSS_BACKSTEP_TIME = 0.35;
+  private static readonly BOSS_BACKSTEP_SPEED = 7.0;
+  private static readonly BOSS_CHARGE_SPEED = 14.0;
+  private static readonly BOSS_CHARGE_RADIUS = 0.65;
+  private static readonly BOSS_SUBSTEP = 0.3;
+
+  // 鎖定當前玩家方向進入 1.25 秒蓄力預警 (玩家可於預警期間側向閃躲)
+  private startBossWindup(playerPos: THREE.Vector3) {
+    this.bossChargeDir.subVectors(playerPos, this.position).setY(0);
+    if (this.bossChargeDir.lengthSq() < 0.0001) this.bossChargeDir.set(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
+    this.bossChargeDir.normalize();
+    this.isBossWindingUp = true;
+    this.bossWindupTimer = 1.25;
+    this.bossChargeCooldown = 7.5;
+    this.bossMeleeTimer = 0;
+    this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
+    this.mesh.rotation.y = this.rotationY;
+    if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = true;
+    soundManager.playWhistle();
+  }
+
+  // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物；起點已重疊的碰撞盒忽略 (允許自行脫離)
+  private bossBodyBlockedAt(colliders: CollidableBox[], x: number, z: number, startX: number, startZ: number): boolean {
+    const r = NPC.BOSS_CHARGE_RADIUS;
+    const y = this.position.y;
+    const near = queryColliders(colliders, Math.min(x, startX) - r, Math.max(x, startX) + r, Math.min(z, startZ) - r, Math.max(z, startZ) + r, _bossNear);
+    for (let i = 0; i < near.length; i++) {
+      const box = near[i];
+      if (box.isFloorOnly) continue;
+      if (!(y + 0.3 < box.max.y && y + 1.9 > box.min.y)) continue;
+      if (x + r <= box.min.x || x - r >= box.max.x || z + r <= box.min.z || z - r >= box.max.z) continue;
+      if (startX + r > box.min.x && startX - r < box.max.x && startZ + r > box.min.z && startZ - r < box.max.z) continue;
+      return true;
+    }
+    return false;
+  }
+
+  // 沿 dir 以 ≤0.3m 子步移動 dist，撞到阻擋物時停在貼齊接觸面處；回傳是否撞上
+  private moveBossSwept(colliders: CollidableBox[], dir: THREE.Vector3, dist: number): boolean {
+    const steps = Math.max(1, Math.ceil(dist / NPC.BOSS_SUBSTEP));
+    const stepLen = dist / steps;
+    for (let i = 0; i < steps; i++) {
+      const sx = this.position.x;
+      const sz = this.position.z;
+      const tx = sx + dir.x * stepLen;
+      const tz = sz + dir.z * stepLen;
+      if (!this.bossBodyBlockedAt(colliders, tx, tz, sx, sz)) {
+        this.position.x = tx;
+        this.position.z = tz;
+        continue;
+      }
+      // 二分逼近接觸點，停在貼齊阻擋面 (不嵌入牆體)
+      let lo = 0;
+      let hi = 1;
+      for (let k = 0; k < 8; k++) {
+        const mid = (lo + hi) * 0.5;
+        if (this.bossBodyBlockedAt(colliders, sx + (tx - sx) * mid, sz + (tz - sz) * mid, sx, sz)) hi = mid;
+        else lo = mid;
+      }
+      this.position.x = sx + (tx - sx) * lo;
+      this.position.z = sz + (tz - sz) * lo;
+      return true;
+    }
+    return false;
+  }
+
+  // 頭頂 3 顆環繞旋轉的暈眩星星 (首次硬直時才建立)
+  private getStunStars(): THREE.Group {
+    if (!this.bossStunStars) {
+      if (!_stunStarGeo) _stunStarGeo = new THREE.OctahedronGeometry(0.11, 0);
+      if (!_stunStarMat) _stunStarMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+      const stars = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const star = new THREE.Mesh(_stunStarGeo, _stunStarMat);
+        const ang = (i / 3) * Math.PI * 2;
+        star.position.set(Math.cos(ang) * 0.42, 0, Math.sin(ang) * 0.42);
+        star.userData.shared = true;
+        stars.add(star);
+      }
+      stars.position.set(0, 2.2, 0);
+      stars.visible = false;
+      this.mesh.add(stars);
+      this.bossStunStars = stars;
+    }
+    return this.bossStunStars;
+  }
+
+  // 硬直期間姿勢：撞擊瞬間後仰，之後身體與頭部畫圓暈眩搖晃、雙臂下垂 (原地凍結不移動)
+  private applyBossStunPose() {
+    const t = this.bossStunElapsed;
+    const lean = Math.max(0, 1 - t / 0.25);
+    const wobble = 1 - lean;
+    this.mesh.rotation.set(
+      -0.42 * lean + Math.sin(t * 3.2) * 0.12 * wobble,
+      this.rotationY,
+      Math.cos(t * 3.2) * 0.12 * wobble
+    );
+    if (this.headMesh) this.headMesh.rotation.set(Math.sin(t * 3.2 + 1.2) * 0.18, 0, Math.cos(t * 3.2 + 1.2) * 0.25);
+    if (this.leftArm) this.leftArm.rotation.set(0.15 + Math.sin(t * 3.2) * 0.08, 0, 0.12);
+    if (this.rightArm) this.rightArm.rotation.set(0.15 - Math.sin(t * 3.2) * 0.08, 0, -0.12);
+    if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+    if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+    if (this.bossStunStars) this.bossStunStars.rotation.y = t * 5.0;
+  }
+
   public stunBoss(duration: number = 3.5) {
     if (this.role !== 'DETENTION_BOSS' || this.isKnockedDown) return;
     this.isBossStunned = true;
     this.bossStunTimer = duration;
+    this.bossStunElapsed = 0;
+    this.bossRecoverTimer = 0;
+    this.bossBackstepTimer = 0;
     this.isBossWindingUp = false;
     this.bossIsCharging = false;
     this.isChasing = false;
+    this.isPaused = false;
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
+    this.getStunStars().visible = true;
 
     // 顯示硬直星星
     const ctx = this.getBadgeContext();
@@ -1656,9 +1603,6 @@ export class NPC {
 
   // 建造 3D Low-Poly 雨傘模型 (傘中棒、握把、10 角多邊傘面、頂端金屬針)
   private buildUmbrellaModel(): THREE.Group {
-    const umbrella = new THREE.Group();
-    umbrella.name = 'umbrella';
-
     // 隨機豐富傘面顏色 (8 款經典色調：黑、海軍藍、黃、紅、綠、紫、珊瑚粉、雅灰)
     const umbrellaColors = [
       0x1e272e, // 紳士墨黑
@@ -1672,45 +1616,15 @@ export class NPC {
     ];
     const canopyColor = umbrellaColors[Math.floor(Math.random() * umbrellaColors.length)];
 
-    const shaftMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.6, roughness: 0.3 });
-    const handleMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-    const canopyMat = new THREE.MeshLambertMaterial({
-      color: canopyColor,
-      side: THREE.DoubleSide
+    const umbrella = buildUmbrella({
+      name: 'umbrella',
+      canopyColor,
+      shaftMetalness: 0.6,
+      handleColor: 0x111111,
+      tipMetalness: 0.8,
+      rigX: -0.16,
+      rigZ: -0.06
     });
-    const tipMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, metalness: 0.8, roughness: 0.2 });
-
-    // 內部微調容器 (使傘面中心精確位於頭頂中央上方)
-    const rig = new THREE.Group();
-    rig.position.set(-0.16, 0, -0.06);
-
-    // 1. 傘中棒 (Shaft) - 向上延伸 1.15m
-    const shaftGeo = new THREE.CylinderGeometry(0.014, 0.014, 1.15, 8);
-    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-    shaft.position.y = 0.50;
-    rig.add(shaft);
-
-    // 2. 傘柄握把 (Grip)
-    const handleGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.14, 8);
-    const handle = new THREE.Mesh(handleGeo, handleMat);
-    handle.position.y = -0.05;
-    rig.add(handle);
-
-    // 3. 傘帽圓錐 (Canopy) - 10 角傘骨造型
-    const canopyGeo = new THREE.ConeGeometry(0.68, 0.34, 10, 1, true);
-    const canopy = new THREE.Mesh(canopyGeo, canopyMat);
-    canopy.position.y = 0.96;
-    canopy.castShadow = true;
-    rig.add(canopy);
-
-    // 4. 傘頂金屬尖端 (Ferrule Tip)
-    const tipGeo = new THREE.CylinderGeometry(0.01, 0.02, 0.10, 8);
-    const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = 1.16;
-    rig.add(tip);
-
-    umbrella.add(rig);
-    umbrella.visible = false;
     // 同色雨傘共用合併幾何體 (傘柄/傘骨/傘面/尖端合併)
     bakeNode(umbrella, `umbrella|${canopyColor}`);
     return umbrella;
@@ -1823,6 +1737,9 @@ export class NPC {
     this.reviveTimer = duration;
     this.isBossStunned = true;
     this.bossStunTimer = duration;
+    this.bossRecoverTimer = 0;
+    this.bossBackstepTimer = 0;
+    if (this.bossStunStars) this.bossStunStars.visible = false;
     this.bossIsCharging = false;
     this.isBossWindingUp = false;
     this.bossWindupTimer = 0;
@@ -1946,7 +1863,7 @@ export class NPC {
       this.isBurstSprinting = false;
       this.dynamicSpeed = this.speed;
 
-      const isDetention = this.role.startsWith('DETENTION');
+      const isDetention = this.cfg.isDetention;
       if (isDetention) {
         this.isPermanentlyKnockedOut = true;
         this.reviveTimer = 999999;
@@ -2026,7 +1943,7 @@ export class NPC {
   // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
   public triggerAttackAnimation() {
     this.attackAnimTimer = 0.35;
-    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
+    if (this.cfg.isCanine) {
       soundManager.playDogBark();
     } else if (this.role === 'BIKE_PATROL') {
       soundManager.playBicycleBell();
@@ -2251,7 +2168,7 @@ export class NPC {
     this.isPaused = true;
     this.pauseAnimTimer = 0;
 
-    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
+    if (this.cfg.isCanine) {
       if (this.role === 'DETENTION_WOLF') {
         // 特訓狼犬：定點警戒嗅聞 4.5 秒 (充足靜止暗殺空檔)
         this.currentIdleBehavior = 'DOG_SNIFF';
@@ -2262,7 +2179,7 @@ export class NPC {
           ? (3.0 + Math.random() * 2.5)
           : (4.0 + Math.random() * 3.0);
       }
-    } else if (this.role.startsWith('DETENTION_')) {
+    } else if (this.cfg.isDetention) {
       // 特訓院哨兵守衛：100% 固定立正環顧警戒，固定 4.5 秒 (Boss 5.0 秒)，背後暴露充足靜止暗殺空檔
       this.currentIdleBehavior = 'LOOK_AROUND';
       this.pauseTimer = this.role === 'DETENTION_BOSS' ? 5.0 : 4.5;
@@ -2398,7 +2315,7 @@ export class NPC {
 
   // 待機/發呆行為多樣性程序化動作 (0-GC 純量運算)
   private applyIdleAnimation() {
-    if (this.role === 'DOG' || this.role === 'DETENTION_WOLF') {
+    if (this.cfg.isCanine) {
       if (this.currentIdleBehavior === 'DOG_SNIFF') {
         // 低頭嗅聞青草，尾巴歡快輕搖
         if (this.dogHead) {
@@ -2570,6 +2487,14 @@ export class NPC {
       this.bossWindupTimer = 0;
       this.bossIsCharging = false;
       this.bossChargeTraveled = 0;
+      this.bossChargeCooldown = 3.0;
+      this.bossMeleeTimer = 0;
+      this.bossBackstepTimer = 0;
+      this.bossRecoverTimer = 0;
+      this.bossStunElapsed = 0;
+      if (this.bossStunStars) this.bossStunStars.visible = false;
+      this.koBadgeSprite.visible = false;
+      this.lastKoBadgeSec = -1;
       if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
       if (this.bossBarrierMesh) this.bossBarrierMesh.visible = true;
     }
@@ -2679,9 +2604,7 @@ export class NPC {
     const distSq = dx * dx + dy * dy + dz * dz;
 
     // 視距半徑
-    const maxViewDist = (this.role === 'DOG' || this.role === 'DETENTION_WOLF') ? 22.0 :
-      (this.role === 'DETENTION_BOSS' || this.role === 'DETENTION_GUARD') ? 22.0 :
-      this.role === 'BIKE_PATROL' ? 16.0 : 14.0;
+    const maxViewDist = this.cfg.viewDist;
     if (distSq > maxViewDist * maxViewDist) return false;
 
     // 視錐夾角檢測 (水平前向向量與目標方向向量的點積)
@@ -2699,7 +2622,7 @@ export class NPC {
 
     // 3D 視線障礙物遮擋檢測 (Line of Sight Raycast with AABB Broadphase Culling)
     if (colliders.length > 0) {
-      const eyeY = this.role === 'DOG' ? 0.6 : 1.5;
+      const eyeY = this.cfg.eyeHeight;
       const eyePosX = this.position.x;
       const eyePosY = this.position.y + eyeY;
       const eyePosZ = this.position.z;
@@ -2752,16 +2675,8 @@ export class NPC {
       return;
     }
 
-    // 小 Boss 硬直狀態：無法行動與追逐
-    if (this.isBossStunned) {
-      this.bossStunTimer -= delta;
-      if (this.bossStunTimer <= 0) {
-        this.isBossStunned = false;
-        this.setAlertState('ALERT');
-        this.isChasing = true;
-      }
-      return;
-    }
+    // 小 Boss 硬直狀態：無法行動與追逐 (倒數與回神由 update 的硬直區塊處理)
+    if (this.isBossStunned) return;
 
     // 校外強盜專屬仇恨邏輯
     if (this.role === 'BANDIT') {
@@ -2779,12 +2694,7 @@ export class NPC {
       return;
     }
 
-    const isDetentionRole =
-      this.role === 'DETENTION_GUARD' ||
-      this.role === 'DETENTION_SENIOR' ||
-      this.role === 'DETENTION_HEAVY' ||
-      this.role === 'DETENTION_WOLF' ||
-      this.role === 'DETENTION_BOSS';
+    const isDetentionRole = this.cfg.isDetention;
 
     // 第二世界專屬 MGS 潛入與警戒 AI
     if (isDetentionRole) {
@@ -2797,27 +2707,30 @@ export class NPC {
       const seesPlayer = this.canSeePlayer(playerPos, colliders, isPlayerHiding, isPlayerSneaking);
 
       // 總教官衝鋒衝撞冷卻與危險預警軌跡線觸發 (1.25 秒蓄力前置預警)
+      // 冷卻於戰鬥中 (追捕或警戒) 持續倒數；3m~22m 直接蓄力，貼身纏鬥超過 2.5 秒則先後撤拉開距離再衝撞
       if (
         this.role === 'DETENTION_BOSS' &&
-        this.isChasing &&
+        (this.isChasing || this.alertState === 'ALERT') &&
         !this.bossIsCharging &&
         !this.isBossWindingUp &&
+        this.bossBackstepTimer <= 0 &&
         !this.isBossStunned &&
         !this.isKnockedDown
       ) {
-        this.bossChargeCooldown -= delta;
-        if (this.bossChargeCooldown <= 0 && distSq > 36.0 && distSq < 484.0) {
-          this.isBossWindingUp = true;
-          this.bossWindupTimer = 1.25;
-          this.bossChargeCooldown = 7.5;
-          // 鎖定當前玩家方向 (1.25秒內玩家可往側向閃躲！)
-          this.bossChargeDir.subVectors(playerPos, this.position).setY(0).normalize();
-          this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
-          this.mesh.rotation.y = this.rotationY;
-          if (this.bossTelegraphGroup) {
-            this.bossTelegraphGroup.visible = true;
+        if (this.bossChargeCooldown > 0) this.bossChargeCooldown -= delta;
+        this.bossMeleeTimer = distSq <= 9.0 ? this.bossMeleeTimer + delta : 0;
+
+        if (this.isChasing && this.bossChargeCooldown <= 0 && !this.isBossInvulnerable) {
+          if (distSq > 9.0 && distSq < 484.0) {
+            this.startBossWindup(playerPos);
+          } else if (distSq <= 9.0 && this.bossMeleeTimer >= 2.5) {
+            // 後撤步：朝遠離玩家方向退開約 2.5m，結束後立即蓄力衝撞
+            this.bossBackstepDir.subVectors(this.position, playerPos).setY(0);
+            if (this.bossBackstepDir.lengthSq() < 0.0001) this.bossBackstepDir.set(-Math.sin(this.rotationY), 0, -Math.cos(this.rotationY));
+            this.bossBackstepDir.normalize();
+            this.bossBackstepTimer = NPC.BOSS_BACKSTEP_TIME;
+            this.bossMeleeTimer = 0;
           }
-          soundManager.playWhistle();
         }
       }
 
@@ -3034,196 +2947,27 @@ export class NPC {
 
   // 尋找瞬移安全目標點 (0-GC，檢測障礙物碰撞與地面高度，絕不穿出走廊外牆)
   private findSafeTeleportPos(centerX: number, centerZ: number, currentY: number, colliders: CollidableBox[]): THREE.Vector3 {
-    const halfWidth = 0.45;
-    const height = 1.8;
-    const minRadius = 1.8;
-    const maxRadius = 4.2;
-
-    for (let attempt = 0; attempt < 14; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = minRadius + Math.random() * (maxRadius - minRadius);
-      const candX = centerX + Math.cos(angle) * dist;
-      const candZ = centerZ + Math.sin(angle) * dist;
-
-      let blocked = false;
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
-        if (box.isFloorOnly) continue;
-        if (
-          candX + halfWidth > box.min.x &&
-          candX - halfWidth < box.max.x &&
-          candZ + halfWidth > box.min.z &&
-          candZ - halfWidth < box.max.z &&
-          currentY + height > box.min.y &&
-          currentY + 0.3 < box.max.y
-        ) {
-          blocked = true;
-          break;
-        }
-      }
-
-      if (!blocked) {
-        let groundY = this.baseFloorY;
-        for (let i = 0; i < colliders.length; i++) {
-          const box = colliders[i];
-          if (
-            candX + halfWidth > box.min.x &&
-            candX - halfWidth < box.max.x &&
-            candZ + halfWidth > box.min.z &&
-            candZ - halfWidth < box.max.z
-          ) {
-            if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
-              const t = THREE.MathUtils.clamp((candZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
-              const rampY = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
-              if (rampY <= currentY + 0.85 && rampY > groundY) {
-                groundY = rampY;
-              }
-            } else {
-              if (box.max.y <= currentY + 0.85 && box.max.y > groundY) {
-                groundY = box.max.y;
-              }
-            }
-          }
-        }
-        _npcSafeTeleportResult.set(candX, groundY, candZ);
-        return _npcSafeTeleportResult;
-      }
-    }
-
-    _npcSafeTeleportResult.set(centerX, currentY, centerZ);
-    return _npcSafeTeleportResult;
+    return findSafeTeleportPos(_npcSafeTeleportResult, centerX, centerZ, currentY, colliders, {
+      minRadius: 1.8,
+      maxRadius: 4.2,
+      attempts: 14,
+      baseGroundY: this.baseFloorY
+    });
   }
 
   // 產生 0-GC 角色殘影
   private spawnAfterimage(colorHex: number, duration: number) {
-    if (this.afterimages.length === 0) return;
-    const item = this.afterimages[this.afterimageIndex];
-    this.afterimageIndex = (this.afterimageIndex + 1) % this.afterimages.length;
-
-    item.materials[0].color.setHex(colorHex);
-    item.materials[0].opacity = 0.75;
-    item.life = duration;
-    item.maxLife = duration;
-
-    item.group.position.copy(this.position);
-    item.group.rotation.copy(this.mesh.rotation);
-
-    const children = item.group.children;
-    if (this.headMesh && children[1]) children[1].rotation.copy(this.headMesh.rotation);
-    if (this.leftArm && children[2]) children[2].rotation.copy(this.leftArm.rotation);
-    if (this.rightArm && children[3]) children[3].rotation.copy(this.rightArm.rotation);
-    if (this.leftLeg && children[4]) children[4].rotation.copy(this.leftLeg.rotation);
-    if (this.rightLeg && children[5]) children[5].rotation.copy(this.rightLeg.rotation);
-
-    item.group.visible = true;
+    this.afterimagePool?.spawn(colorHex, duration, this.position, this.mesh.rotation, this.headMesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
   }
 
   // 每幀更新殘影透明度與生命週期
   public updateAfterimages(delta: number) {
-    for (let i = 0; i < this.afterimages.length; i++) {
-      const item = this.afterimages[i];
-      if (item.life > 0) {
-        item.life -= delta;
-        if (item.life <= 0) {
-          item.life = 0;
-          item.group.visible = false;
-        } else {
-          const ratio = item.life / item.maxLife;
-          item.materials[0].opacity = 0.75 * Math.sin(ratio * Math.PI * 0.5);
-        }
-      }
-    }
-  }
-
-  // 延遲初始化對話氣泡 Sprite (0-GC，按需建立畫布與紋理)
-  private initSkillBubble() {
-    if (this.skillBubbleSprite) return;
-
-    this.skillBubbleCanvas = document.createElement('canvas');
-    this.skillBubbleCanvas.width = 380;
-    this.skillBubbleCanvas.height = 110;
-    this.skillBubbleContext = this.skillBubbleCanvas.getContext('2d')!;
-    this.skillBubbleTexture = new THREE.CanvasTexture(this.skillBubbleCanvas);
-    this.skillBubbleTexture.minFilter = THREE.LinearFilter;
-
-    const bubbleMat = new THREE.SpriteMaterial({
-      map: this.skillBubbleTexture,
-      transparent: true,
-      opacity: 0,
-      depthTest: false,
-      depthWrite: false
-    });
-    this.skillBubbleSprite = new THREE.Sprite(bubbleMat);
-    this.skillBubbleSprite.scale.set(2.2, 0.64, 1.0);
-    this.skillBubbleSprite.position.set(0, this.skillBubbleBaseY, 0);
-    this.skillBubbleSprite.visible = false;
-    this.mesh.add(this.skillBubbleSprite);
-  }
-
-  // 繪製頭頂技能名稱對話方框 (CanvasTexture 0-GC)
-  private drawSkillBubble(text: string, isAdvanced: boolean) {
-    this.initSkillBubble();
-    if (!this.skillBubbleContext || !this.skillBubbleCanvas) return;
-    const ctx = this.skillBubbleContext;
-    const w = this.skillBubbleCanvas.width;
-    const h = this.skillBubbleCanvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    const bubbleW = w - 24;
-    const bubbleH = h - 28;
-    const x = 12;
-    const y = 8;
-    const r = 22;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + bubbleW - r, y);
-    ctx.quadraticCurveTo(x + bubbleW, y, x + bubbleW, y + r);
-    ctx.lineTo(x + bubbleW, y + bubbleH - r);
-    ctx.quadraticCurveTo(x + bubbleW, y + bubbleH, x + bubbleW - r, y + bubbleH);
-    ctx.lineTo(w / 2 + 12, y + bubbleH);
-    ctx.lineTo(w / 2, y + bubbleH + 16);
-    ctx.lineTo(w / 2 - 12, y + bubbleH);
-    ctx.lineTo(x + r, y + bubbleH);
-    ctx.quadraticCurveTo(x, y + bubbleH, x, y + bubbleH - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fill();
-
-    ctx.strokeStyle = isAdvanced ? 'rgba(168, 85, 247, 0.85)' : 'rgba(56, 189, 248, 0.85)';
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    const fontSize = text.length > 9 ? 24 : (text.length > 6 ? 28 : 34);
-    ctx.font = `bold ${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#f8fafc';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-    ctx.fillText(text, w / 2, y + bubbleH / 2 - 1);
-
-    ctx.restore();
-    if (this.skillBubbleTexture) this.skillBubbleTexture.needsUpdate = true;
+    this.afterimagePool?.update(delta);
   }
 
   // 通用頭頂氣泡對話彈出方法 (可自訂顯示時間)
   public showSpeechBubble(text: string, isSpecial: boolean = false, duration: number = 2.4) {
-    this.initSkillBubble();
-    this.skillBubbleDuration = duration;
-    this.drawSkillBubble(text, isSpecial);
-    this.skillBubbleTimer = this.skillBubbleDuration;
-    if (this.skillBubbleSprite) {
-      this.skillBubbleSprite.position.y = this.skillBubbleBaseY;
-      (this.skillBubbleSprite.material as THREE.SpriteMaterial).opacity = 0.95;
-      this.skillBubbleSprite.visible = true;
-    }
+    this.skillBubble.show(text, isSpecial, duration);
   }
 
   // 相容閃身步技能氣泡
@@ -3232,23 +2976,7 @@ export class NPC {
   }
 
   public updateSkillBubble(delta: number) {
-    if (this.skillBubbleTimer > 0 && this.skillBubbleSprite) {
-      this.skillBubbleTimer -= delta;
-      const progress = 1.0 - (this.skillBubbleTimer / this.skillBubbleDuration);
-      this.skillBubbleSprite.position.y = this.skillBubbleBaseY + progress * 0.25;
-
-      const mat = this.skillBubbleSprite.material as THREE.SpriteMaterial;
-      if (progress < 0.60) {
-        mat.opacity = 0.95;
-      } else {
-        mat.opacity = 0.95 * (1.0 - (progress - 0.60) / 0.40);
-      }
-
-      if (this.skillBubbleTimer <= 0) {
-        this.skillBubbleSprite.visible = false;
-        mat.opacity = 0;
-      }
-    }
+    this.skillBubble.update(delta);
   }
 
   public update(
@@ -3268,9 +2996,10 @@ export class NPC {
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.lastColliders = colliders;
+    if (this.role === 'DETENTION_BOSS') impactDust.update(delta);
 
     // 依 NPC 所屬世界套用對應室內區域 (少年院守衛不可誤用天天國中的室內範圍)
-    const isOutdoor = !IndoorManager.isIndoors(this.position, this.role.startsWith('DETENTION') ? 'DETENTION' : 'CAMPUS');
+    const isOutdoor = !IndoorManager.isIndoors(this.position, this.cfg.isDetention ? 'DETENTION' : 'CAMPUS');
     const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
 
     // 傘的顯示與收納狀態更新 (室內、倒地、追捕或雨停時自動收傘)
@@ -3464,7 +3193,7 @@ export class NPC {
           this.isChasing = false;
           this.isBurstSprinting = false;
 
-          const isDetention = this.role.startsWith('DETENTION');
+          const isDetention = this.cfg.isDetention;
           if (isDetention) {
             this.isPermanentlyKnockedOut = true;
             this.reviveTimer = 999999;
@@ -3610,6 +3339,54 @@ export class NPC {
       this.bossBarrierMesh.visible = false;
     }
 
+    // 總教官破盾硬直：原地凍結 (不受 AI 移動與轉向)，暈眩搖晃 + 頭頂星星，結束後甩頭回神再恢復戰鬥
+    if (this.role === 'DETENTION_BOSS' && !this.isKnockedDown && (this.isBossStunned || this.bossRecoverTimer > 0)) {
+      if (this.isBossStunned) {
+        this.bossStunTimer -= delta;
+        this.bossStunElapsed += delta;
+        this.applyBossStunPose();
+        if (this.bossStunTimer <= 0) {
+          this.isBossStunned = false;
+          this.bossStunTimer = 0;
+          this.bossRecoverTimer = 0.3;
+          if (this.bossStunStars) this.bossStunStars.visible = false;
+        }
+      } else {
+        this.bossRecoverTimer -= delta;
+        const k = Math.max(0, this.bossRecoverTimer / 0.3);
+        if (this.headMesh) this.headMesh.rotation.set(0, Math.sin(this.bossRecoverTimer * 42.0) * 0.4 * k, 0);
+        this.mesh.rotation.set(this.mesh.rotation.x * k, this.rotationY, this.mesh.rotation.z * k);
+        if (this.bossRecoverTimer <= 0) {
+          this.bossRecoverTimer = 0;
+          this.resetPose();
+          this.mesh.rotation.set(0, this.rotationY, 0);
+          this.koBadgeSprite.visible = false;
+          this.lastKoBadgeSec = -1;
+          this.setAlertState('ALERT');
+          this.isChasing = true;
+          this.lostSightTimer = 0;
+          this.lastKnownPos.copy(playerPos);
+        }
+      }
+      this.mesh.position.set(this.position.x, this.baseFloorY, this.position.z);
+      return;
+    }
+
+    // 總教官貼身纏鬥後撤步 (拉開距離後立即進入衝撞蓄力)
+    if (this.bossBackstepTimer > 0 && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
+      const stepTime = Math.min(delta, this.bossBackstepTimer);
+      this.bossBackstepTimer -= delta;
+      this.moveBossSwept(colliders, this.bossBackstepDir, NPC.BOSS_BACKSTEP_SPEED * stepTime);
+      this.rotationY = Math.atan2(-this.bossBackstepDir.x, -this.bossBackstepDir.z); // 後退時仍面向玩家
+      this.mesh.rotation.y = this.rotationY;
+      this.mesh.position.copy(this.position);
+      if (this.bossBackstepTimer <= 0) {
+        this.bossBackstepTimer = 0;
+        this.startBossWindup(playerPos);
+      }
+      return;
+    }
+
     // 總教官衝撞前置危險預警階段 (Windup Telegraph)
     if (this.isBossWindingUp && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
       this.bossWindupTimer -= delta;
@@ -3644,9 +3421,9 @@ export class NPC {
 
     // 總教官狂暴衝鋒判定 (狂暴衝刺 14 m/s + 撞柱重度眩暈 + 距離上限)
     if (this.bossIsCharging && this.role === 'DETENTION_BOSS' && !this.isBossStunned && !this.isKnockedDown) {
-      const stepDist = 14.0 * delta;
-      this.position.x += this.bossChargeDir.x * stepDist;
-      this.position.z += this.bossChargeDir.z * stepDist;
+      // 子步掃掠移動 (每步 ≤0.3m)，撞上身體高度範圍內的阻擋物時停在接觸面，避免嵌牆或高速穿牆
+      const stepDist = Math.min(NPC.BOSS_CHARGE_SPEED * delta, this.bossChargeMaxDist - this.bossChargeTraveled);
+      const hitWall = this.moveBossSwept(colliders, this.bossChargeDir, Math.max(0, stepDist));
       this.bossChargeTraveled += stepDist;
       this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
 
@@ -3656,9 +3433,18 @@ export class NPC {
 
       // 檢測是否撞上水泥加固柱或障礙盒
       let hitObstacle = false;
-      // 衝撞判定不分高度 (身體垂直範圍設為無限)
-      if (isBlockedXZ(colliders, this.position.x, this.position.z, 0.65, this.position.y, -Infinity, Infinity)) {
+      if (hitWall) {
         hitObstacle = true;
+        // 撞擊點碎石爆散、反彈後退約 0.5m、玩家 25m 內鏡頭震動
+        _bossImpactPoint.set(
+          this.position.x + this.bossChargeDir.x * NPC.BOSS_CHARGE_RADIUS,
+          this.position.y + 1.2,
+          this.position.z + this.bossChargeDir.z * NPC.BOSS_CHARGE_RADIUS
+        );
+        _bossKnockDir.copy(this.bossChargeDir).negate();
+        if (this.mesh.parent) impactDust.burst(this.mesh.parent, _bossImpactPoint, _bossKnockDir);
+        this.moveBossSwept(colliders, _bossKnockDir, 0.5);
+        if (this.position.distanceToSquared(playerPos) < 625.0) requestCameraShake(0.85);
         // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
         this.stunBoss(3.5);
         soundManager.playPunch();
@@ -3745,7 +3531,7 @@ export class NPC {
       const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq);
 
       // 平滑速度過渡
-      const accelRate = this.role === 'DOG' ? 6.0 : (this.role === 'BIKE_PATROL' ? 8.0 : 4.0);
+      const accelRate = this.cfg.chaseAccelRate;
       this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
     } else if (this.isReclaimingBike && this.ownedBike && !this.ownedBike.isMounted) {
@@ -3798,7 +3584,7 @@ export class NPC {
       }
 
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
-      const isDetention = this.role.startsWith('DETENTION_');
+      const isDetention = this.cfg.isDetention;
       const wpDistSq = isDetention ? 2.25 : (this.role === 'BIKE_PATROL' ? 12.25 : (this.movementStyle === 'JOGGING' ? 4.84 : 3.24));
       if (this.position.distanceToSquared(targetPos) < wpDistSq) {
         // 下雨天沒帶傘時絕不停留發呆，持續快步尋找遮蔽處；第二世界特訓守衛 100% 固定駐足警戒 3.5s
@@ -3847,7 +3633,7 @@ export class NPC {
       if (!isTooCloseToPlayer) {
         const moveStepX = _npcMoveDir.x * currentSpeed * delta;
         const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
-        const radius = (this.role === 'DOG' || this.role === 'DETENTION_WOLF') ? 0.35 : 0.45;
+        const radius = this.cfg.isCanine ? 0.35 : 0.45;
 
         // X 軸移動檢測
         let nextX = this.position.x + moveStepX;
@@ -3916,8 +3702,8 @@ export class NPC {
       // 轉向與俯仰姿態
       const targetRotation = Math.atan2(_npcMoveDir.x, _npcMoveDir.z);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
-      const isDetention = this.role.startsWith('DETENTION_');
-      const isCanine = this.role === 'DOG' || this.role === 'DETENTION_WOLF';
+      const isDetention = this.cfg.isDetention;
+      const isCanine = this.cfg.isCanine;
       const turnRate = isCanine
         ? (this.isChasing ? 14.0 : 4.0)
         : (this.role === 'BIKE_PATROL'
@@ -4055,7 +3841,7 @@ export class NPC {
 
     this.mesh.position.copy(this.position);
     // 犬科四足奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
-    const isCanineRole = this.role === 'DOG' || this.role === 'DETENTION_WOLF';
+    const isCanineRole = this.cfg.isCanine;
     if (isCanineRole && _npcMoveDir.lengthSq() > 0.05) {
       this.mesh.position.y += Math.abs(Math.sin(this.animTimer * 2)) * (currentSpeed > 6.0 ? 0.045 : 0.015);
     }
@@ -4103,7 +3889,7 @@ export class NPC {
     }
 
     // 更新頭頂對話氣泡 (任何角色若有對話氣泡皆能正常更新淡出)
-    if (this.skillBubbleTimer > 0) {
+    if (this.skillBubble.isActive) {
       this.updateSkillBubble(delta);
     }
   }
@@ -4116,19 +3902,8 @@ export class NPC {
     if (this.koBadgeSprite?.material) {
       this.koBadgeSprite.material.dispose();
     }
-    if (this.skillBubbleTexture) {
-      this.skillBubbleTexture.dispose();
-    }
-    if (this.skillBubbleSprite?.material) {
-      (this.skillBubbleSprite.material as THREE.Material).dispose();
-    }
-    for (const item of this.afterimages) {
-      if (scene) scene.remove(item.group);
-      else if (item.group.parent) item.group.parent.remove(item.group);
-      for (const m of item.materials) {
-        m.dispose();
-      }
-    }
+    this.skillBubble.dispose();
+    this.afterimagePool?.dispose(scene);
     disposeNonShared(this.mesh);
     if (scene) {
       scene.remove(this.mesh);

@@ -1595,6 +1595,8 @@ export class CampusWorld {
     for (let k = 1; k < 8; k++) {
       const a = (k * Math.PI) / 16;
       this.addCollider(x - 3.98 * Math.cos(a), x + 3.98 * Math.cos(a), z - 3.98 * Math.sin(a), z + 3.98 * Math.sin(a), y, y + 0.7);
+      // 花叢 (半徑 2.2 + 0.9，頂高約 2.1m) 實體範圍：避免第三人稱鏡頭穿入花叢導致整個畫面被紅色花叢覆蓋閃爍
+      this.addCollider(x - 3.1 * Math.cos(a), x + 3.1 * Math.cos(a), z - 3.1 * Math.sin(a), z + 3.1 * Math.sin(a), y + 0.7, y + 2.1);
     }
 
     const soil = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 0.2, 24), soilMat);

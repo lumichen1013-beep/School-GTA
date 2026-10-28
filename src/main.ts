@@ -32,6 +32,9 @@ import { InteractionSystem } from './game/InteractionSystem';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
+// 精力環投影用暫存向量 (避免每幀配置)
+const _scratchStaminaAnchor = new THREE.Vector3();
+
 /**
  * 主程式：建置引擎與兩個世界、組裝各子系統，並調度每幀更新順序。
  * 各玩法細節分別位於 game/ (成長、戰鬥、互動、校園玩法、特訓院玩法)。
@@ -738,8 +741,8 @@ class SchoolGTASandbox implements GameContext {
     this.hud.update(
       targetPosition,
       playerRotY,
-      this.player.hp,
-      (this.player.stamina / this.player.maxStamina) * 100, // 體力條以上限百分比顯示
+      (this.player.hp / this.player.maxHp) * 100, // 雷達外圈 HP 弧以上限百分比顯示 (第二世界上限 150)
+      (this.player.stamina / this.player.maxStamina) * 100, // 精力環以上限百分比顯示
       this.npcs,
       this.bicycles,
       isBeingChased,
@@ -748,6 +751,25 @@ class SchoolGTASandbox implements GameContext {
       this.currentWorldType,
       detentionRadarData
     );
+
+    // 15.1 精力環：投影角色肩部至螢幕，過場/大地圖/騎車/死亡/隱形時隱藏
+    const p = this.player;
+    let staminaAllowed = !p.isDead && !p.isRidingVehicle && !p.isInvisible && !this.hud.isFullMapOpen && !this.detentionCutscene.isActive;
+    let staminaX = 0;
+    let staminaY = 0;
+    if (staminaAllowed) {
+      // 錨點取角色右側 0.75m、肩部高度 (世界座標)，遠近皆保持在身體旁而不壓到肩膀
+      _scratchStaminaAnchor.copy(targetPosition).addScaledVector(this.cameraCtrl.getRightVector(), 0.75);
+      _scratchStaminaAnchor.y += 1.3;
+      _scratchStaminaAnchor.project(this.cameraCtrl.camera);
+      if (_scratchStaminaAnchor.z > 1) {
+        staminaAllowed = false; // 角色位於鏡頭後方
+      } else {
+        staminaX = (_scratchStaminaAnchor.x * 0.5 + 0.5) * window.innerWidth;
+        staminaY = (-_scratchStaminaAnchor.y * 0.5 + 0.5) * window.innerHeight;
+      }
+    }
+    this.hud.updateStaminaRing(staminaX, staminaY, staminaAllowed, rawDelta);
 
     // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
     this.weatherSystem.update(rawDelta, targetPosition);

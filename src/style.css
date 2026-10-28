@@ -84,18 +84,12 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   pointer-events: none;
 }
 
-/* Top-Left: Minimap + Location Title + Health / Stamina Bars */
+/* Top-Left (空間資訊欄)：雷達 (外圈體力弧) → 地點卡片 → 任務膠囊，由上而下排列 */
 .hud-top-left {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  pointer-events: none;
-}
-
-.radar-container {
-  display: flex;
-  align-items: center;
-  gap: 14px;
   pointer-events: none;
 }
 
@@ -163,13 +157,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   pointer-events: none;
 }
 
-.player-status-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  pointer-events: none;
-}
-
 .hud-title-zone {
   background: rgba(13, 19, 33, 0.82);
   backdrop-filter: blur(8px);
@@ -198,67 +185,139 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   white-space: nowrap;
 }
 
-.bars-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 160px;
-  background: rgba(13, 19, 33, 0.78);
-  backdrop-filter: blur(8px);
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+/* 雷達外框：HP 3/4 弧環繞雷達 (右側 3 點鐘起順時針繞至 12 點鐘，右上缺口放數值) */
+.radar-frame {
+  --ring-pad: 12px;
+  --ring-pull-top: 12px;
+  position: relative;
+  flex-shrink: 0;
+  padding: var(--ring-pad);
+  /* 上、左以負邊距吸收外框留白，雷達本體位置不變；下方保留，避免後續元件壓到弧環 */
+  margin: calc(var(--ring-pull-top) * -1) 0 0 calc(var(--ring-pad) * -1);
+  pointer-events: none;
 }
-
-.meter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.meter-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #bbb;
-  display: flex;
-  justify-content: space-between;
-}
-
-.meter-title {
-  color: #ddd;
-}
-
-.meter-val {
-  font-family: 'Changa One', monospace;
-  font-size: 11px;
-  color: #fff;
-}
-
-.meter-bar {
+.hp-ring {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 7px;
-  background: rgba(0, 0, 0, 0.65);
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.meter-fill {
   height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.hp-ring circle {
+  fill: none;
+  stroke-width: 4.2;
+  stroke-linecap: round;
+}
+.hp-ring-track {
+  stroke: rgba(8, 12, 20, 0.72);
+  stroke-dasharray: 75 100;
+  stroke-width: 5.6 !important;
+}
+.hp-ring-trail {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-dasharray: 75 100;
+  /* 受傷時白色殘量延遲 0.35 秒後才跟著縮短，呈現「被扣掉的那一段」 */
+  transition: stroke-dasharray 0.5s ease-in 0.35s;
+}
+.hp-ring-fill {
+  stroke: #2ecc71;
+  stroke-dasharray: 75 100;
+  filter: drop-shadow(0 0 3px rgba(46, 204, 113, 0.7));
+  transition: stroke-dasharray 0.18s ease-out, stroke 0.3s ease;
+}
+.hp-ring.hp-mid .hp-ring-fill {
+  stroke: #f1c40f;
+  filter: drop-shadow(0 0 3px rgba(241, 196, 15, 0.7));
+}
+.hp-ring.hp-low .hp-ring-fill {
+  stroke: #e74c3c;
+  filter: drop-shadow(0 0 4px rgba(231, 76, 60, 0.9));
+  animation: hp-ring-pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes hp-ring-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+.hp-ring-label {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(8, 12, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-family: 'Changa One', monospace;
+  font-size: 13px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.hp-ring-icon {
+  color: #2ecc71;
+  font-size: 11px;
+}
+.radar-frame:has(.hp-mid) .hp-ring-icon { color: #f1c40f; }
+.radar-frame:has(.hp-low) .hp-ring-icon { color: #e74c3c; }
+
+/* 精力環：角色身旁浮現的小圓環 (Zelda 式)，僅以 transform 定位與 opacity 淡入淡出 */
+#stamina-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  will-change: transform, opacity;
+  z-index: var(--z-hud-base);
+}
+#stamina-ring.visible {
+  opacity: 1;
+}
+#stamina-ring svg {
   width: 100%;
-  border-radius: 4px;
-  transition: width 0.15s ease-out;
+  height: 100%;
+  transform: rotate(-90deg);
 }
-
-.fill-hp {
-  background: linear-gradient(90deg, #27ae60, #2ecc71);
-  box-shadow: 0 0 6px rgba(46, 204, 113, 0.5);
+#stamina-ring circle {
+  fill: none;
+  stroke-width: 5;
 }
-
-.fill-stamina {
-  background: linear-gradient(90deg, #2980b9, #3498db);
-  box-shadow: 0 0 6px rgba(52, 152, 219, 0.5);
+.stamina-ring-track {
+  stroke: rgba(8, 12, 20, 0.6);
+}
+.stamina-ring-fill {
+  stroke: #f9ca24;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  filter: drop-shadow(0 0 2px rgba(249, 202, 36, 0.8));
+  transition: stroke 0.25s ease;
+}
+.stamina-ring-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#stamina-ring.exhausted .stamina-ring-fill {
+  stroke: #e74c3c;
+  filter: drop-shadow(0 0 3px rgba(231, 76, 60, 0.9));
+}
+#stamina-ring.exhausted svg {
+  animation: stamina-ring-pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes stamina-ring-pulse {
+  from { transform: rotate(-90deg) scale(1); }
+  to { transform: rotate(-90deg) scale(1.15); }
 }
 
 /* Top-Right: Wanted Stars, Demerits, Status, Pills, Weapons */
@@ -275,7 +334,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   to { opacity: 1; transform: scale(1.2); }
 }
 
-/* Clock & Cash & Pills Row */
+/* 右上個人狀態列：零用錢 + ⚙️ 設定鍵 (下方為校規處分) */
 .hud-status-row {
   display: flex;
   align-items: center;
@@ -283,109 +342,67 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   pointer-events: auto;
 }
 
-.status-badge {
+.cash-badge {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  min-height: 40px;
+  box-sizing: border-box;
   background: rgba(13, 19, 33, 0.82);
   backdrop-filter: blur(8px);
-  padding: 6px 12px;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 18px;
   border-right: 3px solid #2ecc71;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.badge-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  white-space: nowrap;
 }
 
 .cash-val {
   color: #2ecc71;
   font-family: 'Changa One', monospace;
-  font-size: 16px;
+  font-size: 20px;
   letter-spacing: 0.5px;
 }
 
-.time-val {
-  color: #f1c40f;
-  font-family: 'Changa One', monospace;
-  font-size: 15px;
-}
-
-.weather-badge {
-  cursor: pointer;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.weather-badge:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.45);
-  transform: translateY(-1px);
-}
-
-.weather-key-hint {
-  font-size: 10px;
-  padding: 1px 4px;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 3px;
-  color: #ffd32a;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  margin-left: 4px;
-  font-weight: bold;
-}
-
-.world-badge {
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(41, 128, 185, 0.25);
-  border: 1px solid rgba(52, 152, 219, 0.45);
-  transition: all 0.2s ease;
-  user-select: none;
-  color: #ecf0f1;
-}
-
-.world-badge:hover {
-  background: rgba(41, 128, 185, 0.45);
-  border-color: rgba(52, 152, 219, 0.8);
-  transform: translateY(-1px);
-}
-
-.world-key-hint {
-  font-size: 10px;
-  padding: 1px 4px;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 3px;
-  color: #38bdf8;
-  border: 1px solid rgba(52, 152, 219, 0.4);
-  margin-left: 4px;
-  font-weight: bold;
-}
-
 .hud-action-pills {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  pointer-events: auto;
 }
 
-/* ⚙️ 設定選單：電腦端隱藏按鈕、三顆功能鍵照常橫排；手機端改為下拉選單 */
+/* ⚙️ 設定鍵 + 下拉選單 (全螢幕 / 觸控操作)，桌面與手機一致 */
 .hud-pill-btn.hud-settings-btn {
-  display: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 10px;
 }
 .hud-settings-menu {
-  display: flex;
-  align-items: center;
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
+  min-width: 170px;
+  padding: 8px;
+  background: rgba(13, 19, 33, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  z-index: var(--z-hud-menu);
+}
+.hud-settings-menu.open {
+  display: flex;
+}
+.hud-settings-menu .hud-pill-btn {
+  min-height: 38px;
+  justify-content: flex-start;
+  white-space: nowrap;
 }
 
 .hud-pill-btn {
@@ -502,9 +519,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 /* 專屬任務看板 (Quest / Mission Tracker Panel) - 頂級毛玻璃手遊風格看板 */
 #quest-tracker-panel {
-  position: absolute;
-  top: calc(var(--hud-left-bottom, 214px) + 10px);
-  left: max(18px, env(safe-area-inset-left, 18px));
+  position: relative;
   width: 236px;
   max-width: 90vw;
   cursor: pointer;
@@ -946,12 +961,12 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 }
 
 /* Notification Banner */
-/* 橫幅固定於頂部狀態列下方的專屬欄位 (--hud-top-bottom 由 HUD 依實際狀態列高度同步)，單行顯示超長省略 */
+/* 橫幅置於頂部中央留白欄位 (左右兩欄之間；--hud-side-w 由 HUD 依較寬欄位同步)，比分板下方，單行顯示超長省略 */
 #hud-banner {
   position: absolute;
-  top: calc(var(--hud-top-bottom, 134px) + 8px);
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
   left: 50%;
-  max-width: calc(100vw - 560px);
+  max-width: calc(100vw - 2 * var(--hud-side-w, 300px) - 40px);
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
@@ -2090,6 +2105,65 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   padding: 3px 10px;
   border-radius: 6px;
 }
+/* 大地圖工具列：BGM / 天氣 / 世界切換 */
+.fullmap-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.fullmap-toolbar .bgm-badge,
+.fullmap-tool-btn {
+  min-height: 36px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.fullmap-toolbar .bgm-badge {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-right-width: 3px;
+}
+.fullmap-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ecf0f1;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.fullmap-tool-btn.weather-badge {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.fullmap-tool-btn.weather-badge:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.fullmap-tool-btn.world-badge {
+  background: rgba(41, 128, 185, 0.25);
+  border: 1px solid rgba(52, 152, 219, 0.55);
+}
+.fullmap-tool-btn.world-badge:hover {
+  background: rgba(41, 128, 185, 0.45);
+}
+.world-current {
+  color: #38bdf8;
+}
+.tool-key-hint {
+  font-size: 10px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  color: #ffd32a;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-weight: bold;
+}
 .fullmap-coords {
   font-family: monospace;
   font-size: 13px;
@@ -2718,15 +2792,24 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     padding: max(8px, env(safe-area-inset-top, 8px)) max(10px, env(safe-area-inset-right, 10px)) max(8px, env(safe-area-inset-bottom, 8px)) max(10px, env(safe-area-inset-left, 10px)) !important;
   }
   .hud-top-left {
-    gap: 4px !important;
-  }
-  .radar-container {
-    gap: 8px !important;
+    gap: 6px !important;
   }
   .minimap-wrapper {
     width: 112px !important;
     height: 112px !important;
     border-width: 2px !important;
+  }
+  .radar-frame {
+    --ring-pad: 9px;
+    --ring-pull-top: 5px; /* 手機上緣留白較少，避免弧頂被裁切 */
+  }
+  .hp-ring-label {
+    font-size: 11px;
+    padding: 0 5px;
+    top: 0;
+  }
+  .hp-ring-icon {
+    font-size: 11px;
   }
   .minimap-expand-badge {
     bottom: 6px;
@@ -2745,20 +2828,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   .location-name {
     font-size: 12px !important;
   }
-  .bars-container {
-    width: 108px !important;
-    padding: 4px 7px !important;
-    gap: 3px !important;
-  }
-  .meter-label {
-    font-size: 11px !important;
-  }
-  .meter-val {
-    font-size: 11px !important;
-  }
-  .meter-bar {
-    height: 5px !important;
-  }
   .demerit-container {
     padding: 4px 8px !important;
     gap: 3px !important;
@@ -2774,23 +2843,15 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     padding: 2px 4px !important;
   }
   .hud-status-row {
-    gap: 5px !important;
+    gap: 6px !important;
   }
-  .status-badge {
-    padding: 4px 8px !important;
-    font-size: 12px !important;
-    gap: 8px !important;
+  .cash-badge {
+    min-height: 44px !important;
+    padding: 0 10px !important;
+    font-size: 15px !important;
   }
   .cash-val {
-    font-size: 13px !important;
-  }
-  .time-val {
-    font-size: 12px !important;
-  }
-  .hud-action-pills {
-    gap: 4px !important;
-    position: relative !important;
-    pointer-events: auto !important;
+    font-size: 16px !important;
   }
 
   /* 校規處分卡精簡為單行標籤 (保留即時狀態文字，隱藏五格記過徽章) */
@@ -2814,55 +2875,30 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     font-size: 11px !important;
   }
 
-  /* 狀態標籤：單行不換行，隱藏電腦鍵位提示；可點擊的世界/天氣標籤維持 44px 觸控高度 */
-  .status-badge {
-    min-height: 44px !important;
-    box-sizing: border-box !important;
-    padding: 0 10px !important;
-    flex-wrap: nowrap !important;
-  }
-  .badge-item {
-    white-space: nowrap !important;
-    flex-shrink: 0 !important;
-  }
-  .world-badge, .weather-badge {
-    align-self: stretch !important;
-    cursor: pointer !important;
-  }
-  .world-key-hint, .weather-key-hint, .bgm-key-hint {
+  /* 觸控裝置隱藏鍵位提示 */
+  .tool-key-hint, .bgm-key-hint {
     display: none !important;
   }
 
-  /* ⚙️ 設定按鈕 + 下拉選單 (全螢幕 / 觸控 / BGM) */
+  /* ⚙️ 設定按鈕與下拉選單：觸控目標 44px */
   .hud-settings-btn {
-    display: inline-flex !important;
     width: 44px !important;
     height: 44px !important;
-    padding: 0 !important;
     font-size: 20px !important;
     border-radius: 12px !important;
   }
-  .hud-settings-menu {
-    display: none !important;
-    position: absolute !important;
-    top: calc(100% + 6px) !important;
-    right: 0 !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 6px !important;
-    min-width: 180px !important;
-    padding: 8px !important;
-    background: rgba(13, 19, 33, 0.96) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55) !important;
-    z-index: var(--z-hud-menu) !important;
+  .fullmap-badge {
+    white-space: nowrap !important;
   }
-  .hud-settings-menu.open {
-    display: flex !important;
+  /* 大地圖工具列 (BGM / 天氣 / 世界)：觸控目標至少 44px */
+  .fullmap-toolbar .bgm-badge,
+  .fullmap-tool-btn {
+    min-height: 44px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+    transform: none !important;
   }
-  .hud-settings-menu .hud-pill-btn,
-  .hud-settings-menu .bgm-badge {
+  .hud-settings-menu .hud-pill-btn {
     min-height: 44px !important;
     box-sizing: border-box !important;
     justify-content: flex-start !important;
@@ -2872,11 +2908,8 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     transform: none !important;
   }
 
-  /* 任務小介面：手機端為頂部輕量懸浮膠囊，點擊開啟大地圖任務清單 */
+  /* 任務小介面：手機端為左欄底部的輕量膠囊，點擊開啟大地圖任務清單 */
   #quest-tracker-panel {
-    top: max(8px, env(safe-area-inset-top, 8px)) !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
     width: auto !important;
     min-width: 150px !important;
     max-width: 260px !important;
@@ -3040,54 +3073,20 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 /* 手機直屏 (Portrait) 與窄螢幕下任務看板與頂部核心 UI 重疊修復 */
 @media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
-  /* 直屏頂部狀態列改為兩行：第 1 行小地圖 + 地點 + 體力；第 2 行處分 / 零用錢 / 時間 / 世界 / 天氣標籤 */
-  .hud-top {
-    flex-wrap: wrap !important;
-    row-gap: 6px !important;
-  }
+  /* 直屏：左欄寬度讓出右欄 (零用錢 + ⚙️ / 校規標籤)，地點卡片可換行不推擠右欄 */
   .hud-top-left {
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-    padding-right: 78px !important; /* 預留右上角 ⚙️ 設定鍵與處分標籤空間 */
+    max-width: calc(100vw - 190px) !important;
   }
-  .hud-top-right {
-    width: 100% !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    gap: 6px !important;
+  .hud-title-zone {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
-  .hud-status-row {
-    min-width: 0 !important;
+  .school-badge, .location-name {
+    white-space: normal !important;
   }
-  .status-badge {
-    gap: 7px !important;
-    padding: 0 8px !important;
-  }
-  .demerit-icon {
-    display: none !important;
-  }
-  /* 處分標籤置於 ⚙️ 下方 (第 1 行右側)，第 2 行完整留給狀態標籤 */
-  .demerit-container {
-    position: absolute !important;
-    top: calc(max(8px, env(safe-area-inset-top, 8px)) + 50px) !important;
-    right: max(10px, env(safe-area-inset-right, 10px)) !important;
-  }
-  /* ⚙️ 設定鍵固定於右上角，下拉選單向下展開 */
-  .hud-action-pills {
-    position: absolute !important;
-    top: max(8px, env(safe-area-inset-top, 8px)) !important;
-    right: max(10px, env(safe-area-inset-right, 10px)) !important;
-  }
-  /* 直屏：任務膠囊移至兩行頂部狀態列下方 (第 1 行 95 + 間距 6 + 第 2 行 44 + 8)，避免壓住地點卡片 */
-  #quest-tracker-panel {
-    top: calc(var(--hud-top-bottom, 161px) + 6px) !important;
-    left: max(10px, env(safe-area-inset-left, 10px)) !important;
-    transform: none !important;
-  }
-  /* 直屏：橫幅置於任務膠囊 (44px) 下方，滿版寬度單行省略 */
+  /* 直屏：中央留白過窄，橫幅改置於頂部兩欄下方 (--hud-top-bottom)，滿版寬度單行省略 */
   #hud-banner {
-    top: calc(var(--hud-top-bottom, 161px) + 58px) !important;
+    top: calc(var(--hud-top-bottom, 280px) + 8px) !important;
     max-width: calc(100vw - 20px) !important;
     font-size: 13px !important;
     letter-spacing: 1px !important;
@@ -3102,6 +3101,18 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .fullmap-title {
     font-size: 16px !important;
+  }
+  /* 直屏標題列：標題獨佔一行，BGM 開關 / 世界徽章 / 關閉鈕排第二行，避免逐字折行 */
+  .fullmap-header {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+  .fullmap-title-group {
+    flex: 1 1 100% !important;
+  }
+  .fullmap-header-meta {
+    flex: 1 1 100% !important;
+    gap: 8px !important;
   }
   .fullmap-quest-panel {
     max-height: none !important;
@@ -3120,21 +3131,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 /* 手機橫屏模式 (高度 <= 520px) 極致緊湊優化 */
 @media (max-height: 520px) {
-  /* 橫屏：任務膠囊移至左上雷達/體力區塊下方 (依 --hud-left-bottom 實際底緣 + 間距 6)，中央頂部留給橫幅與比分板，右側留給狀態列 */
-  #quest-tracker-panel {
-    top: calc(var(--hud-left-bottom, 120px) + 6px) !important;
-    left: max(8px, env(safe-area-inset-left, 8px)) !important;
-    transform: none !important;
-    min-width: 130px !important;
-    padding: 4px 12px !important;
-  }
-  /* 橫屏右上：處分標籤一行、零用錢 / 時間 / 世界 / 天氣 + ⚙️ 一行，不換行 */
-  .hud-top-right {
-    gap: 4px !important;
-  }
-  .status-badge {
-    gap: 8px !important;
-  }
   /* 橫屏大地圖：地圖與任務清單並排，高度貼齊可視範圍 */
   .fullmap-body {
     grid-template-columns: auto minmax(0, 1fr) !important;
@@ -3162,11 +3158,21 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     width: 100px !important;
     height: 100px !important;
   }
-  .bars-container {
-    width: 90px !important;
+  .radar-frame {
+    --ring-pull-top: 0px; /* 橫向上緣留白最少，弧頂不再上移 */
   }
   .location-name {
     font-size: 11px !important;
+  }
+  /* 橫屏：地點卡片限寬，過長分區名稱以省略號截斷，避免伸入中央 */
+  .hud-title-zone {
+    max-width: 210px !important;
+    box-sizing: border-box !important;
+  }
+  .school-badge, .location-name {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
   }
   #touch-joystick-zone {
     width: 96px !important;
@@ -3192,10 +3198,10 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     width: 300px !important;
     padding: 5px 10px !important;
   }
-  /* 橫屏：橫幅置於頂部狀態列下方中央，左右避開任務膠囊與狀態列 */
+  /* 橫屏：橫幅置於頂部中央留白欄位 (比分板下方)，左右避開兩欄 */
   #hud-banner {
-    top: calc(var(--hud-top-bottom, 107px) + 6px) !important;
-    max-width: calc(100vw - 400px) !important;
+    top: calc(env(safe-area-inset-top, 0px) + 34px) !important;
+    max-width: calc(100vw - 2 * var(--hud-side-w, 200px) - 24px) !important;
     font-size: 13px !important;
     letter-spacing: 1px !important;
     padding: 4px 18px !important;
