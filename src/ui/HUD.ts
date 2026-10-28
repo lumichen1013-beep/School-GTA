@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { NPC } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
+import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
 
 export interface CommissaryItem {
   id: string;
@@ -190,6 +191,16 @@ export class HUD {
     this.bgmToggleBtnEl = document.getElementById('bgm-toggle-btn');
     this.crosshairEl = document.getElementById('crosshair');
     this.cashTextEl = document.getElementById('cash-text');
+
+    // 狀態列時鐘：顯示裝置本地時間 (每 30 秒更新一次，原為寫死的 12:15 PM)
+    const clockEl = document.getElementById('clock-text');
+    if (clockEl) {
+      const updateClock = () => {
+        clockEl.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      };
+      updateClock();
+      setInterval(updateClock, 30000);
+    }
     this.poisonVignetteEl = document.getElementById('poison-vignette');
     this.weatherBadgeEl = document.getElementById('weather-badge');
     this.weatherTextEl = document.getElementById('weather-text');
@@ -562,6 +573,17 @@ export class HUD {
   private shotNeedleEl: HTMLElement | null;
   private shotFeedbackEl: HTMLElement | null;
 
+  // 每幀更新路徑使用的 DOM 元素快取 (元素僅搬移不重建，查詢一次後重複使用)
+  private domCache = new Map<string, HTMLElement | null>();
+  private $(id: string): HTMLElement | null {
+    let el = this.domCache.get(id);
+    if (el === undefined) {
+      el = document.getElementById(id);
+      this.domCache.set(id, el);
+    }
+    return el;
+  }
+
   public setBasketballAiming(isAiming: boolean) {
     if (this.crosshairEl) {
       if (isAiming) {
@@ -669,8 +691,17 @@ export class HUD {
     );
   }
 
+  private lastPromptKey = '';
+  private lastPromptText = '';
+  private isPromptVisible = false;
+
   public showPrompt(key: string, text: string) {
+    // 每幀呼叫：內容與可見狀態未變時直接略過 (省去 regex 與 DOM 寫入)
+    if (this.isPromptVisible && key === this.lastPromptKey && text === this.lastPromptText) return;
     if (this.actionPrompt && this.promptKey && this.promptText) {
+      this.lastPromptKey = key;
+      this.lastPromptText = text;
+      this.isPromptVisible = true;
       const isMobile = this.isMobile();
       let displayKey = key;
       let displayText = text;
@@ -724,6 +755,7 @@ export class HUD {
   // 開啟全螢幕大地圖
   public openFullMap() {
     this.isFullMapOpen = true;
+    this.lastFullmapRenderAt = 0; // 開啟時立即繪製第一幀
     // 解除滑鼠指標鎖定，使 PC 玩家可點選任務分類與捲動清單 (按 J 開啟時仍處於鎖定)
     if (document.pointerLockElement) {
       document.exitPointerLock();
@@ -784,18 +816,6 @@ export class HUD {
   }
 
   // 武器 HUD 狀態更新 (依需求已移除右上角武器欄，狀態與進度統一由左側任務看板呈現)
-  public updateWeaponHUD(
-    _currentWeapon: 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT',
-    _hasNormal: boolean,
-    _hasSpecial: boolean,
-    _studentDefeated: number,
-    _teacherDefeated: number,
-    _dogDefeated: number,
-    _bikeDefeated: number
-  ) {
-    // 安全保留空函式，避免呼叫端報錯
-  }
-
   // 任務清單已整合進大地圖：開啟 / 關閉 / 切換大地圖任務側欄 (J 鍵與任務小介面共用)
   public toggleQuestTracker(expand?: boolean) {
     if (expand === undefined) {
@@ -844,8 +864,8 @@ export class HUD {
 
   // 即時更新頂端任務看板資訊 (進度、達成狀態、Boss狀態、運動紀錄與探索，含髒檢查 Dirty check)
   public updateMissionTracker(data: MissionTrackerData) {
-    const campusWrapper = document.getElementById('campus-quest-wrapper');
-    const detentionWrapper = document.getElementById('detention-quest-wrapper');
+    const campusWrapper = this.$('campus-quest-wrapper');
+    const detentionWrapper = this.$('detention-quest-wrapper');
     if (campusWrapper && detentionWrapper && campusWrapper.style.display === 'none') {
       campusWrapper.style.display = 'block';
       detentionWrapper.style.display = 'none';
@@ -872,7 +892,8 @@ export class HUD {
       last.hasRiddenBike === data.hasRiddenBike &&
       last.hasEscapedDog === data.hasEscapedDog &&
       last.hasWishedPond === data.hasWishedPond &&
-      last.hasTastedHotFood === data.hasTastedHotFood
+      last.hasTastedHotFood === data.hasTastedHotFood &&
+      last.dodgeSkillLevel === data.dodgeSkillLevel
     ) {
       return;
     }
@@ -1374,6 +1395,8 @@ export class HUD {
   }
 
   public hidePrompt() {
+    if (!this.isPromptVisible) return;
+    this.isPromptVisible = false;
     if (this.actionPrompt) {
       this.actionPrompt.style.display = 'none';
     }
@@ -1414,8 +1437,13 @@ export class HUD {
     this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta, currentWorld, detentionData);
 
     // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
+    // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪
     if (this.isFullMapOpen) {
-      this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
+      const nowMs = performance.now();
+      if (nowMs - this.lastFullmapRenderAt >= 50) {
+        this.lastFullmapRenderAt = nowMs;
+        this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
+      }
     }
 
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
@@ -1452,7 +1480,7 @@ export class HUD {
   private updateLocationZone(pos: THREE.Vector3, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS') {
     if (!this.locationEl) return;
 
-    let zone = '教學中庭廣場';
+    let zone: string;
     if (currentWorld === 'DETENTION') {
       if (pos.z < -28) {
         zone = '⛓️ A 區：牢房走廊迷宮 (獲取門禁卡 A)';
@@ -1464,29 +1492,7 @@ export class HUD {
         zone = '🚪 絕境安全脫逃通道 (任務完成)';
       }
     } else {
-      if (pos.z > 105.0 || pos.z < -105.0 || Math.abs(pos.x) > 105.0) {
-        zone = '🏙️ 校外大街 (強盜出沒警戒區)';
-      } else if (pos.x >= 63 && pos.x <= 87 && pos.z >= -55 && pos.z <= -15) {
-        zone = '🏊 天天國中 25m 標準游泳館';
-      } else if (pos.x >= -95 && pos.x <= -45 && pos.z >= -104 && pos.z <= -77) {
-        zone = '🌿 自然生態探索園區 (秘境霸主)';
-      } else if (pos.y > 8.0) {
-        zone = '教學大樓 A 棟 · 天台高空';
-      } else if (pos.x > 20 && pos.z < 0) {
-        zone = '教學大樓 A 棟 (高三部走廊)';
-      } else if (pos.x > 20 && pos.z > 20) {
-        zone = '教學大樓 B 棟 (活動中心)';
-      } else if (pos.x < -20 && pos.z > 10) {
-        zone = '操場 PU 跑道 & 足球場';
-      } else if (pos.x < -30 && pos.z < 5 && pos.z > -20) {
-        zone = '全校升旗司令台';
-      } else if (pos.x < 5 && pos.x > -25 && pos.z < -40) {
-        zone = '🏪 天天合作社 (熱食補血部)';
-      } else if (pos.x < -35 && pos.z < -40) {
-        zone = '火柴人自行車棚';
-      } else if (pos.z > 80) {
-        zone = '校門口 & 警衛守衛室';
-      }
+      zone = getCampusZoneName(pos.x, pos.y, pos.z);
     }
 
     if (this.lastLocationZone !== zone) {
@@ -1874,49 +1880,11 @@ export class HUD {
       ctx.fillRect((bx - playerPos.x - bw / 2) * mapScale, (bz - playerPos.z - bd / 2) * mapScale, bw * mapScale, bd * mapScale);
     };
 
-    // 生態探索園區 (西北深綠森林泥土地，位於北圍牆內側)
-    drawBuilding(-70, -90.5, 50, 27, '#14532d');
-
-    // 25m 標準游泳館
-    drawBuilding(75, -35, 20, 32, '#0284c7');
-
-    // 大樓 A, B
-    drawBuilding(40, -30, 48, 18, '#334155');
-    drawBuilding(40, 45, 48, 18, '#334155');
-    // 天天合作社
-    drawBuilding(-15, -60, 18, 14, '#b45309');
-    // 車棚
-    drawBuilding(-50, -55, 24, 8, '#0369a1');
-    // 司令台
-    drawBuilding(-45, -8, 16, 10, '#475569');
-
-    // 操場跑道 (真實橢圓體育場造型)
-    const tCenterX = (-55 - playerPos.x) * mapScale;
-    const tCenterZ = (30 - playerPos.z) * mapScale;
-    const sHalf = 16 * mapScale;
-    const rOuter = 26 * mapScale;
-    const rInner = 16 * mapScale;
-
-    // 紅磚色 PU 跑道
-    ctx.strokeStyle = '#991b1b';
-    ctx.lineWidth = 9 * mapScale;
-    ctx.beginPath();
-    ctx.moveTo(tCenterX + rOuter - 4 * mapScale, tCenterZ - sHalf);
-    ctx.lineTo(tCenterX + rOuter - 4 * mapScale, tCenterZ + sHalf);
-    ctx.arc(tCenterX, tCenterZ + sHalf, rOuter - 4 * mapScale, 0, Math.PI, false);
-    ctx.lineTo(tCenterX - (rOuter - 4 * mapScale), tCenterZ - sHalf);
-    ctx.arc(tCenterX, tCenterZ - sHalf, rOuter - 4 * mapScale, Math.PI, Math.PI * 2, false);
-    ctx.stroke();
-
-    // 內圈綠色草皮
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.moveTo(tCenterX + rInner, tCenterZ - sHalf);
-    ctx.lineTo(tCenterX + rInner, tCenterZ + sHalf);
-    ctx.arc(tCenterX, tCenterZ + sHalf, rInner, 0, Math.PI, false);
-    ctx.lineTo(tCenterX - rInner, tCenterZ - sHalf);
-    ctx.arc(tCenterX, tCenterZ - sHalf, rInner, Math.PI, Math.PI * 2, false);
-    ctx.fill();
+    // 操場跑道與校園建築 (共用校園平面配置)
+    this.drawCampusTrack(ctx, (CAMPUS_TRACK.x - playerPos.x) * mapScale, (CAMPUS_TRACK.z - playerPos.z) * mapScale, mapScale);
+    for (const r of CAMPUS_MAP_RECTS) {
+      drawBuilding(r.x, r.z, r.w, r.d, r.color);
+    }
 
     // 繪製腳踏車標記 (藍色點)
     for (const bike of bicycles) {
@@ -1997,20 +1965,35 @@ export class HUD {
   }
 
   // 更新暗殺/擊昏提示 (動態浮動於目標 NPC 頭頂上方，僅顯示「擊暈」)
+  private lastCqcVisible = false;
+  private lastCqcX = -1;
+  private lastCqcY = -1;
+
   public updateCqcPrompt(
     visible: boolean,
     screenX: number = 0,
     screenY: number = 0
   ) {
-    const el = document.getElementById('cqc-prompt-container');
-    const textEl = document.getElementById('cqc-btn-text');
-    const mobileAttackBtn = document.getElementById('m-btn-attack');
+    const el = this.$('cqc-prompt-container');
+    const x = Math.round(screenX);
+    const y = Math.round(screenY);
+
+    // 可見時僅於座標變動才更新位置；可見狀態切換才更新顯示與手機攻擊鈕
+    if (el && visible && (x !== this.lastCqcX || y !== this.lastCqcY || !this.lastCqcVisible)) {
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      this.lastCqcX = x;
+      this.lastCqcY = y;
+    }
+    if (visible === this.lastCqcVisible) return;
+    this.lastCqcVisible = visible;
+
+    const textEl = this.$('cqc-btn-text');
+    const mobileAttackBtn = this.$('m-btn-attack');
 
     if (el) {
       if (visible) {
         el.style.display = 'flex';
-        el.style.left = `${Math.round(screenX)}px`;
-        el.style.top = `${Math.round(screenY)}px`;
         el.style.bottom = 'auto';
         el.style.transform = 'translate(-50%, -100%)';
         if (textEl) {
@@ -2034,9 +2017,15 @@ export class HUD {
   }
 
   // 刺客教條匿蹤藏匿提示 (身處草堆或隱蔽物中)
+  private lastStealthKey: string | null = null;
+
   public updateStealthHiding(isHiding: boolean, spotName: string = '') {
-    const badge = document.getElementById('ac-stealth-badge');
-    const text = document.getElementById('ac-stealth-badge-text');
+    // 每幀呼叫：藏匿狀態與地點未變時略過 DOM 寫入
+    const stateKey = isHiding ? spotName : '';
+    if (stateKey === this.lastStealthKey) return;
+    this.lastStealthKey = stateKey;
+    const badge = this.$('ac-stealth-badge');
+    const text = this.$('ac-stealth-badge-text');
     if (badge) {
       if (isHiding) {
         badge.style.display = 'flex';
@@ -2050,17 +2039,19 @@ export class HUD {
   }
 
   // 更新 MGS 警戒倒數計時器
+  private lastMgsActive: boolean | null = null;
+
   public updateMgsAlert(timer: number) {
-    const banner = document.getElementById('mgs-alert-banner');
-    const val = document.getElementById('mgs-alert-timer');
+    const active = timer > 0;
+    // 非警戒狀態且已隱藏時略過；警戒中僅更新倒數文字
+    if (!active && this.lastMgsActive === false) return;
+    const banner = this.$('mgs-alert-banner');
+    const val = this.$('mgs-alert-timer');
     if (banner && val) {
-      if (timer > 0) {
-        banner.style.display = 'flex';
-        val.textContent = timer.toFixed(2);
-      } else {
-        banner.style.display = 'none';
-      }
+      if (active !== this.lastMgsActive) banner.style.display = active ? 'flex' : 'none';
+      if (active) val.textContent = timer.toFixed(2);
     }
+    this.lastMgsActive = active;
   }
 
   // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
@@ -2204,6 +2195,8 @@ export class HUD {
   }
 
   // 更新特訓院越獄任務面板
+  private lastEscapeTrackerKey = '';
+
   public updateWorld2EscapeTracker(
     takedowns: number,
     gateAOpen: boolean,
@@ -2213,8 +2206,12 @@ export class HUD {
     isBossDefeated: boolean,
     isEscapeComplete: boolean
   ) {
-    const campusWrapper = document.getElementById('campus-quest-wrapper');
-    const detentionWrapper = document.getElementById('detention-quest-wrapper');
+    // 每幀呼叫：所有輸入值未變時略過 DOM 寫入
+    const stateKey = `${takedowns}|${gateAOpen}|${gateBOpen}|${bossHp}|${bossMaxHp}|${isBossDefeated}|${isEscapeComplete}`;
+    const campusWrapper = this.$('campus-quest-wrapper');
+    const detentionWrapper = this.$('detention-quest-wrapper');
+    if (stateKey === this.lastEscapeTrackerKey && detentionWrapper && detentionWrapper.style.display === 'block') return;
+    this.lastEscapeTrackerKey = stateKey;
     if (campusWrapper && detentionWrapper) {
       campusWrapper.style.display = 'none';
       detentionWrapper.style.display = 'block';
@@ -2224,33 +2221,33 @@ export class HUD {
     const escapeDone = (takedowns > 0 ? 1 : 0) + (gateAOpen ? 1 : 0) + (gateBOpen ? 1 : 0) + (isBossDefeated ? 1 : 0) + (isEscapeComplete ? 1 : 0);
     this.setQuestSummary('⛓️ 逃脫任務', escapeDone, 5);
 
-    const koCountEl = document.getElementById('det-ko-count');
-    const koStatusEl = document.getElementById('det-ko-status');
+    const koCountEl = this.$('det-ko-count');
+    const koStatusEl = this.$('det-ko-status');
     if (koCountEl) koCountEl.textContent = `${takedowns}`;
     if (koStatusEl) {
       koStatusEl.textContent = takedowns > 0 ? `已排除 ${takedowns}` : '進行中';
       koStatusEl.className = 'q-status completed';
     }
 
-    const g1El = document.getElementById('det-gate1-status');
+    const g1El = this.$('det-gate1-status');
     if (g1El) {
       g1El.textContent = gateAOpen ? '已開啟' : '未解鎖';
       g1El.className = gateAOpen ? 'q-status completed' : 'q-status';
     }
 
-    const g2El = document.getElementById('det-gate2-status');
+    const g2El = this.$('det-gate2-status');
     if (g2El) {
       g2El.textContent = gateBOpen ? '已開啟' : '未解鎖';
       g2El.className = gateBOpen ? 'q-status completed' : 'q-status';
     }
 
-    const bossEl = document.getElementById('det-boss-status');
+    const bossEl = this.$('det-boss-status');
     if (bossEl) {
       bossEl.textContent = isBossDefeated ? '已擊破' : `${bossHp}/${bossMaxHp}`;
       bossEl.className = isBossDefeated ? 'q-status completed' : 'q-status';
     }
 
-    const escEl = document.getElementById('det-escape-status');
+    const escEl = this.$('det-escape-status');
     if (escEl) {
       escEl.textContent = isEscapeComplete ? '已逃脫' : '未完成';
       escEl.className = isEscapeComplete ? 'q-status completed' : 'q-status';
@@ -2258,6 +2255,46 @@ export class HUD {
   }
 
   // 繪製全螢幕全域態勢戰術大地圖 (Full Map Modal Canvas)
+  // 大地圖靜態底圖離屏快取
+  private fullmapStaticCanvas: HTMLCanvasElement | null = null;
+  private fullmapStaticKey = '';
+  private lastFullmapCoordsText = '';
+  private lastFullmapHeaderWorld: 'CAMPUS' | 'DETENTION' | null = null;
+  private lastFullmapRenderAt = 0;
+
+  private getFullmapStaticCtx(w: number, h: number): CanvasRenderingContext2D {
+    if (!this.fullmapStaticCanvas) this.fullmapStaticCanvas = document.createElement('canvas');
+    this.fullmapStaticCanvas.width = w;
+    this.fullmapStaticCanvas.height = h;
+    return this.fullmapStaticCanvas.getContext('2d')!;
+  }
+
+  // 繪製操場橢圓跑道 (紅磚 PU 跑道 + 內圈草皮)，cx/cz 為跑道中心於畫布上的位置
+  private drawCampusTrack(ctx: CanvasRenderingContext2D, cx: number, cz: number, scale: number) {
+    const sHalf = CAMPUS_TRACK.straightHalf * scale;
+    const rInner = CAMPUS_TRACK.innerR * scale;
+    const rLane = (CAMPUS_TRACK.innerR + CAMPUS_TRACK.outerR) / 2 * scale;
+
+    ctx.strokeStyle = '#991b1b';
+    ctx.lineWidth = (CAMPUS_TRACK.outerR - CAMPUS_TRACK.innerR) * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx + rLane, cz - sHalf);
+    ctx.lineTo(cx + rLane, cz + sHalf);
+    ctx.arc(cx, cz + sHalf, rLane, 0, Math.PI, false);
+    ctx.lineTo(cx - rLane, cz - sHalf);
+    ctx.arc(cx, cz - sHalf, rLane, Math.PI, Math.PI * 2, false);
+    ctx.stroke();
+
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.moveTo(cx + rInner, cz - sHalf);
+    ctx.lineTo(cx + rInner, cz + sHalf);
+    ctx.arc(cx, cz + sHalf, rInner, 0, Math.PI, false);
+    ctx.lineTo(cx - rInner, cz - sHalf);
+    ctx.arc(cx, cz - sHalf, rInner, Math.PI, Math.PI * 2, false);
+    ctx.fill();
+  }
+
   private renderFullMap(
     playerPos: THREE.Vector3,
     playerRotY: number,
@@ -2267,7 +2304,9 @@ export class HUD {
     detentionData?: DetentionRadarData
   ) {
     if (!this.fullmapCanvas || !this.fullmapCtx) return;
-    const ctx = this.fullmapCtx;
+    const outCtx = this.fullmapCtx;
+    // 靜態底圖 (建築、迷宮、跑道等) 繪於離屏畫布並快取；世界或閘門狀態變更時才重繪，每幀僅疊加動態標記
+    let ctx: CanvasRenderingContext2D = outCtx;
     const w = this.fullmapCanvas.width;
     const h = this.fullmapCanvas.height;
     const cx = w / 2;
@@ -2275,14 +2314,19 @@ export class HUD {
     const scale = 3.15; // 縮放比：全地圖 200m 映射到約 630px
 
     // 更新抬頭元資訊
-    if (this.fullmapCoordsEl) {
-      this.fullmapCoordsEl.textContent = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
+    const coordsText = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
+    if (this.fullmapCoordsEl && coordsText !== this.lastFullmapCoordsText) {
+      this.lastFullmapCoordsText = coordsText;
+      this.fullmapCoordsEl.textContent = coordsText;
     }
-    if (this.fullmapWorldBadgeEl) {
-      this.fullmapWorldBadgeEl.textContent = currentWorld === 'DETENTION' ? '⛓️ 第七少年特訓院' : '🏫 天天國中';
-    }
-    if (this.fullmapTitleEl) {
-      this.fullmapTitleEl.textContent = currentWorld === 'DETENTION' ? '🗺️ 第七少年特訓院 · 戰術全域態勢圖' : '🗺️ 天天國中 · 全校導覽全景地圖';
+    if (this.lastFullmapHeaderWorld !== currentWorld) {
+      this.lastFullmapHeaderWorld = currentWorld;
+      if (this.fullmapWorldBadgeEl) {
+        this.fullmapWorldBadgeEl.textContent = currentWorld === 'DETENTION' ? '⛓️ 第七少年特訓院' : '🏫 天天國中';
+      }
+      if (this.fullmapTitleEl) {
+        this.fullmapTitleEl.textContent = currentWorld === 'DETENTION' ? '🗺️ 第七少年特訓院 · 戰術全域態勢圖' : '🗺️ 天天國中 · 全校導覽全景地圖';
+      }
     }
     // 圖例依當前世界切換 (髒檢查，世界變更時才更新 DOM)
     if (this.lastFullmapLegendWorld !== currentWorld) {
@@ -2291,12 +2335,28 @@ export class HUD {
       if (this.fullmapLegendDetentionEl) this.fullmapLegendDetentionEl.style.display = currentWorld === 'DETENTION' ? 'flex' : 'none';
     }
 
-    ctx.clearRect(0, 0, w, h);
-
     const now = performance.now();
     const pulse = 1.0 + 0.3 * Math.sin(now * 0.008);
 
     if (currentWorld === 'DETENTION') {
+      // 輔助函式：全圖坐標系轉換 (以世界原點 (0,0) 為中心，北方朝上 -Z)
+      const toScreenX = (wx: number) => cx + wx * scale;
+      const toScreenY = (wz: number) => cy + wz * scale;
+
+      const drawBox = (bx: number, bz: number, bw: number, bd: number, fill: string, stroke: string) => {
+        const sx = toScreenX(bx - bw / 2);
+        const sy = toScreenY(bz - bd / 2);
+        ctx.fillStyle = fill;
+        ctx.fillRect(sx, sy, bw * scale, bd * scale);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(sx, sy, bw * scale, bd * scale);
+      };
+
+      const staticKey = `DETENTION|${detentionData?.isGateAOpen}|${detentionData?.isGateBOpen}|${detentionData?.isSouthGateOpen}|${w}x${h}`;
+      if (this.fullmapStaticKey !== staticKey) {
+      this.fullmapStaticKey = staticKey;
+      ctx = this.getFullmapStaticCtx(w, h);
       // 1. 深邃軍規情報雷達底色
       ctx.fillStyle = '#02100b';
       ctx.fillRect(0, 0, w, h);
@@ -2322,20 +2382,6 @@ export class HUD {
       ctx.arc(cx, cy, 70 * scale, 0, Math.PI * 2);
       ctx.arc(cx, cy, 95 * scale, 0, Math.PI * 2);
       ctx.stroke();
-
-      // 輔助函式：全圖坐標系轉換 (以世界原點 (0,0) 為中心，北方朝上 -Z)
-      const toScreenX = (wx: number) => cx + wx * scale;
-      const toScreenY = (wz: number) => cy + wz * scale;
-
-      const drawBox = (bx: number, bz: number, bw: number, bd: number, fill: string, stroke: string) => {
-        const sx = toScreenX(bx - bw / 2);
-        const sy = toScreenY(bz - bd / 2);
-        ctx.fillStyle = fill;
-        ctx.fillRect(sx, sy, bw * scale, bd * scale);
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(sx, sy, bw * scale, bd * scale);
-      };
 
       // 外圍高壓電鐵絲網圍牆 (X: -95 ~ 95, Z: -95 ~ 95)
       ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
@@ -2438,6 +2484,10 @@ export class HUD {
       ctx.fillStyle = southCol;
       ctx.font = 'bold 10px sans-serif';
       ctx.fillText(detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
+      ctx = outCtx;
+      }
+      outCtx.drawImage(this.fullmapStaticCanvas!, 0, 0);
+      outCtx.textAlign = 'center';
 
       // 鑰匙卡標記
       if (detentionData) {
@@ -2636,11 +2686,15 @@ export class HUD {
     // ==========================================
     // 天天國中 Campus World 大地圖
     // ==========================================
-    ctx.fillStyle = '#0b1320';
-    ctx.fillRect(0, 0, w, h);
-
     const toScreenX = (wx: number) => cx + wx * scale;
     const toScreenY = (wz: number) => cy + wz * scale;
+
+    const campusStaticKey = `CAMPUS|${w}x${h}`;
+    if (this.fullmapStaticKey !== campusStaticKey) {
+    this.fullmapStaticKey = campusStaticKey;
+    ctx = this.getFullmapStaticCtx(w, h);
+    ctx.fillStyle = '#0b1320';
+    ctx.fillRect(0, 0, w, h);
 
     const drawBuilding = (bx: number, bz: number, bw: number, bd: number, color: string, label?: string) => {
       const sx = toScreenX(bx - bw / 2);
@@ -2658,40 +2712,17 @@ export class HUD {
       }
     };
 
-    // 生態探索區、泳池、教學大樓、合作社、司令台
-    drawBuilding(-70, -90.5, 50, 27, '#14532d', '自然生態探索園區');
-    drawBuilding(75, -35, 20, 32, '#0284c7', '標準游泳館');
-    drawBuilding(40, -30, 48, 18, '#334155', '教學大樓 A 棟');
-    drawBuilding(40, 45, 48, 18, '#334155', '教學大樓 B 棟 (活動中心)');
-    drawBuilding(-15, -60, 18, 14, '#b45309', '天天合作社');
-    drawBuilding(-50, -55, 24, 8, '#0369a1', '自行車棚');
-    drawBuilding(-45, -8, 16, 10, '#475569', '司令台');
+    // 操場跑道 (先繪於底層，建築標籤覆蓋其上)
+    this.drawCampusTrack(ctx, toScreenX(CAMPUS_TRACK.x), toScreenY(CAMPUS_TRACK.z), scale);
 
-    // 操場跑道
-    const tCenterX = toScreenX(-55);
-    const tCenterZ = toScreenY(30);
-    const sHalf = 16 * scale;
-    const rOuter = 26 * scale;
-    const rInner = 16 * scale;
-
-    ctx.strokeStyle = '#991b1b';
-    ctx.lineWidth = 9 * scale;
-    ctx.beginPath();
-    ctx.moveTo(tCenterX + rOuter - 4 * scale, tCenterZ - sHalf);
-    ctx.lineTo(tCenterX + rOuter - 4 * scale, tCenterZ + sHalf);
-    ctx.arc(tCenterX, tCenterZ + sHalf, rOuter - 4 * scale, 0, Math.PI, false);
-    ctx.lineTo(tCenterX - (rOuter - 4 * scale), tCenterZ - sHalf);
-    ctx.arc(tCenterX, tCenterZ - sHalf, rOuter - 4 * scale, Math.PI, Math.PI * 2, false);
-    ctx.stroke();
-
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.moveTo(tCenterX + rInner, tCenterZ - sHalf);
-    ctx.lineTo(tCenterX + rInner, tCenterZ + sHalf);
-    ctx.arc(tCenterX, tCenterZ + sHalf, rInner, 0, Math.PI, false);
-    ctx.lineTo(tCenterX - rInner, tCenterZ - sHalf);
-    ctx.arc(tCenterX, tCenterZ - sHalf, rInner, Math.PI, Math.PI * 2, false);
-    ctx.fill();
+    // 校園建築與設施 (共用校園平面配置)
+    for (const r of CAMPUS_MAP_RECTS) {
+      drawBuilding(r.x, r.z, r.w, r.d, r.color, r.label || undefined);
+    }
+    ctx = outCtx;
+    }
+    outCtx.drawImage(this.fullmapStaticCanvas!, 0, 0);
+    outCtx.textAlign = 'center';
 
     // 自行車
     for (const bike of bicycles) {

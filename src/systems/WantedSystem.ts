@@ -4,7 +4,16 @@ export class WantedSystem {
   public stars: number = 0; // 0 ~ 5 級記過懲戒
   public escapeTimer: number = 0;
   public isEvading: boolean = false;
-  public currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  private _currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  // 切換世界時立即刷新處分狀態標籤 (避免切回校園仍顯示第二世界的「隱蔽安全」)
+  public get currentWorld(): 'CAMPUS' | 'DETENTION' {
+    return this._currentWorld;
+  }
+  public set currentWorld(world: 'CAMPUS' | 'DETENTION') {
+    if (world === this._currentWorld) return;
+    this._currentWorld = world;
+    this.updateHUDStars();
+  }
   private isSpottedThisFrame: boolean = false;
   private bannerTimeout: number = 0;
   public onWantedCleared?: () => void;
@@ -105,44 +114,33 @@ export class WantedSystem {
     this.isSpottedThisFrame = false;
   }
 
+  // 處分徽章與狀態標籤 DOM 快取，以及上次繪製的狀態 (星數/躲藏中/世界未變時略過 DOM 寫入)
+  private demeritBadgeEls: NodeListOf<Element> | null = null;
+  private demeritStatusTitleEl: HTMLElement | null = null;
+  private lastHUDStarsKey = '';
+
   public updateHUDStars() {
-    // 支援記過懲戒標籤 (.demerit-badge) 以及相容原本的 (.star)
-    const demeritBadges = document.querySelectorAll('.demerit-badge');
-    demeritBadges.forEach((el, idx) => {
+    const stateKey = `${this.stars}|${this.isEvading}|${this._currentWorld}`;
+    if (stateKey === this.lastHUDStarsKey) return;
+    this.lastHUDStarsKey = stateKey;
+
+    if (!this.demeritBadgeEls) this.demeritBadgeEls = document.querySelectorAll('.demerit-badge');
+    if (!this.demeritStatusTitleEl) this.demeritStatusTitleEl = document.getElementById('demerit-status-title');
+
+    this.demeritBadgeEls.forEach((el, idx) => {
       if (idx < this.stars) {
         el.classList.add('active');
-        if (this.isEvading) {
-          el.classList.add('evading');
-        } else {
-          el.classList.remove('evading');
-        }
-        if (this.stars >= 4) {
-          el.classList.add('danger');
-        } else {
-          el.classList.remove('danger');
-        }
+        el.classList.toggle('evading', this.isEvading);
+        el.classList.toggle('danger', this.stars >= 4);
       } else {
         el.classList.remove('active', 'danger', 'evading');
       }
     });
 
-    const starEls = document.querySelectorAll('.wanted-stars .star');
-    starEls.forEach((el, idx) => {
-      if (idx < this.stars) {
-        el.classList.add('active');
-        if (this.isEvading) el.classList.add('evading');
-        else el.classList.remove('evading');
-        if (this.stars >= 4) el.classList.add('danger');
-        else el.classList.remove('danger');
-      } else {
-        el.classList.remove('active', 'danger', 'evading');
-      }
-    });
-
-    const statusTitleEl = document.getElementById('demerit-status-title');
+    const statusTitleEl = this.demeritStatusTitleEl;
     if (statusTitleEl) {
       if (this.stars === 0) {
-        statusTitleEl.textContent = this.currentWorld === 'DETENTION' ? '隱蔽安全' : '操行良好';
+        statusTitleEl.textContent = this._currentWorld === 'DETENTION' ? '隱蔽安全' : '操行良好';
         statusTitleEl.style.color = '#2ecc71';
       } else {
         statusTitleEl.textContent = this.getDemeritLevelTitle(this.stars);

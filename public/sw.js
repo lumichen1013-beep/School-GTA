@@ -1,5 +1,6 @@
 // 學校GTA - 輕量 PWA Service Worker
-const CACHE_NAME = 'school-gta-pwa-v1';
+// 快取版本於 build 時由 vite.config.ts 注入 (每次部署更換，activate 時清除舊版快取)
+const CACHE_NAME = 'school-gta-pwa-__SW_VERSION__';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -26,46 +27,50 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      caches.keys().then((keys) => {
-        return Promise.all(
-          keys.map((key) => {
-            if (key !== CACHE_NAME) {
-              return caches.delete(key);
-            }
-          })
-        );
-      })
+      caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
     ])
   );
 });
 
-// 擷取事件：網路優先，離線回退至快取（保證符合 PWA 安裝標準同時即時載入最新代碼）
+// 擷取事件：僅處理同源 GET
+// - /assets/* (Vite 帶 hash 檔名，內容不變)：快取優先
+// - 其餘 (導覽頁、manifest、icons)：網路優先，離線回退快取
 self.addEventListener('fetch', (event) => {
-  // 僅處理同源或 HTTP/HTTPS GET 請求
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const cloned = networkResponse.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned)));
+          }
+          return networkResponse;
+        });
+      })
+    );
     return;
   }
 
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then((networkResponse) => {
-        // 請求成功時快取靜態資源 (css, js, html, 圖片, 字型)
         if (networkResponse && networkResponse.status === 200) {
           const cloned = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, cloned);
-          });
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned)));
         }
         return networkResponse;
       })
       .catch(async () => {
-        // 網路離線或連線失敗時回退至本地快取
-        const cached = await caches.match(event.request);
-        if (cached) {
-          return cached;
-        }
+        const cached = await caches.match(request);
+        if (cached) return cached;
         // 導航請求回退至首頁
-        if (event.request.mode === 'navigate') {
+        if (request.mode === 'navigate') {
           const rootCached = await caches.match('/');
           if (rootCached) return rootCached;
         }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { sharedLambert, freezeStaticMatrices } from './sceneUtils';
 
 export interface CollidableBox {
   min: THREE.Vector3;
@@ -27,14 +28,12 @@ export class CampusWorld {
   public scene: THREE.Scene;
   public group: THREE.Group = new THREE.Group();
   public colliders: CollidableBox[] = [];
-  public collisionMeshes: THREE.Object3D[] = [];
   public bicycleSpawnPoints: THREE.Vector3[] = [];
 
   // 方案 D：校園惡搞彩蛋與小遊戲互動點
   public broadcastStationPos: THREE.Vector3 = new THREE.Vector3(30, 0, 18);
   public basketballSpawnPos: THREE.Vector3 = new THREE.Vector3(22, 0.22, -59.5); // 置於西側頂弧三分球起點
   public commissaryPos: THREE.Vector3 = new THREE.Vector3(-17, 0, -50.0); // 天天合作社熱食補血櫃台
-  public ecologicalGardenPos: THREE.Vector3 = new THREE.Vector3(-70, 0, -85.0); // 生態探索園區入口
   public swimmingPoolPos: THREE.Vector3 = new THREE.Vector3(75, 0, -48.6); // 25m 標準游泳池出發台
   public swimCheckpoints: THREE.Vector3[] = [
     new THREE.Vector3(73.25, 0.25, -42.0), // 1. 出發入水加速點 (第2泳道)
@@ -89,6 +88,14 @@ export class CampusWorld {
     this.scene = scene;
     scene.add(this.group);
     this.buildRichCampus();
+
+    // 靜態場景矩陣凍結：僅電梯滑動門與投籃熱點光圈於執行期會移動/縮放
+    const dynamicObjects = new Set<THREE.Object3D>();
+    for (const doors of [this.lift1FDoors, this.lift4FDoors]) {
+      if (doors) { dynamicObjects.add(doors.left); dynamicObjects.add(doors.right); }
+    }
+    for (const spot of this.shootingHotspots) dynamicObjects.add(spot.ringMesh);
+    freezeStaticMatrices(this.group, dynamicObjects);
   }
 
   // 註冊垂直阻擋物體 (牆面、立柱、鐵欄杆、球架等)
@@ -224,9 +231,9 @@ export class CampusWorld {
 
     // 4. 實作可上下樓、有走廊、有內部教室的大樓
     // 敬業樓 A 棟：Z 從 1 到 35
-    this.buildWalkableSchoolBuilding(38, 0, 18, '敬業樓 (三年級部)', true);
+    this.buildWalkableSchoolBuilding(38, 0, 18, true); // 敬業樓 (三年級部)
     // 樂群樓 B 棟：Z 從 55 到 89
-    this.buildWalkableSchoolBuilding(38, 0, 72, '樂群樓 (一二年級部)', false);
+    this.buildWalkableSchoolBuilding(38, 0, 72, false); // 樂群樓 (一二年級部)
 
     // 5. 兩棟大樓之間的空中走廊天橋連結 (連接敬業樓與樂群樓 2F & 3F)，X 需對齊走廊中心線 31.0 (走廊 X: 28.0 ~ 34.0)
     this.buildConnectingSkybridge(31, 0, 45);
@@ -261,7 +268,7 @@ export class CampusWorld {
   }
 
   // 建造可上下樓、有真實雙跑折返樓梯間、通暢走廊與教室內部、空中天橋貫通的立體校舍
-  private buildWalkableSchoolBuilding(baseX: number, baseY: number, baseZ: number, buildingName: string, isBuildingA: boolean) {
+  private buildWalkableSchoolBuilding(baseX: number, baseY: number, baseZ: number, isBuildingA: boolean) {
     const railColor = 0x27ae60; // 經典綠色防護欄杆
     const innerWallColor = 0xf5f6fa; // 教室白灰內牆
     const woodColor = 0x8d6e63; // 課桌木色
@@ -532,14 +539,14 @@ export class CampusWorld {
     // 4. 建造真實校園雙跑折返樓梯間 (1F -> 2F -> 3F -> 頂樓天台，上下暢通、永不擋頭卡腳)
     if (isBuildingA) {
       // 敬業樓：樓梯間配置在大樓北端 (Z: -8.5 ~ 1.0)，連接 1F~3F 走廊與頂樓天台
-      this.buildSwitchbackStaircase(corridorMinX, corridorMaxX, zStart, true, numFloors, floorH, buildingName);
+      this.buildSwitchbackStaircase(corridorMinX, corridorMaxX, zStart, true, numFloors, floorH);
     } else {
       // 樂群樓：樓梯間配置在大樓南端 (Z: 89.0 ~ 98.5)，連接 1F~3F 走廊與頂樓天台
-      this.buildSwitchbackStaircase(corridorMinX, corridorMaxX, zEnd, false, numFloors, floorH, buildingName);
+      this.buildSwitchbackStaircase(corridorMinX, corridorMaxX, zEnd, false, numFloors, floorH);
     }
   }
 
-  // 教室內部佈置：黑板、木製講台、課桌椅
+  // 教室內部佈置：黑板、木製講台、課桌椅 (室內家具位於樓板之下，陰影不可見故不投射陰影)
   private decorateClassroom(rx: number, ry: number, rz: number, woodMat: THREE.Material, blackboardMat: THREE.Material) {
     // 黑板
     const board = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.8, 5.0), blackboardMat);
@@ -549,7 +556,6 @@ export class CampusWorld {
     // 講台 (Podium)
     const podium = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 0.8), woodMat);
     podium.position.set(rx + 10.0, ry + 0.55, rz);
-    podium.castShadow = true;
     this.group.add(podium);
     this.addCollider(rx + 9.4, rx + 10.6, rz - 0.4, rz + 0.4, ry, ry + 1.1);
 
@@ -565,24 +571,21 @@ export class CampusWorld {
         // 課桌
         const desk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.75, 0.6), woodMat);
         desk.position.set(deskX, ry + 0.38, deskZ);
-        desk.castShadow = true;
         this.group.add(desk);
         this.addCollider(deskX - 0.6, deskX + 0.6, deskZ - 0.3, deskZ + 0.3, ry, ry + 0.8);
 
         // 學生椅座面
         const chairSeat = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.45, 0.48), woodMat);
         chairSeat.position.set(deskX - 0.75, ry + 0.23, deskZ);
-        chairSeat.castShadow = true;
         this.group.add(chairSeat);
 
         // 學生椅靠背
         const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.48), woodMat);
         chairBack.position.set(deskX - 0.95, ry + 0.65, deskZ);
-        chairBack.castShadow = true;
         this.group.add(chairBack);
 
         // 桌面上的國英數教科書
-        const bookMat = new THREE.MeshLambertMaterial({ color: bookColors[bIdx % bookColors.length] });
+        const bookMat = sharedLambert(bookColors[bIdx % bookColors.length]);
         bIdx++;
         const book = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.03, 0.26), bookMat);
         book.position.set(deskX + 0.1, ry + 0.77, deskZ + 0.05);
@@ -607,15 +610,14 @@ export class CampusWorld {
     zAttach: number,
     isNorthFacing: boolean,
     numFloors: number,
-    floorH: number,
-    _buildingName?: string
+    floorH: number
   ) {
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xfaebd7, side: THREE.DoubleSide });
-    const stepMat = new THREE.MeshLambertMaterial({ color: 0xbdc3c7 });
-    const nosingMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 }); // 樓梯止滑踏條
-    const landingMat = new THREE.MeshLambertMaterial({ color: 0x95a5a6 });
-    const railMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 }); // 經典學校綠欄杆
-    const glassMat = new THREE.MeshLambertMaterial({ color: 0x74b9ff, transparent: true, opacity: 0.65 });
+    const wallMat = sharedLambert(0xfaebd7, { side: THREE.DoubleSide });
+    const stepMat = sharedLambert(0xbdc3c7);
+    const nosingMat = sharedLambert(0x2c3e50); // 樓梯止滑踏條
+    const landingMat = sharedLambert(0x95a5a6);
+    const railMat = sharedLambert(0x27ae60); // 經典學校綠欄杆
+    const glassMat = sharedLambert(0x74b9ff, { transparent: true, opacity: 0.65 });
 
     // 樓梯間 X 向寬度：外擴至 7.4m，提供 3.2m 寬闊跑道與 0.3m 碰撞隔離緩衝，杜絕擠角卡腳
     const stairMinX = corridorMinX - 0.7; // 27.3
@@ -1762,8 +1764,8 @@ export class CampusWorld {
   }
 
   private buildCampusTree(x: number, y: number, z: number) {
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
-    const foliageMat = new THREE.MeshLambertMaterial({ color: 0x1b5e20 });
+    const trunkMat = sharedLambert(0x5d4037);
+    const foliageMat = sharedLambert(0x1b5e20);
 
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 4.0, 8), trunkMat);
     trunk.position.set(x, y + 2.0, z);
@@ -2357,7 +2359,7 @@ export class CampusWorld {
       const riserW = 12.0;
 
       // 階梯地坪 (東側半區)
-      const riser = new THREE.Mesh(new THREE.BoxGeometry(riserW, 0.35, 3.8), new THREE.MeshLambertMaterial({ color: 0x34495e }));
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(riserW, 0.35, 3.8), sharedLambert(0x34495e));
       riser.position.set(baseX + 4.5, rowY + 0.175, rowZ);
       this.group.add(riser);
       this.addFloorSlab(baseX + 4.5 - riserW / 2, baseX + 4.5 + riserW / 2, rowZ - 1.9, rowZ + 1.9, floorY);
@@ -2403,7 +2405,6 @@ export class CampusWorld {
         // 2. 影院厚沙發坐墊 (紅絲絨軟墊，厚度 0.16m，寬度 seatW)
         const cushion = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.16, seatD), cinemaVelvetMat);
         cushion.position.set(0, 0.30, -0.02);
-        cushion.castShadow = true;
         cushion.receiveShadow = true;
         chairGroup.add(cushion);
 
@@ -2415,7 +2416,6 @@ export class CampusWorld {
         // 主椅背 (高 0.54m, 厚 0.14m)
         const backMesh = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.54, 0.14), cinemaVelvetMat);
         backMesh.position.set(0, 0.27, 0);
-        backMesh.castShadow = true;
         backrestGroup.add(backMesh);
         // 後背防踢外殼
         const backShell = new THREE.Mesh(new THREE.BoxGeometry(seatW + 0.01, 0.55, 0.03), cinemaArmMat);
@@ -2425,7 +2425,6 @@ export class CampusWorld {
         // 頂部突出頭枕 (高 0.18m, 厚 0.18m，總高約 0.72m)
         const headrest = new THREE.Mesh(new THREE.BoxGeometry(seatW - 0.04, 0.18, 0.18), cinemaVelvetMat);
         headrest.position.set(0, 0.63, -0.02);
-        headrest.castShadow = true;
         backrestGroup.add(headrest);
         const headrestBack = new THREE.Mesh(new THREE.BoxGeometry(seatW - 0.02, 0.18, 0.03), cinemaArmMat);
         headrestBack.position.set(0, 0.63, 0.07);
@@ -3219,15 +3218,17 @@ export class CampusWorld {
     const floatBlueMat = new THREE.MeshLambertMaterial({ color: 0x0984e3 });
 
     const dividerXOffsets = [-3.5, 0, 3.5];
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x2d3436 });
+    const floatGeo = new THREE.SphereGeometry(0.065, 8, 8);
     dividerXOffsets.forEach(dx => {
-      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 26, 6), new THREE.MeshBasicMaterial({ color: 0x2d3436 }));
+      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 26, 6), wireMat);
       wire.rotation.x = Math.PI / 2;
       wire.position.set(dx, 0.28, 0);
       poolGroup.add(wire);
 
       for (let fz = -12.5; fz <= 12.5; fz += 0.8) {
         const mat = Math.abs(fz) > 8 ? floatRedMat : (Math.floor(fz) % 2 === 0 ? floatWhiteMat : floatBlueMat);
-        const floatSphere = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), mat);
+        const floatSphere = new THREE.Mesh(floatGeo, mat);
         floatSphere.position.set(dx, 0.28, fz);
         poolGroup.add(floatSphere);
       }

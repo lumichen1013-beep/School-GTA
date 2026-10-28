@@ -61,6 +61,9 @@ export interface ACHidingSpot {
   type: 'HAY_CART' | 'HAY_BALE';
 }
 
+// 探照燈燈頭朝向用暫存向量 (重複使用，避免每幀配置)
+const _scratchLook = new THREE.Vector3();
+
 export class DetentionWorld {
   public scene: THREE.Scene;
   public group: THREE.Group = new THREE.Group();
@@ -84,10 +87,6 @@ export class DetentionWorld {
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
   public benchpressStationPos: THREE.Vector3 = new THREE.Vector3(-48, 0, -8); // 西側體能區：臥推訓練
   public tireStationPos: THREE.Vector3 = new THREE.Vector3(-49, 0, 8); // 西側體能區：巨型輪胎翻滾
-  public barracksPos: THREE.Vector3 = new THREE.Vector3(-40, 0, -60); // 監舍主體大樓
-  public hqPos: THREE.Vector3 = new THREE.Vector3(52.5, 0, 50); // 教官總部
-  public workshopPos: THREE.Vector3 = new THREE.Vector3(-52.5, 0, 50); // 實習工廠
-  public gatePos: THREE.Vector3 = new THREE.Vector3(0, 0, 95); // 少年院正門 (南側脫逃大門)
 
   // 門禁與機關點位
   public gateAPos: THREE.Vector3 = new THREE.Vector3(0, 0, -28); // 管制閘門 1 (連通 A 區與 B 區)
@@ -1293,19 +1292,20 @@ export class DetentionWorld {
       color: 0xbaa478 // 軍規帆布沙包土黃色
     });
 
-    const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material) => {
+    // 地面類合併網格 (泥地/跑道) 平貼地表，僅接收陰影不投射，省去整片地面的陰影 pass 繪製
+    const createMergedMesh = (geos: THREE.BufferGeometry[], mat: THREE.Material, castShadow: boolean = true) => {
       if (geos.length === 0) return;
       const merged = mergeGeometries(geos, false);
       if (merged) {
         const mesh = new THREE.Mesh(merged, mat);
-        mesh.castShadow = true;
+        mesh.castShadow = castShadow;
         mesh.receiveShadow = true;
         this.group.add(mesh);
       }
     };
 
-    createMergedMesh(groundMudGeos, mudMat);
-    createMergedMesh(groundTrackGeos, trackMat);
+    createMergedMesh(groundMudGeos, mudMat, false);
+    createMergedMesh(groundTrackGeos, trackMat, false);
     createMergedMesh(concreteGeos, concreteMat);
     createMergedMesh(darkSteelGeos, darkSteelMat);
     createMergedMesh(rustedMetalGeos, rustedMetalMat);
@@ -1401,7 +1401,6 @@ export class DetentionWorld {
     let anyDetected = false;
     let minDistance = 999;
 
-    const _scratchLook = new THREE.Vector3();
     const isPlayerOutdoors = playerPos.y < 3.0;
 
     // 沉穩緩慢速度設計：
