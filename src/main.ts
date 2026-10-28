@@ -42,6 +42,9 @@ class SchoolGTASandbox {
   private ecologicalGarden!: EcologicalGarden;
   private waterSplashVFX!: WaterSplashVFX;
   private bicycles: Bicycle[] = [];
+  // 被搶奪的車主綁定單車 (依搶奪先後排序)，路邊閒置超過上限時回收最舊者，防止單車無限堆積
+  private stolenBikes: Bicycle[] = [];
+  private static readonly MAX_LOOSE_STOLEN_BIKES = 3;
   private npcs: NPC[] = [];
   private campusNPCs: NPC[] = [];
   private detentionNPCs: NPC[] = [];
@@ -944,6 +947,9 @@ class SchoolGTASandbox {
 
             const stolenBike = new Bicycle(this.engine.scene, spawnPos, 0x3498db);
             this.bicycles.push(stolenBike);
+            // 車主綁定：騎士復活後會走回車旁牽回，而非憑空再生一台新車
+            npc.ownedBike = stolenBike;
+            this.stolenBikes.push(stolenBike);
             stolenBike.mount(this.player, groundY);
             this.currentRidingBike = stolenBike;
             this.player.isRidingVehicle = true;
@@ -1359,6 +1365,33 @@ class SchoolGTASandbox {
   }
 
   // 統一 NPC 擊倒/擊敗結算
+
+  // 自世界移除單車 (釋放資源並清除所有引用)；騎乘中的單車不可移除
+  private removeBicycle(bike: Bicycle) {
+    if (bike.isMounted || bike === this.currentRidingBike) return;
+    bike.dispose(this.engine.scene);
+    const idx = this.bicycles.indexOf(bike);
+    if (idx >= 0) this.bicycles.splice(idx, 1);
+    const sIdx = this.stolenBikes.indexOf(bike);
+    if (sIdx >= 0) this.stolenBikes.splice(sIdx, 1);
+  }
+
+  // 路邊閒置的被搶單車超過上限時，回收最早被搶的那台並解除車主綁定 (車主之後於視野外自行恢復騎乘)
+  private enforceStolenBikeCap() {
+    let looseCount = 0;
+    for (const bike of this.stolenBikes) {
+      if (!bike.isMounted) looseCount++;
+    }
+    while (looseCount > SchoolGTASandbox.MAX_LOOSE_STOLEN_BIKES) {
+      const oldest = this.stolenBikes.find(b => !b.isMounted);
+      if (!oldest) break;
+      for (const npc of this.campusNPCs) {
+        if (npc.ownedBike === oldest) npc.clearOwnedBike();
+      }
+      this.removeBicycle(oldest);
+      looseCount--;
+    }
+  }
   private handleNpcDefeated(npc: NPC, source: 'ATTACK' | 'BIKE' | 'FALL' = 'ATTACK') {
     let reward = 20;
     if (npc.role === 'STUDENT') {
@@ -2554,7 +2587,32 @@ class SchoolGTASandbox {
     let isAnyChasing = false;
     let isHighDanger = false;
     const isPlayerRidingBike = this.currentRidingBike !== null;
+    // 被搶單車數量超過上限 (含玩家下車後閒置者) 時回收最舊的路邊單車
+    if (this.stolenBikes.length > SchoolGTASandbox.MAX_LOOSE_STOLEN_BIKES) {
+      this.enforceStolenBikeCap();
+    }
     for (const npc of this.npcs) {
+      // 車主走回愛車旁 (或逾時)：移除路邊單車並恢復騎乘巡邏
+      if (npc.wantsBikeReclaim) {
+        const ownedBike = npc.ownedBike;
+        if (ownedBike && !ownedBike.isMounted) {
+          npc.completeBikeReclaim();
+          this.removeBicycle(ownedBike);
+        } else {
+          npc.wantsBikeReclaim = false;
+        }
+      } else if (
+        npc.isOriginalBikePatrol &&
+        npc.role !== 'BIKE_PATROL' &&
+        !npc.ownedBike &&
+        !npc.isKnockedDown &&
+        !npc.isPermanentlyKnockedOut &&
+        npc.position.distanceToSquared(targetPosition) > 1225.0
+      ) {
+        // 愛車已被回收的徒步車主：離玩家 35m 外 (視野外) 再恢復騎乘，避免當面憑空變車
+        npc.restoreBikePatrol();
+      }
+
       npc.update(
         delta,
         targetPosition,

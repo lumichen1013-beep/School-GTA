@@ -247,6 +247,21 @@ export class Bicycle {
     soundManager.playBicycleBell();
   }
 
+  // 自場景移除並釋放幾何體與材質 (車主牽回或超量回收路邊單車時呼叫；騎乘中不得呼叫)
+  public dispose(scene: THREE.Scene) {
+    scene.remove(this.mesh);
+    this.mesh.traverse((obj) => {
+      const m = obj as THREE.Mesh;
+      if (m.isMesh) {
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) {
+          if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
+          else m.material.dispose();
+        }
+      }
+    });
+  }
+
   public update(delta: number, input: InputManager, colliders: CollidableBox[]) {
     if (this.isMounted) {
       // 1. 加速與倒車 (W / S)

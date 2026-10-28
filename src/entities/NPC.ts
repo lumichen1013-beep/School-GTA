@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
+import type { Bicycle } from '../vehicles/Bicycle';
 
 export type NPCRole =
   | 'STUDENT'
@@ -192,6 +193,11 @@ export class NPC {
 
   // 單車糾察隊與單車組件追蹤
   public isOriginalBikePatrol: boolean = false;
+  // 被玩家搶走的自行車 (車主綁定)：復活後步行回到愛車旁牽回，避免憑空變出新車導致單車堆積
+  public ownedBike: Bicycle | null = null;
+  public isReclaimingBike: boolean = false;
+  public wantsBikeReclaim: boolean = false; // 已抵達愛車 (或逾時)，由主迴圈移除路邊單車並恢復騎乘
+  private reclaimTimer: number = 0;
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
   private bikeParts: THREE.Object3D[] = [];
@@ -2018,6 +2024,28 @@ export class NPC {
     this.reviveTimer = 3.0;
   }
 
+  // 牽回被搶的愛車：抵達車旁時站到車子位置與車頭朝向後恢復騎乘；逾時則原地恢復，避免瞬移到無法抵達處 (路邊單車實體由主迴圈移除)
+  public completeBikeReclaim() {
+    const bike = this.ownedBike;
+    if (bike && this.position.distanceToSquared(bike.position) < 2.25) {
+      this.position.x = bike.position.x;
+      this.position.z = bike.position.z;
+      this.rotationY = bike.rotationY;
+    }
+    this.clearOwnedBike();
+    this.restoreBikePatrol();
+    this.mesh.position.x = this.position.x;
+    this.mesh.position.z = this.position.z;
+  }
+
+  // 解除車主綁定 (愛車被牽回或被超量回收)
+  public clearOwnedBike() {
+    this.ownedBike = null;
+    this.isReclaimingBike = false;
+    this.wantsBikeReclaim = false;
+    this.reclaimTimer = 0;
+  }
+
   // 恢復騎乘單車巡邏狀態 (復活時還原為單車巡邏同學)
   public restoreBikePatrol() {
     // 妥善銷毀並從 this.mesh 移除 this.humanoidParts 的幾何體與材質
@@ -3548,9 +3576,15 @@ export class NPC {
           this.koBadgeSprite.visible = false;
           this.lastKoBadgeSec = -1;
 
-          if (this.isOriginalBikePatrol && this.role !== 'BIKE_PATROL') {
+          if (this.isOriginalBikePatrol && this.role !== 'BIKE_PATROL' && !this.ownedBike) {
+            // 愛車已不存在 (被上限回收)：直接恢復騎乘巡邏
             this.restoreBikePatrol();
           } else {
+            // 愛車仍在路邊：先徒步起身，再走回車旁牽車
+            if (this.ownedBike) {
+              this.isReclaimingBike = true;
+              this.reclaimTimer = 0;
+            }
             // 重新站立回正
             this.mesh.rotation.x = 0;
             this.mesh.rotation.z = 0;
@@ -3756,6 +3790,18 @@ export class NPC {
       const accelRate = this.role === 'DOG' ? 6.0 : (this.role === 'BIKE_PATROL' ? 8.0 : 4.0);
       this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
+    } else if (this.isReclaimingBike && this.ownedBike && !this.ownedBike.isMounted) {
+      // 走回被搶的愛車旁牽車 (玩家正在騎乘時改為一般巡邏，待玩家下車後再前往)
+      this.isBurstSprinting = false;
+      if (this.isPaused) this.cancelPause();
+      currentSpeed = this.speed * 1.3;
+      this.dynamicSpeed = currentSpeed;
+      targetPos = this.ownedBike.position;
+      this.reclaimTimer += delta;
+      // 抵達車旁 1.5m 內，或 20 秒仍走不到 (受阻/卡住) 時強制牽回
+      if (this.position.distanceToSquared(targetPos) < 2.25 || this.reclaimTimer > 20.0) {
+        this.wantsBikeReclaim = true;
+      }
     } else {
       this.isBurstSprinting = false;
 
