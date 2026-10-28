@@ -64,7 +64,7 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 特訓狼犬：脆皮敏捷
   DETENTION_WOLF: { ...DETENTION, maxHp: 105, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 10, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
   // 總教官 Boss【鐵面總長】
-  DETENTION_BOSS: { ...DETENTION, maxHp: 420, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 20, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
+  DETENTION_BOSS: { ...DETENTION, maxHp: 500, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 20, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
 };
 
 // 平民學生各移動風格數值 (散步、疾走、慢跑、步巡)

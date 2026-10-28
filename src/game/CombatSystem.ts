@@ -194,7 +194,7 @@ export class CombatSystem {
       target.position.addScaledVector(_scratchImpactDir, 0.45);
       target.mesh.position.copy(target.position);
 
-      // 每次精確造成 100 傷害，300 HP 需暗殺 3 次才能擊破
+      // 每次精確造成 100 傷害，500 HP 需暗殺 5 次才能擊破
       target.isBossStunned = false;
       target.bossStunTimer = 0;
       target.applyAssassinationDamage(100);
@@ -204,7 +204,7 @@ export class CombatSystem {
         : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
       const qteSub = isFinalBlow
         ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/300，總教官倒地癱瘓 2 秒！)`;
+        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/${target.maxHp}，總教官倒地癱瘓 2 秒！)`;
       hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
 
       if (target.hp <= 0) {
@@ -214,7 +214,7 @@ export class CombatSystem {
         wantedSystem.showBanner(
           isFromHiding
             ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-            : '🏆 狂賀！第三次終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+            : '🏆 狂賀！終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
           5000
         );
         soundManager.playSchoolBell();
@@ -223,8 +223,8 @@ export class CombatSystem {
         target.knockdownBoss(2.0);
         wantedSystem.showBanner(
           isFromHiding
-            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`
-            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/300) 總教官倒地癱瘓 2 秒！`,
+            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`
+            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`,
           3000
         );
       }

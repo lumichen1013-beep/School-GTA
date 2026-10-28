@@ -214,9 +214,9 @@ export class NPC {
 
   // 單車糾察隊與單車組件追蹤
   public isOriginalBikePatrol: boolean = false;
-  // 第一世界學生服裝 (生成時隨機決定並保留，搶車/復活重建模型時維持同一套)：米白襯衫配深綠長褲制服，或藍紫色運動服
+  // 第一世界學生服裝 (生成時隨機決定並保留，搶車/復活重建模型時維持同一套)：米白襯衫配深綠長褲制服，或淺青藍色運動服
   private readonly studentOutfit: { shirt: number; pants: number } =
-    Math.random() < 0.5 ? { shirt: 0xf3ead3, pants: 0x2f4a36 } : { shirt: 0x5a4fcf, pants: 0x4a3fb8 };
+    Math.random() < 0.5 ? { shirt: 0xf3ead3, pants: 0x2f4a36 } : { shirt: 0x5bb8d6, pants: 0x3f93b3 };
   // 被玩家搶走的自行車 (車主綁定)：復活後步行回到愛車旁牽回，避免憑空變出新車導致單車堆積
   public ownedBike: Bicycle | null = null;
   public isReclaimingBike: boolean = false;

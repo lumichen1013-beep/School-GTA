@@ -394,7 +394,7 @@ export class DetentionMode {
       dw.isGateAOpen,
       dw.isGateBOpen,
       wardenBoss ? wardenBoss.hp : 0,
-      wardenBoss ? wardenBoss.maxHp : 300,
+      wardenBoss ? wardenBoss.maxHp : 500,
       this.isBossDefeated,
       this.isEscapeComplete
     );

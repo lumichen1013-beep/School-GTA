@@ -293,8 +293,8 @@ const DETENTION_NPC_DEFS: NPCSpawnDef[] = [
     pos: [0, 0, 63],
     waypoints: [[-10, 0, 63], [10, 0, 63]],
     style: 'OFFICER_PATROL',
-    hp: 300,
-    maxHp: 300
+    hp: 500,
+    maxHp: 500
   }
 ];
 
