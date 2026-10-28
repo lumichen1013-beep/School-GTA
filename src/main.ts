@@ -290,6 +290,7 @@ class SchoolGTASandbox implements GameContext {
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
+    this.input.joystickSneakEnabled = targetWorld === 'DETENTION';
     this.cameraCtrl.currentWorld = targetWorld;
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
@@ -566,7 +567,8 @@ class SchoolGTASandbox implements GameContext {
         isSpawnGraceActive,
         this.player.isSneaking,
         this.player.isSprinting,
-        this.player.isHidingInCover
+        this.player.isHidingInCover,
+        this.player.isMoving
       );
 
       if (!npc.isKnockedDown && !npc.isPermanentlyKnockedOut && npc.isChasing) {

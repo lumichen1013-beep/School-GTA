@@ -13,6 +13,8 @@ export class InputManager {
   public virtualAxisX: number = 0;
   public virtualAxisY: number = 0;
   public virtualAxisMagnitude: number = 0;
+  // 手機搖桿潛行區是否啟用 (僅特訓院潛入關卡，由切換世界時設定)
+  public joystickSneakEnabled: boolean = false;
   private virtualSprint: boolean = false;
   private virtualJump: boolean = false;
 

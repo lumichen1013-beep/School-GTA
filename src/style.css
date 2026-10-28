@@ -93,6 +93,11 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   pointer-events: none;
 }
 
+/* 地點卡片 + 任務膠囊群組：桌面不產生盒子 (子元素照常排入左欄)；手機改為頂部中央浮動列 (見手機媒體查詢) */
+.hud-info-group {
+  display: contents;
+}
+
 .minimap-wrapper {
   position: relative;
   /* 雷達為核心 HUD 元素：桌面 176px，手機直向 112px、橫向 100px (見下方媒體查詢) */
@@ -2873,6 +2878,40 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     padding: 4px 8px !important;
     border-left-width: 3px !important;
   }
+  /* 手機：地點卡片與任務膠囊移至頂部中央 (左右兩欄之間) 並排；層級低於警戒列/橫幅/比分板，警示出現時直接覆蓋其上 */
+  .hud-info-group {
+    display: flex !important;
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 2 * var(--hud-side-w, 200px) - 16px);
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: center;
+    gap: 6px;
+    z-index: calc(var(--z-hud-base) - 1); /* 低於 Boss 血條、比分板、橫幅與警戒列 */
+    pointer-events: none;
+  }
+  .hud-info-group > .hud-title-zone {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 220px !important;
+    box-sizing: border-box !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .hud-info-group .school-badge,
+  .hud-info-group .location-name {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .hud-info-group > #quest-tracker-panel {
+    flex: 0 0 auto;
+  }
   .school-badge {
     font-size: 11px !important;
     letter-spacing: 1px !important;
@@ -3072,6 +3111,65 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     text-align: center;
   }
 
+  /* 手機開始畫面：整頁限制在可視範圍 (dvh + 安全區) 不需捲動；世界卡片精簡並排，進入按鈕落在畫面中下段拇指可及區 */
+  #start-screen {
+    height: 100dvh;
+    overflow: hidden;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top, 12px)) max(12px, env(safe-area-inset-right, 12px)) max(12px, env(safe-area-inset-bottom, 12px)) max(12px, env(safe-area-inset-left, 12px)) !important;
+  }
+  #start-screen #world-select-container {
+    margin-top: 4px;
+    max-width: 560px;
+  }
+  #start-screen .world-select-prompt {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  #start-screen .world-select-grid {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  #start-screen .world-card {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 260px;
+    padding: 12px 10px;
+    border-radius: 14px;
+  }
+  #start-screen .world-card:hover {
+    transform: none;
+  }
+  #start-screen .world-card-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    margin-bottom: 6px;
+    white-space: nowrap;
+  }
+  #start-screen .world-card-icon {
+    font-size: 30px;
+    margin-bottom: 2px;
+  }
+  #start-screen .world-card-name {
+    font-size: 16px;
+    margin-bottom: 2px;
+  }
+  #start-screen .world-card-tagline {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  #start-screen .world-card-features {
+    display: none;
+  }
+  #start-screen .world-card-btn {
+    margin-top: auto;
+    min-height: 52px;
+    padding: 8px 6px;
+    font-size: 13px;
+    line-height: 1.3;
+    border-radius: 12px;
+  }
+
   /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
   #mobile-controls-container {
     display: block !important;
@@ -3135,6 +3233,11 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .school-badge, .location-name {
     white-space: normal !important;
+  }
+  /* 直屏：兩欄之間過窄，地點卡片 + 任務膠囊改置於兩欄下方的頂部中央帶 (與警戒列/橫幅同一帶，警示出現時覆蓋其上) */
+  .hud-info-group {
+    top: calc(var(--hud-top-bottom, 150px) + 8px);
+    max-width: calc(100vw - 20px);
   }
   /* 直屏：中央留白過窄，警戒列與橫幅依序置於頂部兩欄下方 (--hud-top-bottom)；警戒列顯示時橫幅下移避開 */
   #mgs-alert-banner {
@@ -3257,6 +3360,10 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   .location-name {
     font-size: 11px !important;
   }
+  /* 橫屏：地點卡片 + 任務膠囊貼頂部中央 (與警戒列同一帶，警示出現時覆蓋其上) */
+  .hud-info-group {
+    top: calc(env(safe-area-inset-top, 0px) + 4px);
+  }
   /* 橫屏：地點卡片限寬，過長分區名稱以省略號截斷，避免伸入中央 */
   .hud-title-zone {
     max-width: 210px !important;
@@ -3355,6 +3462,30 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     padding: 8px 24px !important;
     font-size: 13px !important;
     width: min(88vw, 340px) !important;
+  }
+  /* 橫屏開始畫面：高度有限，隱藏卡片圖示與副標，卡片更扁，進入按鈕維持 48px 觸控高度 */
+  #start-screen .game-sub {
+    display: none;
+  }
+  #start-screen .world-select-prompt {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  #start-screen #world-select-container {
+    max-width: 620px;
+  }
+  #start-screen .world-card {
+    max-width: 300px;
+    padding: 8px 10px;
+  }
+  #start-screen .world-card-icon {
+    display: none;
+  }
+  #start-screen .world-card-tagline {
+    margin-bottom: 6px;
+  }
+  #start-screen .world-card-btn {
+    min-height: 48px;
   }
 }
 

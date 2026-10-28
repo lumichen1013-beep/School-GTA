@@ -15,6 +15,8 @@ export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 // 模組頂層靜態共享 Scratch 物件 (0-GC 避免每幀垃圾回收引發微卡頓)
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
+// 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.8 視為潛行 (特訓院)
+export const JOYSTICK_SNEAK_RADIUS = 0.8;
 const _safeTeleportResult = new THREE.Vector3();
 // 玩家瞬移落點取樣參數
 const PLAYER_TELEPORT_OPTS = { minRadius: 2.0, maxRadius: 4.2, attempts: 12, baseGroundY: 0 };
@@ -935,17 +937,21 @@ export class Player {
     this.isMoving = isMoving;
 
     // 潛龍諜影潛行步態 (MGS Sneak Mode)
-    // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）；手機版：虛擬搖桿推桿半徑小於 0.5。無論靜止或移動皆可下蹲！
+    // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）。
+    // 手機版 (特訓院)：預設為潛行姿態，搖桿推至半徑 80% 內 (含靜止不動) 皆維持潛行，超過 80% 才改為一般步行，按「跑」則取消潛行改為衝刺。
+    // 躲入草堆掩體時一律保持潛行，不受搖桿影響。
     const isSneakTriggered = input.mouseButtons.right || !!(
       input.keys['ControlLeft'] ||
       input.keys['ControlRight']
     );
-    const isJoystickSneak = hasVirtualJoystick && input.virtualAxisMagnitude > 0.05 && input.virtualAxisMagnitude < 0.5;
-    const wantsSneak = isSneakTriggered || isJoystickSneak;
-    this.isSneaking = wantsSneak;
+    const isJoystickSneak = input.isTouchDevice && input.joystickSneakEnabled && !hasKeyboard && !this.isSwimming &&
+      input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS && !(input.sprint && isMoving);
+    this.isSneaking = this.isHidingInCover || isSneakTriggered || isJoystickSneak;
 
     // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)
     let currentSpeed = this.walkSpeed;
+    // 是否處於衝刺：於決定速度的分支直接記錄 (搖桿類比縮放後速度不等於 sprintSpeed，不可用速度比對)
+    let sprintActive = false;
     if (this.isSneaking) {
       if (input.sprint && isMoving && this.stamina > 5) {
         // 刺客疾速潛行 (Crouch-Sprint 疾速低姿滑行 6.5 m/s，依舊 0 噪音，消耗極少體力)
@@ -960,12 +966,14 @@ export class Player {
       if (this.isSwimming) {
         currentSpeed = input.sprint && this.stamina > 5 ? this.swimSprintSpeed : this.swimSpeed;
         if (input.sprint && isMoving && this.stamina > 5) {
+          sprintActive = true;
           this.stamina = Math.max(0, this.stamina - delta * 14.0);
         } else {
           this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
         }
       } else if (input.sprint && isMoving && this.stamina > 5) {
         currentSpeed = this.sprintSpeed;
+        sprintActive = true;
         this.stamina = Math.max(0, this.stamina - delta * 24.0);
       } else {
         // 體力自動恢復
@@ -1121,8 +1129,8 @@ export class Player {
     }
 
     // 7. 人物走動與攻擊動畫擺動 (Procedural Animation)
-    const isSprinting = currentSpeed === (this.isSwimming ? this.swimSprintSpeed : this.sprintSpeed);
-    this.isSprinting = isMoving && isSprinting;
+    const isSprinting = isMoving && sprintActive;
+    this.isSprinting = isSprinting;
     this.animatePlayer(delta, isMoving, isSprinting, currentSpeed);
   }
 
