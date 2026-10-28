@@ -197,6 +197,7 @@ class SchoolGTASandbox implements GameContext {
       }
     };
     this.hud = new HUD();
+    this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
       this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
     };
@@ -401,6 +402,8 @@ class SchoolGTASandbox implements GameContext {
       this.basketballGame.drop(this.player, this.hud, this.wantedSystem);
     }
     this.tennisGame.startMatch(this.hud, this.peCoachNpc, this.engine.scene, this.player, this.cameraCtrl);
+    // 對話時已釋放滑鼠鎖定：開賽 (點擊開始或按 E) 時重新鎖定，賽後不需再點一次畫面才能轉動視角
+    this.input.requestPointerLock();
   }
 
   // 投籃出手 (滑鼠左鍵鬆開 / 手機攻擊鍵放開，僅天天國中)

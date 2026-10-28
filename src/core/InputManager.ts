@@ -231,9 +231,14 @@ export class InputManager {
     this.mouseDeltaY = 0;
   }
 
+  // 需在使用者手勢 (點擊/按鍵) 中呼叫；瀏覽器拒絕時 (無手勢或冷卻中) 靜默忽略，玩家點擊畫面即可再鎖定
   public requestPointerLock() {
-    if (!this.isTouchDevice) {
-      this.canvas.requestPointerLock();
+    if (this.isTouchDevice || document.pointerLockElement === this.canvas) return;
+    try {
+      const result = this.canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (result && typeof result.catch === 'function') result.catch(() => { });
+    } catch {
+      // 舊版瀏覽器同步拋錯時忽略
     }
   }
 

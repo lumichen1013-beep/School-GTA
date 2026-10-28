@@ -149,6 +149,8 @@ export class HUD {
   private worldBadgeEl: HTMLElement | null;
   private worldTextEl: HTMLElement | null;
   public onWorldToggle?: () => void;
+  // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
+  public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
   private worldModalCloseBtnEl: HTMLElement | null;
   private modalBtnCampusEl: HTMLElement | null;
@@ -238,7 +240,7 @@ export class HUD {
       // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 (與 M 鍵同流程)
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.closeFullMap();
+        this.closeFullMap(false); // 接著開啟世界選擇視窗，維持滑鼠解鎖以便點選
         if (this.onWorldToggle) this.onWorldToggle();
       });
     }
@@ -810,11 +812,13 @@ export class HUD {
   }
 
   // 關閉全螢幕大地圖
-  public closeFullMap() {
+  public closeFullMap(relockPointer: boolean = true) {
     this.isFullMapOpen = false;
     if (this.fullmapModalEl) {
       this.fullmapModalEl.style.display = 'none';
     }
+    // 關閉地圖 (J 鍵或點擊關閉鈕) 時重新鎖定滑鼠，PC 玩家不需再點一次畫面即可轉動視角
+    if (relockPointer && this.onRequestPointerLock) this.onRequestPointerLock();
   }
 
   // 切換全螢幕大地圖
@@ -1200,6 +1204,10 @@ export class HUD {
   public openWorldModal(currentWorld: 'CAMPUS' | 'DETENTION', onSwitch: (world: 'CAMPUS' | 'DETENTION') => void) {
     if (!this.worldModalEl) return;
     this.isWorldModalOpen = true;
+    // 解除滑鼠指標鎖定，使 PC 玩家 (含按 M 開啟時) 可點選世界卡片
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
     this.onWorldSwitchCallback = onSwitch;
 
     if (this.modalCurrentCampusEl && this.modalCurrentDetentionEl) {
