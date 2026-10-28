@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
+import { isBlockedXZ, depenetrateXZ, getSupportFloorY } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
@@ -178,26 +179,7 @@ export class Bicycle {
 
   // 檢測指定 (X, Z) 位置下方的真實支撐面 (最高樓板、坡道或地面 Y = 0)
   public static getFloorHeightAt(posX: number, posY: number, posZ: number, colliders: CollidableBox[]): number {
-    let supportFloorY = 0;
-    for (let i = 0; i < colliders.length; i++) {
-      const box = colliders[i];
-      if (box.isFloorOnly || box.isRamp) {
-        if (
-          posX >= box.min.x && posX <= box.max.x &&
-          posZ >= box.min.z && posZ <= box.max.z
-        ) {
-          let floorTop = box.max.y;
-          if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
-            const t = THREE.MathUtils.clamp((posZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
-            floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
-          }
-          if (floorTop <= posY + 0.85 && floorTop > supportFloorY) {
-            supportFloorY = floorTop;
-          }
-        }
-      }
-    }
-    return supportFloorY;
+    return getSupportFloorY(colliders, posX, posY, posZ, 0.85);
   }
 
   // 上車：校正 Y 軸座標並將玩家模型移上火柴人車架 (杜絕浮空)
@@ -319,55 +301,16 @@ export class Bicycle {
     // 4. 碰撞檢測與滑牆
     const radius = 0.42; // 適度微調判定半徑，符合單車縱長窄身特性，不易在窄縫卡死
 
+    // 若當前位移是遠離障礙物中心 (倒車或轉向外駛)，允許通行脫困
     const nextX = this.position.x + moveX;
-    let hitX = false;
-    for (const box of colliders) {
-      if (box.isFloorOnly) continue;
-      if (
-        nextX + radius > box.min.x &&
-        nextX - radius < box.max.x &&
-        this.position.z + radius > box.min.z &&
-        this.position.z - radius < box.max.z &&
-        this.position.y + 0.3 < box.max.y &&
-        this.position.y + 1.2 > box.min.y
-      ) {
-        // 若當前位移是遠離障礙物中心 (倒車或轉向外駛)，允許通行脫困
-        const boxCenterX = (box.min.x + box.max.x) / 2;
-        const movingAway = (this.position.x > boxCenterX && moveX > 0) || (this.position.x < boxCenterX && moveX < 0);
-        if (!movingAway) {
-          hitX = true;
-          break;
-        }
-      }
-    }
-    if (!hitX) {
+    if (!isBlockedXZ(colliders, nextX, this.position.z, radius, this.position.y, 0.3, 1.2, 1, this.position.x, moveX)) {
       this.position.x = nextX;
     } else {
       this.speed *= 0.75;
     }
 
     const nextZ = this.position.z + moveZ;
-    let hitZ = false;
-    for (const box of colliders) {
-      if (box.isFloorOnly) continue;
-      if (
-        this.position.x + radius > box.min.x &&
-        this.position.x - radius < box.max.x &&
-        nextZ + radius > box.min.z &&
-        nextZ - radius < box.max.z &&
-        this.position.y + 0.3 < box.max.y &&
-        this.position.y + 1.2 > box.min.y
-      ) {
-        // 若當前位移是遠離障礙物中心，允許通行脫困
-        const boxCenterZ = (box.min.z + box.max.z) / 2;
-        const movingAway = (this.position.z > boxCenterZ && moveZ > 0) || (this.position.z < boxCenterZ && moveZ < 0);
-        if (!movingAway) {
-          hitZ = true;
-          break;
-        }
-      }
-    }
-    if (!hitZ) {
+    if (!isBlockedXZ(colliders, this.position.x, nextZ, radius, this.position.y, 0.3, 1.2, 2, this.position.z, moveZ)) {
       this.position.z = nextZ;
     } else {
       this.speed *= 0.75;
@@ -375,33 +318,7 @@ export class Bicycle {
 
     // 5. 主動穿透脫困排除器 (Depenetration / Unstuck Resolver)
     // 若因高速撞擊或原地轉向導致車身進入障礙物碰撞體，主動朝最小穿透方向彈出，徹底杜絕卡入椅子等障礙物不動！
-    for (const box of colliders) {
-      if (box.isFloorOnly) continue;
-      if (
-        this.position.x + radius > box.min.x &&
-        this.position.x - radius < box.max.x &&
-        this.position.z + radius > box.min.z &&
-        this.position.z - radius < box.max.z &&
-        this.position.y + 0.3 < box.max.y &&
-        this.position.y + 1.2 > box.min.y
-      ) {
-        const overlapLeft = (this.position.x + radius) - box.min.x;
-        const overlapRight = box.max.x - (this.position.x - radius);
-        const overlapBack = (this.position.z + radius) - box.min.z;
-        const overlapFront = box.max.z - (this.position.z - radius);
-
-        const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-        if (minOverlap === overlapLeft) {
-          this.position.x = box.min.x - radius - 0.03;
-        } else if (minOverlap === overlapRight) {
-          this.position.x = box.max.x + radius + 0.03;
-        } else if (minOverlap === overlapBack) {
-          this.position.z = box.min.z - radius - 0.03;
-        } else if (minOverlap === overlapFront) {
-          this.position.z = box.max.z + radius + 0.03;
-        }
-      }
-    }
+    depenetrateXZ(colliders, this.position, radius, 0.3, 1.2, 0.03, 1, 'bicycle');
 
     // 6. 重力與地面吸附檢測 (Ground Snapping & Gravity - 杜絕浮空)
     const groundY = Bicycle.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);

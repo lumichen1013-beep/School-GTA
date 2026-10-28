@@ -19,6 +19,8 @@ import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
 import { WeatherSystem } from './systems/WeatherSystem';
+import { ColliderGrid } from './physics/ColliderGrid';
+import { queryColliders } from './physics/aabb';
 
 // 模組頂層共用 Scratch Vectors (0-GC 避免幀迴圈記憶體堆積觸發微卡頓)
 // 互動距離常數：互動提示與 E 鍵實際判定共用，避免「看得到提示卻按不出動作」
@@ -27,6 +29,7 @@ const GATE_CONSOLE_RANGE = 3.8;
 const MUSHROOM_PICK_RANGE = 2.2; // 與 EcologicalGarden.tryPickMushroom 判定半徑一致
 
 const _scratchBikeForward = new THREE.Vector3();
+const _separationNear: CollidableBox[] = [];
 const _scratchBikeSideVec = new THREE.Vector3();
 const _scratchBikeLaunchDir = new THREE.Vector3();
 const _scratchPlayerForward = new THREE.Vector3();
@@ -505,6 +508,8 @@ class SchoolGTASandbox {
   private setActiveWorldScene(world: 'CAMPUS' | 'DETENTION') {
     const scene = this.engine.scene;
     const isCampus = world === 'CAMPUS';
+    // 預先建置該世界碰撞盒的空間網格，避免首次查詢時於遊戲幀內建置
+    ColliderGrid.of(isCampus ? this.world.colliders : this.detentionWorld.colliders);
     const attach = (obj: THREE.Object3D, active: boolean) => {
       if (active) {
         obj.visible = true;
@@ -1936,8 +1941,9 @@ class SchoolGTASandbox {
           const minZ = Math.min(testPlayerZ, this.player.position.z) - playerRadius;
           const maxZ = Math.max(testPlayerZ, this.player.position.z) + playerRadius;
 
-          for (let i = 0; i < colliders.length; i++) {
-            const box = colliders[i];
+          const near = queryColliders(colliders, minX, maxX, minZ, maxZ, _separationNear);
+          for (let i = 0; i < near.length; i++) {
+            const box = near[i];
             if (box.isFloorOnly) continue;
             // 2D 寬泛包圍盒快速淘汰：跳過 95%+ 遠距離障礙物，大幅節省頂點碰撞計算
             if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) {

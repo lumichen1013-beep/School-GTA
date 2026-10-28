@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
 import { IndoorManager } from '../systems/IndoorManager';
+import { queryColliders } from '../physics/aabb';
+
+const _cameraSegNear: CollidableBox[] = [];
 
 export class ThirdPersonCamera {
   public camera: THREE.PerspectiveCamera;
@@ -275,7 +278,9 @@ export class ThirdPersonCamera {
         const segMinZ = Math.min(focusPoint.z, idealPosition.z) - cameraRadius;
         const segMaxZ = Math.max(focusPoint.z, idealPosition.z) + cameraRadius;
 
-        for (const box of colliders) {
+        const segNear = queryColliders(colliders, segMinX, segMaxX, segMinZ, segMaxZ, _cameraSegNear);
+        for (let i = 0; i < segNear.length; i++) {
+          const box = segNear[i];
           if (box.isFloorOnly) continue; // 地板與斜坡單獨由高度限制與地面處理
           if (
             box.max.x < segMinX || box.min.x > segMaxX ||

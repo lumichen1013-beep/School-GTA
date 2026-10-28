@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CollidableBox } from '../world/CampusWorld';
+import { queryColliders, isBlockedXZ, depenetrateXZ, getSupportFloorY, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import type { Bicycle } from '../vehicles/Bicycle';
+import { bakeNode, bakeStaticParts, disposeNonShared, getHpBarMaterial, getHpBarResources } from './npc/modelCache';
 
 export type NPCRole =
   | 'STUDENT'
@@ -44,6 +46,7 @@ export interface NPCAfterimageItem {
 const _npcMoveDir = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
+const _npcSightNear: CollidableBox[] = [];
 
 // 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
 export interface AttackSpec {
@@ -469,17 +472,13 @@ export class NPC {
     this.hpBarGroup = new THREE.Group();
     this.hpBarGroup.position.set(0, hpY, 0);
 
-    // 1. 血條深色底襯框
-    const bgGeo = new THREE.BoxGeometry(0.84, 0.11, 0.05);
-    const bgMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-    this.hpBarBgMesh = new THREE.Mesh(bgGeo, bgMat);
+    // 1. 血條深色底襯框 (全體 NPC 共用幾何體與材質)
+    const hpRes = getHpBarResources();
+    this.hpBarBgMesh = new THREE.Mesh(hpRes.bgGeo, hpRes.bgMat);
     this.hpBarGroup.add(this.hpBarBgMesh);
 
-    // 2. 綠色/黃色/紅色動態血條 (幾何體自左側向右縮放)
-    const hpGeo = new THREE.BoxGeometry(0.80, 0.07, 0.07);
-    hpGeo.translate(0.40, 0, 0); // 錨點設在左側，縮放時從左向右展開
-    const hpMat = new THREE.MeshBasicMaterial({ color: 0x2ecc71 });
-    this.hpBarMesh = new THREE.Mesh(hpGeo, hpMat);
+    // 2. 綠色/黃色/紅色動態血條 (錨點設在左側，縮放時從左向右展開；狀態色以切換共用材質呈現)
+    this.hpBarMesh = new THREE.Mesh(hpRes.barGeo, getHpBarMaterial(0x2ecc71));
     this.hpBarMesh.position.set(-0.40, 0, 0.01);
     this.hpBarGroup.add(this.hpBarMesh);
 
@@ -495,7 +494,6 @@ export class NPC {
     this.mesh.add(this.hpBarGroup);
 
     scene.add(this.mesh);
-
     // 閃身步老師 (DODGE_TEACHER) 專屬技能對話氣泡與 0-GC 殘影物件池
     if (this.role === 'DODGE_TEACHER') {
       this.initSkillBubble();
@@ -938,6 +936,16 @@ export class NPC {
     this.dogFrontRightLeg = createShibaLeg(0.18, 0.32);
     this.dogBackLeftLeg = createShibaLeg(-0.18, -0.32);
     this.dogBackRightLeg = createShibaLeg(0.18, -0.32);
+
+    // 烘焙合併：頭、尾、四腿各自保留動畫關節，其餘身體零件合併為單一靜態網格 (同品種共用幾何體)
+    const animatedParts: THREE.Object3D[] = [
+      this.dogHead, this.dogTail,
+      this.dogFrontLeftLeg, this.dogFrontRightLeg, this.dogBackLeftLeg, this.dogBackRightLeg
+    ];
+    bakeNode(this.dogHead, `${this.role}|head`);
+    bakeNode(this.dogTail, `${this.role}|tail`);
+    for (let i = 2; i < animatedParts.length; i++) bakeNode(animatedParts[i], `${this.role}|leg`);
+    bakeStaticParts(this.mesh, this.mesh.children.filter(c => !animatedParts.includes(c)), `${this.role}|body`);
   }
 
   // 2. 建造騎單車糾察隊 3D 模型
@@ -969,9 +977,6 @@ export class NPC {
     const handlebar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.05, 0.05), frameMat);
     handlebar.position.set(0, 0.95, 0.65);
     this.mesh.add(handlebar);
-
-    // 註冊單車專屬零件供失竊時清理與處置
-    this.bikeParts = [this.bikeRearWheel, this.bikeFrontWheel, frameTube, handlebar];
 
     // 糾察隊員 (騎坐在車上)
     const riderTorso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.32), shirtMat);
@@ -1016,6 +1021,15 @@ export class NPC {
     legR.position.set(0.2, 0.65, -0.1);
     legR.rotation.x = 0.5;
     this.mesh.add(legR);
+
+    // 烘焙合併：前後輪 (會轉動) 與頭部 (會轉頭) 保留，車架與坐姿騎士合併為單一靜態網格
+    const outfitKey = `${this.studentOutfit.shirt}|${this.studentOutfit.pants}`;
+    bakeNode(this.bikeRearWheel, 'BIKE_PATROL|wheel');
+    bakeNode(this.bikeFrontWheel, 'BIKE_PATROL|wheel');
+    bakeNode(head, 'BIKE_PATROL|head');
+    const staticParts = [frameTube, handlebar, riderTorso, band, cap, armL, armR, legL, legR];
+    const body = bakeStaticParts(this.mesh, staticParts, `BIKE_PATROL|${outfitKey}|body`);
+    this.bikeParts = [this.bikeRearWheel, this.bikeFrontWheel, body];
   }
 
   // 3. 建造普通人型 NPC 3D 模型 (生教、步巡糾察、普通學生)
@@ -1391,6 +1405,19 @@ export class NPC {
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
     addHumanoidPart(this.rightLeg);
+
+    // 烘焙合併：頭與四肢保留各自動畫關節 (手持裝備併入手臂、雨傘保留可切換顯示)，
+    // 軀幹與配飾合併為單一靜態網格；同角色同服裝的 NPC 共用同一份幾何體
+    const lookKey = `${this.role}|${shirtColor}|${pantsColor}`;
+    const umbrella = this.umbrellaMesh;
+    bakeNode(head, `${lookKey}|head`);
+    bakeNode(this.leftArm, `${lookKey}|armL`);
+    bakeNode(this.rightArm, `${lookKey}|armR`, obj => obj === umbrella);
+    bakeNode(this.leftLeg, `${lookKey}|leg`);
+    bakeNode(this.rightLeg, `${lookKey}|leg`);
+    const animated: THREE.Object3D[] = [head, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
+    const body = bakeStaticParts(this.mesh, this.humanoidParts.filter(p => !animated.includes(p)), `${lookKey}|body`);
+    this.humanoidParts = [body, ...animated];
   }
 
   // 建造大如老師專屬 3D 經典蓬鬆喜感爆炸頭 (Afro) 與運動吸汗頭帶
@@ -1684,6 +1711,8 @@ export class NPC {
 
     umbrella.add(rig);
     umbrella.visible = false;
+    // 同色雨傘共用合併幾何體 (傘柄/傘骨/傘面/尖端合併)
+    bakeNode(umbrella, `umbrella|${canopyColor}`);
     return umbrella;
   }
 
@@ -1756,6 +1785,15 @@ export class NPC {
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.18, 0.35, 0);
     this.mesh.add(this.rightLeg);
+
+    // 烘焙合併：頭與四肢保留動畫關節 (砍刀併入右臂)，軀幹、面罩與紅瞳合併為靜態網格
+    bakeNode(head, 'BANDIT|head');
+    bakeNode(this.leftArm, 'BANDIT|armL');
+    bakeNode(this.rightArm, 'BANDIT|armR');
+    bakeNode(this.leftLeg, 'BANDIT|leg');
+    bakeNode(this.rightLeg, 'BANDIT|leg');
+    const animated: THREE.Object3D[] = [head, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
+    bakeStaticParts(this.mesh, this.mesh.children.filter(c => !animated.includes(c)), 'BANDIT|body');
   }
 
   public getRoleTitle(): string {
@@ -1812,11 +1850,11 @@ export class NPC {
     const ratio = Math.max(0.01, this.hp / this.maxHp);
     this.hpBarMesh.scale.x = ratio;
     if (ratio < 0.35) {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xe74c3c);
+      this.hpBarMesh.material = getHpBarMaterial(0xe74c3c);
     } else if (ratio < 0.65) {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xf39c12);
+      this.hpBarMesh.material = getHpBarMaterial(0xf39c12);
     } else {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
+      this.hpBarMesh.material = getHpBarMaterial(0x2ecc71);
     }
   }
 
@@ -1893,11 +1931,11 @@ export class NPC {
     const ratio = Math.max(0.01, this.hp / this.maxHp);
     this.hpBarMesh.scale.x = ratio;
     if (ratio < 0.35) {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xe74c3c);
+      this.hpBarMesh.material = getHpBarMaterial(0xe74c3c);
     } else if (ratio < 0.65) {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xf39c12);
+      this.hpBarMesh.material = getHpBarMaterial(0xf39c12);
     } else {
-      (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
+      this.hpBarMesh.material = getHpBarMaterial(0x2ecc71);
     }
 
     // 血量歸零：倒地倒下，碰撞箱全面失效 (第二世界永久擊昏不重生)
@@ -2010,24 +2048,13 @@ export class NPC {
   public loseBike() {
     if (this.isPaused) this.cancelPause();
     for (let i = 0; i < this.bikeParts.length; i++) {
-      const part = this.bikeParts[i];
-      part.visible = false;
-      this.mesh.remove(part);
-      if ((part as THREE.Mesh).isMesh) {
-        const mesh = part as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose();
-      }
+      this.mesh.remove(this.bikeParts[i]);
     }
     this.bikeParts.length = 0;
-    // 移除並釋放坐姿騎士身體 (軀幹、頭、帽、臂章、手臂、彎曲雙腿)
+    // 移除坐姿騎士身體與單車 (共用的烘焙幾何體與材質由快取持有，不釋放)
     for (const part of this.bikeModelParts) {
       this.mesh.remove(part);
-      const m = part as THREE.Mesh;
-      if (m.isMesh && m.geometry) m.geometry.dispose();
-      if (m.isMesh && m.material) {
-        if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
-        else m.material.dispose();
-      }
+      disposeNonShared(part);
     }
     this.bikeModelParts.length = 0;
     this.bikeFrontWheel = undefined;
@@ -2076,20 +2103,12 @@ export class NPC {
 
   // 恢復騎乘單車巡邏狀態 (復活時還原為單車巡邏同學)
   public restoreBikePatrol() {
-    // 妥善銷毀並從 this.mesh 移除 this.humanoidParts 的幾何體與材質
+    // 從 this.mesh 移除步行人形零件 (僅釋放非共用資源，共用烘焙幾何體與材質由快取持有)
     for (const part of this.humanoidParts) {
       this.mesh.remove(part);
-      part.traverse((obj) => {
-        const m = obj as THREE.Mesh;
-        if (m.isMesh) {
-          if (m.geometry) m.geometry.dispose();
-          if (m.material) {
-            if (Array.isArray(m.material)) m.material.forEach(mt => mt.dispose());
-            else m.material.dispose();
-          }
-        }
-      });
+      disposeNonShared(part);
     }
+    this.umbrellaMesh = undefined;
     this.humanoidParts.length = 0;
     this.leftArm = undefined;
     this.rightArm = undefined;
@@ -2697,8 +2716,9 @@ export class NPC {
       const minRayZ = Math.min(eyePosZ, targetEyeZ);
       const maxRayZ = Math.max(eyePosZ, targetEyeZ);
 
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
+      const sightNear = queryColliders(colliders, minRayX, maxRayX, minRayZ, maxRayZ, _npcSightNear);
+      for (let i = 0; i < sightNear.length; i++) {
+        const box = sightNear[i];
         if (box.isFloorOnly) continue; // 地板/坡道不遮擋水平視線
         if (box.min.x > maxRayX || box.max.x < minRayX ||
             box.min.y > maxRayY || box.max.y < minRayY ||
@@ -2712,30 +2732,6 @@ export class NPC {
     }
 
     return true;
-  }
-
-  // 檢測指定 (X, Z) 位置下方的真實支撐面 (最高樓板、坡道或地面 Y = 0)
-  private getFloorHeightAt(posX: number, posY: number, posZ: number, colliders: CollidableBox[]): number {
-    let supportFloorY = 0;
-    for (let i = 0; i < colliders.length; i++) {
-      const box = colliders[i];
-      if (box.isFloorOnly || box.isRamp) {
-        if (
-          posX >= box.min.x && posX <= box.max.x &&
-          posZ >= box.min.z && posZ <= box.max.z
-        ) {
-          let floorTop = box.max.y;
-          if (box.isRamp && box.rampMinZ !== undefined && box.rampMaxZ !== undefined && box.rampYAtMinZ !== undefined && box.rampYAtMaxZ !== undefined) {
-            const t = THREE.MathUtils.clamp((posZ - box.rampMinZ) / (box.rampMaxZ - box.rampMinZ), 0, 1);
-            floorTop = box.rampYAtMinZ + t * (box.rampYAtMaxZ - box.rampYAtMinZ);
-          }
-          if (floorTop <= posY + 0.6 && floorTop > supportFloorY) {
-            supportFloorY = floorTop;
-          }
-        }
-      }
-    }
-    return supportFloorY;
   }
 
   // AI 狀態機：仇恨追捕、視線丟失與放棄邏輯 (降低圈複雜度與重複運算)
@@ -3373,43 +3369,11 @@ export class NPC {
 
           // X 軸防穿牆檢測
           const nextX = this.position.x + moveStepX;
-          let hitX = false;
-          for (let i = 0; i < colliders.length; i++) {
-            const box = colliders[i];
-            if (box.isFloorOnly) continue;
-            if (
-              nextX + radius > box.min.x &&
-              nextX - radius < box.max.x &&
-              this.position.z + radius > box.min.z &&
-              this.position.z - radius < box.max.z &&
-              this.position.y + 0.3 < box.max.y &&
-              this.position.y + 1.6 > box.min.y
-            ) {
-              hitX = true;
-              break;
-            }
-          }
-          if (!hitX) this.position.x = nextX;
+          if (!isBlockedXZ(colliders, nextX, this.position.z, radius, this.position.y, 0.3, 1.6)) this.position.x = nextX;
 
           // Z 軸防穿牆檢測
           const nextZ = this.position.z + moveStepZ;
-          let hitZ = false;
-          for (let i = 0; i < colliders.length; i++) {
-            const box = colliders[i];
-            if (box.isFloorOnly) continue;
-            if (
-              this.position.x + radius > box.min.x &&
-              this.position.x - radius < box.max.x &&
-              nextZ + radius > box.min.z &&
-              nextZ - radius < box.max.z &&
-              this.position.y + 0.3 < box.max.y &&
-              this.position.y + 1.6 > box.min.y
-            ) {
-              hitZ = true;
-              break;
-            }
-          }
-          if (!hitZ) this.position.z = nextZ;
+          if (!isBlockedXZ(colliders, this.position.x, nextZ, radius, this.position.y, 0.3, 1.6)) this.position.z = nextZ;
 
           // 定期產生青色破空殘影
           this.afterimageSpawnTimer -= delta;
@@ -3469,42 +3433,16 @@ export class NPC {
       }
 
       // 2. 建築物與掩體防穿透阻擋 (絕不卡進建築物內部，碰撞後貼牆阻停)
-      const flyRadius = 0.55;
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
-        if (box.isFloorOnly) continue;
-        if (this.position.y + 0.2 < box.max.y && this.position.y + 1.6 > box.min.y) {
-          if (
-            this.position.x + flyRadius > box.min.x &&
-            this.position.x - flyRadius < box.max.x &&
-            this.position.z + flyRadius > box.min.z &&
-            this.position.z - flyRadius < box.max.z
-          ) {
-            const boxCenterX = (box.min.x + box.max.x) * 0.5;
-            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-            const halfBoxX = (box.max.x - box.min.x) * 0.5;
-            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
-
-            const overlapX = (halfBoxX + flyRadius) - Math.abs(this.position.x - boxCenterX);
-            const overlapZ = (halfBoxZ + flyRadius) - Math.abs(this.position.z - boxCenterZ);
-
-            if (overlapX < overlapZ) {
-              this.position.x = this.position.x >= boxCenterX ? box.max.x + flyRadius + 0.05 : box.min.x - flyRadius - 0.05;
-              this.knockVelocity.x = 0;
-            } else {
-              this.position.z = this.position.z >= boxCenterZ ? box.max.z + flyRadius + 0.05 : box.min.z - flyRadius - 0.05;
-              this.knockVelocity.z = 0;
-            }
-          }
-        }
-      }
+      const flyPushed = depenetrateXZ(colliders, this.position, 0.55, 0.2, 1.6, 0.05, 1, 'npc');
+      if (flyPushed & DEPEN_PUSH_X) this.knockVelocity.x = 0;
+      if (flyPushed & DEPEN_PUSH_Z) this.knockVelocity.z = 0;
 
       // 空中旋轉翻滾
       this.mesh.rotation.x += delta * 12.0;
       this.mesh.rotation.z += delta * 8.0;
 
       // 計算 NPC 當前 (X, Z) 位置下方的真實支撐面 (最高樓板或地面 Y = 0)
-      const supportFloorY = this.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);
+      const supportFloorY = getSupportFloorY(colliders, this.position.x, this.position.y, this.position.z, 0.6);
 
       // 著地檢測：只有落到真實支撐面 (supportFloorY 或校園地面 Y = 0) 時才著地！
       if (this.position.y <= supportFloorY) {
@@ -3568,7 +3506,7 @@ export class NPC {
       this.updateKOBadge(this.reviveTimer);
 
       // 倒地重力墜落檢測 (若被打出大樓邊界懸空倒地，持續自由落體墜落至地面)
-      const supportFloorY = this.getFloorHeightAt(this.position.x, this.position.y, this.position.z, colliders);
+      const supportFloorY = getSupportFloorY(colliders, this.position.x, this.position.y, this.position.z, 0.6);
       if (this.position.y > supportFloorY) {
         this.position.y = Math.max(supportFloorY, this.position.y - 22.0 * delta);
         this.baseFloorY = supportFloorY;
@@ -3598,7 +3536,7 @@ export class NPC {
           this.isKnockedDown = false;
           this.hp = this.maxHp;
           this.hpBarMesh.scale.x = 1.0;
-          (this.hpBarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x2ecc71);
+          this.hpBarMesh.material = getHpBarMaterial(0x2ecc71);
           this.hpBarBgMesh.visible = true;
           this.hpBarMesh.visible = true;
           this.koBadgeSprite.visible = false;
@@ -3718,22 +3656,14 @@ export class NPC {
 
       // 檢測是否撞上水泥加固柱或障礙盒
       let hitObstacle = false;
-      for (const box of colliders) {
-        if (box.isFloorOnly) continue;
-        if (
-          this.position.x + 0.65 > box.min.x &&
-          this.position.x - 0.65 < box.max.x &&
-          this.position.z + 0.65 > box.min.z &&
-          this.position.z - 0.65 < box.max.z
-        ) {
-          hitObstacle = true;
-          // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
-          this.stunBoss(3.5);
-          soundManager.playPunch();
-          soundManager.playBatHit();
-          if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
-          break;
-        }
+      // 衝撞判定不分高度 (身體垂直範圍設為無限)
+      if (isBlockedXZ(colliders, this.position.x, this.position.z, 0.65, this.position.y, -Infinity, Infinity)) {
+        hitObstacle = true;
+        // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
+        this.stunBoss(3.5);
+        soundManager.playPunch();
+        soundManager.playBatHit();
+        if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
       }
 
       if (!hitObstacle && this.bossChargeTraveled >= this.bossChargeMaxDist) {
@@ -3934,21 +3864,7 @@ export class NPC {
         }
 
         if (!hitX) {
-          for (let i = 0; i < colliders.length; i++) {
-            const box = colliders[i];
-            if (box.isFloorOnly) continue;
-            if (nextX + radius <= box.min.x || nextX - radius >= box.max.x ||
-                this.position.z + radius <= box.min.z || this.position.z - radius >= box.max.z) {
-              continue;
-            }
-            if (
-              this.position.y + 0.3 < box.max.y &&
-              this.position.y + 1.6 > box.min.y
-            ) {
-              hitX = true;
-              break;
-            }
-          }
+          hitX = isBlockedXZ(colliders, nextX, this.position.z, radius, this.position.y, 0.3, 1.6);
         }
         if (!hitX) this.position.x = nextX;
 
@@ -3967,21 +3883,7 @@ export class NPC {
         }
 
         if (!hitZ) {
-          for (let i = 0; i < colliders.length; i++) {
-            const box = colliders[i];
-            if (box.isFloorOnly) continue;
-            if (this.position.x + radius <= box.min.x || this.position.x - radius >= box.max.x ||
-                nextZ + radius <= box.min.z || nextZ - radius >= box.max.z) {
-              continue;
-            }
-            if (
-              this.position.y + 0.3 < box.max.y &&
-              this.position.y + 1.6 > box.min.y
-            ) {
-              hitZ = true;
-              break;
-            }
-          }
+          hitZ = isBlockedXZ(colliders, this.position.x, nextZ, radius, this.position.y, 0.3, 1.6);
         }
         if (!hitZ) this.position.z = nextZ;
 
@@ -4008,29 +3910,7 @@ export class NPC {
         }
 
         // 5. 防穿牆與卡牆修復 (永遠朝外側退回，絕不向建築內部彈射)
-        for (let i = 0; i < colliders.length; i++) {
-          const box = colliders[i];
-          if (box.isFloorOnly) continue;
-          if (this.position.x + radius <= box.min.x || this.position.x - radius >= box.max.x ||
-              this.position.z + radius <= box.min.z || this.position.z - radius >= box.max.z) {
-            continue;
-          }
-          if (this.position.y + 0.3 < box.max.y && this.position.y + 1.6 > box.min.y) {
-            const boxCenterX = (box.min.x + box.max.x) * 0.5;
-            const boxCenterZ = (box.min.z + box.max.z) * 0.5;
-            const halfBoxX = (box.max.x - box.min.x) * 0.5;
-            const halfBoxZ = (box.max.z - box.min.z) * 0.5;
-
-            const overlapX = (halfBoxX + radius) - Math.abs(this.position.x - boxCenterX);
-            const overlapZ = (halfBoxZ + radius) - Math.abs(this.position.z - boxCenterZ);
-
-            if (overlapX < overlapZ) {
-              this.position.x = this.position.x >= boxCenterX ? box.max.x + radius + 0.02 : box.min.x - radius - 0.02;
-            } else {
-              this.position.z = this.position.z >= boxCenterZ ? box.max.z + radius + 0.02 : box.min.z - radius - 0.02;
-            }
-          }
-        }
+        depenetrateXZ(colliders, this.position, radius, 0.3, 1.6, 0.02, 1, 'npc');
       }
 
       // 轉向與俯仰姿態
@@ -4249,19 +4129,7 @@ export class NPC {
         m.dispose();
       }
     }
-    this.mesh.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      }
-    });
+    disposeNonShared(this.mesh);
     if (scene) {
       scene.remove(this.mesh);
     } else if (this.mesh.parent) {

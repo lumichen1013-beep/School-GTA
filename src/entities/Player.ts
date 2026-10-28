@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CollidableBox } from '../world/CampusWorld';
+import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
@@ -17,6 +18,8 @@ interface AfterimageItem {
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
 const _safeTeleportResult = new THREE.Vector3();
+const _sweepNear: CollidableBox[] = [];
+const _footprintNear: CollidableBox[] = [];
 
 export class Player {
   public mesh: THREE.Group;
@@ -1254,13 +1257,22 @@ export class Player {
     const stepDz = totalDz / subSteps;
     let collidedX = false;
     let collidedZ = false;
+    // 只取整段子步範圍內的鄰近碰撞盒 (位移只會被夾在起點與終點之間，候選集合足以涵蓋)
+    const sweep = queryColliders(
+      colliders,
+      Math.min(this.position.x, this.position.x + totalDx) - halfWidth - 0.1,
+      Math.max(this.position.x, this.position.x + totalDx) + halfWidth + 0.1,
+      Math.min(this.position.z, this.position.z + totalDz) - halfWidth - 0.1,
+      Math.max(this.position.z, this.position.z + totalDz) + halfWidth + 0.1,
+      _sweepNear
+    );
 
     for (let s = 0; s < subSteps; s++) {
       // X 軸移動
       if (stepDx !== 0 && !collidedX) {
         let newX = this.position.x + stepDx;
-        for (let i = 0; i < colliders.length; i++) {
-          const box = colliders[i];
+        for (let i = 0; i < sweep.length; i++) {
+          const box = sweep[i];
           if (box.isFloorOnly) continue; // 地板/坡道不阻擋水平位移
           if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
           if (this.position.z + halfWidth <= box.min.z || this.position.z - halfWidth >= box.max.z) continue;
@@ -1280,8 +1292,8 @@ export class Player {
       // Z 軸移動
       if (stepDz !== 0 && !collidedZ) {
         let newZ = this.position.z + stepDz;
-        for (let i = 0; i < colliders.length; i++) {
-          const box = colliders[i];
+        for (let i = 0; i < sweep.length; i++) {
+          const box = sweep[i];
           if (box.isFloorOnly) continue;
           if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
           if (this.position.x + halfWidth <= box.min.x || this.position.x - halfWidth >= box.max.x) continue;
@@ -1309,32 +1321,14 @@ export class Player {
 
     // 防卡牆與牆角擠壓自解修復 (Depenetration / Anti-Stuck Auto Ejection)
     // 最多 4 輪迭代，沿最小穿透軸擠出；無重疊即提前結束，避免牆角/窄縫來回彈跳
-    for (let pass = 0; pass < 4; pass++) {
-      let resolved = true;
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
-        if (box.isFloorOnly) continue;
-        if (this.position.y + height <= box.min.y || this.position.y + stepHeight >= box.max.y) continue;
-        const overlapLeft = this.position.x + halfWidth - box.min.x;
-        const overlapRight = box.max.x - (this.position.x - halfWidth);
-        const overlapBack = this.position.z + halfWidth - box.min.z;
-        const overlapFront = box.max.z - (this.position.z - halfWidth);
-        if (overlapLeft <= 0 || overlapRight <= 0 || overlapBack <= 0 || overlapFront <= 0) continue;
-
-        resolved = false;
-        const pushX = Math.min(overlapLeft, overlapRight);
-        const pushZ = Math.min(overlapBack, overlapFront);
-        if (pushX < pushZ) {
-          this.position.x = overlapLeft < overlapRight ? box.min.x - halfWidth - skin : box.max.x + halfWidth + skin;
-          this.velocity.x = 0;
-          this.knockVelocity.x = 0;
-        } else {
-          this.position.z = overlapBack < overlapFront ? box.min.z - halfWidth - skin : box.max.z + halfWidth + skin;
-          this.velocity.z = 0;
-          this.knockVelocity.z = 0;
-        }
-      }
-      if (resolved) break;
+    const pushed = depenetrateXZ(colliders, this.position, halfWidth, stepHeight, height, skin, 4, 'player');
+    if (pushed & DEPEN_PUSH_X) {
+      this.velocity.x = 0;
+      this.knockVelocity.x = 0;
+    }
+    if (pushed & DEPEN_PUSH_Z) {
+      this.velocity.z = 0;
+      this.knockVelocity.z = 0;
     }
 
     // 出水攀岸判定：剛脫離水體且雙腳仍低於水面時，放寬落腳高度並平滑抬升至池畔
@@ -1348,12 +1342,18 @@ export class Player {
     // Y 軸移動 (重力與垂直檢測，支援水平層板與連續坡道階梯)
     let targetY = this.position.y + this.velocity.y * delta;
     let groundY = 0; // 地面水平面
+    const footprint = queryColliders(
+      colliders,
+      this.position.x - halfWidth, this.position.x + halfWidth,
+      this.position.z - halfWidth, this.position.z + halfWidth,
+      _footprintNear
+    );
 
     // 頭頂天花板檢測：上升時頭部不可穿入上方障礙物 (僅檢查目前位於頭頂之上的物件)
     if (targetY > this.position.y) {
       const headY = this.position.y + height;
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
+      for (let i = 0; i < footprint.length; i++) {
+        const box = footprint[i];
         if (box.isRamp || box.min.y < headY - skin) continue;
         if (targetY + height <= box.min.y) continue;
         if (this.position.x + halfWidth <= box.min.x || this.position.x - halfWidth >= box.max.x) continue;
@@ -1364,7 +1364,7 @@ export class Player {
       }
     }
 
-    for (const box of colliders) {
+    for (const box of footprint) {
       if (
         this.position.x + halfWidth > box.min.x &&
         this.position.x - halfWidth < box.max.x &&
