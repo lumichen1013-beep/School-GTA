@@ -209,9 +209,8 @@ export class CombatSystem {
 
       if (target.hp <= 0) {
         target.knockoutSilently();
-        detention.isBossDefeated = true;
+        detention.onBossDefeated(target);
         detention.takedownCount++;
-        this.ctx.detentionWorld.spawnMasterKeycard(target.position);
         wantedSystem.showBanner(
           isFromHiding
             ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`

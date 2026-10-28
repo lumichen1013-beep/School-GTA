@@ -144,13 +144,7 @@ class SchoolGTASandbox implements GameContext {
       const cutsceneOverlay = document.getElementById('cutscene-overlay');
       if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
       this.weatherSystem.setWeather('SUNNY', true, false);
-      if (this.player) {
-        this.player.hasNormalBat = true;
-        this.player.setWeapon('NORMAL_BAT');
-        this.player.maxHp = 150;
-        this.player.hp = 150;
-      }
-      this.detention.spawnGraceTimer = 5.0;
+      this.detention.startEscape();
       this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
       this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
     };
@@ -367,6 +361,8 @@ class SchoolGTASandbox implements GameContext {
       this.player.velocity.set(0, 0, 0);
       this.player.rotationY = 0;
       this.cameraCtrl.resetBehind(this.player.position, 0);
+      // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
+      this.detention.startEscape();
       this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
       this.hud.showCenterPrompt('尋找門禁卡進入下一個區域吧');
     }
@@ -485,10 +481,7 @@ class SchoolGTASandbox implements GameContext {
     setTimeout(() => {
       this.player.respawn(respawnPos);
       if (this.currentWorldType === 'DETENTION') {
-        this.player.maxHp = 150;
-        this.player.hp = 150;
-        this.player.hasNormalBat = true;
-        this.player.setWeapon('NORMAL_BAT');
+        this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
         this.detention.resetGuards();
       }
@@ -678,7 +671,7 @@ class SchoolGTASandbox implements GameContext {
       this.hud.updateStealthHiding(false);
       this.hud.updateCqcPrompt(false);
     } else {
-      this.detention.update(delta, targetPosition);
+      this.detention.update(delta, targetPosition, this.wardenBossNpc);
     }
 
     this.campus.updateBroadcastCooldown(delta);

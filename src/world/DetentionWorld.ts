@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
+import { isBlockedXZ } from '../physics/aabb';
+
+// 越獄起點 (北側牢房後方通風口)：首次進入與「重新挑戰」皆由此出發
+const INITIAL_SPAWN = new THREE.Vector3(-55, 0, -84);
+const INITIAL_CHECKPOINT_NAME = 'A 區 牢房起點';
 
 export interface SearchlightItem {
   id: number;
@@ -73,15 +78,20 @@ export class DetentionWorld {
   public hidingSpots: ACHidingSpot[] = [];
 
   // 少年院關鍵點位 (改為潛龍諜影潛行迷宮配置)
-  public spawnPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 起點：北側牢房後方通風口 (空曠安全區)
-  public currentCheckpointPos: THREE.Vector3 = new THREE.Vector3(-55, 0, -84); // 當前重生/存檔點
-  public currentCheckpointName: string = 'A 區 牢房起點'; // 存檔點名稱
+  public spawnPos: THREE.Vector3 = INITIAL_SPAWN.clone(); // 起點：北側牢房後方通風口 (空曠安全區)
+  public currentCheckpointPos: THREE.Vector3 = INITIAL_SPAWN.clone(); // 當前重生/存檔點
+  public currentCheckpointName: string = INITIAL_CHECKPOINT_NAME; // 存檔點名稱
 
   // 更新檢查點 / 存檔點
   public setCheckpoint(pos: THREE.Vector3, name: string) {
     this.currentCheckpointPos.copy(pos);
     this.spawnPos.copy(pos);
     this.currentCheckpointName = name;
+  }
+
+  // 存檔點還原為越獄起點 (重新挑戰時使用)
+  public resetCheckpoint() {
+    this.setCheckpoint(INITIAL_SPAWN, INITIAL_CHECKPOINT_NAME);
   }
   public commissaryPos: THREE.Vector3 = new THREE.Vector3(38, 0, -42.0); // 特訓小賣部取餐/補給窗口
   public pullupStationPos: THREE.Vector3 = new THREE.Vector3(-52, 0, 0); // 西側體能區：單槓訓練
@@ -1520,6 +1530,12 @@ export class DetentionWorld {
     for (let i = 0; i < this.colliders.length; i++) {
       const box = this.colliders[i];
       if (box.isFloorOnly) continue; // 地板/層板不阻礙高空俯視
+      // 略過包住光源起點的碰撞盒 (燈塔本體)：起點在盒內時 tEnter≈0，會把整片燈塔周圍誤判為被遮蔽
+      if (
+        start.x >= box.min.x - 0.01 && start.x <= box.max.x + 0.01 &&
+        start.y >= box.min.y - 0.01 && start.y <= box.max.y + 0.01 &&
+        start.z >= box.min.z - 0.01 && start.z <= box.max.z + 0.01
+      ) continue;
 
       // AABB Slab Test
       const t1x = (box.min.x - start.x) * invDirX;
@@ -1638,11 +1654,33 @@ export class DetentionWorld {
   }
 
   // Boss 擊敗後於地面生成【萬能逃脫鑰匙卡】
+  // 落點若位於柱子、牆壁等阻擋物內，就近環狀搜尋可站立的空地，確保玩家必定拿得到
   public spawnMasterKeycard(pos: THREE.Vector3) {
-    this.masterKeycardPos = pos.clone();
+    this.masterKeycardPos = this.findReachableGroundPos(pos.x, pos.z);
     this.masterKeycardPos.y = 0.8;
     this.masterKeycardMeshGroup.position.copy(this.masterKeycardPos);
     this.masterKeycardMeshGroup.visible = true;
+  }
+
+  // 清除萬能鑰匙卡 (重新挑戰時使用)
+  public clearMasterKeycard() {
+    this.masterKeycardPos = null;
+    this.hasPickedMasterKeycard = false;
+    this.masterKeycardMeshGroup.visible = false;
+  }
+
+  private findReachableGroundPos(x: number, z: number): THREE.Vector3 {
+    const r = 0.5;
+    if (!isBlockedXZ(this.colliders, x, z, r, 0, 0.3, 1.8)) return new THREE.Vector3(x, 0, z);
+    for (let ring = 0.5; ring <= 8; ring += 0.5) {
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const cx = x + Math.cos(a) * ring;
+        const cz = z + Math.sin(a) * ring;
+        if (!isBlockedXZ(this.colliders, cx, cz, r, 0, 0.3, 1.8)) return new THREE.Vector3(cx, 0, cz);
+      }
+    }
+    return new THREE.Vector3(x, 0, z);
   }
 
   // 鑰匙卡自轉與上下懸浮動畫

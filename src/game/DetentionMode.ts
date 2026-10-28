@@ -42,7 +42,8 @@ export class DetentionMode {
 
   constructor(private readonly ctx: GameContext) {}
 
-  // 進入特訓院時重置越獄進度、門禁與鑰匙卡
+  // 進入特訓院 (首次進入與「重新挑戰」共用) 時完整重置越獄進度：
+  // 門禁、鑰匙卡、萬能卡、存檔點、全體守衛與總教官 (含永久擊昏者)，確保每次都是乾淨的新局
   public reset() {
     this.escapeStartTime = performance.now();
     this.takedownCount = 0;
@@ -54,14 +55,21 @@ export class DetentionMode {
     this.isBossDefeated = false;
     this.isEscapeComplete = false;
     this.spawnGraceTimer = 5.0;
+    this.searchlightAlertTimer = 0;
+    this.nearbyCqcTarget = null;
+
+    for (const n of this.ctx.detentionNPCs) {
+      n.resetToInitialState();
+    }
+    this.ctx.hud.updateMgsAlert(0);
 
     const dw = this.ctx.detentionWorld;
+    dw.resetCheckpoint();
+    dw.clearMasterKeycard();
     dw.hasPickedKeycardA = false;
     dw.hasPickedKeycardB = false;
-    dw.hasPickedMasterKeycard = false;
     dw.keycardAMeshGroup.visible = true;
     dw.keycardBMeshGroup.visible = true;
-    dw.masterKeycardMeshGroup.visible = false;
     dw.isGateAOpen = false;
     dw.isGateBOpen = false;
     dw.isSouthGateOpen = false;
@@ -82,15 +90,40 @@ export class DetentionMode {
     }
   }
 
+  // 特訓院裝備：150 HP 與特訓防暴棒 (開場結束、重新挑戰、死亡重生共用)
+  public applyLoadout() {
+    const { player } = this.ctx;
+    player.hasNormalBat = true;
+    player.setWeapon('NORMAL_BAT');
+    player.maxHp = 150;
+    player.hp = 150;
+  }
+
+  // 正式開始潛入 (開場動畫結束或略過開場時)：配發裝備、出生保護並從此刻開始計時
+  public startEscape() {
+    this.applyLoadout();
+    this.spawnGraceTimer = 5.0;
+    this.escapeStartTime = performance.now();
+  }
+
+  // 總教官被擊敗 (暗殺或一般攻擊皆適用)：只觸發一次，掉落萬能逃脫鑰匙卡
+  public onBossDefeated(boss: NPC): boolean {
+    if (this.isBossDefeated) return false;
+    this.isBossDefeated = true;
+    this.ctx.detentionWorld.spawnMasterKeycard(boss.position);
+    return true;
+  }
+
   public setCheckpoint(pos: THREE.Vector3, name: string) {
     this.ctx.detentionWorld.setCheckpoint(pos, name);
     this.ctx.wantedSystem.showBanner(`🚩 存檔點已更新：【${name}】！死亡後將在此處重生。`, 3500);
     soundManager.playBroadcastChime();
   }
 
-  // 守衛全體回到初始崗位並清除警戒 (玩家倒地與復甦時)
+  // 守衛全體回到初始崗位並清除警戒 (玩家倒地與復甦時)；已擊敗的總教官維持倒地，不因玩家死亡復活
   public resetGuards() {
     for (const n of this.ctx.detentionNPCs) {
+      if (this.isBossDefeated && n.role === 'DETENTION_BOSS') continue;
       n.resetToInitialState();
     }
     this.alertTimer = 0;
@@ -108,8 +141,16 @@ export class DetentionMode {
   }
 
   // 每幀：草堆匿蹤、鑰匙卡/探照燈動畫、MGS 警戒倒數與背後暗殺目標鎖定
-  public update(delta: number, targetPosition: THREE.Vector3) {
+  public update(delta: number, targetPosition: THREE.Vector3, wardenBoss?: NPC) {
     const { player, hud, detentionWorld, wantedSystem } = this.ctx;
+
+    // 總教官以一般攻擊 (非暗殺) 歸零倒下時同樣掉落萬能卡，避免南大門永遠無法開啟
+    if (wardenBoss && !this.isBossDefeated && (wardenBoss.hp <= 0 || wardenBoss.isPermanentlyKnockedOut)) {
+      if (this.onBossDefeated(wardenBoss)) {
+        wantedSystem.showBanner('🏆 擊倒特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！', 5000);
+        soundManager.playSchoolBell();
+      }
+    }
 
     let inHidingSpot = false;
     let hidingSpotName = '';
