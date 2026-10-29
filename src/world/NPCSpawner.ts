@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { NPC, NPCRole, NPCMovementStyle } from '../entities/NPC';
+import { NPC, NPCRole, NPCMovementStyle, NPCLook, NPCCampusAnchor } from '../entities/NPC';
 
 export interface NPCSpawnDef {
   role: NPCRole;
@@ -8,6 +8,8 @@ export interface NPCSpawnDef {
   style?: NPCMovementStyle;
   hp?: number;
   maxHp?: number;
+  look?: NPCLook;
+  anchor?: NPCCampusAnchor;
 }
 
 // ============================================================================
@@ -68,13 +70,18 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
     waypoints: [[0, 0, 92], [-16, 0, 82], [-10, 0, 65], [12, 0, 65], [16, 0, 82]],
     style: 'OFFICER_PATROL'
   },
-  // 6. 普通學生 (12 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
-  // 6.1 田徑跑者 1 號 (PU 跑道標準逆時針慢跑 200m 全圈)
+  // 6. 普通學生 (1F 12 名 (含田徑隊阿凱) + 泳池 1 名 + 籃球場 2 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
+  // 6.1 田徑隊阿凱 (PU 跑道外側分道逆時針慢跑繞圈；200m 對決由他上場，見 CampusSportsCrew)
   {
     role: 'STUDENT',
-    pos: [-30, 0, 14],
-    waypoints: [[-30, 0, 14], [-55, 0, -10], [-80, 0, 20], [-80, 0, 45], [-55, 0, 70], [-30, 0, 45]],
-    style: 'JOGGING'
+    pos: [-28, 0, 14],
+    waypoints: [
+      [-28, 0, 14], [-36.6, 0, -4.4], [-55, 0, -12], [-73.4, 0, -4.4], [-81, 0, 14], [-81, 0, 46],
+      [-73.4, 0, 64.4], [-55, 0, 72], [-36.6, 0, 64.4], [-29, 0, 46]
+    ],
+    style: 'JOGGING',
+    look: 'TRACK',
+    anchor: 'TRACK'
   },
   // 6.2 田徑跑者 2 號 (錯開半圈起跑的慢跑同學)
   {
@@ -151,7 +158,33 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
     waypoints: [[-16, 0, 84], [0, 0, 88], [16, 0, 84], [0, 0, 80]],
     style: 'CASUAL_WALK'
   },
-  // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋)
+  // 6.13 游泳隊小魚 (池畔北側甲板出發台旁熱身；50m 自由式對決由他上場，見 CampusSportsCrew)
+  {
+    role: 'STUDENT',
+    pos: [77.5, 0.3, -49.6],
+    waypoints: [[77.5, 0.3, -49.6], [81, 0.3, -49.6]],
+    style: 'CASUAL_WALK',
+    look: 'SWIMMER',
+    anchor: 'POOL'
+  },
+  // 6.14 & 6.15 籃球場鬥牛雙人組 (東南籃框半場輪流運球、投籃、搶籃板與傳球)
+  {
+    role: 'STUDENT',
+    pos: [36.6, 0, -28.6],
+    waypoints: [[36.6, 0, -28.6], [40.5, 0, -30.5], [41.5, 0, -27.5]],
+    style: 'CASUAL_WALK',
+    look: 'PE',
+    anchor: 'COURT'
+  },
+  {
+    role: 'STUDENT',
+    pos: [39.4, 0, -26.4],
+    waypoints: [[39.4, 0, -26.4], [35.5, 0, -30], [38, 0, -32]],
+    style: 'CASUAL_WALK',
+    look: 'PE',
+    anchor: 'COURT'
+  },
+  // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋；學生 2F 4 名、3F 3 名)
   {
     role: 'TEACHER',
     pos: [31, 6.0, 10],
@@ -173,11 +206,6 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
     role: 'STUDENT',
     pos: [36, 6.0, 22],
     waypoints: [[36, 6.0, 22], [44, 6.0, 22], [44, 6.0, 30], [36, 6.0, 30]]
-  },
-  {
-    role: 'STUDENT',
-    pos: [36, 6.0, 60],
-    waypoints: [[36, 6.0, 60], [44, 6.0, 60], [44, 6.0, 68], [36, 6.0, 68]]
   },
   {
     role: 'STUDENT',
@@ -203,18 +231,8 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
   },
   {
     role: 'STUDENT',
-    pos: [36, 12.0, 22],
-    waypoints: [[36, 12.0, 22], [44, 12.0, 22], [44, 12.0, 30], [36, 12.0, 30]]
-  },
-  {
-    role: 'STUDENT',
     pos: [36, 12.0, 60],
     waypoints: [[36, 12.0, 60], [44, 12.0, 60], [44, 12.0, 68], [36, 12.0, 68]]
-  },
-  {
-    role: 'STUDENT',
-    pos: [36, 12.0, 74],
-    waypoints: [[36, 12.0, 74], [44, 12.0, 74], [44, 12.0, 84], [36, 12.0, 84]]
   },
   // 8. 校外強盜 (圍牆外長程巡邏，65m~110m)
   {
@@ -334,7 +352,8 @@ function instantiateNPCs(scene: THREE.Scene, defs: NPCSpawnDef[], initialVisible
     for (let w = 0; w < d.waypoints.length; w++) {
       wpVecs.push(new THREE.Vector3(d.waypoints[w][0], d.waypoints[w][1], d.waypoints[w][2]));
     }
-    const npc = new NPC(scene, startVec, d.role, wpVecs, d.style);
+    const npc = new NPC(scene, startVec, d.role, wpVecs, d.style, d.look);
+    if (d.anchor) npc.campusAnchor = d.anchor;
     if (d.hp !== undefined) npc.hp = d.hp;
     if (d.maxHp !== undefined) npc.maxHp = d.maxHp;
     npc.mesh.visible = initialVisible;

@@ -51,6 +51,10 @@ export interface NPCLifeTask {
   phase: 'GO' | 'HOLD' | 'DONE';
 }
 export type NPCMovementStyle = 'CASUAL_WALK' | 'HURRIED_WALK' | 'JOGGING' | 'OFFICER_PATROL';
+// 學生外觀：DEFAULT 隨機制服/運動服、PE 固定運動服 (籃球場)、SWIMMER 游泳隊小魚 (泳池)、TRACK 田徑隊阿凱 (操場)
+export type NPCLook = 'DEFAULT' | 'PE' | 'SWIMMER' | 'TRACK';
+// 固定駐點：由 CampusSportsCrew 管理，不參與校園生活的地點活動、小團體與角色事件 (仍會對玩家反應)
+export type NPCCampusAnchor = 'POOL' | 'COURT' | 'TRACK';
 
 export interface ShuttlecockProjectile {
   mesh: THREE.Group;
@@ -321,8 +325,8 @@ export class NPC {
   // 單車糾察隊與單車組件追蹤
   public isOriginalBikePatrol: boolean = false;
   // 第一世界學生服裝 (生成時隨機決定並保留，搶車/復活重建模型時維持同一套)：米白襯衫配深綠長褲制服，或淺青藍色運動服
-  private readonly studentOutfit: { shirt: number; pants: number } =
-    Math.random() < 0.5 ? { shirt: 0xf3ead3, pants: 0x2f4a36 } : { shirt: 0x5bb8d6, pants: 0x3f93b3 };
+  private readonly studentOutfit: { shirt: number; pants: number };
+  public readonly look: NPCLook;
   // 被玩家搶走的自行車 (車主綁定)：復活後步行回到愛車旁牽回，避免憑空變出新車導致單車堆積
   public ownedBike: Bicycle | null = null;
   public isReclaimingBike: boolean = false;
@@ -346,6 +350,9 @@ export class NPC {
   // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法系統
   private lastColliders: CollidableBox[] = [];
   public isConversing: boolean = false;
+  // 固定駐點 (泳池 / 籃球場 / 操場) 與暫離名單狀態 (小魚、阿凱上場比賽期間由陪賽模型代演)
+  public campusAnchor: NPCCampusAnchor | null = null;
+  public isOffstage: boolean = false;
   private isDodging: boolean = false;
   private dodgeTimer: number = 0;
   private dodgeDuration: number = 0.24;
@@ -401,8 +408,11 @@ export class NPC {
     startPos: THREE.Vector3,
     role: NPCRole,
     waypoints: THREE.Vector3[] = [],
-    movementStyle?: NPCMovementStyle
+    movementStyle?: NPCMovementStyle,
+    look: NPCLook = 'DEFAULT'
   ) {
+    this.look = look;
+    this.studentOutfit = look === 'PE' || Math.random() >= 0.5 ? { shirt: 0x5bb8d6, pants: 0x3f93b3 } : { shirt: 0xf3ead3, pants: 0x2f4a36 };
     this.position = startPos.clone();
     this.initialPosition = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
@@ -745,6 +755,7 @@ export class NPC {
       mesh: this.mesh,
       role: this.role,
       studentOutfit: this.studentOutfit,
+      look: this.look,
       hasUmbrella: this.hasUmbrella,
       humanoidParts: this.humanoidParts,
       headMesh: this.headMesh,
@@ -1736,6 +1747,7 @@ export class NPC {
   // 玩家死亡重生時完整重置 NPC 至初始狀態 (位置、警戒狀態、巡邏狀態、HP 與肢體)
   public resetToInitialState() {
     this.position.copy(this.initialPosition);
+    this.baseFloorY = this.initialPosition.y; // 被擊飛落到其他樓層後，回到原樓層基準
     this.mesh.position.copy(this.initialPosition);
     this.velocity.set(0, 0, 0);
     this.rotationY = this.initialRotationY;
@@ -1764,6 +1776,11 @@ export class NPC {
     this.isPermanentlyKnockedOut = false;
     this.reviveTimer = 0;
     this.mesh.visible = true;
+    // 倒地時隱藏的血條與昏迷告示牌一併復原
+    this.hpBarBgMesh.visible = true;
+    this.hpBarMesh.visible = true;
+    this.koBadgeSprite.visible = false;
+    this.lastKoBadgeSec = -1;
 
     // Boss 專屬狀態重置
     if (this.role === 'DETENTION_BOSS') {

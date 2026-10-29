@@ -4,6 +4,7 @@ import { RaceRival } from '../entities/RaceRival';
 import { WantedSystem } from './WantedSystem';
 import { soundManager } from '../audio/SoundEffects';
 import { WaterSplashVFX } from '../effects/WaterSplashVFX';
+import { SWIM_TEAM_LOOK, TRACK_TEAM_LOOK } from '../entities/npc/models';
 
 // 陪賽對手自適應配速 (速度皆以「玩家路徑等效 m/s」表示)：
 // 中段緊咬玩家 (落後 1~4m、偶爾短暫超前製造壓力)；最後 25% 依玩家努力程度擲骰決定劇本 (玩家險勝 / 對手險勝)，
@@ -115,11 +116,13 @@ export class RacingGame {
     this.swimCheckpointMarker.visible = false;
     scene.add(this.swimCheckpointMarker);
 
-    this.trackRival = new RaceRival(scene, '🏃 田徑隊 阿凱', 0x2563eb, 0xfacc15);
+    // 與操場慢跑的阿凱 NPC 同比例、同配色：比賽期間由此模型代演 (CampusSportsCrew 於上場期間隱藏 NPC)
+    this.trackRival = new RaceRival(scene, TRACK_TEAM_LOOK.label, TRACK_TEAM_LOOK.jersey, TRACK_TEAM_LOOK.cap, 'NPC');
     this.trackRival.setPath(this.buildTrackRivalPath());
     this.trackRival.hide();
 
-    this.swimRival = new RaceRival(scene, '🏊 游泳隊 小魚', 0x0e7490, 0xef4444);
+    // 與池畔小魚 NPC 同比例、同配色：比賽期間由此模型代演池畔的小魚 (CampusSportsCrew 於上場期間隱藏 NPC)
+    this.swimRival = new RaceRival(scene, SWIM_TEAM_LOOK.label, SWIM_TEAM_LOOK.jersey, SWIM_TEAM_LOOK.cap, 'NPC');
     this.swimRival.setPath([
       new THREE.Vector3(SWIM_RIVAL_LANE_X, 0.3, -48.6), // 出發台
       new THREE.Vector3(SWIM_RIVAL_LANE_X, 0.25, -47.0), // 躍入水中
@@ -202,6 +205,15 @@ export class RacingGame {
     this.swimCheckpointIdx = 0;
     this.prepareRace(this.swimState, this.swimRival, playerPos, checkpoints, SWIM_TUNING, SWIM_CP_RADIUS);
     wantedSystem.showBanner('🏊【50m 自由式對決】游泳隊小魚已站上出發台！倒數後跳入泳池游過青色檢查點！', 2500);
+  }
+
+  // 陪賽對手是否在場上 (倒數、比賽中、賽後停留期間)
+  public get isSwimRivalOnStage(): boolean {
+    return this.swimRival.mesh.visible;
+  }
+
+  public get isTrackRivalOnStage(): boolean {
+    return this.trackRival.mesh.visible;
   }
 
   // 世界切換等情況：立即中止所有比賽並收起對手

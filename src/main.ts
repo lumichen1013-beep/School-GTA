@@ -28,6 +28,7 @@ import { Progression } from './game/Progression';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
 import { CampusLife } from './game/CampusLife';
+import { CampusSportsCrew } from './game/CampusSportsCrew';
 import { CombatSystem } from './game/CombatSystem';
 import { InteractionSystem } from './game/InteractionSystem';
 
@@ -67,7 +68,7 @@ class SchoolGTASandbox implements GameContext {
   public npcs: NPC[] = [];
   public campusNPCs: NPC[] = [];
   public detentionNPCs: NPC[] = [];
-  // 固定角色 NPC 快取 (NPC 名單於載入後不再增減，免去每幀 find 線性搜尋)
+  // 固定角色 NPC 快取 (NPC 名單於載入後不再增減，免去每幀 find 線性搜尋；僅小魚/阿凱上場比賽期間暫離名單)
   public peCoachNpc?: NPC;
   public dodgeTeacherNpc?: NPC;
   private campusDogNpc?: NPC;
@@ -78,6 +79,7 @@ class SchoolGTASandbox implements GameContext {
   public readonly detention: DetentionMode = new DetentionMode(this);
   public readonly campus: CampusMode = new CampusMode(this);
   public readonly campusLife: CampusLife = new CampusLife(this);
+  private readonly sportsCrew: CampusSportsCrew = new CampusSportsCrew(this);
   public readonly combat: CombatSystem = new CombatSystem(this);
   private readonly interaction = new InteractionSystem(this);
 
@@ -290,6 +292,7 @@ class SchoolGTASandbox implements GameContext {
     this.wantedSystem.clearWanted(); // onWantedCleared 會一併重置所有 NPC 仇恨
     this.campus.resetTransientState();
     this.campusLife.reset();
+    this.sportsCrew.reset();
     this.combat.resetTransientState();
     // 進入世界時展開快捷鍵指南，30 秒後自動收合
     this.hud.showControlsGuide();
@@ -727,6 +730,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
     if (isCampus) this.campusLife.update(delta, targetPosition);
+    // 固定駐點同學 (泳池小魚、操場阿凱、籃球場鬥牛)
+    if (isCampus) this.sportsCrew.update(delta, targetPosition);
 
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);

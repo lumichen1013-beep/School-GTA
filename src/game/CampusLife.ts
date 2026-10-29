@@ -13,6 +13,8 @@ import type { GameContext } from './GameContext';
  * - 角色專屬事件：巡堂老師攔下快走同學、主任教官檢查服儀、糾察站崗校門、柴柴追鴿子與討食、強盜勒索同學
  * - 固定個性：每名同學固定膽小 / 愛湊熱鬧 / 乖寶寶 / 調皮其一，決定反應方式
  * 決策以 0.2 秒為單位批次判斷 (不逐幀)，只指派 NPC.lifeTask，移動與動作由 NPC 自身執行
+ * 固定駐點同學 (泳池小魚、操場阿凱、籃球場鬥牛雙人組，npc.campusAnchor) 由 CampusSportsCrew 管理：
+ * 不參與地點活動、小團體、師長攔查與勒索事件，只保留對玩家的反應 (打招呼、被撞、閃車、圍觀打架、通報)
  */
 
 type Persona = 'NOSY' | 'GOOD' | 'PRANK' | 'TIMID';
@@ -190,7 +192,7 @@ export class CampusLife {
     }
 
     // 小團體：1F 散步同學依序組成 3 / 2 / 2 人一組
-    const casual = this.students.filter((s) => s.npc.movementStyle === 'CASUAL_WALK' && this.isGround(s.npc));
+    const casual = this.students.filter((s) => s.npc.movementStyle === 'CASUAL_WALK' && this.isGround(s.npc) && !s.npc.campusAnchor);
     const sizes = [3, 2, 2];
     let idx = 0;
     for (const size of sizes) {
@@ -283,16 +285,16 @@ export class CampusLife {
     // 5. 地點活動
     if (!raining) {
       for (const st of this.students) {
-        if (st.activity === 'NONE' && !st.group && st.poiCooldown <= 0 && st.npc.isPaused && !st.npc.lifeTask) {
+        if (st.activity === 'NONE' && !st.group && !st.npc.campusAnchor && st.poiCooldown <= 0 && st.npc.isPaused && !st.npc.lifeTask) {
           this.tryAssignPoi(st);
         }
       }
     }
   }
 
-  // 追捕中、倒地、被擊飛、聽廣播定格時不參與校園生活
+  // 追捕中、倒地、被擊飛、聽廣播定格、暫離名單 (泳池小魚比賽中) 時不參與校園生活
   private isBusyNpc(npc: NPC): boolean {
-    return npc.isChasing || npc.isKnockedDown || npc.isKnockedFlying || npc.isPermanentlyKnockedOut || npc.freezeTimer > 0;
+    return npc.isChasing || npc.isKnockedDown || npc.isKnockedFlying || npc.isPermanentlyKnockedOut || npc.freezeTimer > 0 || npc.isOffstage;
   }
 
   private endActivity(st: StudentState) {
@@ -687,6 +689,7 @@ export class CampusLife {
       let target: StudentState | null = null;
       for (const st of this.students) {
         if (st.activity !== 'NONE' && st.activity !== 'POI') continue;
+        if (st.npc.campusAnchor) continue;
         if (st.group && st.activity === 'NONE' && st !== st.group.members[0]) continue;
         if (this.isBusyNpc(st.npc) || !this.isGround(st.npc)) continue;
         if (n.role === 'TEACHER' && st.npc.movementStyle !== 'HURRIED_WALK') continue;
@@ -797,7 +800,7 @@ export class CampusLife {
       // 找一名可直線走到校門內側的 1F 同學，以及一名閒置的校門外強盜
       const bandit = this.ctx.campusNPCs.find((n) => n.role === 'BANDIT' && !this.isBusyNpc(n) && n.position.z > 110 && Math.abs(n.position.x) < 60);
       if (!bandit) return;
-      const st = this.students.find((s) => s.activity === 'NONE' && !s.group && this.isGround(s.npc) && !this.isBusyNpc(s.npc)
+      const st = this.students.find((s) => s.activity === 'NONE' && !s.group && !s.npc.campusAnchor && this.isGround(s.npc) && !this.isBusyNpc(s.npc)
         && s.npc.position.distanceToSquared(GATE_INNER) < 70 * 70
         && this.pathClear(s.npc.position.x, s.npc.position.z, GATE_INNER.x, GATE_INNER.z, 0));
       if (!st) return;
