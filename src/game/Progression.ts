@@ -26,11 +26,11 @@ const ROLE_DEFEAT_REWARDS: Partial<Record<NPCRole, RoleDefeatReward>> = {
   DOG: { reward: 120, counts: ['dog'] },
   INSTRUCTOR: { reward: 150, counts: ['inspector', 'teacher'] },
   PE_TEACHER_BOSS: { reward: 180, banner: { text: '🏸 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', duration: 5000 } },
-  DETENTION_SENIOR: { reward: 100, banner: { text: '💪 擊敗【特訓資深學長】！獲得切磋犒賞 +$100！', duration: 3000 } },
-  DETENTION_WOLF: { reward: 120, banner: { text: '🐺 擊退【特訓狼犬】！獲得特訓賞金 +$120！', duration: 3000 } },
-  DETENTION_GUARD: { reward: 150, banner: { text: '🛡️ 突破【防暴特訓教官】防線！獲得高額賞金 +$150！', duration: 3500 } },
-  DETENTION_HEAVY: { reward: 200, banner: { text: '🏋️ 破除【重訓霸榜生】霸體！獲得重裝巨額犒賞 +$200！', duration: 4000 } },
-  DETENTION_BOSS: { reward: 500, banner: { text: '🎖️ 震撼全院！擊倒特訓總長【鐵面總長】！獲得傳奇特訓賞金 +$500！', duration: 6000 } }
+  DETENTION_SENIOR: { reward: 100, banner: { text: '💪 擊敗【特訓資深守衛】！獲得特訓賞金 +$100！', duration: 3000 } },
+  DETENTION_WOLF: { reward: 120, banner: { text: '🐺 擊退【特訓警戒犬】！獲得特訓賞金 +$120！', duration: 3000 } },
+  DETENTION_GUARD: { reward: 150, banner: { text: '🛡️ 突破【特訓院守衛】防線！獲得高額賞金 +$150！', duration: 3500 } },
+  DETENTION_HEAVY: { reward: 200, banner: { text: '🏋️ 破除【特訓重裝守衛】霸體！獲得重裝巨額賞金 +$200！', duration: 4000 } },
+  DETENTION_BOSS: { reward: 500, banner: { text: '🎖️ 震撼全院！擊倒特訓總教官【鐵面總長】！獲得傳奇特訓賞金 +$500！', duration: 6000 } }
 };
 
 /**
@@ -60,13 +60,16 @@ export class Progression {
   };
 
   public openCommissary() {
-    this.ctx.hud.openCommissary(this.cash, this.buyCommissaryItem);
+    this.ctx.hud.openCommissary(this.cash, this.buyCommissaryItem, this.ctx.currentWorldType === 'DETENTION');
   }
 
   private readonly buyCommissaryItem = (item: CommissaryItem) => {
     const { player, hud, wantedSystem } = this.ctx;
     if (this.cash < item.price) {
-      wantedSystem.showBanner('零用錢不足！快去探索校園賺錢吧！', 2000);
+      wantedSystem.showBanner(
+        this.ctx.currentWorldType === 'DETENTION' ? '資金不足！正面擊倒守衛可賺取特訓賞金！' : '零用錢不足！快去探索校園賺錢吧！',
+        2000
+      );
       return;
     }
 
@@ -80,7 +83,12 @@ export class Progression {
     soundManager.playCashRegister();
     soundManager.playEatFood();
     hud.setCash(this.cash);
-    wantedSystem.showBanner(`😋 品嚐了【${item.name}】！體力 +${item.healHp} HP！剩餘零用錢 $${this.cash}`, 3000);
+    wantedSystem.showBanner(
+      this.ctx.currentWorldType === 'DETENTION'
+        ? `🩹 補給了【${item.name}】！體力 +${item.healHp} HP！剩餘資金 $${this.cash}`
+        : `😋 品嚐了【${item.name}】！體力 +${item.healHp} HP！剩餘零用錢 $${this.cash}`,
+      3000
+    );
     this.openCommissary();
   };
 
@@ -215,7 +223,12 @@ export class Progression {
       return;
     }
     if (this.dodgeSkillLevel === 0) {
-      wantedSystem.showBanner('🥋 尚未習得技能！請至教學大樓尋訪「閃身步老師」學習【閃身步】！', 2500);
+      wantedSystem.showBanner(
+        this.ctx.currentWorldType === 'DETENTION'
+          ? '🥋 尚未習得技能！需返回【天天國中】教學大樓尋訪「閃身步老師」學習【閃身步】！'
+          : '🥋 尚未習得技能！請至教學大樓尋訪「閃身步老師」學習【閃身步】！',
+        2500
+      );
       return;
     }
     if (this.dodgeCooldownTimer > 0) {
@@ -249,6 +262,6 @@ export class Progression {
       this.dodgeCooldownTimer = Math.max(0, this.dodgeCooldownTimer - delta);
     }
     const maxSkillCd = this.dodgeSkillLevel === 2 ? 2.0 : 5.0;
-    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd);
+    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd, this.ctx.currentWorldType === 'DETENTION');
   }
 }

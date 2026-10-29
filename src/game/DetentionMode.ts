@@ -61,7 +61,7 @@ export class DetentionMode {
     alertLevel: 'NORMAL',
     alertTimer: 0,
     checkpointPos: new THREE.Vector3(),
-    checkpointName: 'A區中央警衛室'
+    checkpointName: 'A區收容車道起點'
   };
 
   constructor(private readonly ctx: GameContext) {}

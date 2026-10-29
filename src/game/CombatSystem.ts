@@ -146,7 +146,7 @@ export class CombatSystem {
         if (npc.launchFlying(_scratchPlayerForward, actualKnockback, damage)) {
           this.handleNpcDefeated(npc, 'ATTACK');
         } else {
-          wantedSystem.reportCrime(1, '校園打架鬥毆');
+          wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
           npc.isChasing = true;
         }
         return;
@@ -262,7 +262,9 @@ export class CombatSystem {
 
     const sourceDesc = source === 'BIKE' ? '遭火柴人自行車強力撞飛' : source === 'FALL' ? '高處摔落' : '倒地';
     wantedSystem.reportCrime(1, `${npc.getRoleTitle()}${sourceDesc}`);
-    wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！(10秒後復活)`, 3500);
+    // 第二世界 NPC 倒地即永久昏迷，不會復活
+    const reviveNote = this.ctx.currentWorldType === 'DETENTION' ? '(永久昏迷)' : '(10秒後復活)';
+    wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！${reviveNote}`, 3500);
   }
 
   // 火柴人自行車高速衝撞 NPC (每幀最多撞飛一人)
@@ -319,8 +321,8 @@ export class CombatSystem {
             soundManager.playBatHit();
             wantedSystem.showBanner('💥 遭到總教官狂暴衝撞重創！擊飛！(-30 HP)', 2500);
             wantedSystem.notifyAttacked();
-            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 30, '鐵面總教官')) {
-              this.ctx.handlePlayerDeath('被鐵面總教官狂暴衝撞擊潰！');
+            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 30, '鐵面總長')) {
+              this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
             }
           }
         }
@@ -328,7 +330,7 @@ export class CombatSystem {
         // 總教官危險預警與眩暈狀態提示
         if (npc.isBossWindingUp && !this.wasBossWindingUp) {
           this.wasBossWindingUp = true;
-          wantedSystem.showBanner('⚠️【危險警報】鐵面總教官鎖定衝撞軌跡！立即側向閃避或引導撞柱！', 2200);
+          wantedSystem.showBanner('⚠️【危險警報】鐵面總長鎖定衝撞軌跡！立即側向閃避或引導撞柱！', 2200);
         } else if (!npc.isBossWindingUp) {
           this.wasBossWindingUp = false;
         }

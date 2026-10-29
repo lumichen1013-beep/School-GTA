@@ -218,7 +218,8 @@ class SchoolGTASandbox implements GameContext {
     this.weatherSystem.onWeatherChange = (preset, isManual) => {
       this.hud.updateWeatherHUD(preset.badgeText);
       if (isManual) {
-        this.wantedSystem.showBanner(`${preset.bannerText} (按 [P] 鍵切換)`, 2500);
+        const text = this.currentWorldType === 'DETENTION' ? preset.detentionBannerText : preset.bannerText;
+        this.wantedSystem.showBanner(`${text} (按 [P] 鍵切換)`, 2500);
       }
     };
     this.hud.onWeatherToggle = () => {
@@ -295,6 +296,7 @@ class SchoolGTASandbox implements GameContext {
     this.cameraCtrl.currentWorld = targetWorld;
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
+    this.hud.setBGMWorld(targetWorld);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
     }
@@ -469,7 +471,10 @@ class SchoolGTASandbox implements GameContext {
     if (isMuted) {
       this.wantedSystem.showBanner('🔇 背景音樂 (BGM) 已靜音', 2000);
     } else {
-      const modeText = bgmManager.getMode() === 'PURSUIT' ? '通緝逃亡熱血節奏' : '校園漫步放鬆旋律';
+      const isDetention = this.currentWorldType === 'DETENTION';
+      const modeText = bgmManager.getMode() === 'PURSUIT'
+        ? (isDetention ? '警戒追捕熱血節奏' : '通緝逃亡熱血節奏')
+        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律');
       this.wantedSystem.showBanner(`🎵 背景音樂 (BGM) 已開啟【${modeText}】`, 2500);
     }
   }

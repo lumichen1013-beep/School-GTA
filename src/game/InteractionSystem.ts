@@ -113,7 +113,7 @@ export class InteractionSystem {
           const mk = dw().masterKeycardPos;
           return !!mk && !det().hasMasterKeycard && p.distanceTo(mk) < KEYCARD_PICKUP_RANGE;
         },
-        prompt: () => this.showPrompt('🔑 拾取【萬能逃脫鑰匙卡】(開啟南側大門)'),
+        prompt: () => this.showPrompt('🔑 拾取【萬能逃脫鑰匙卡】(開啟南大門)'),
         act: () => {
           det().hasMasterKeycard = true;
           dw().hasPickedMasterKeycard = true;
@@ -145,7 +145,7 @@ export class InteractionSystem {
         act: () => {
           if (det().hasKeycardB) {
             dw().openGateB();
-            ctx.wantedSystem.showBanner('🔓 管制閘門 2 已開啟！進入 C 區終極哨戒門庭！', 3500);
+            ctx.wantedSystem.showBanner('🔓 管制閘門 2 已開啟！進入 C 區決戰區，擊破總教官奪取萬能逃脫鑰匙卡！', 3500);
             det().setCheckpoint(new THREE.Vector3(0, 0, 42), 'C區決戰前哨');
             soundManager.playSchoolBell();
           } else {
@@ -156,15 +156,15 @@ export class InteractionSystem {
       {
         world: W,
         when: (p) => !dw().isSouthGateOpen && p.distanceTo(dw().southGateConsolePos) < SOUTH_GATE_CONSOLE_RANGE,
-        prompt: () => this.showPrompt(det().hasMasterKeycard ? '🚪 刷卡解鎖【南側絕境逃脫大門】！' : '🔒 終極防暴大門 (需要萬能逃脫鑰匙卡)'),
+        prompt: () => this.showPrompt(det().hasMasterKeycard ? '🚪 刷卡解鎖【南大門】！' : '🔒 南大門 (需要萬能逃脫鑰匙卡)'),
         act: () => {
           if (det().hasMasterKeycard) {
             dw().openSouthGate();
-            ctx.wantedSystem.showBanner('🚪 南側絕境大門全面解鎖升起！快衝出大門逃出生天！', 5000);
+            ctx.wantedSystem.showBanner('🚪 南大門全面解鎖升起！快衝出大門逃出生天！', 5000);
             det().setCheckpoint(new THREE.Vector3(-7.5, 0, 91), '南大門逃脫點');
             soundManager.playSchoolBell();
           } else {
-            ctx.wantedSystem.showBanner('🔒 終極防暴大門鎖死！需要擊破特訓總教官取得【萬能逃脫鑰匙卡】！', 3500);
+            ctx.wantedSystem.showBanner('🔒 南大門鎖死！需要擊破特訓總教官取得【萬能逃脫鑰匙卡】！', 3500);
           }
         }
       },

@@ -12,6 +12,7 @@ export class WantedSystem {
   public set currentWorld(world: 'CAMPUS' | 'DETENTION') {
     if (world === this._currentWorld) return;
     this._currentWorld = world;
+    this.updateDemeritLabels();
     this.updateHUDStars();
   }
   private isSpottedThisFrame: boolean = false;
@@ -118,6 +119,23 @@ export class WantedSystem {
   private demeritBadgeEls: NodeListOf<Element> | null = null;
   private demeritStatusTitleEl: HTMLElement | null = null;
   private lastHUDStarsKey = -1;
+
+  // 處分面板標題與五格徽章文字依世界切換 (校園：校規記過；特訓院：院內戒備等級)
+  private static readonly BADGE_TEXT = {
+    CAMPUS: ['警告', '小過', '小過二', '大過', '留校察看'],
+    DETENTION: ['注意', '搜索', '升級', '封鎖', '圍剿']
+  };
+  private updateDemeritLabels() {
+    if (typeof document === 'undefined') return;
+    const label = document.querySelector('.demerit-label');
+    if (label) label.textContent = this._currentWorld === 'DETENTION' ? '院內戒備:' : '校規處分:';
+    const texts = WantedSystem.BADGE_TEXT[this._currentWorld];
+    document.querySelectorAll<HTMLElement>('.demerit-badge').forEach((el, idx) => {
+      if (idx >= texts.length) return;
+      el.textContent = texts[idx];
+      el.title = this.getDemeritLevelTitle(idx + 1);
+    });
+  }
 
   public updateHUDStars() {
     // 數值狀態鍵 (星級 / 逃脫中 / 世界)：每幀呼叫時不組字串

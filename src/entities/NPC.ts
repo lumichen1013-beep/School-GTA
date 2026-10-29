@@ -2912,8 +2912,8 @@ export class NPC {
     // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家 (0-GC 純量計算)
     this.faceHpBar(playerPos);
 
-    // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC)
-    if (isRaining && isOutdoorHumanoid && !this.isKnockedDown && !this.isChasing) {
+    // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC；特訓警戒犬不說人話)
+    if (isRaining && isOutdoorHumanoid && !this.cfg.isCanine && !this.isKnockedDown && !this.isChasing) {
       const distToPlayerSq = this.position.distanceToSquared(playerPos);
       if (distToPlayerSq < 625.0) { // < 25m
         this.rainChatTimer += delta;

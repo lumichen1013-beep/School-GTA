@@ -748,7 +748,19 @@ export class HUD {
     }
   }
 
+  // BGM 標籤依所在世界顯示 (切換世界時以上次狀態重繪)
+  private bgmWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  private lastBgmMode: 'EXPLORE' | 'PURSUIT' = 'EXPLORE';
+  private lastBgmMuted = false;
+  public setBGMWorld(world: 'CAMPUS' | 'DETENTION') {
+    this.bgmWorld = world;
+    this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted);
+  }
+
   public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT', isMuted: boolean) {
+    this.lastBgmMode = mode;
+    this.lastBgmMuted = isMuted;
+    const isDetention = this.bgmWorld === 'DETENTION';
     if (!this.bgmBadgeEl || !this.bgmIconEl || !this.bgmTextEl || !this.bgmToggleBtnEl) return;
 
     if (isMuted) {
@@ -759,12 +771,12 @@ export class HUD {
     } else if (mode === 'PURSUIT') {
       this.bgmBadgeEl.className = 'bgm-badge pursuit';
       this.bgmIconEl.textContent = '🚨';
-      this.bgmTextEl.textContent = 'BGM: 通緝追逐!';
+      this.bgmTextEl.textContent = isDetention ? 'BGM: 警戒追捕!' : 'BGM: 通緝追逐!';
       this.bgmToggleBtnEl.textContent = '[開]';
     } else {
       this.bgmBadgeEl.className = 'bgm-badge';
       this.bgmIconEl.textContent = '🎵';
-      this.bgmTextEl.textContent = 'BGM: 校園漫步';
+      this.bgmTextEl.textContent = isDetention ? 'BGM: 暗夜潛入' : 'BGM: 校園漫步';
       this.bgmToggleBtnEl.textContent = '[開]';
     }
   }
@@ -1094,8 +1106,14 @@ export class HUD {
   }
 
   // 合作社 (熱食補血部) 彈出式選單
-  public openCommissary(playerCash: number, onBuyItem: (item: CommissaryItem) => void) {
+  public openCommissary(playerCash: number, onBuyItem: (item: CommissaryItem) => void, isDetention: boolean = false) {
     if (!this.commissaryModalEl || !this.commissaryGridEl || !this.commissaryCashValEl) return;
+
+    // 第二世界共用同一菜單，標題與說明改為特訓小賣部
+    const titleEl = this.commissaryModalEl.querySelector('.commissary-title');
+    if (titleEl) titleEl.textContent = isDetention ? '🏪 特訓小賣部 (體能急救補給)' : '🏪 天天合作社 (熱食補血部)';
+    const descEl = this.commissaryModalEl.querySelector('.commissary-desc');
+    if (descEl) descEl.textContent = isDetention ? '購買體能與急救補給品，立刻恢復 HP 體力與精力！' : '吃熱騰騰美味餐點，立刻恢復 HP 體力與精力！';
 
     this.isCommissaryOpen = true;
     this.commissaryCashValEl.textContent = `NT$ ${playerCash}`;
@@ -1291,19 +1309,19 @@ export class HUD {
   }
 
   // 即時更新技能 HUD 狀態 (技能圖示、名稱、冷卻倒數與扇形遮罩)
-  public updateSkillHUD(skillLevel: number, cdRemaining: number, maxCd: number) {
+  public updateSkillHUD(skillLevel: number, cdRemaining: number, maxCd: number, isDetention: boolean = false) {
     if (!this.skillHudCardEl || !this.skillIconEl || !this.skillNameEl || !this.skillDescEl || !this.skillCdNumberEl || !this.skillCooldownOverlayEl) {
       return;
     }
     // 髒檢查：每幀呼叫，僅在技能等級或冷卻顯示值 (0.1s 精度) 變動時寫入 DOM
-    const skillKey = skillLevel * 100000 + (cdRemaining > 0 ? Math.ceil(cdRemaining * 10) : 0);
+    const skillKey = (skillLevel * 100000 + (cdRemaining > 0 ? Math.ceil(cdRemaining * 10) : 0)) * 2 + (isDetention ? 1 : 0);
     if (skillKey === this.lastSkillKey) return;
     this.lastSkillKey = skillKey;
 
     if (skillLevel === 0) {
       this.skillIconEl.textContent = '🔒';
       this.skillNameEl.textContent = '閃身步 (未習得)';
-      this.skillDescEl.textContent = '教學大樓尋找閃身步老師';
+      this.skillDescEl.textContent = isDetention ? '回天天國中教學大樓習得' : '教學大樓尋找閃身步老師';
       this.skillCdNumberEl.style.display = 'none';
       this.skillCooldownOverlayEl.style.height = '0%';
       this.skillHudCardEl.classList.add('locked');
@@ -1465,17 +1483,18 @@ export class HUD {
     }
   }
 
+  private lastLocationWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   private updateLocationZone(pos: THREE.Vector3, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS') {
     if (!this.locationEl) return;
 
     let zone: string;
     if (currentWorld === 'DETENTION') {
       if (pos.z < -28) {
-        zone = '⛓️ A 區：監區庭院 (中央警衛室取門禁卡 A)';
+        zone = '⛓️ A 區：監區 (中央警衛室取門禁卡 A)';
       } else if (pos.z >= -28 && pos.z <= 35) {
         zone = '📦 B 區：訓練場 (東側器材庫取門禁卡 B)';
       } else if (pos.z > 35 && pos.z <= 95) {
-        zone = '⚡ C 區：決戰庭院 (擊破總教官取得萬能鑰匙卡)';
+        zone = '⚡ C 區：決戰區 (擊破總教官取得萬能鑰匙卡)';
       } else {
         zone = '🚪 絕境安全脫逃通道 (任務完成)';
       }
@@ -1486,6 +1505,12 @@ export class HUD {
     if (this.lastLocationZone !== zone) {
       this.lastLocationZone = zone;
       this.locationEl.textContent = zone;
+    }
+    // 地點卡片上方的所屬機構名稱 (切換世界時更新)
+    if (this.lastLocationWorld !== currentWorld) {
+      this.lastLocationWorld = currentWorld;
+      const badge = document.querySelector('.school-badge');
+      if (badge) badge.textContent = currentWorld === 'DETENTION' ? '第七少年特訓院 · 潛入越獄' : '新北市立天天國中 · 自由沙盒';
     }
   }
 
