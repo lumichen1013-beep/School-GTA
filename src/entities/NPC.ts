@@ -165,29 +165,28 @@ const BIKE_REST_SPEED = 14.0;
 const BIKE_POUNCE_MAX_DIST = 10.0; // 距離過遠時先以跟蹤曲線追近，不發動撲咬
 const BIKELESS_CHASE_SPEED = 10.0;
 
-// 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
+// 各角色攻擊擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)；傷害統一由 roleConfig.attackPower 決定
 export interface AttackSpec {
-  damage: number;
   hForce: number;
   vForce: number;
 }
 
 const _ATTACK_SPECS: Record<string, AttackSpec> = {
-  DODGE_TEACHER: { damage: 0, hForce: 5.0, vForce: 2.0 },
-  PE_TEACHER_BOSS: { damage: 28, hForce: 13.0, vForce: 7.0 },
-  DETENTION_BOSS: { damage: 20, hForce: 10.0, vForce: 4.5 },
-  DETENTION_HEAVY: { damage: 18, hForce: 12.0, vForce: 5.0 },
-  DETENTION_WOLF: { damage: 10, hForce: 7.0, vForce: 3.5 },
-  DETENTION_GUARD: { damage: 12, hForce: 7.0, vForce: 3.0 },
-  DETENTION_SENIOR: { damage: 14, hForce: 8.0, vForce: 3.5 },
-  BANDIT: { damage: 44, hForce: 10.0, vForce: 5.5 },
-  TEACHER: { damage: 28, hForce: 10.0, vForce: 6.0 },
-  DOG: { damage: 24, hForce: 11.5, vForce: 5.0 },
-  BIKE_PATROL: { damage: 22, hForce: 12.5, vForce: 6.5 },
-  INSPECTOR: { damage: 18, hForce: 8.0, vForce: 4.5 },
-  STUDENT: { damage: 12, hForce: 6.0, vForce: 3.5 }
+  DODGE_TEACHER: { hForce: 5.0, vForce: 2.0 },
+  PE_TEACHER_BOSS: { hForce: 13.0, vForce: 7.0 },
+  DETENTION_BOSS: { hForce: 10.0, vForce: 4.5 },
+  DETENTION_HEAVY: { hForce: 12.0, vForce: 5.0 },
+  DETENTION_WOLF: { hForce: 7.0, vForce: 3.5 },
+  DETENTION_GUARD: { hForce: 7.0, vForce: 3.0 },
+  DETENTION_SENIOR: { hForce: 8.0, vForce: 3.5 },
+  BANDIT: { hForce: 10.0, vForce: 5.5 },
+  TEACHER: { hForce: 10.0, vForce: 6.0 },
+  DOG: { hForce: 11.5, vForce: 5.0 },
+  BIKE_PATROL: { hForce: 12.5, vForce: 6.5 },
+  INSPECTOR: { hForce: 8.0, vForce: 4.5 },
+  STUDENT: { hForce: 6.0, vForce: 3.5 }
 };
-const _DEFAULT_ATTACK_SPEC: AttackSpec = { damage: 12, hForce: 6.0, vForce: 3.5 };
+const _DEFAULT_ATTACK_SPEC: AttackSpec = { hForce: 6.0, vForce: 3.5 };
 
 // 3D 羽球靜態共享幾何體與材質 (0-GC 全域快取複用，杜絕頻繁發球引發 GC 微卡頓或 GPU 洩漏)
 // 1. 軟木塞球頭 (Cork Head)：半徑約 0.075m 橢圓小球，位於飛行方向最前端 (+Z)

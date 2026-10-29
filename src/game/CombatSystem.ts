@@ -543,7 +543,7 @@ export class CombatSystem {
             soundManager.playBatHit();
             wantedSystem.showBanner('💥 遭到總教官狂暴衝撞重創！擊飛！(-30 HP)', 2500);
             wantedSystem.notifyAttacked();
-            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 30, '鐵面總長')) {
+            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 21, '鐵面總長')) {
               this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
             }
           }
@@ -597,7 +597,7 @@ export class CombatSystem {
         soundManager.playPunch();
         wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
         wantedSystem.notifyAttacked();
-        if (player.takeDamage(specs.damage, npc.getRoleTitle())) {
+        if (player.takeDamage(npc.attackPower, npc.getRoleTitle())) {
           this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
         }
         continue;
@@ -605,7 +605,7 @@ export class CombatSystem {
       wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
 
       wantedSystem.notifyAttacked();
-      if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, specs.damage, npc.getRoleTitle())) {
+      if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, npc.attackPower, npc.getRoleTitle())) {
         this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
       }
     }
