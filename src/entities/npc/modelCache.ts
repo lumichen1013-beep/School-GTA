@@ -256,3 +256,39 @@ export function getHpBarMaterial(hex: number): THREE.MeshBasicMaterial {
   }
   return mat;
 }
+
+// NPC 手機 (滑手機/舉手機錄影姿勢時顯示)：深色機身 + 亮色螢幕合併為單一頂點色網格，全 NPC 共用一份幾何體與材質 (1 Draw Call)
+let phoneGeo: THREE.BufferGeometry | null = null;
+let phoneMat: THREE.MeshBasicMaterial | null = null;
+
+function paintGeometry(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const c = new THREE.Color(hex);
+  const count = geo.attributes.position.count;
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
+}
+
+export function getPhoneResources() {
+  if (!phoneGeo || !phoneMat) {
+    // 機身 (寬 0.11、長 0.2、厚 0.022)，螢幕貼於 +Z 面
+    const body = paintGeometry(new THREE.BoxGeometry(0.11, 0.2, 0.022).toNonIndexed(), 0x1b1d22);
+    const screen = paintGeometry(new THREE.PlaneGeometry(0.095, 0.172).toNonIndexed(), 0x8fd3ff);
+    screen.translate(0, 0, 0.0115);
+    body.deleteAttribute('uv');
+    screen.deleteAttribute('uv');
+    body.deleteAttribute('normal');
+    screen.deleteAttribute('normal');
+    phoneGeo = markShared(mergeGeometries([body, screen])!);
+    body.dispose();
+    screen.dispose();
+    phoneGeo.computeBoundingSphere();
+    phoneMat = markShared(new THREE.MeshBasicMaterial({ vertexColors: true }));
+  }
+  return { geometry: phoneGeo, material: phoneMat };
+}

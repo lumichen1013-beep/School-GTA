@@ -17,6 +17,7 @@ import type { WaterSplashVFX } from '../effects/WaterSplashVFX';
 import type { Progression } from './Progression';
 import type { DetentionMode } from './DetentionMode';
 import type { CampusMode } from './CampusMode';
+import type { CampusLife } from './CampusLife';
 import type { CombatSystem } from './CombatSystem';
 
 export type WorldType = 'CAMPUS' | 'DETENTION';
@@ -44,6 +45,7 @@ export interface GameContext {
   readonly progression: Progression;
   readonly detention: DetentionMode;
   readonly campus: CampusMode;
+  readonly campusLife: CampusLife;
   readonly combat: CombatSystem;
 
   readonly currentWorldType: WorldType;

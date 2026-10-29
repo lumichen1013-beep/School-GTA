@@ -137,6 +137,9 @@ export class CombatSystem {
       if (npc.position.distanceTo(player.position) < reach + 0.3 && !npc.isKnockedDown && !npc.isPermanentlyKnockedOut) {
         let actualKnockback = knockback;
 
+        // 校園打人：附近同學依個性圍觀 / 起鬨 / 逃跑 / 叫老師 (打強盜可解救被勒索的同學)
+        if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onFight(npc);
+
         if (this.ctx.currentWorldType === 'DETENTION') {
           this.ctx.detention.onPlayerAttackedGuard(npc);
 
