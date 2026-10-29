@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 
+// 陽光相對於陰影焦點 (玩家) 的固定偏移，維持原有光照方向
+const SUN_OFFSET = new THREE.Vector3(45, 70, 30);
+const SHADOW_DISTANCE = 40;
+// 光源視角座標軸 (與陰影相機 lookAt 一致)，用於將焦點對齊陰影貼圖像素格防止移動時陰影閃爍
+const _sunAxisZ = SUN_OFFSET.clone().normalize();
+const _sunAxisX = new THREE.Vector3(0, 1, 0).cross(_sunAxisZ).normalize();
+const _sunAxisY = new THREE.Vector3().crossVectors(_sunAxisZ, _sunAxisX);
+
 export class Engine {
   public scene: THREE.Scene;
   public renderer: THREE.WebGLRenderer;
@@ -7,6 +15,7 @@ export class Engine {
   public hemiLight!: THREE.HemisphereLight;
   public dirLight!: THREE.DirectionalLight;
   private clock: THREE.Clock;
+  private shadowTexelSize = 0;
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -126,7 +135,7 @@ export class Engine {
 
     // 主陽光 (Sunlight with Cast Shadow)
     this.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.25);
-    this.dirLight.position.set(45, 70, 30);
+    this.dirLight.position.copy(SUN_OFFSET);
     this.dirLight.castShadow = true;
 
     // 陰影覆蓋範圍 (行動端降檔至 1024x1024 顯著降低 GPU 頻寬與發熱，PC 維持 2048x2048)
@@ -137,14 +146,28 @@ export class Engine {
     this.dirLight.shadow.camera.near = 0.5;
     this.dirLight.shadow.camera.far = 180;
 
-    const shadowDistance = 90;
-    this.dirLight.shadow.camera.left = -shadowDistance;
-    this.dirLight.shadow.camera.right = shadowDistance;
-    this.dirLight.shadow.camera.top = shadowDistance;
-    this.dirLight.shadow.camera.bottom = -shadowDistance;
+    // 陰影相機僅涵蓋玩家周圍 ±40m 並隨玩家移動 (見 updateShadowFocus)，大幅減少陰影繪製物件
+    this.dirLight.shadow.camera.left = -SHADOW_DISTANCE;
+    this.dirLight.shadow.camera.right = SHADOW_DISTANCE;
+    this.dirLight.shadow.camera.top = SHADOW_DISTANCE;
+    this.dirLight.shadow.camera.bottom = -SHADOW_DISTANCE;
     this.dirLight.shadow.bias = -0.0005;
+    this.shadowTexelSize = (SHADOW_DISTANCE * 2) / shadowRes;
 
     this.scene.add(this.dirLight);
+    this.scene.add(this.dirLight.target);
+  }
+
+  // 陽光與陰影相機跟隨焦點 (玩家/載具)；焦點在光源視角平面上對齊陰影像素格，避免移動時陰影邊緣閃爍
+  public updateShadowFocus(focus: THREE.Vector3) {
+    const texel = this.shadowTexelSize;
+    const u = focus.dot(_sunAxisX);
+    const v = focus.dot(_sunAxisY);
+    const target = this.dirLight.target.position;
+    target.copy(focus)
+      .addScaledVector(_sunAxisX, Math.round(u / texel) * texel - u)
+      .addScaledVector(_sunAxisY, Math.round(v / texel) * texel - v);
+    this.dirLight.position.copy(target).add(SUN_OFFSET);
   }
 
   public onResizeCallback?: (width: number, height: number, aspect: number) => void;

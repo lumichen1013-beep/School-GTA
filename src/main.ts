@@ -593,6 +593,7 @@ class SchoolGTASandbox implements GameContext {
       } else {
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
+        this.engine.updateShadowFocus(this.player.position);
         this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
         return;
       }
@@ -788,7 +789,8 @@ class SchoolGTASandbox implements GameContext {
     // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
     this.weatherSystem.update(rawDelta, targetPosition);
 
-    // 16. 渲染畫面
+    // 16. 渲染畫面 (陽光陰影跟隨玩家)
+    this.engine.updateShadowFocus(targetPosition);
     this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
   };
 }

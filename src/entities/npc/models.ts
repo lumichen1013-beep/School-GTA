@@ -207,9 +207,9 @@ export function buildDogModel(rig: NPCModelRig) {
     rig.dogHead, rig.dogTail,
     rig.dogFrontLeftLeg, rig.dogFrontRightLeg, rig.dogBackLeftLeg, rig.dogBackRightLeg
   ];
-  bakeNode(rig.dogHead, `${rig.role}|head`);
-  bakeNode(rig.dogTail, `${rig.role}|tail`);
-  for (let i = 2; i < animatedParts.length; i++) bakeNode(animatedParts[i], `${rig.role}|leg`);
+  bakeNode(rig.dogHead, `${rig.role}|head`, undefined, false);
+  bakeNode(rig.dogTail, `${rig.role}|tail`, undefined, false);
+  for (let i = 2; i < animatedParts.length; i++) bakeNode(animatedParts[i], `${rig.role}|leg`, undefined, false);
   bakeStaticParts(rig.mesh, rig.mesh.children.filter(c => !animatedParts.includes(c)), `${rig.role}|body`);
 }
 
@@ -291,7 +291,7 @@ export function buildBikePatrolModel(rig: NPCModelRig) {
   const outfitKey = `${rig.studentOutfit.shirt}|${rig.studentOutfit.pants}`;
   bakeNode(rig.bikeRearWheel, 'BIKE_PATROL|wheel');
   bakeNode(rig.bikeFrontWheel, 'BIKE_PATROL|wheel');
-  bakeNode(head, 'BIKE_PATROL|head');
+  bakeNode(head, 'BIKE_PATROL|head', undefined, false);
   const staticParts = [frameTube, handlebar, riderTorso, band, cap, armL, armR, legL, legR];
   bakeStaticParts(rig.mesh, staticParts, `BIKE_PATROL|${outfitKey}|body`);
 }
@@ -674,11 +674,11 @@ export function buildHumanoidModel(rig: NPCModelRig) {
   // 軀幹與配飾合併為單一靜態網格；同角色同服裝的 NPC 共用同一份幾何體
   const lookKey = `${rig.role}|${shirtColor}|${pantsColor}`;
   const umbrella = rig.umbrellaMesh;
-  bakeNode(head, `${lookKey}|head`);
-  bakeNode(rig.leftArm, `${lookKey}|armL`);
-  bakeNode(rig.rightArm, `${lookKey}|armR`, obj => obj === umbrella);
-  bakeNode(rig.leftLeg, `${lookKey}|leg`);
-  bakeNode(rig.rightLeg, `${lookKey}|leg`);
+  bakeNode(head, `${lookKey}|head`, undefined, false);
+  bakeNode(rig.leftArm, `${lookKey}|armL`, undefined, false);
+  bakeNode(rig.rightArm, `${lookKey}|armR`, obj => obj === umbrella, false);
+  bakeNode(rig.leftLeg, `${lookKey}|leg`, undefined, false);
+  bakeNode(rig.rightLeg, `${lookKey}|leg`, undefined, false);
   const animated: THREE.Object3D[] = [head, rig.leftArm, rig.rightArm, rig.leftLeg, rig.rightLeg];
   const body = bakeStaticParts(rig.mesh, rig.humanoidParts.filter(p => !animated.includes(p)), `${lookKey}|body`);
   rig.humanoidParts = [body, ...animated];
@@ -1018,11 +1018,11 @@ export function buildBanditModel(rig: NPCModelRig) {
   rig.mesh.add(rig.rightLeg);
 
   // 烘焙合併：頭與四肢保留動畫關節 (砍刀併入右臂)，軀幹、面罩與紅瞳合併為靜態網格
-  bakeNode(head, 'BANDIT|head');
-  bakeNode(rig.leftArm, 'BANDIT|armL');
-  bakeNode(rig.rightArm, 'BANDIT|armR');
-  bakeNode(rig.leftLeg, 'BANDIT|leg');
-  bakeNode(rig.rightLeg, 'BANDIT|leg');
+  bakeNode(head, 'BANDIT|head', undefined, false);
+  bakeNode(rig.leftArm, 'BANDIT|armL', undefined, false);
+  bakeNode(rig.rightArm, 'BANDIT|armR', undefined, false);
+  bakeNode(rig.leftLeg, 'BANDIT|leg', undefined, false);
+  bakeNode(rig.rightLeg, 'BANDIT|leg', undefined, false);
   const animated: THREE.Object3D[] = [head, rig.leftArm, rig.rightArm, rig.leftLeg, rig.rightLeg];
   bakeStaticParts(rig.mesh, rig.mesh.children.filter(c => !animated.includes(c)), 'BANDIT|body');
 }
