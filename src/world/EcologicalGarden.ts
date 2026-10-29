@@ -628,9 +628,10 @@ export class EcologicalGarden {
       }
       group.add(mergeParts(dots));
 
-      // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)
+      // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)；
+      // 須高於園區泥土地表 (Y = 0.03) 足夠距離，與地表共平面會深度衝突而閃爍
       const glow = new THREE.Mesh(GLOW_DISC_GEO, makeAdditiveGlowMat(cfg.glow, 0.32));
-      glow.position.y = 0.03;
+      glow.position.y = 0.06;
       group.add(glow);
 
       this.group.add(group);
