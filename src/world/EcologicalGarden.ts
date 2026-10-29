@@ -1166,7 +1166,7 @@ export class EcologicalGarden {
         if (bug.hp <= 0) {
           bug.isDead = true;
           bug.mesh.visible = false;
-          bug.respawnTimer = 22.0;
+          bug.respawnTimer = 8 + Math.random() * 12; // 擊破後 8～20 秒隨機重生
           return { hit: true, name: '生態園毒甲蟲', defeated: true, isBoss: false };
         }
         return { hit: true, name: '生態園毒甲蟲', defeated: false, isBoss: false };
