@@ -628,9 +628,10 @@ export class EcologicalGarden {
       }
       group.add(mergeParts(dots));
 
-      // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)
+      // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)；
+      // 須高於園區泥土地表 (Y = 0.03) 足夠距離，與地表共平面會深度衝突而閃爍
       const glow = new THREE.Mesh(GLOW_DISC_GEO, makeAdditiveGlowMat(cfg.glow, 0.32));
-      glow.position.y = 0.03;
+      glow.position.y = 0.06;
       group.add(glow);
 
       this.group.add(group);
@@ -1165,7 +1166,7 @@ export class EcologicalGarden {
         if (bug.hp <= 0) {
           bug.isDead = true;
           bug.mesh.visible = false;
-          bug.respawnTimer = 22.0;
+          bug.respawnTimer = 8 + Math.random() * 12; // 擊破後 8～20 秒隨機重生
           return { hit: true, name: '生態園毒甲蟲', defeated: true, isBoss: false };
         }
         return { hit: true, name: '生態園毒甲蟲', defeated: false, isBoss: false };

@@ -1910,12 +1910,15 @@ export class HUD {
     CAUTION: '❓ CAUTION'
   } as const;
 
-  // 慢動作處決特寫畫面效果 (電影黑邊、受擊閃白、QTE 打擊橫幅)
-  public triggerCinematicExecution(title: string, subtitle: string, duration: number = 1.0) {
+  // 慢動作處決特寫開始：電影黑邊與受擊閃白 (運鏡期間不顯示 QTE 打擊橫幅，避免遮擋畫面)
+  public beginCinematicExecution(title: string, subtitle: string) {
     if (!this.cinematicBarsEl) return;
     if (this.cinemaQteBadgeEl) this.cinemaQteBadgeEl.textContent = title;
     if (this.cinemaQteSubEl) this.cinemaQteSubEl.textContent = subtitle;
+    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    this.cinemaDismissTimer = null;
 
+    this.cinematicBarsEl.classList.remove('qte-show');
     this.cinematicBarsEl.classList.add('active');
     if (this.cinemaFlashEl) {
       this.cinemaFlashEl.classList.add('flash');
@@ -1923,11 +1926,29 @@ export class HUD {
         if (this.cinemaFlashEl) this.cinemaFlashEl.classList.remove('flash');
       }, 140);
     }
+  }
 
+  // 處決特寫結束：收起黑邊，恢復操控後短暫顯示 QTE 打擊橫幅 (resultMs 為 0 則不顯示)，結束後呼叫 onDone
+  public endCinematicExecution(resultMs: number, onDone?: () => void) {
     if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    this.cinemaDismissTimer = null;
+    const bars = this.cinematicBarsEl;
+    if (!bars) {
+      onDone?.();
+      return;
+    }
+    bars.classList.remove('active');
+    if (resultMs <= 0) {
+      bars.classList.remove('qte-show');
+      onDone?.();
+      return;
+    }
+    bars.classList.add('qte-show');
     this.cinemaDismissTimer = setTimeout(() => {
-      if (this.cinematicBarsEl) this.cinematicBarsEl.classList.remove('active');
-    }, Math.max(350, Math.round(duration * 1000)));
+      this.cinemaDismissTimer = null;
+      bars.classList.remove('qte-show');
+      onDone?.();
+    }, resultMs);
   }
 
   // 顯示特訓院絕境越獄通關結算對話框

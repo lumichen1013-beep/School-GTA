@@ -228,7 +228,7 @@ class SchoolGTASandbox implements GameContext {
       }
     };
     this.hud.onWeatherToggle = () => {
-      this.weatherSystem.cycleWeather(true);
+      this.weatherSystem.cycleWeather();
     };
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
@@ -426,7 +426,7 @@ class SchoolGTASandbox implements GameContext {
   private setupInputBindings() {
     // E 鍵互動：依互動表優先順序執行 (與每幀互動提示共用同一張表)
     this.input.onInteract(() => {
-      if (!this.isGameRunning) return;
+      if (!this.isGameRunning || this.combat.isExecutionActive) return;
       this.interaction.interact();
     });
 
@@ -452,7 +452,7 @@ class SchoolGTASandbox implements GameContext {
       } else if (e.code === 'KeyK') {
         hud.toggleControlsGuide();
       } else if (e.code === 'KeyP') {
-        this.weatherSystem.cycleWeather(true);
+        this.weatherSystem.cycleWeather();
       } else if (e.code === 'Escape') {
         if (hud.isFullMapOpen) hud.closeFullMap();
         if (hud.isCommissaryOpen) hud.closeCommissary();
@@ -470,7 +470,9 @@ class SchoolGTASandbox implements GameContext {
     });
 
     // Q 鍵身法技能
-    this.input.onSkill(this.progression.triggerDodgeSkill);
+    this.input.onSkill(() => {
+      if (!this.combat.isExecutionActive) this.progression.triggerDodgeSkill();
+    });
   }
 
   private toggleBGM() {
@@ -595,7 +597,6 @@ class SchoolGTASandbox implements GameContext {
 
     const rawDelta = this.engine.getDelta();
     const delta = this.combat.scaleDelta(rawDelta);
-    this.combat.updateBossLeap(rawDelta);
 
     // -1. 少年院開場電影級劇情動畫更新與 Space 跳過
     if (this.detentionCutscene.isActive) {
@@ -736,7 +737,8 @@ class SchoolGTASandbox implements GameContext {
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
 
-    // NPC 攻擊玩家判定
+    // 玩家招式命中結算與 NPC 攻擊玩家判定
+    this.combat.updatePlayerStrike();
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
 
     // 9. 角色推擠排除
@@ -748,6 +750,7 @@ class SchoolGTASandbox implements GameContext {
     // 11. 更新攝影機 (使用 rawDelta 維持 60fps 絲滑運鏡與慢動作特寫)
     // 羽球比賽倒數與進行中切換轉播視角，結束/中止後自動回復一般跟隨
     this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
+    this.combat.updateExecution(rawDelta);
     this.cameraCtrl.update(targetPosition, rawDelta, colliders);
 
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條

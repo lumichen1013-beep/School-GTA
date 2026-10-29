@@ -183,6 +183,7 @@ export class CampusMode {
   }
 
   private mountBike(bike: Bicycle, groundY: number) {
+    this.ctx.player.cancelAttack();
     bike.mount(this.ctx.player, groundY);
     this.ctx.currentRidingBike = bike;
     this.ctx.player.isRidingVehicle = true;

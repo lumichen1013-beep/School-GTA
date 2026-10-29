@@ -21,13 +21,24 @@ export class ThirdPersonCamera {
   public sensitivityX: number = 0.0022;
   public sensitivityY: number = 0.002;
 
-  // 慢動作特寫鏡頭系統 (Cinematic Execution Close-Up)
+  // 暗殺運鏡 (Execution Shot)：由 CombatSystem 逐幀驅動，期間停用一般跟隨與自由視角
   public isCinematicExecution: boolean = false;
-  private cinematicTimer: number = 0;
-  private cinematicDuration: number = 0;
-  private cinematicCamPos: THREE.Vector3 = new THREE.Vector3();
-  private cinematicLookAt: THREE.Vector3 = new THREE.Vector3();
+  private readonly shotAnchor = new THREE.Vector3(); // 起手時玩家與目標中點 (腳底高度)
+  private readonly shotSide = new THREE.Vector3(); // 垂直於打擊軸的水平方向 (已選定不被遮擋的一側)
+  private shotDistance: number = 0;
+  private shotHeight: number = 0;
+  private readonly shotBlendFromPos = new THREE.Vector3();
+  private readonly shotBlendFromLook = new THREE.Vector3();
+  private shotBlendFromFov: number = 65;
+  private readonly _shotProbe = new THREE.Vector3();
+  private readonly _shotFocus = new THREE.Vector3();
   private defaultFov: number = 65;
+  private static readonly SHOT_FOV = 50;
+  private static readonly SHOT_HEIGHT = 2.6;
+  private static readonly SHOT_FALLBACK_HEIGHT = 3.6;
+  private static readonly SHOT_MIN_DISTANCE = 3.5;
+  private static readonly SHOT_LOOK_HEIGHT = 1.0;
+  private static readonly SHOT_OCCLUSION_MARGIN = 0.3;
 
   // 當前世界 (樓梯間/電梯/大樓天花板約束僅適用天天國中)
   public currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
@@ -68,7 +79,7 @@ export class ThirdPersonCamera {
   }
 
   public updateRotation(deltaX: number, deltaY: number) {
-    if (this.isCinematicExecution && this.cinematicTimer > 0) return; // 特寫運鏡期間鎖定自由視角旋轉
+    if (this.isCinematicExecution) return; // 暗殺運鏡期間鎖定自由視角旋轉
     if (this.isMatchView) return; // 羽球比賽轉播視角鎖定朝向球場
     if (this.isVehicleFollow) return; // 手機騎車視角跟隨車頭
     this.yaw -= deltaX * this.sensitivityX;
@@ -95,71 +106,155 @@ export class ThirdPersonCamera {
     }
   }
 
-  // 觸發暗殺/處決慢動作特寫鏡頭 (Cinematic Camera Framing)
-  public triggerCinematicExecution(
-    bossPos: THREE.Vector3,
+  // 開始暗殺側面運鏡：鏡頭置於打擊軸垂直側 (類 2D 格鬥遊戲構圖)。
+  // 預定機位被遮擋時改用另一側；兩側皆遮擋則升高並縮短距離 (最短 3.5m)。
+  // maxDolly / orbitMax 為整段運鏡中最大後拉距離與環繞角度，選側時一併檢查以免中途穿牆。
+  public beginExecutionShot(
     playerPos: THREE.Vector3,
-    duration: number = 1.0,
-    isFinisher: boolean = false,
-    colliders: CollidableBox[] = []
+    targetPos: THREE.Vector3,
+    distance: number,
+    maxDolly: number,
+    orbitMax: number,
+    colliders: CollidableBox[]
   ) {
-    this.isCinematicExecution = true;
-    this.cinematicTimer = duration;
-    this.cinematicDuration = duration;
+    this.shotAnchor.addVectors(playerPos, targetPos).multiplyScalar(0.5);
+    // 打擊軸 (玩家 → 目標) 的水平垂直向量
+    let ax = targetPos.x - playerPos.x;
+    let az = targetPos.z - playerPos.z;
+    const len = Math.hypot(ax, az);
+    if (len < 0.01) { ax = 0; az = 1; } else { ax /= len; az /= len; }
 
-    // 焦點設在玩家與受擊目標中間略偏打擊點 (高度約 1.15m)
-    const midPoint = new THREE.Vector3().addVectors(playerPos, bossPos).multiplyScalar(0.5);
-    this.cinematicLookAt.copy(midPoint).add(new THREE.Vector3(0, 1.15, 0));
-
-    // 打擊方向 (從 Boss 指向 Player)
-    const strikeDir = new THREE.Vector3().subVectors(playerPos, bossPos);
-    strikeDir.y = 0;
-    if (strikeDir.lengthSq() < 0.01) {
-      strikeDir.set(0, 0, 1);
-    } else {
-      strikeDir.normalize();
+    const focus = this._shotFocus.set(this.shotAnchor.x, this.shotAnchor.y + ThirdPersonCamera.SHOT_LOOK_HEIGHT, this.shotAnchor.z);
+    const height = ThirdPersonCamera.SHOT_HEIGHT;
+    let chosen = false;
+    for (let sign = 1; sign >= -1; sign -= 2) {
+      this.shotSide.set(-az * sign, 0, ax * sign);
+      if (this.isShotClear(focus, distance, maxDolly, orbitMax, height, colliders)) {
+        this.shotDistance = distance;
+        this.shotHeight = height;
+        chosen = true;
+        break;
+      }
     }
-
-    // 垂直側翼向量 (90度側角)
-    const sideDir = new THREE.Vector3(-strikeDir.z, 0, strikeDir.x);
-
-    // 低角度仰角側前方 2.1m 特寫：形成極富張力的近身搏擊刺客特寫
-    const dist = isFinisher ? 2.5 : 2.1;
-    this.cinematicCamPos.copy(midPoint)
-      .addScaledVector(sideDir, dist * 0.88)
-      .addScaledVector(strikeDir, dist * 0.45);
-    this.cinematicCamPos.y = Math.max(0.45, playerPos.y + 0.82);
-
-    // 障礙物防穿牆檢測 (避免特寫鏡頭推入水泥柱或掩體)
-    if (colliders.length > 0) {
-      const rayDir = this.cinematicCamPos.clone().sub(midPoint);
-      const targetDist = rayDir.length();
-      if (targetDist > 0.1) {
-        rayDir.normalize();
-        let minHit = targetDist;
-        for (const box of colliders) {
-          if (box.isFloorOnly) continue;
-          const hit = this.intersectRayAABB(
-            midPoint,
-            rayDir,
-            box.min.x - 0.25, box.max.x + 0.25,
-            box.min.y - 0.25, box.max.y + 0.25,
-            box.min.z - 0.25, box.max.z + 0.25,
-            minHit
-          );
-          if (hit !== null && hit < minHit && hit > 0.3) {
-            minHit = hit;
-          }
-        }
-        if (minHit < targetDist) {
-          this.cinematicCamPos.copy(midPoint).addScaledVector(rayDir, minHit - 0.1);
+    // 兩側皆遮擋：升高機位並逐步縮短距離，找不到則以最短距離取遮擋較少的一側
+    for (let d = distance - 0.5; !chosen && d >= ThirdPersonCamera.SHOT_MIN_DISTANCE - 0.001; d -= 0.5) {
+      for (let sign = 1; sign >= -1; sign -= 2) {
+        this.shotSide.set(-az * sign, 0, ax * sign);
+        if (this.isShotClear(focus, d, maxDolly, orbitMax, ThirdPersonCamera.SHOT_FALLBACK_HEIGHT, colliders)) {
+          this.shotDistance = d;
+          this.shotHeight = ThirdPersonCamera.SHOT_FALLBACK_HEIGHT;
+          chosen = true;
+          break;
         }
       }
     }
+    if (!chosen) {
+      this.shotSide.set(-az, 0, ax);
+      this.shotDistance = ThirdPersonCamera.SHOT_MIN_DISTANCE;
+      this.shotHeight = ThirdPersonCamera.SHOT_FALLBACK_HEIGHT;
+    }
 
-    // 鏡頭特寫拉近 (FOV: 65 -> 48 帶來魄力壓縮感)
-    this.camera.fov = 48;
+    this.isCinematicExecution = true;
+    this.camera.fov = ThirdPersonCamera.SHOT_FOV;
     this.camera.updateProjectionMatrix();
+    // 起手為硬切：視線直接對準中點
+    this.currentLookAt.copy(focus);
+  }
+
+  // 每幀更新暗殺運鏡：dolly 為額外後拉距離、orbit 為繞錨點水平環繞角 (弧度)、lookTarget 為視線目標 (腳底座標，內部加上視線高度)
+  public updateExecutionShot(dolly: number, orbit: number, lookTarget: THREE.Vector3, rawDelta: number) {
+    this.computeShotPosition(this.currentPosition, this.shotDistance + dolly, orbit, this.shotHeight);
+    this._shotFocus.set(lookTarget.x, lookTarget.y + ThirdPersonCamera.SHOT_LOOK_HEIGHT, lookTarget.z);
+    this.currentLookAt.lerp(this._shotFocus, 1 - Math.exp(-8 * rawDelta));
+    this.applyCinematicCamera(rawDelta);
+  }
+
+  // 記錄目前運鏡機位，作為收尾時平滑過渡回一般跟隨鏡頭的起點
+  public markExecutionBlendStart() {
+    this.shotBlendFromPos.copy(this.currentPosition);
+    this.shotBlendFromLook.copy(this.currentLookAt);
+    this.shotBlendFromFov = this.camera.fov;
+  }
+
+  // 收尾過渡：t (0~1) 由運鏡機位插值至玩家正後方 (與 resetBehind 相同的機位)
+  public blendExecutionToBehind(targetPos: THREE.Vector3, yaw: number, t: number, rawDelta: number) {
+    const k = t * t * (3 - 2 * t);
+    const focus = this._shotFocus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
+    const pitch = 0.25;
+    const dist = this.targetDistance;
+    this._shotProbe.set(
+      focus.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+      focus.y + Math.sin(pitch) * dist,
+      focus.z + Math.cos(yaw) * Math.cos(pitch) * dist
+    );
+    this.currentPosition.lerpVectors(this.shotBlendFromPos, this._shotProbe, k);
+    this.currentLookAt.lerpVectors(this.shotBlendFromLook, focus, k);
+    this.camera.fov = THREE.MathUtils.lerp(this.shotBlendFromFov, this.defaultFov, k);
+    this.camera.updateProjectionMatrix();
+    this.applyCinematicCamera(rawDelta);
+  }
+
+  // 結束暗殺運鏡，恢復一般跟隨鏡頭 (置於玩家正後方)
+  public endExecutionShot(targetPos: THREE.Vector3, yaw: number) {
+    this.isCinematicExecution = false;
+    this.camera.fov = this.defaultFov;
+    this.camera.updateProjectionMatrix();
+    this.resetBehind(targetPos, yaw);
+  }
+
+  private computeShotPosition(out: THREE.Vector3, distance: number, orbit: number, height: number) {
+    const c = Math.cos(orbit);
+    const s = Math.sin(orbit);
+    // 側向量繞 Y 軸旋轉 orbit
+    const sx = this.shotSide.x * c + this.shotSide.z * s;
+    const sz = -this.shotSide.x * s + this.shotSide.z * c;
+    return out.set(this.shotAnchor.x + sx * distance, this.shotAnchor.y + height, this.shotAnchor.z + sz * distance);
+  }
+
+  // 檢查運鏡起訖機位 (未後拉/最大後拉、環繞起點/終點) 與焦點間是否無遮擋
+  private isShotClear(focus: THREE.Vector3, distance: number, maxDolly: number, orbitMax: number, height: number, colliders: CollidableBox[]): boolean {
+    if (colliders.length === 0) return true;
+    const probe = this._shotProbe;
+    return !this.isSegmentBlocked(focus, this.computeShotPosition(probe, distance, 0, height), colliders) &&
+      !this.isSegmentBlocked(focus, this.computeShotPosition(probe, distance + maxDolly, orbitMax, height), colliders);
+  }
+
+  // 焦點至機位線段是否被碰撞盒阻擋 (碰撞盒向外膨脹 margin，含鏡頭本身半徑)
+  private isSegmentBlocked(from: THREE.Vector3, to: THREE.Vector3, colliders: CollidableBox[]): boolean {
+    const m = ThirdPersonCamera.SHOT_OCCLUSION_MARGIN;
+    const dir = this._rayDir.subVectors(to, from);
+    const len = dir.length();
+    if (len < 0.05) return false;
+    dir.divideScalar(len);
+    const near = queryColliders(
+      colliders,
+      Math.min(from.x, to.x) - m, Math.max(from.x, to.x) + m,
+      Math.min(from.z, to.z) - m, Math.max(from.z, to.z) + m,
+      _cameraSegNear
+    );
+    for (let i = 0; i < near.length; i++) {
+      const box = near[i];
+      if (box.isFloorOnly) continue;
+      const minX = box.min.x - m, maxX = box.max.x + m;
+      const minY = box.min.y - m, maxY = box.max.y + m;
+      const minZ = box.min.z - m, maxZ = box.max.z + m;
+      // 焦點本身位於碰撞盒內 (例如角色緊貼牆面) 時略過，避免誤判
+      if (from.x >= minX && from.x <= maxX && from.y >= minY && from.y <= maxY && from.z >= minZ && from.z <= maxZ) continue;
+      if (this.intersectRayAABB(from, dir, minX, maxX, minY, maxY, minZ, maxZ, len) !== null) return true;
+    }
+    return false;
+  }
+
+  // 套用運鏡結果至實際鏡頭 (含打擊震動)
+  private applyCinematicCamera(rawDelta: number) {
+    this.camera.position.copy(this.currentPosition);
+    const shake = consumeCameraShake(rawDelta) * 0.35;
+    if (shake > 0) {
+      this.camera.position.x += (Math.random() - 0.5) * shake;
+      this.camera.position.y += (Math.random() - 0.5) * shake;
+      this.camera.position.z += (Math.random() - 0.5) * shake;
+    }
+    this.camera.lookAt(this.currentLookAt);
   }
 
   public setMode(isVehicle: boolean) {
@@ -186,35 +281,8 @@ export class ThirdPersonCamera {
   }
 
   public update(targetPos: THREE.Vector3, delta: number, colliders: CollidableBox[] = []) {
-    // 慢動作特寫鏡頭模式 (Cinematic Execution Hold & Smooth Recovery)
-    if (this.isCinematicExecution) {
-      this.cinematicTimer -= delta;
-      if (this.cinematicTimer > 0) {
-        // 快速推入特寫機位 (帶微彈性平滑)
-        this.currentPosition.lerp(this.cinematicCamPos, Math.min(delta * 14.0, 1.0));
-        this.currentLookAt.lerp(this.cinematicLookAt, Math.min(delta * 14.0, 1.0));
-
-        // 打擊微震顫 (Trauma Shake)
-        const trauma = Math.max(0, this.cinematicTimer / this.cinematicDuration);
-        const shake = trauma * 0.035;
-        this.camera.position.set(
-          this.currentPosition.x + (Math.random() - 0.5) * shake,
-          this.currentPosition.y + (Math.random() - 0.5) * shake,
-          this.currentPosition.z + (Math.random() - 0.5) * shake
-        );
-        this.camera.lookAt(this.currentLookAt);
-        return;
-      } else {
-        // 特寫計時結束，平滑復原 FOV
-        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.defaultFov, Math.min(delta * 6.0, 1.0));
-        this.camera.updateProjectionMatrix();
-        if (Math.abs(this.camera.fov - this.defaultFov) < 0.5) {
-          this.camera.fov = this.defaultFov;
-          this.camera.updateProjectionMatrix();
-          this.isCinematicExecution = false;
-        }
-      }
-    }
+    // 暗殺運鏡期間由 CombatSystem 逐幀驅動鏡頭
+    if (this.isCinematicExecution) return;
 
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)

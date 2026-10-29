@@ -2474,7 +2474,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
 
-#cinematic-bars.active #cinema-qte-title {
+#cinematic-bars.qte-show #cinema-qte-title {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1.0);
 }

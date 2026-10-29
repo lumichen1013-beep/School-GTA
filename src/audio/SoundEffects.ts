@@ -242,12 +242,12 @@ export class SoundEffects {
     this.tone('sine', [['set', 1318.5, now], ['exp', 880, now + 0.25]], [['set', 0.25, now], ['exp', 0.001, now + 0.30]], now, now + 0.31);
   }
 
-  // 刺客處決/慢動作暴擊重音 (Cinematic Bullet Time Impact Boom & Armor Crunch)
+  // 刺客處決/慢動作暴擊重音 (Cinematic Bullet Time Impact Boom & Metallic Crunch)
   public playCinematicExecutionHit() {
     const now = this.audio().currentTime;
     // 1. 低頻震顫震撼低音 (Sub-bass boom)
     this.tone('sine', [['set', 130, now], ['exp', 28, now + 0.65]], [['set', 0.65, now], ['exp', 0.001, now + 0.70]], now, now + 0.72);
-    // 2. 金屬破甲撕裂聲 (Armor break metallic crunch)
+    // 2. 金屬撞擊撕裂聲 (Metallic impact crunch)
     this.tone('triangle', [['set', 540, now], ['exp', 75, now + 0.35]], [['set', 0.42, now], ['exp', 0.001, now + 0.38]], now, now + 0.40);
   }
 

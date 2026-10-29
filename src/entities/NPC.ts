@@ -7,6 +7,7 @@ import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
 import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
+import { KungFuLayer, getNpcMoveset, type KfMove } from './shared/kungfu';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
@@ -165,29 +166,29 @@ const BIKE_REST_SPEED = 14.0;
 const BIKE_POUNCE_MAX_DIST = 10.0; // 距離過遠時先以跟蹤曲線追近，不發動撲咬
 const BIKELESS_CHASE_SPEED = 10.0;
 
-// 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
+// 各角色攻擊擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)；傷害統一由 roleConfig.attackPower 決定
 export interface AttackSpec {
-  damage: number;
   hForce: number;
   vForce: number;
 }
 
 const _ATTACK_SPECS: Record<string, AttackSpec> = {
-  DODGE_TEACHER: { damage: 0, hForce: 5.0, vForce: 2.0 },
-  PE_TEACHER_BOSS: { damage: 28, hForce: 13.0, vForce: 7.0 },
-  DETENTION_BOSS: { damage: 20, hForce: 10.0, vForce: 4.5 },
-  DETENTION_HEAVY: { damage: 18, hForce: 12.0, vForce: 5.0 },
-  DETENTION_WOLF: { damage: 10, hForce: 7.0, vForce: 3.5 },
-  DETENTION_GUARD: { damage: 12, hForce: 7.0, vForce: 3.0 },
-  DETENTION_SENIOR: { damage: 14, hForce: 8.0, vForce: 3.5 },
-  BANDIT: { damage: 44, hForce: 10.0, vForce: 5.5 },
-  TEACHER: { damage: 28, hForce: 10.0, vForce: 6.0 },
-  DOG: { damage: 24, hForce: 11.5, vForce: 5.0 },
-  BIKE_PATROL: { damage: 22, hForce: 12.5, vForce: 6.5 },
-  INSPECTOR: { damage: 18, hForce: 8.0, vForce: 4.5 },
-  STUDENT: { damage: 12, hForce: 6.0, vForce: 3.5 }
+  DODGE_TEACHER: { hForce: 5.0, vForce: 2.0 },
+  PE_TEACHER_BOSS: { hForce: 13.0, vForce: 7.0 },
+  DETENTION_BOSS: { hForce: 10.0, vForce: 4.5 },
+  DETENTION_HEAVY: { hForce: 12.0, vForce: 5.0 },
+  DETENTION_WOLF: { hForce: 7.0, vForce: 3.5 },
+  DETENTION_GUARD: { hForce: 7.0, vForce: 3.0 },
+  DETENTION_SENIOR: { hForce: 8.0, vForce: 3.5 },
+  BANDIT: { hForce: 10.0, vForce: 5.5 },
+  TEACHER: { hForce: 10.0, vForce: 6.0 },
+  INSTRUCTOR: { hForce: 10.0, vForce: 6.0 },
+  DOG: { hForce: 11.5, vForce: 5.0 },
+  BIKE_PATROL: { hForce: 12.5, vForce: 6.5 },
+  INSPECTOR: { hForce: 8.0, vForce: 4.5 },
+  STUDENT: { hForce: 6.0, vForce: 3.5 }
 };
-const _DEFAULT_ATTACK_SPEC: AttackSpec = { damage: 12, hForce: 6.0, vForce: 3.5 };
+const _DEFAULT_ATTACK_SPEC: AttackSpec = { hForce: 6.0, vForce: 3.5 };
 
 // 3D 羽球靜態共享幾何體與材質 (0-GC 全域快取複用，杜絕頻繁發球引發 GC 微卡頓或 GPU 洩漏)
 // 1. 軟木塞球頭 (Cork Head)：半徑約 0.075m 橢圓小球，位於飛行方向最前端 (+Z)
@@ -247,6 +248,8 @@ export class NPC {
   public alertState: 'NORMAL' | 'CAUTION' | 'ALERT' = 'NORMAL'; // 警戒狀態 (綠/黃/紅)
   public cautionTimer: number = 0;
   public reviveTimer: number = 0;
+  // 倒地改為向前俯臥 (總教官遭背刺後向前踉蹌撲倒)；起身或重置時清除
+  public isDownFaceDown: boolean = false;
 
   // 小 Boss【鐵面總教官】專屬閃身與衝撞硬直機制
   public isBossStunned: boolean = false;
@@ -306,6 +309,11 @@ export class NPC {
   private animTimer: number = 0;
   private whistleCooldown: number = 0;
   private attackAnimTimer: number = 0;
+  // 人型角色功夫出招：姿勢圖層、招式輪替序號、本幀是否已套用姿勢；kfStrike 為本幀到達命中時間點 (由戰鬥系統結算)
+  private readonly kf = new KungFuLayer();
+  private kfSeq: number = 0;
+  private kfApplied: boolean = false;
+  public kfStrike: KfMove | null = null;
 
   // 人型角色肢體
   private humanoidParts: THREE.Object3D[] = [];
@@ -563,6 +571,18 @@ export class NPC {
     this.drawDynamicBadge(BADGE_KO, `💫 昏迷中 (${sec}s)`);
   }
 
+  // 暫時隱藏/恢復頭頂倒地倒數告示牌 (暗殺運鏡期間隱藏，恢復時依目前倒數重繪)
+  public setKOBadgeVisible(visible: boolean) {
+    if (!visible) {
+      this.koBadgeSprite.visible = false;
+      return;
+    }
+    if (!this.isKnockedDown) return;
+    this.lastKoBadgeSec = -1;
+    this.updateKOBadge(this.reviveTimer);
+    this.koBadgeSprite.visible = true;
+  }
+
   // 顯示自定義頭頂動態文字徽章 (如金鐘護體、撞柱硬直等)
   public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
     // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)
@@ -646,7 +666,8 @@ export class NPC {
     soundManager.playWhistle();
   }
 
-  // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物；起點已重疊的碰撞盒忽略 (允許自行脫離)
+  // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物
+  // 起點已重疊的碰撞盒 (步行半徑 0.45 < 衝撞半徑 0.65，貼牆/貼柱站立時必然重疊) 僅在嵌入深度不增加時放行 (沿牆滑行或脫離)，往內推進仍視為撞上
   private bossBodyBlockedAt(colliders: CollidableBox[], x: number, z: number, startX: number, startZ: number): boolean {
     const r = NPC.BOSS_CHARGE_RADIUS;
     const y = this.position.y;
@@ -656,7 +677,11 @@ export class NPC {
       if (box.isFloorOnly) continue;
       if (!(y + 0.3 < box.max.y && y + 1.9 > box.min.y)) continue;
       if (x + r <= box.min.x || x - r >= box.max.x || z + r <= box.min.z || z - r >= box.max.z) continue;
-      if (startX + r > box.min.x && startX - r < box.max.x && startZ + r > box.min.z && startZ - r < box.max.z) continue;
+      if (startX + r > box.min.x && startX - r < box.max.x && startZ + r > box.min.z && startZ - r < box.max.z) {
+        const startDepth = Math.min(startX + r - box.min.x, box.max.x - startX + r, startZ + r - box.min.z, box.max.z - startZ + r);
+        const depth = Math.min(x + r - box.min.x, box.max.x - x + r, z + r - box.min.z, box.max.z - z + r);
+        if (depth <= startDepth + 1e-6) continue;
+      }
       return true;
     }
     return false;
@@ -798,6 +823,7 @@ export class NPC {
 
   // 執行模型建構函式 (實作位於 npc/models.ts) 並套用結果
   private buildModel(build: (rig: NPCModelRig) => void) {
+    this.kf.cancel();
     const rig = this.createRig();
     build(rig);
     this.readRig(rig);
@@ -1012,9 +1038,22 @@ export class NPC {
     return wasKnockedDown;
   }
 
-  // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
-  public triggerAttackAnimation() {
+  // 觸發攻擊動作：人型角色依角色招式組輪替出招，傷害於命中時間點結算 (回傳 true)；
+  // 犬類、單車糾察、羽球賽中的大如老師維持原本即時動作 (回傳 false，由呼叫端立即結算)
+  public triggerAttackAnimation(allowKungFu: boolean = true): boolean {
+    const set = allowKungFu && this.rightArm && !this.isInBadmintonMatch ? getNpcMoveset(this.role) : null;
+    if (set) {
+      const move = set[this.kfSeq % set.length];
+      this.kfSeq++;
+      this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+      return true;
+    }
     this.attackAnimTimer = 0.35;
+    this.playAttackSound();
+    return false;
+  }
+
+  private playAttackSound() {
     if (this.cfg.isCanine) {
       soundManager.playDogBark();
     } else if (this.role === 'BIKE_PATROL') {
@@ -1199,7 +1238,7 @@ export class NPC {
 
     this.shuttlecockCooldown = cooldown; // 發球間隔
     soundManager.playBadmintonWhoosh();
-    this.triggerAttackAnimation();
+    this.triggerAttackAnimation(false);
 
     // 建立/復用標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏 0-GC)
     const group = NPC.createShuttlecockMesh();
@@ -1401,7 +1440,10 @@ export class NPC {
 
   // 倒地姿勢與貼地高度 (依所在樓層基準)：sideways 為側躺 (犬類、單車)，否則仰躺
   private applyDownPose(sideways: boolean) {
-    if (sideways) {
+    if (this.isDownFaceDown) {
+      this.mesh.rotation.set(Math.PI / 2, 0, -this.rotationY);
+      this.mesh.position.y = this.baseFloorY + 0.25;
+    } else if (sideways) {
       this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
       this.mesh.position.y = this.baseFloorY + 0.2;
     } else {
@@ -1436,6 +1478,7 @@ export class NPC {
   }
 
   public resetPose() {
+    this.kf.cancel();
     if (this.phoneMesh) this.phoneMesh.visible = false;
     if (this.headMesh) {
       this.headMesh.rotation.set(0, 0, 0);
@@ -1746,6 +1789,7 @@ export class NPC {
 
   // 玩家死亡重生時完整重置 NPC 至初始狀態 (位置、警戒狀態、巡邏狀態、HP 與肢體)
   public resetToInitialState() {
+    this.isDownFaceDown = false;
     this.position.copy(this.initialPosition);
     this.baseFloorY = this.initialPosition.y; // 被擊飛落到其他樓層後，回到原樓層基準
     this.mesh.position.copy(this.initialPosition);
@@ -2403,6 +2447,38 @@ export class NPC {
     isPlayerHiding: boolean = false,
     isPlayerMoving: boolean = true
   ) {
+    this.kfStrike = null;
+    this.kfApplied = false;
+    if (this.kf.engaged) {
+      // 先移除上一幀疊加的扭腰/側傾/升降，讓本幀其他動作邏輯從原始姿勢開始
+      this.mesh.rotation.y = this.rotationY;
+      this.mesh.rotation.z = 0;
+      this.mesh.position.y -= this.kf.rise;
+    }
+    this.updateInner(
+      delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerRidingBike, isPlayerDead, isRaining,
+      isThunderstorm, isSpawnGraceActive, isPlayerSneaking, isPlayerSprinting, isPlayerHiding, isPlayerMoving
+    );
+    // 本幀走了倒地、擊飛、定格、總教官衝撞等其他分支：中止出招並還原四肢
+    if (this.kf.engaged && !this.kfApplied) this.kf.cancel();
+  }
+
+  private updateInner(
+    delta: number,
+    playerPos: THREE.Vector3,
+    wantedLevel: number,
+    colliders: CollidableBox[],
+    onSpotPlayer: () => void,
+    isPlayerRidingBike: boolean = false,
+    isPlayerDead: boolean = false,
+    isRaining: boolean = false,
+    isThunderstorm: boolean = false,
+    isSpawnGraceActive: boolean = false,
+    isPlayerSneaking: boolean = false,
+    isPlayerSprinting: boolean = false,
+    isPlayerHiding: boolean = false,
+    isPlayerMoving: boolean = true
+  ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.seesPlayerNow = false;
     this.lastColliders = colliders;
@@ -2545,6 +2621,10 @@ export class NPC {
     // 全校廣播定格發呆 (聽廣播立正站好，中斷一切追擊與攻擊動作)
     if (this.freezeTimer > 0) {
       this.freezeTimer -= delta;
+      if (this.kf.engaged) {
+        this.kf.cancel();
+        this.mesh.rotation.set(0, this.rotationY, 0);
+      }
       this.zeroLimbs();
       return;
     }
@@ -2652,6 +2732,7 @@ export class NPC {
         if (this.role === 'DETENTION_BOSS') {
           // 特訓總教官暗殺倒地癱瘓結束：起身恢復戰鬥，保留剩餘血量不回滿血！
           this.isKnockedDown = false;
+          this.isDownFaceDown = false;
           this.isBossStunned = false;
           this.bossStunTimer = 0;
           this.koBadgeSprite.visible = false;
@@ -2863,6 +2944,20 @@ export class NPC {
       return;
     }
 
+    // 功夫出招推進：停止追捕即收招；到達命中時間點時播放打擊音效並通知戰鬥系統結算
+    if (this.kf.engaged) {
+      if (!this.isChasing) {
+        this.kf.cancel();
+        this.mesh.rotation.set(0, this.rotationY, 0);
+      } else {
+        const move = this.kf.move;
+        if (this.kf.update(delta) && move) {
+          this.kfStrike = move;
+          this.playAttackSound();
+        }
+      }
+    }
+
     // 2. 仇恨判定 (AI 狀態機)
     this.updateAggroState(
       delta,
@@ -3035,7 +3130,8 @@ export class NPC {
       // 近戰警戒距離停止前進：當追捕中看得見玩家且距離小於 1.15m 時，站在近戰打擊範圍內專注攻擊，避免強推玩家進牆角
       const isTooCloseToPlayer = this.isChasing && this.lostSightTimer <= 0 && distToTargetSq < 1.32; // ~1.15m
 
-      if (!isTooCloseToPlayer) {
+      // 出招中紮穩腳步不前進 (僅原地轉向)
+      if (!isTooCloseToPlayer && !this.kf.move) {
         const moveStepX = _npcMoveDir.x * currentSpeed * delta;
         const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
         const radius = this.cfg.isCanine ? 0.35 : 0.45;
@@ -3113,7 +3209,7 @@ export class NPC {
         ? (this.isChasing ? 14.0 : 4.0)
         : (this.role === 'BIKE_PATROL'
           ? 12.0
-          : (isDetention && !this.isChasing ? 3.2 : 10.0));
+          : (isDetention && !this.isChasing ? 3.2 : (this.kf.move ? 4.0 : 10.0)));
       this.rotationY += diff * Math.min(delta * turnRate, 1.0);
       this.mesh.rotation.y = this.rotationY;
 
@@ -3245,6 +3341,10 @@ export class NPC {
     }
 
     this.mesh.position.copy(this.position);
+    if (this.kf.engaged) {
+      this.kf.apply(this.rotationY);
+      this.kfApplied = true;
+    }
     // 犬科四足奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
     const isCanineRole = this.cfg.isCanine;
     if (isCanineRole && _npcMoveDir.lengthSq() > 0.05) {
