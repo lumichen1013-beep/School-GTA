@@ -12,6 +12,10 @@ const ALERT_HOLD_TIME = 1.0; // 短暫失去視線 (如總教官衝撞、轉角)
 const EVASION_TIME = 5.0;
 const CAUTION_TIME = 4.0;
 const FIGHT_NOISE_RADIUS = 20.0; // 正面打鬥聲響傳播半徑 (m)；暗殺為無聲
+const SURROUND_INTERVAL = 0.3; // 包夾站位重新指派間隔 (s)
+const SURROUND_RANGE_SQ = 36.0; // 6m 內追捕中的守衛參與包夾
+const TWO_PI = Math.PI * 2;
+const bySurroundBearing = (a: NPC, b: NPC) => a.surroundBearing - b.surroundBearing;
 
 /**
  * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
@@ -49,6 +53,8 @@ export class DetentionMode {
   private searchlightLocked: boolean = false;
   private alertHoldTimer: number = 0;
   private pendingSighting: boolean = false;
+  private surroundTimer: number = 0;
+  private readonly surroundGroup: NPC[] = [];
 
   private readonly radarData: DetentionRadarData = {
     isGateAOpen: false,
@@ -313,6 +319,41 @@ export class DetentionMode {
     const hunt = this.alertPhase === 'ALERT' || this.alertPhase === 'EVASION';
     for (let i = 0; i < npcs.length; i++) npcs[i].detentionHuntActive = hunt;
     hud.updateMgsAlert(this.alertPhase, this.alertTimer);
+  }
+
+  // 多人包夾 (低頻)：玩家 6m 內 2 名以上追捕中的特訓群守衛，依目前方位角排序後分配等角環繞站位 (360/n 度)，
+  // 以整體旋轉偏移貼近各自方位以減少交錯；站位被障礙物佔據者改為直接逼近
+  public updateSurround(delta: number, playerPos: THREE.Vector3) {
+    this.surroundTimer -= delta;
+    if (this.surroundTimer > 0) return;
+    this.surroundTimer = SURROUND_INTERVAL;
+    const npcs = this.ctx.detentionNPCs;
+    const group = this.surroundGroup;
+    group.length = 0;
+    for (let i = 0; i < npcs.length; i++) {
+      const n = npcs[i];
+      n.hasSurroundSlot = false;
+      if (!n.isWorld2Minion || !n.isChasing || n.isInvestigatingNoise || n.lostSightTimer > 0) continue;
+      if (n.isKnockedDown || n.isPermanentlyKnockedOut || n.isKnockedFlying) continue;
+      const dx = n.position.x - playerPos.x;
+      const dz = n.position.z - playerPos.z;
+      if (dx * dx + dz * dz > SURROUND_RANGE_SQ || Math.abs(n.position.y - playerPos.y) > 2.0) continue;
+      n.surroundBearing = Math.atan2(dx, dz);
+      group.push(n);
+    }
+    const count = group.length;
+    if (count < 2) return;
+    group.sort(bySurroundBearing);
+    const step = TWO_PI / count;
+    let sx = 0;
+    let sz = 0;
+    for (let i = 0; i < count; i++) {
+      const a = group[i].surroundBearing - i * step;
+      sx += Math.sin(a);
+      sz += Math.cos(a);
+    }
+    const base = Math.atan2(sx, sz);
+    for (let i = 0; i < count; i++) group[i].assignSurroundSlot(base + i * step, playerPos.x, playerPos.z);
   }
 
   // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定

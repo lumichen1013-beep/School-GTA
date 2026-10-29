@@ -727,7 +727,10 @@ class SchoolGTASandbox implements GameContext {
     // 8. NPC AI 更新
     this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
     // 8.1 少年院全域警戒階段：依本幀守衛實際目擊結果推進 (須在 NPC AI 更新之後)
-    if (!isCampus) this.detention.updateAlertPhase(delta, targetPosition);
+    if (!isCampus) {
+      this.detention.updateAlertPhase(delta, targetPosition);
+      this.detention.updateSurround(delta, targetPosition);
+    }
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
     if (isCampus) this.campusLife.update(delta, targetPosition);

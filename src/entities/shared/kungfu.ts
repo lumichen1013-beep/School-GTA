@@ -349,6 +349,8 @@ export class KungFuLayer {
   public get canChain(): boolean { return !this.move || this.time >= this.move.cancel * this.move.dur * this.scale; }
   public get beforeStrike(): boolean { return !!this.move && this.time < this.move.strike * this.move.dur * this.scale; }
   public get rise(): number { return this.appliedRise; }
+  // 出招預備進度：0 = 剛起手、1 = 到達命中時間點 (無招式時為 0)
+  public get strikeProgress(): number { return this.move ? this.time / (this.move.strike * this.move.dur * this.scale) : 0; }
 
   // twistFrom：指定起始扭腰 (例如角色朝向瞬間改變時帶入「舊畫面朝向 − 新朝向」，由招式平滑轉回)
   public start(move: KfMove, scale: number, mesh: THREE.Object3D, la?: THREE.Object3D | null, ra?: THREE.Object3D | null, ll?: THREE.Object3D | null, rl?: THREE.Object3D | null, twistFrom?: number) {

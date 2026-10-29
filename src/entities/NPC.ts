@@ -70,6 +70,19 @@ export interface ShuttlecockProjectile {
 const _npcMoveDir = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
+const _npcSurroundTarget = new THREE.Vector3();
+
+// 第二世界特訓群 (總教官除外) 戰鬥積極度
+const W2_COMBAT_MIN_SPEED = 5.5; // 追捕中最低移動速度 (潛行巡邏慢速不帶入戰鬥)
+const W2_STAGGER_TIME = 0.3; // 一般受擊踉蹌總時間 (前段後退、後段縮身)
+const W2_STAGGER_PUSH_TIME = 0.15;
+const W2_STAGGER_DIST = 0.4; // 踉蹌後退距離 (m)，仍留在攻擊範圍內
+const W2_HYPER_ARMOR_PROGRESS = 0.5; // 出招預備過半即霸體：受擊不中斷出招
+const W2_COUNTER_COOLDOWN = 0.2; // 盾擋 / 狗熊哆嗦毛成功後立即反擊
+const W2_SURROUND_RADIUS = 1.6; // 包夾站位半徑 (m)
+const W2_SURROUND_MAX_TURN = 0.9; // 每次朝站位繞行的最大角度 (rad)，沿圓弧繞行不穿過玩家
+const W2_SURROUND_SETTLE_ANGLE = 0.6; // 與站位方位差小於約 34 度即視為就位
+const W2_SURROUND_TRAVEL_TIMEOUT = 1.5;
 // NPC 技能/對話氣泡外觀：大字版 (世界尺寸約為舊版 1.8 倍、畫布 512×160)，長句換成 2 行而不縮小字級，
 // 底部對齊於血條/告示牌上方
 const NPC_BUBBLE_STYLE: SkillBubbleStyle = {
@@ -329,6 +342,16 @@ export class NPC {
   public knockVelocity: THREE.Vector3 = new THREE.Vector3();
   public hitCooldown: number = 0;
   public attackCooldown: number = 0; // 攻擊冷卻時間
+  // 第二世界特訓群一般受擊踉蹌 (取代擊飛)：剩餘時間與後退方向
+  public staggerTimer: number = 0;
+  private staggerDirX: number = 0;
+  private staggerDirZ: number = 0;
+  // 第二世界多人包夾站位 (由 DetentionMode 低頻指派)：環繞玩家的目標方位角
+  public hasSurroundSlot: boolean = false;
+  public surroundAngle: number = 0;
+  public surroundBearing: number = 0;
+  private surroundSettled: boolean = true;
+  private surroundTravelTimer: number = 0; // 繞行前往站位的累計時間 (逾時即就地出手，避免受阻永不攻擊)
   public freezeTimer: number = 0;   // 全校廣播定格發呆時間
 
   // 追捕動態節奏系統 (忽快忽慢：衝刺爆發期 vs 喘氣調息期，給玩家合理甩脫機會)
@@ -1141,7 +1164,8 @@ export class NPC {
   }
 
   // 單車衝撞與武器擊飛效果
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number): boolean {
+  // canLaunch：第二世界特訓群僅連招終結技可擊飛，其餘命中改為短暫踉蹌
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true): boolean {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1164,6 +1188,7 @@ export class NPC {
       if (Math.random() < 0.3) {
         this.performBearShake(this.lastColliders);
         this.isChasing = true;
+        this.attackCooldown = W2_COUNTER_COOLDOWN; // 施展期間不倒數，現身後立即反擊
         return false;
       }
     }
@@ -1174,6 +1199,13 @@ export class NPC {
       this.isChasing = true; // 存活時被撞激怒追擊
     } else {
       this.isChasing = false;
+    }
+
+    // 第二世界特訓群：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
+    if (this.isWorld2Minion && !this.isKnockedDown &&
+      (!canLaunch || (this.role === 'DETENTION_HEAVY' && this.hp > this.maxHp * 0.5))) {
+      this.startStagger(impactDir);
+      return wasKnockedDown;
     }
 
     // 重訓霸榜生高血量霸體：半血以上免疫衝撞擊飛，低於半血後可被擊退
@@ -1194,6 +1226,63 @@ export class NPC {
     );
 
     return wasKnockedDown;
+  }
+
+  // 第二世界特訓群 (總教官另有專屬規則)
+  public get isWorld2Minion(): boolean {
+    return this.cfg.isDetention && this.role !== 'DETENTION_BOSS';
+  }
+
+  // 一般受擊踉蹌：沿受擊方向後退約 0.4m 並縮身；出招預備未過半時中斷出招，過半則霸體照常命中
+  private startStagger(impactDir: THREE.Vector3) {
+    this.staggerTimer = W2_STAGGER_TIME;
+    this.staggerDirX = impactDir.x;
+    this.staggerDirZ = impactDir.z;
+    const move = this.kf.move;
+    if (move && move.dmg > 0 && this.kf.strikeProgress < W2_HYPER_ARMOR_PROGRESS) {
+      this.kf.cancel();
+      this.mesh.rotation.set(0, this.rotationY, 0);
+    }
+  }
+
+  // 踉蹌後退位移 (逐軸碰撞檢測，不穿牆)
+  private updateStagger(delta: number, colliders: CollidableBox[]) {
+    const elapsed = W2_STAGGER_TIME - this.staggerTimer;
+    this.staggerTimer = Math.max(0, this.staggerTimer - delta);
+    const pushDt = Math.min(W2_STAGGER_TIME - this.staggerTimer, W2_STAGGER_PUSH_TIME) - Math.min(elapsed, W2_STAGGER_PUSH_TIME);
+    if (pushDt <= 0) return;
+    const step = (W2_STAGGER_DIST / W2_STAGGER_PUSH_TIME) * pushDt;
+    const radius = this.cfg.isCanine ? 0.35 : 0.45;
+    const nextX = this.position.x + this.staggerDirX * step;
+    if (!isBlockedXZ(colliders, nextX, this.position.z, radius, this.position.y, 0.3, 1.6)) this.position.x = nextX;
+    const nextZ = this.position.z + this.staggerDirZ * step;
+    if (!isBlockedXZ(colliders, this.position.x, nextZ, radius, this.position.y, 0.3, 1.6)) this.position.z = nextZ;
+    depenetrateXZ(colliders, this.position, radius, 0.3, 1.6, 0.02, 1, 'npc');
+  }
+
+  // 包夾繞行中 (尚未抵達站位方位且未逾時) 暫不出手，先散開再圍攻
+  public get isSurroundRepositioning(): boolean {
+    return this.hasSurroundSlot && !this.surroundSettled && this.surroundTravelTimer < W2_SURROUND_TRAVEL_TIMEOUT;
+  }
+
+  // 指派包夾站位：站位點被障礙物佔據時放棄 (改為直接逼近)
+  public assignSurroundSlot(angle: number, px: number, pz: number) {
+    this.surroundAngle = angle;
+    const x = px + Math.sin(angle) * W2_SURROUND_RADIUS;
+    const z = pz + Math.cos(angle) * W2_SURROUND_RADIUS;
+    this.hasSurroundSlot = !isBlockedXZ(this.lastColliders, x, z, this.cfg.isCanine ? 0.35 : 0.45, this.position.y, 0.3, 1.6);
+  }
+
+  // 朝包夾站位沿圓弧繞行：每次最多偏轉 W2_SURROUND_MAX_TURN，避免直線穿過玩家
+  private computeSurroundTarget(playerPos: THREE.Vector3, delta: number): THREE.Vector3 {
+    const bearing = Math.atan2(this.position.x - playerPos.x, this.position.z - playerPos.z);
+    const off = wrapAngle(this.surroundAngle - bearing);
+    const d = THREE.MathUtils.clamp(off, -W2_SURROUND_MAX_TURN, W2_SURROUND_MAX_TURN);
+    const a = bearing + d;
+    this.surroundSettled = Math.abs(off) < W2_SURROUND_SETTLE_ANGLE;
+    if (this.surroundSettled) this.surroundTravelTimer = 0;
+    else this.surroundTravelTimer += delta;
+    return _npcSurroundTarget.set(playerPos.x + Math.sin(a) * W2_SURROUND_RADIUS, this.position.y, playerPos.z + Math.cos(a) * W2_SURROUND_RADIUS);
   }
 
   // 觸發攻擊動作：人型角色依角色招式組輪替出招，傷害於命中時間點結算 (回傳 true)；
@@ -1951,6 +2040,8 @@ export class NPC {
   public resetAggro() {
     this.isChasing = false;
     this.isInvestigatingNoise = false;
+    this.hasSurroundSlot = false;
+    this.staggerTimer = 0;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -1975,6 +2066,8 @@ export class NPC {
     this.mesh.rotation.y = this.initialRotationY;
     this.isChasing = false;
     this.isInvestigatingNoise = false;
+    this.hasSurroundSlot = false;
+    this.staggerTimer = 0;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -2416,12 +2509,10 @@ export class NPC {
       return this.isBurstSprinting ? 9.8 : 7.8;
     }
 
-    if (this.isBurstSprinting) {
-      return this.chaseSpeed;
-    }
-
-    if (this.role === 'BANDIT') return 8.5;
-    return this.speed;
+    const pacedSpeed = this.isBurstSprinting ? this.chaseSpeed : (this.role === 'BANDIT' ? 8.5 : this.speed);
+    // 第二世界特訓群追捕 / 搜捕中不再以潛行巡邏慢速爬行 (循聲察看維持原節奏)
+    if (this.isWorld2Minion && !this.isInvestigatingNoise) return Math.max(pacedSpeed, W2_COMBAT_MIN_SPEED);
+    return pacedSpeed;
   }
 
   private resetBikePursuit() {
@@ -2519,7 +2610,7 @@ export class NPC {
     if (this.isPaused) this.cancelPause();
     this.isChasing = true;
     this.kf.start(NPC_SHIELD_BLOCK, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
-    this.attackCooldown = Math.max(this.attackCooldown, 0.45);
+    this.attackCooldown = W2_COUNTER_COOLDOWN; // 格擋成功立即盾後反擊
     this.showSkillBubble('🛡️ 盾擋！', false);
     soundManager.playBanditSlash();
     return true;
@@ -3189,6 +3280,10 @@ export class NPC {
     if (this.isChasing) {
       // 若看得見玩家直接追擊；若剛失去視線則前往最後目擊位置搜索
       targetPos = this.lostSightTimer > 0 ? this.lastKnownPos : playerPos;
+      // 第二世界多人包夾：看得見玩家時前往指派的環繞站位，避免排成一列
+      if (this.hasSurroundSlot && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
+        targetPos = this.computeSurroundTarget(playerPos, delta);
+      }
 
       // 追捕動態節奏計時 (忽快忽慢：爆發衝刺 vs 喘氣慢跑)
       if (this.role === 'BIKE_PATROL') {
@@ -3328,19 +3423,26 @@ export class NPC {
       }
     }
 
+    // 第二世界受擊踉蹌後退
+    if (this.staggerTimer > 0) this.updateStagger(delta, colliders);
+
     // 4. 計算移動方向與位移 (0-GC 重複利用 Scratch Vector)
     _npcMoveDir.subVectors(targetPos, this.position);
     _npcMoveDir.y = 0;
     const distToTargetSq = _npcMoveDir.lengthSq();
+    const usingSurroundSlot = targetPos === _npcSurroundTarget;
 
-    if (distToTargetSq > 0.05) {
+    if (distToTargetSq > 0.05 || usingSurroundSlot) {
       _npcMoveDir.normalize();
 
       // 近戰警戒距離停止前進：當追捕中看得見玩家且距離小於 1.15m 時，站在近戰打擊範圍內專注攻擊，避免強推玩家進牆角
-      const isTooCloseToPlayer = this.isChasing && this.lostSightTimer <= 0 && distToTargetSq < 1.32; // ~1.15m
+      // 包夾站位：抵達站位 (0.3m 內) 即停步
+      const isTooCloseToPlayer = usingSurroundSlot
+        ? distToTargetSq < 0.09
+        : (this.isChasing && this.lostSightTimer <= 0 && distToTargetSq < 1.32); // ~1.15m
 
-      // 出招中紮穩腳步不前進 (僅原地轉向)
-      if (!isTooCloseToPlayer && !this.kf.move) {
+      // 出招中紮穩腳步不前進 (僅原地轉向)；受擊踉蹌期間不前進
+      if (!isTooCloseToPlayer && !this.kf.move && this.staggerTimer <= 0) {
         const moveStepX = _npcMoveDir.x * currentSpeed * delta;
         const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
         const radius = this.cfg.isCanine ? 0.35 : 0.45;
@@ -3409,8 +3511,18 @@ export class NPC {
         depenetrateXZ(colliders, this.position, radius, 0.3, 1.6, 0.02, 1, 'npc');
       }
 
-      // 轉向與俯仰姿態
-      const targetRotation = Math.atan2(_npcMoveDir.x, _npcMoveDir.z);
+      // 轉向與俯仰姿態 (包夾站位進入攻擊距離或抵達站位時改為面向玩家出招)
+      let faceX = _npcMoveDir.x;
+      let faceZ = _npcMoveDir.z;
+      if (usingSurroundSlot) {
+        const pdx = playerPos.x - this.position.x;
+        const pdz = playerPos.z - this.position.z;
+        if (isTooCloseToPlayer || pdx * pdx + pdz * pdz < 4.0) {
+          faceX = pdx;
+          faceZ = pdz;
+        }
+      }
+      const targetRotation = Math.atan2(faceX, faceZ);
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
       const isDetention = this.cfg.isDetention;
       const isCanine = this.cfg.isCanine;
@@ -3546,6 +3658,16 @@ export class NPC {
             }
           }
         }
+      }
+    }
+
+    // 受擊踉蹌縮身：上身後仰、雙臂護身 (霸體出招中僅後仰)
+    if (this.staggerTimer > 0) {
+      const k = this.staggerTimer / W2_STAGGER_TIME;
+      this.mesh.rotation.x = -0.28 * k;
+      if (!this.kf.engaged && !this.cfg.isCanine) {
+        if (this.leftArm) this.leftArm.rotation.set(-1.2 * k, 0, 0.35 * k);
+        if (this.rightArm) this.rightArm.rotation.set(-1.2 * k, 0, -0.35 * k);
       }
     }
 

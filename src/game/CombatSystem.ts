@@ -687,7 +687,8 @@ export class CombatSystem {
       // 擊退方向：玩家指向目標 (旋身招式可擊中側後方目標)
       if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
       else _scratchImpactDir.copy(_scratchPlayerForward);
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage)) {
+      // 第二世界特訓群僅連招終結技可擊飛，一般命中為短暫踉蹌 (見 NPC.launchFlying)
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, move.finisher)) {
         this.handleNpcDefeated(npc, 'ATTACK');
       } else {
         wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
@@ -852,7 +853,8 @@ export class CombatSystem {
       // 兩個世界皆僅在追捕狀態 (通緝或被激怒) 且進入攻擊距離時發動攻擊，第一世界 NPC 不會無故主動攻擊
       // 循聲察看中的守衛尚未確認敵蹤，不出手
       const shouldAttack = !isSpawnGraceActive && npc.isChasing && !npc.isInvestigatingNoise && distToPlayer <= attackDist;
-      if (!shouldAttack || player.isDead || npc.attackCooldown > 0) continue;
+      // 第二世界多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)
+      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning) continue;
 
       npc.attackCooldown = this.getNpcAttackInterval(npc);
       // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算
