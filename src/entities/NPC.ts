@@ -1203,9 +1203,9 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
-    // 鐵面總長受擊：撞柱硬直中 30%、其餘 60% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
-    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.60)) return false;
-    // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
+    // 鐵面總長受擊：撞柱硬直中 30%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.50)) return false;
+    // 持盾特訓院守衛：正面受擊 40% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
     if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
     // 校園執法者：主任教官 25% 格擋反擊、生教組長 20% 閃身步 (施展招牌技期間不防衛)
     if (this.tryEnforcerDefense()) return false;
@@ -2799,7 +2799,7 @@ export class NPC {
   private tryShieldBlock(impactDir: THREE.Vector3): boolean {
     if (!this.rightArm) return false;
     if (impactDir.x * Math.sin(this.rotationY) + impactDir.z * Math.cos(this.rotationY) >= 0) return false;
-    if (Math.random() >= 0.5) return false;
+    if (Math.random() >= 0.4) return false;
     if (this.isPaused) this.cancelPause();
     this.isChasing = true;
     this.kf.start(NPC_SHIELD_BLOCK, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
