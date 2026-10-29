@@ -243,7 +243,7 @@ const NPC_HEAVY = defineMove('大開大合重拳', { dur: 0.76, strike: 0.5 }, [
   [0.76, E_OUT, { tw: -0.55, ln: 0.26, h: -0.14, la: [0.7, 0, -0.2], ra: [-1.5, 0, -0.1], ll: [-0.68, 0, -0.2], rr: [0.58, 0, 0.2] }],
   [1, E_SMOOTH, REST]
 ]);
-const NPC_SPINKICK = defineMove('迴旋踢', { dur: 0.8, strike: 0.5, reach: 1.1, arc: -1 }, [
+export const NPC_SPINKICK = defineMove('迴旋踢', { dur: 0.8, strike: 0.5, reach: 1.1, arc: -1 }, [
   [0.28, E_SMOOTH, { tw: -0.7, ln: 0.06, h: -0.1, la: [-1.0, 0, -0.2], ra: [-0.7, 0, 0.2], ll: [-0.2, 0, -0.05], rr: [0.3, 0, 0.05] }],
   [0.5, E_IN, { tw: 4.71, ln: -0.08, rl: 0.3, h: 0.04, la: [-0.2, 0, -1.25], ra: [-0.2, 0, 1.2], ll: [0.05, 0, -0.08], rr: [-0.25, 0, 1.35] }],
   [0.72, E_OUT, { tw: 5.7, ln: -0.04, rl: 0.18, la: [-0.3, 0, -1.0], ra: [-0.3, 0, 0.9], ll: [0.05, 0, -0.08], rr: [-0.2, 0, 0.7] }],

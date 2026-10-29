@@ -4,7 +4,7 @@ import { queryColliders, isBlockedXZ } from '../physics/aabb';
 import { requestCameraShake } from '../effects/cameraShake';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
-import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, wrapAngle, type KfMove } from '../entities/shared/kungfu';
+import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, wrapAngle, type KfMove } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import { isBehindNpc, isBossStunOpening } from './DetentionMode';
 
@@ -56,6 +56,7 @@ const NPC_ATTACK_INTERVAL = 0.85;
 const GRAB_THROW_DAMAGE = 20; // 主任教官擒拿摔
 const GRAB_THROW_DOWN_TIME = 0.7; // 擒拿摔落地後倒地秒數
 const RULER_STRIKE_DAMAGE = 8; // 生教組長戒尺連打 (每下)
+const BIG_MOVE_INTERRUPT_CHANCE = 0.5; // 玩家出招中被大招 (擒拿摔、戒尺連打、總教官衝撞/迴旋踢) 打斷的機率
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
@@ -812,13 +813,19 @@ export class CombatSystem {
             npc.pauseTimer = 1.0;
             npc.isPaused = true;
             if (npc.bossTelegraphGroup) npc.bossTelegraphGroup.visible = false;
-            soundManager.playPunch();
-            soundManager.playBatHit();
-            wantedSystem.showBanner(`💥 遭到總教官狂暴衝撞重創！擊飛！(-${BOSS_CHARGE_DAMAGE} HP)`, 2500);
-            wantedSystem.notifyAttacked();
             this.ctx.detention.emitFightNoise(targetPosition);
-            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, BOSS_CHARGE_DAMAGE, '鐵面總長')) {
-              this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
+            if (this.resistsHitWhileAttacking(true)) {
+              if (this.applyDamageOnlyHit(BOSS_CHARGE_DAMAGE, '鐵面總長', `💥 硬吃總教官狂暴衝撞！出招不中斷！(-${BOSS_CHARGE_DAMAGE} HP)`)) {
+                this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
+              }
+            } else {
+              soundManager.playPunch();
+              soundManager.playBatHit();
+              wantedSystem.showBanner(`💥 遭到總教官狂暴衝撞重創！擊飛！(-${BOSS_CHARGE_DAMAGE} HP)`, 2500);
+              wantedSystem.notifyAttacked();
+              if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, BOSS_CHARGE_DAMAGE, '鐵面總長')) {
+                this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
+              }
             }
           }
         }
@@ -845,7 +852,7 @@ export class CombatSystem {
         npc.kfStrike = null;
         if (!isSpawnGraceActive && !player.isDead && this.isNpcStrikeInRange(npc, targetPosition, strike)) {
           if (strike === NPC_GRAB_THROW || strike === NPC_RULER_FLURRY) this.applySignatureHit(npc, targetPosition, strike === NPC_GRAB_THROW);
-          else this.applyNpcHit(npc, targetPosition);
+          else this.applyNpcHit(npc, targetPosition, strike === NPC_SPINKICK);
         }
       }
 
@@ -917,7 +924,15 @@ export class CombatSystem {
     const damage = isGrab ? GRAB_THROW_DAMAGE : RULER_STRIKE_DAMAGE;
     wantedSystem.notifyAttacked();
     let died: boolean;
-    if (this.ctx.currentRidingBike || !isGrab) {
+    if (!this.ctx.currentRidingBike && this.resistsHitWhileAttacking(true)) {
+      soundManager.playPunch();
+      died = player.takeDamage(damage, title);
+      wantedSystem.showBanner(isGrab
+        ? `🥋 硬吃主任教官擒拿！出招不中斷！(-${damage} HP)`
+        : `📏 戒尺連打命中！出招不中斷！(-${damage} HP)`, 1500);
+    } else if (this.ctx.currentRidingBike || !isGrab) {
+      // 戒尺連打打斷玩家出招 (未出招時本就不影響)
+      if (!isGrab && player.isAttacking) player.cancelAttack();
       soundManager.playPunch();
       died = player.takeDamage(damage, title);
       wantedSystem.showBanner(isGrab
@@ -935,8 +950,25 @@ export class CombatSystem {
     if (died) this.ctx.handlePlayerDeath(`被${title}逮捕擊倒！`);
   }
 
-  // NPC 攻擊命中玩家結算 (閃避、騎車只扣血、擊飛)
-  private applyNpcHit(npc: NPC, targetPosition: THREE.Vector3) {
+  // 玩家出招中 (霸體)：一般攻擊只扣血不打斷；大招有 BIG_MOVE_INTERRUPT_CHANCE 機率打斷 (照原效果結算)
+  private resistsHitWhileAttacking(isBigMove: boolean): boolean {
+    if (!this.ctx.player.isAttacking) return false;
+    return !isBigMove || Math.random() >= BIG_MOVE_INTERRUPT_CHANCE;
+  }
+
+  // 只扣血不擊飛的命中結算 (沿用 0.55 秒受擊保護時間避免連續秒殺)，回傳是否死亡
+  private applyDamageOnlyHit(damage: number, title: string, banner: string): boolean {
+    const { player, wantedSystem } = this.ctx;
+    if (player.hitCooldown > 0) return false;
+    player.hitCooldown = 0.55;
+    soundManager.playPunch();
+    wantedSystem.showBanner(banner, 1500);
+    wantedSystem.notifyAttacked();
+    return player.takeDamage(damage, title);
+  }
+
+  // NPC 攻擊命中玩家結算 (閃避、騎車或出招中只扣血、擊飛)；isBigMove 為總教官迴旋踢
+  private applyNpcHit(npc: NPC, targetPosition: THREE.Vector3, isBigMove: boolean = false) {
     const { player, wantedSystem } = this.ctx;
     if (player.isDodging) {
       this.showDodgeBanner('💨 閃身步！成功規避攻擊！', '🐻 狗熊哆嗦毛！神速規避攻擊！', 1500);
@@ -955,13 +987,13 @@ export class CombatSystem {
     // 第二世界打鬥聲響：附近守衛前往察看
     if (this.ctx.currentWorldType === 'DETENTION') this.ctx.detention.emitFightNoise(targetPosition);
     // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
-    if (this.ctx.currentRidingBike) {
-      if (player.hitCooldown > 0) return;
-      player.hitCooldown = 0.55;
-      soundManager.playPunch();
-      wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
-      wantedSystem.notifyAttacked();
-      if (player.takeDamage(npc.attackPower, npc.getRoleTitle())) {
+    // 出招中被一般攻擊命中：只扣血，出招繼續
+    const riding = !!this.ctx.currentRidingBike;
+    if (riding || this.resistsHitWhileAttacking(isBigMove)) {
+      const banner = riding
+        ? `遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`
+        : `遭到${npc.getRoleTitle()}攻擊！出招不中斷！`;
+      if (this.applyDamageOnlyHit(npc.attackPower, npc.getRoleTitle(), banner)) {
         this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
       }
       return;
