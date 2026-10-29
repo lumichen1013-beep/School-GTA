@@ -1154,8 +1154,8 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
-    // 鐵面總長受擊：撞柱硬直中 30%、其餘 70% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
-    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.70)) return false;
+    // 鐵面總長受擊：撞柱硬直中 30%、其餘 60% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.60)) return false;
     // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
     if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
     // 特訓資深守衛 / 重裝守衛：受擊 (任意方向) 30% 機率施展「狗熊哆嗦毛」避開 (不受傷也不被擊飛)；施展期間免疫攻擊
