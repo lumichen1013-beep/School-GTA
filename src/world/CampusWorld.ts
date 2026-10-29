@@ -2715,7 +2715,7 @@ export class CampusWorld {
     this.lift4FDoors = { left: door4FL, right: door4FR };
     this.group.add(lift4FGroup);
 
-    // 5. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 16.5)
+    // 5. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 22.0，挑高天花板讓高遠球不穿頂)
     // A. 4F 完整樓地板 (移除舊安全梯天井後，西側與全場地板完整平鋪密封，杜絕墜落)
     const f4Floor = new THREE.Mesh(new THREE.BoxGeometry(bW, 0.45, bL), stageFloorMat);
     f4Floor.position.set(baseX, 11.78, baseZ);
@@ -2723,8 +2723,8 @@ export class CampusWorld {
     this.group.add(f4Floor);
     this.addFloorSlab(minX, maxX, minZ, maxZ, 12.0);
 
-    // B. 4F 四周外牆與大採光窗 (Y: 12.0 ~ 16.5)
-    const h4 = 4.5;
+    // B. 4F 四周外牆與大採光窗 (Y: 12.0 ~ 22.0)
+    const h4 = 10.0;
     const midY4 = 12.0 + h4 / 2;
     this.buildWall(baseX, midY4, minZ, bW, h4, 0.6, wallMat);
     this.buildWall(baseX, midY4, maxZ, bW, h4, 0.6, wallMat);
@@ -2792,9 +2792,9 @@ export class CampusWorld {
     refGroup.add(refSeat);
     this.group.add(refGroup);
 
-    // F. 屋頂與高空採光天窗 (Y = 16.5)
+    // F. 屋頂與高空採光天窗 (Y = 22.0；羽球最高飛行點約 17.5m，保留充足淨高)
     const roof = new THREE.Mesh(new THREE.BoxGeometry(bW + 1.0, 0.5, bL + 1.0), wallMat);
-    roof.position.set(baseX, 16.5, baseZ);
+    roof.position.set(baseX, 22.0, baseZ);
     this.group.add(roof);
 
     // G. 招牌橫匾 (正面西門上方與南外牆上方)

@@ -403,7 +403,7 @@ export class ThirdPersonCamera {
       return;
     }
 
-    // 演藝大樓本體 (X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0，1~3F 演藝廳 Y < 11.5，4F 羽球館 Y: 12.0 ~ 16.5)
+    // 演藝大樓本體 (X: 63.0 ~ 85.0, Z: 23.0 ~ 53.0，1~3F 演藝廳 Y < 11.5，4F 羽球館 Y: 12.0 ~ 22.0)
     const inPerformingArts =
       (targetPos.x >= 63.0 && targetPos.x <= 85.0 && targetPos.z >= 23.0 && targetPos.z <= 53.0) ||
       (pos.x >= 63.0 && pos.x <= 85.0 && pos.z >= 23.0 && pos.z <= 53.0);
@@ -411,7 +411,7 @@ export class ThirdPersonCamera {
       if (targetPos.y < 11.5) {
         pos.y = Math.max(0.45, Math.min(11.25, pos.y));
       } else {
-        pos.y = Math.max(12.45, Math.min(15.95, pos.y));
+        pos.y = Math.max(12.45, Math.min(21.45, pos.y));
       }
       return;
     }
