@@ -27,6 +27,8 @@ import type { GameContext, WorldType } from './game/GameContext';
 import { Progression } from './game/Progression';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
+import { CampusLife } from './game/CampusLife';
+import { CampusSportsCrew } from './game/CampusSportsCrew';
 import { CombatSystem } from './game/CombatSystem';
 import { InteractionSystem } from './game/InteractionSystem';
 
@@ -41,6 +43,7 @@ const _campusRespawnPos = new THREE.Vector3(0, 0, 15); // 天天國中保健室�
  * 各玩法細節分別位於 game/ (成長、戰鬥、互動、校園玩法、特訓院玩法)。
  */
 class SchoolGTASandbox implements GameContext {
+  private lastBikeYaw: number = 0; // 上一幀騎車朝向 (計算轉彎持續時間)
   public engine!: Engine;
   public input!: InputManager;
   public cameraCtrl!: ThirdPersonCamera;
@@ -65,7 +68,7 @@ class SchoolGTASandbox implements GameContext {
   public npcs: NPC[] = [];
   public campusNPCs: NPC[] = [];
   public detentionNPCs: NPC[] = [];
-  // 固定角色 NPC 快取 (NPC 名單於載入後不再增減，免去每幀 find 線性搜尋)
+  // 固定角色 NPC 快取 (NPC 名單於載入後不再增減，免去每幀 find 線性搜尋；僅小魚/阿凱上場比賽期間暫離名單)
   public peCoachNpc?: NPC;
   public dodgeTeacherNpc?: NPC;
   private campusDogNpc?: NPC;
@@ -75,6 +78,8 @@ class SchoolGTASandbox implements GameContext {
   public readonly progression: Progression = new Progression(this);
   public readonly detention: DetentionMode = new DetentionMode(this);
   public readonly campus: CampusMode = new CampusMode(this);
+  public readonly campusLife: CampusLife = new CampusLife(this);
+  private readonly sportsCrew: CampusSportsCrew = new CampusSportsCrew(this);
   public readonly combat: CombatSystem = new CombatSystem(this);
   private readonly interaction = new InteractionSystem(this);
 
@@ -286,6 +291,8 @@ class SchoolGTASandbox implements GameContext {
 
     this.wantedSystem.clearWanted(); // onWantedCleared 會一併重置所有 NPC 仇恨
     this.campus.resetTransientState();
+    this.campusLife.reset();
+    this.sportsCrew.reset();
     this.combat.resetTransientState();
     // 進入世界時展開快捷鍵指南，30 秒後自動收合
     this.hud.showControlsGuide();
@@ -644,6 +651,13 @@ class SchoolGTASandbox implements GameContext {
       this.player.position.copy(targetPosition);
       this.player.updateSkillBubble(delta);
       this.player.updateUmbrella(isRaining, true, this.currentWorldType);
+      // 騎車時不走步行更新：受擊保護計時於此遞減 (騎車被攻擊只扣血不摔車)
+      if (this.player.hitCooldown > 0) this.player.hitCooldown -= delta;
+      // 玩家騎車遙測 (車速、持續轉彎秒數) 供單車騎士判斷撲咬時機
+      NPC.playerBikeSpeed = ridingBike.speed;
+      const yawDiff = Math.atan2(Math.sin(playerRotY - this.lastBikeYaw), Math.cos(playerRotY - this.lastBikeYaw));
+      NPC.playerBikeTurnTime = delta > 0 && Math.abs(yawDiff) / delta > 0.5 ? NPC.playerBikeTurnTime + delta : 0;
+      this.lastBikeYaw = playerRotY;
 
       // 更新非騎乘中之所有單車 (套用重力與貼地，防止懸空)
       if (isCampus) {
@@ -656,6 +670,8 @@ class SchoolGTASandbox implements GameContext {
       // 火柴人自行車衝撞 NPC
       this.combat.updateBikeRam(targetPosition, playerRotY);
     } else {
+      NPC.playerBikeSpeed = 0;
+      NPC.playerBikeTurnTime = 0;
       // 玩家步行時，更新場景中所有閒置單車 (套用重力與貼地，防止懸空)
       if (isCampus) {
         for (let i = 0; i < this.bicycles.length; i++) {
@@ -711,6 +727,11 @@ class SchoolGTASandbox implements GameContext {
     this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
     // 8.1 少年院全域警戒階段：依本幀守衛實際目擊結果推進 (須在 NPC AI 更新之後)
     if (!isCampus) this.detention.updateAlertPhase(delta, targetPosition);
+
+    // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
+    if (isCampus) this.campusLife.update(delta, targetPosition);
+    // 固定駐點同學 (泳池小魚、操場阿凱、籃球場鬥牛)
+    if (isCampus) this.sportsCrew.update(delta, targetPosition);
 
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);

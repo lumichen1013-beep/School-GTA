@@ -74,6 +74,7 @@ export class Progression {
     }
 
     this.hasTastedHotFood = true;
+    if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onPlayerAte(); // 柴柴聞香跟來討食
     this.cash -= item.price;
     player.hp = Math.min(player.maxHp, player.hp + item.healHp);
     if (item.restoreStamina) {

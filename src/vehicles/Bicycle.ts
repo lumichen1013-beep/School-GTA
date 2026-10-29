@@ -12,7 +12,7 @@ export class Bicycle {
   public velocity: THREE.Vector3 = new THREE.Vector3();
   public rotationY: number = 0;
   public speed: number = 0;
-  public maxSpeed: number = 15.0; // 騎車最高速度 (與火柴人自行車騎士完全一致，皆為 15.0)
+  public maxSpeed: number = 15.0; // 玩家騎車最高速度 (火柴人自行車騎士為 14.8：直線緊追但追不上)
   public acceleration: number = 14.0;
   public deceleration: number = 11.0;
   public turnSpeed: number = 2.1;

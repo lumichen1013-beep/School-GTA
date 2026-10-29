@@ -2,6 +2,54 @@ import * as THREE from 'three';
 
 const _scratchSegDir = new THREE.Vector3();
 
+// 頭頂名牌 (同一名稱共用貼圖與材質；陪賽對手與池畔小魚 NPC 共用)
+const nameTagMats = new Map<string, THREE.SpriteMaterial>();
+export function createNameTagSprite(label: string): THREE.Sprite {
+  let mat = nameTagMats.get(label);
+  if (!mat) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.beginPath();
+      ctx.roundRect(4, 6, 248, 52, 26);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, 128, 33);
+    }
+    mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthTest: false });
+    nameTagMats.set(label, mat);
+  }
+  const tag = new THREE.Sprite(mat);
+  tag.scale.set(1.8, 0.45, 1);
+  tag.renderOrder = 10;
+  return tag;
+}
+
+// 人形比例：RIVAL 為原陪跑對手瘦長比例；NPC 與校園人形 NPC 尺寸、肩/髖位置一致 (池畔小魚上場時外觀不變)
+interface BodyDims {
+  torso: [number, number, number, number]; // 寬、高、深、中心高度
+  head: [number, number, number]; // 邊長、高、中心高度
+  cap: [number, number, number]; // 邊長、高、中心高度
+  arm: [number, number, number, number]; // 肩 x、肩高、長、寬
+  leg: [number, number, number, number]; // 髖 x、髖高、長、寬
+  skin: number;
+  eyes: boolean;
+}
+const RIVAL_DIMS: BodyDims = {
+  torso: [0.5, 0.62, 0.28, 1.15], head: [0.36, 0.38, 1.66], cap: [0.38, 0.12, 1.86],
+  arm: [0.33, 1.42, 0.6, 0.14], leg: [0.13, 0.84, 0.84, 0.18], skin: 0xf1c27d, eyes: false
+};
+const NPC_DIMS: BodyDims = {
+  torso: [0.65, 0.75, 0.35, 1.05], head: [0.38, 0.4, 1.62], cap: [0.42, 0.16, 1.78],
+  arm: [0.45, 1.375, 0.65, 0.18], leg: [0.18, 0.7, 0.7, 0.24], skin: 0xfad390, eyes: true
+};
+
 // 田徑 / 游泳競速陪賽對手：輕量獨立人形模型，不加入校園 NPC 名單，不可攻擊、不觸發通緝、不計入任務
 export class RaceRival {
   public mesh: THREE.Group;
@@ -20,26 +68,37 @@ export class RaceRival {
   private animTimer: number = 0;
   private facingY: number = 0;
 
-  constructor(scene: THREE.Scene, label: string, jerseyColor: number, capColor: number) {
+  constructor(scene: THREE.Scene, label: string, jerseyColor: number, capColor: number, proportions: 'RIVAL' | 'NPC' = 'RIVAL') {
+    const dims = proportions === 'NPC' ? NPC_DIMS : RIVAL_DIMS;
     this.mesh = new THREE.Group();
     this.body = new THREE.Group();
     this.mesh.add(this.body);
 
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xf1c27d });
+    const skinMat = new THREE.MeshLambertMaterial({ color: dims.skin });
     const jerseyMat = new THREE.MeshLambertMaterial({ color: jerseyColor });
     const shortsMat = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
     const capMat = new THREE.MeshLambertMaterial({ color: capColor });
 
     // 軀幹與頭部 (腳底為原點，與玩家模型比例一致)
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), jerseyMat);
-    torso.position.y = 1.15;
+    const [tw, th, td, ty] = dims.torso;
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(tw, th, td), jerseyMat);
+    torso.position.y = ty;
     this.body.add(torso);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.38, 0.36), skinMat);
-    head.position.y = 1.66;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(dims.head[0], dims.head[1], dims.head[0]), skinMat);
+    head.position.y = dims.head[2];
     this.body.add(head);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.38), capMat);
-    cap.position.y = 1.86;
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(dims.cap[0], dims.cap[1], dims.cap[0]), capMat);
+    cap.position.y = dims.cap[2];
     this.body.add(cap);
+    if (dims.eyes) {
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+      const eyeGeo = new THREE.BoxGeometry(0.06, 0.05, 0.02);
+      for (const ex of [-0.09, 0.09]) {
+        const eye = new THREE.Mesh(eyeGeo, eyeMat);
+        eye.position.set(ex, dims.head[2] + 0.03, dims.head[0] / 2 + 0.01);
+        this.body.add(eye);
+      }
+    }
 
     // 四肢以肩/髖為樞紐，供跑步擺臂與自由式划水動畫
     const buildLimb = (x: number, y: number, len: number, w: number, mat: THREE.Material): THREE.Group => {
@@ -51,32 +110,16 @@ export class RaceRival {
       this.body.add(pivot);
       return pivot;
     };
-    this.leftArm = buildLimb(-0.33, 1.42, 0.6, 0.14, skinMat);
-    this.rightArm = buildLimb(0.33, 1.42, 0.6, 0.14, skinMat);
-    this.leftLeg = buildLimb(-0.13, 0.84, 0.84, 0.18, shortsMat);
-    this.rightLeg = buildLimb(0.13, 0.84, 0.84, 0.18, shortsMat);
+    const [ax, ay, al, aw] = dims.arm;
+    const [lx, ly, ll, lw] = dims.leg;
+    this.leftArm = buildLimb(-ax, ay, al, aw, skinMat);
+    this.rightArm = buildLimb(ax, ay, al, aw, skinMat);
+    this.leftLeg = buildLimb(-lx, ly, ll, lw, shortsMat);
+    this.rightLeg = buildLimb(lx, ly, ll, lw, shortsMat);
 
     // 頭頂名牌
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-      ctx.beginPath();
-      ctx.roundRect(4, 6, 248, 52, 26);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 28px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, 128, 33);
-    }
-    const tagMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthTest: false });
-    this.nameTag = new THREE.Sprite(tagMat);
-    this.nameTag.scale.set(1.8, 0.45, 1);
+    this.nameTag = createNameTagSprite(label);
     this.nameTag.position.y = 2.35;
-    this.nameTag.renderOrder = 10;
     this.mesh.add(this.nameTag);
 
     this.mesh.visible = false;

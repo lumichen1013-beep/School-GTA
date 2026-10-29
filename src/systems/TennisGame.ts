@@ -379,7 +379,7 @@ export class TennisGame {
       if (
         sc.position.x < 62.8 || sc.position.x > 85.2 ||
         sc.position.z < 22.8 || sc.position.z > 53.2 ||
-        sc.position.y < 11.5 || sc.position.y > 17.5
+        sc.position.y < 11.5 || sc.position.y > 21.5
       ) {
         NPC.disposeProjectile(sc, scene);
         this.shuttlecocks.splice(i, 1);

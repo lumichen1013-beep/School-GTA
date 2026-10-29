@@ -22,6 +22,7 @@ export class CombatSystem {
   private bulletTimeDuration: number = 0;
   private bulletTimeScale: number = 0.15;
   private bossJumpDelayTimer: number = 0;
+  private isBossLeaping: boolean = false;
   private readonly bossJumpTargetPos = new THREE.Vector3();
   private wasBossWindingUp: boolean = false;
   private wasBossStunned: boolean = false;
@@ -32,6 +33,7 @@ export class CombatSystem {
   public resetTransientState() {
     this.bulletTimeTimer = 0;
     this.bossJumpDelayTimer = 0;
+    this.isBossLeaping = false;
   }
 
   // 套用慢動作時間膨脹後的模擬時間步長
@@ -44,15 +46,33 @@ export class CombatSystem {
     return rawDelta * currentScale;
   }
 
-  // 暗殺動畫播畢後玩家朝遠離 BOSS 方向後跳/跳離 4 個身位（約 4.8~5.2m），落地時面向 BOSS
+  // 暗殺動畫播畢後玩家朝遠離 BOSS 方向後空翻跳離 4 個身位 (約 4m，留下閃身步殘影)；
+  // 起跳與落地時玩家與鏡頭都面向 BOSS (鏡頭置於玩家正後方)
   public updateBossLeap(rawDelta: number) {
-    if (this.bossJumpDelayTimer <= 0) return;
-    this.bossJumpDelayTimer -= rawDelta;
-    if (this.bossJumpDelayTimer <= 0) {
-      this.bossJumpDelayTimer = 0;
-      const { player, cameraCtrl } = this.ctx;
-      player.leapAwayFrom(this.bossJumpTargetPos, this.ctx.activeColliders, 5.0);
-      cameraCtrl.resetBehind(player.position, player.rotationY);
+    const { player, cameraCtrl } = this.ctx;
+    if (this.bossJumpDelayTimer > 0) {
+      this.bossJumpDelayTimer -= rawDelta;
+      if (this.bossJumpDelayTimer <= 0) {
+        this.bossJumpDelayTimer = 0;
+        player.leapAwayFrom(this.bossJumpTargetPos, 4.0);
+        cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
+        this.isBossLeaping = true;
+      }
+      return;
+    }
+    if (this.isBossLeaping && !player.isBackflipping) {
+      this.isBossLeaping = false;
+      if (player.isDead) return;
+      // 落地：重新對準 BOSS 目前位置
+      const boss = this.ctx.npcs.find((n) => n.role === 'DETENTION_BOSS');
+      const focus = boss ? boss.position : this.bossJumpTargetPos;
+      const dx = focus.x - player.position.x;
+      const dz = focus.z - player.position.z;
+      if (dx * dx + dz * dz > 0.0001) {
+        player.rotationY = Math.atan2(dx, dz);
+        player.mesh.rotation.y = player.rotationY;
+      }
+      cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
     }
   }
 
@@ -117,18 +137,15 @@ export class CombatSystem {
       if (npc.position.distanceTo(player.position) < reach + 0.3 && !npc.isKnockedDown && !npc.isPermanentlyKnockedOut) {
         let actualKnockback = knockback;
 
+        // 校園打人：附近同學依個性圍觀 / 起鬨 / 逃跑 / 叫老師 (打強盜可解救被勒索的同學)
+        if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onFight(npc);
+
         if (this.ctx.currentWorldType === 'DETENTION') {
           this.ctx.detention.onPlayerAttackedGuard(npc);
 
           if (npc.role === 'DETENTION_BOSS') {
             if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
               wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
-              soundManager.playPunch();
-              player.setAttackCooldown(0.5);
-              return;
-            }
-            if (!npc.isBossStunned) {
-              wantedSystem.showBanner('🛡️ 總教官正面持盾防禦！正面攻擊無效！需誘使撞柱硬直破盾！', 2500);
               soundManager.playPunch();
               player.setAttackCooldown(0.5);
               return;
@@ -337,7 +354,7 @@ export class CombatSystem {
 
         if (npc.isBossStunned && !this.wasBossStunned) {
           this.wasBossStunned = true;
-          wantedSystem.showBanner('⚡ 總教官猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈！快繞後刺殺！', 2500);
+          wantedSystem.showBanner('⚡ 總教官猛烈撞擊加固水泥柱！陷入 5 秒重度眩暈！快繞後刺殺！', 2500);
         } else if (!npc.isBossStunned) {
           this.wasBossStunned = false;
         }
@@ -368,12 +385,19 @@ export class CombatSystem {
       }
 
       const specs = npc.getAttackSpecs();
+      // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
       if (this.ctx.currentRidingBike) {
-        this.ctx.forceDismount();
-        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下火柴人自行車！`, 2500);
-      } else {
-        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
+        if (player.hitCooldown > 0) continue;
+        player.hitCooldown = 0.55;
+        soundManager.playPunch();
+        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
+        wantedSystem.notifyAttacked();
+        if (player.takeDamage(specs.damage, npc.getRoleTitle())) {
+          this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
+        }
+        continue;
       }
+      wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
 
       wantedSystem.notifyAttacked();
       if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, specs.damage, npc.getRoleTitle())) {

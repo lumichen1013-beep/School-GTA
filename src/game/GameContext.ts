@@ -17,6 +17,7 @@ import type { WaterSplashVFX } from '../effects/WaterSplashVFX';
 import type { Progression } from './Progression';
 import type { DetentionMode } from './DetentionMode';
 import type { CampusMode } from './CampusMode';
+import type { CampusLife } from './CampusLife';
 import type { CombatSystem } from './CombatSystem';
 
 export type WorldType = 'CAMPUS' | 'DETENTION';
@@ -44,6 +45,7 @@ export interface GameContext {
   readonly progression: Progression;
   readonly detention: DetentionMode;
   readonly campus: CampusMode;
+  readonly campusLife: CampusLife;
   readonly combat: CombatSystem;
 
   readonly currentWorldType: WorldType;
@@ -55,7 +57,7 @@ export interface GameContext {
   readonly bicycles: Bicycle[];
   currentRidingBike: Bicycle | null;
 
-  /** 固定角色 NPC 快取 (NPC 名單於載入後不再增減) */
+  /** 固定角色 NPC 快取 (NPC 名單於載入後不再增減；僅小魚/阿凱上場比賽期間暫離名單) */
   readonly peCoachNpc?: NPC;
   readonly dodgeTeacherNpc?: NPC;
 

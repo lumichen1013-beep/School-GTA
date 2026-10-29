@@ -4,8 +4,8 @@ import { queryColliders, isBlockedXZ, depenetrateXZ, getSupportFloorY, DEPEN_PUS
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import type { Bicycle } from '../vehicles/Bicycle';
-import { disposeNonShared, getHpBarMaterial, getHpBarResources, markShared } from './npc/modelCache';
-import { SkillBubble } from './shared/SkillBubble';
+import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
+import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
@@ -29,8 +29,32 @@ export type NPCRole =
   | 'DETENTION_WOLF'
   | 'DETENTION_BOSS';
 
-export type NPCIdleBehavior = 'LOOK_AROUND' | 'PHONE' | 'STRETCH' | 'HANDS_BEHIND_BACK' | 'CHAT' | 'DOG_SNIFF' | 'DOG_SIT';
+export type NPCIdleBehavior =
+  | 'LOOK_AROUND' | 'PHONE' | 'STRETCH' | 'HANDS_BEHIND_BACK' | 'CHAT' | 'DOG_SNIFF' | 'DOG_SIT'
+  // 第一世界校園生活 (CampusLife 指派)：坐下、投籃、舉手機拍攝、歡呼起鬨、驚嚇抱頭、訓話、洗手
+  | 'SIT' | 'SHOOT_HOOP' | 'FILM' | 'CHEER' | 'COWER' | 'SCOLD' | 'WASH';
+
+// 第一世界校園生活導演 (CampusLife) 指派的活動：前往 target，抵達後面向指定點做 hold 動作 holdTime 秒
+// 進行中為 GO / HOLD，完成或放棄 (受阻) 時為 DONE，由導演收回後恢復原巡邏路線
+export interface NPCLifeTask {
+  target: THREE.Vector3;
+  speedMul: number;   // 相對自身步行速度的倍率
+  run: boolean;       // 以小跑動作移動 (趕去圍觀、逃跑、閃避)
+  arriveDist: number;
+  hold: NPCIdleBehavior;
+  holdTime: number;
+  hasFace: boolean;   // 抵達後是否轉向 face 點
+  faceX: number;
+  faceZ: number;
+  sitBack: number;    // SIT：身體向後位移坐上椅面 (公尺)
+  bubble: string;     // 抵達時說的話 (空字串不說)
+  phase: 'GO' | 'HOLD' | 'DONE';
+}
 export type NPCMovementStyle = 'CASUAL_WALK' | 'HURRIED_WALK' | 'JOGGING' | 'OFFICER_PATROL';
+// 學生外觀：DEFAULT 隨機制服/運動服、PE 固定運動服 (籃球場)、SWIMMER 游泳隊小魚 (泳池)、TRACK 田徑隊阿凱 (操場)
+export type NPCLook = 'DEFAULT' | 'PE' | 'SWIMMER' | 'TRACK';
+// 固定駐點：由 CampusSportsCrew 管理，不參與校園生活的地點活動、小團體與角色事件 (仍會對玩家反應)
+export type NPCCampusAnchor = 'POOL' | 'COURT' | 'TRACK';
 
 export interface ShuttlecockProjectile {
   mesh: THREE.Group;
@@ -45,8 +69,15 @@ export interface ShuttlecockProjectile {
 const _npcMoveDir = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
-// NPC 技能/對話氣泡外觀 (字級依文字長度縮放)
-const NPC_BUBBLE_STYLE = { fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: (text: string) => (text.length > 9 ? 24 : (text.length > 6 ? 28 : 34)) };
+// NPC 技能/對話氣泡外觀：大字版 (世界尺寸約為舊版 1.8 倍、畫布 512×160)，長句換成 2 行而不縮小字級，
+// 底部對齊於血條/告示牌上方
+const NPC_BUBBLE_STYLE: SkillBubbleStyle = {
+  fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: () => 46,
+  canvasW: 512, canvasH: 160, worldW: 3.9, worldH: 1.21875,
+  wrap: true, minFontSize: 38, anchorBottom: true
+};
+// 氣泡底部 (箭頭尖端) 位於血條上方的高度：讓開放大後的 KO/警戒告示牌
+const NPC_BUBBLE_ABOVE_HPBAR = 0.62;
 const _npcSightNear: CollidableBox[] = [];
 const _bossNear: CollidableBox[] = [];
 const _bossKnockDir = new THREE.Vector3();
@@ -87,7 +118,7 @@ function drawBadge(ctx: CanvasRenderingContext2D, style: BadgeStyle, text: strin
   ctx.fillText(text, 128, 32);
 }
 
-// 固定內容告示牌 (❓ / ❗ / 永久擊昏 / 破盾硬直) 全體 NPC 共用一張貼圖，免除每隻 NPC 各自重繪與上傳
+// 固定內容告示牌 (❓ / ❗ / 永久擊昏 / 撞柱硬直) 全體 NPC 共用一張貼圖，免除每隻 NPC 各自重繪與上傳
 const _sharedBadgeTextures = new Map<string, THREE.CanvasTexture>();
 function getSharedBadgeTexture(key: string, style: BadgeStyle, text: string, textColor?: string): THREE.CanvasTexture {
   let tex = _sharedBadgeTextures.get(key);
@@ -107,6 +138,31 @@ function getSharedBadgeTexture(key: string, style: BadgeStyle, text: string, tex
 const ALERT_BADGE_CODE = { NORMAL: -1, CAUTION: -101, ALERT: -102 } as const;
 // 失去單車後步行數值 (學生步速依移動風格決定，徒步騎士固定採用一般步行/追逐速度)
 const BIKELESS_WALK_SPEED = 5.0;
+
+// ===== 火柴人自行車騎士追逐「騎車中的玩家」：跟蹤 → 響鈴預告 → 撲咬 → 喘息 =====
+// 完全依玩家騎法觸發 (無隨機)：減速、持續轉彎時撲咬；全速直線每 6 秒固定一次試探撲 (停在攻擊距離外)
+interface BikePersona { followDist: number; pounceSpeed: number; restTime: number }
+// 4 名騎士的固定個性 (依生成順序輪流套用)
+const BIKE_PERSONAS: BikePersona[] = [
+  { followDist: 4.0, pounceSpeed: 16.5, restTime: 2.0 }, // 最兇，貼最近
+  { followDist: 5.0, pounceSpeed: 16.2, restTime: 2.0 }, // 標準
+  { followDist: 6.0, pounceSpeed: 16.0, restTime: 2.0 }, // 保守，跟較遠
+  { followDist: 4.5, pounceSpeed: 15.8, restTime: 1.5 }  // 撲較弱、喘息較短
+];
+const BIKE_MATCH_SPEED = 15.0;     // 跟蹤緩衝區內與玩家騎車極速相同
+const BIKE_STALK_MIN = 13.5;
+const BIKE_STALK_MAX = 16.5;
+const BIKE_BUFFER = 1.0;           // 理想跟車距離 ±1m 緩衝區
+const BIKE_SLOW_TRIGGER = 13.0;    // 玩家車速低於此值即撲咬
+const BIKE_TURN_TRIGGER = 0.4;     // 玩家持續轉彎超過此秒數即撲咬
+const BIKE_PROBE_INTERVAL = 6.0;   // 全速直線持續此秒數發動試探撲
+const BIKE_PROBE_STOP = 2.8;       // 試探撲逼近至此距離 (預測下一步) 即收手，保持在攻擊距離 2.4m 之外
+const BIKE_GUARD_DIST = 3.0;       // 非撲咬階段的安全距離：預測距離小於此值時車速壓在玩家車速 -2.5 以下，不主動貼身
+const BIKE_WARN_TIME = 0.5;        // 響鈴預告
+const BIKE_POUNCE_TIME = 1.5;
+const BIKE_POUNCE_CONTACT = 1.3;   // 真撲咬貼身即結束 (交由近戰攻擊結算)
+const BIKE_REST_SPEED = 14.0;
+const BIKE_POUNCE_MAX_DIST = 10.0; // 距離過遠時先以跟蹤曲線追近，不發動撲咬
 const BIKELESS_CHASE_SPEED = 10.0;
 
 // 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
@@ -192,7 +248,7 @@ export class NPC {
   public cautionTimer: number = 0;
   public reviveTimer: number = 0;
 
-  // 小 Boss【鐵面總教官】專屬破盾與衝撞硬直機制
+  // 小 Boss【鐵面總教官】專屬閃身與衝撞硬直機制
   public isBossStunned: boolean = false;
   public bossStunTimer: number = 0;
   public bossInvulnerableTimer: number = 0;
@@ -211,7 +267,6 @@ export class NPC {
   public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
   public bossTelegraphGroup?: THREE.Group;
   private bossTelegraphMat?: THREE.MeshBasicMaterial;
-  public bossBarrierMesh?: THREE.Mesh;
 
   // 單車衝撞擊飛與無敵幀 (避免持續性傷害)
   public isKnockedFlying: boolean = false;
@@ -235,6 +290,9 @@ export class NPC {
   // NPC 多樣性行為與移動風格系統
   public movementStyle: NPCMovementStyle = 'CASUAL_WALK';
   public currentIdleBehavior: NPCIdleBehavior = 'LOOK_AROUND';
+  // 校園生活導演指派的活動 (null 時走原本巡邏路線)
+  public lifeTask: NPCLifeTask | null = null;
+  private lifeSitBack: number = 0;
   public isPaused: boolean = false;
   public pauseTimer: number = 0;
   public pauseAnimTimer: number = 0;
@@ -267,8 +325,8 @@ export class NPC {
   // 單車糾察隊與單車組件追蹤
   public isOriginalBikePatrol: boolean = false;
   // 第一世界學生服裝 (生成時隨機決定並保留，搶車/復活重建模型時維持同一套)：米白襯衫配深綠長褲制服，或淺青藍色運動服
-  private readonly studentOutfit: { shirt: number; pants: number } =
-    Math.random() < 0.5 ? { shirt: 0xf3ead3, pants: 0x2f4a36 } : { shirt: 0x5bb8d6, pants: 0x3f93b3 };
+  private readonly studentOutfit: { shirt: number; pants: number };
+  public readonly look: NPCLook;
   // 被玩家搶走的自行車 (車主綁定)：復活後步行回到愛車旁牽回，避免憑空變出新車導致單車堆積
   public ownedBike: Bicycle | null = null;
   public isReclaimingBike: boolean = false;
@@ -292,6 +350,9 @@ export class NPC {
   // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法系統
   private lastColliders: CollidableBox[] = [];
   public isConversing: boolean = false;
+  // 固定駐點 (泳池 / 籃球場 / 操場) 與暫離名單狀態 (小魚、阿凱上場比賽期間由陪賽模型代演)
+  public campusAnchor: NPCCampusAnchor | null = null;
+  public isOffstage: boolean = false;
   private isDodging: boolean = false;
   private dodgeTimer: number = 0;
   private dodgeDuration: number = 0.24;
@@ -316,11 +377,23 @@ export class NPC {
   // 下雨天撐傘與避雨行為
   public hasUmbrella: boolean = false;
   private umbrellaMesh?: THREE.Group;
+  // 手機模型 (掛於右臂，僅滑手機/坐著滑手機/舉手機錄影待機時顯示；共用幾何體與材質)
+  private phoneMesh?: THREE.Mesh;
   private rainChatTimer: number = 0;
   private rainChatNextTime: number = 6.0;
   private isDogSheltering: boolean = false;
   private originalDogWaypoints: THREE.Vector3[] = [];
   public static readonly DOG_SHELTER_POS = new THREE.Vector3(24.0, 0, 15.0);
+
+  // 玩家騎車遙測 (main 每幀寫入：目前車速、持續轉彎秒數)，供單車騎士判斷撲咬時機
+  public static playerBikeSpeed: number = 0;
+  public static playerBikeTurnTime: number = 0;
+  private static bikePatrolCount: number = 0;
+  private bikePersona: BikePersona = BIKE_PERSONAS[1];
+  private bikePhase: 'STALK' | 'WARN' | 'POUNCE' | 'REST' = 'STALK';
+  private bikePhaseTimer: number = 0;
+  private bikeStraightTimer: number = 0;
+  private bikePounceIsProbe: boolean = false;
 
   // 頭頂技能名稱對話氣泡 (3D Billboard Sprite)
   private skillBubble!: SkillBubble;
@@ -335,8 +408,11 @@ export class NPC {
     startPos: THREE.Vector3,
     role: NPCRole,
     waypoints: THREE.Vector3[] = [],
-    movementStyle?: NPCMovementStyle
+    movementStyle?: NPCMovementStyle,
+    look: NPCLook = 'DEFAULT'
   ) {
+    this.look = look;
+    this.studentOutfit = look === 'PE' || Math.random() >= 0.5 ? { shirt: 0x5bb8d6, pants: 0x3f93b3 } : { shirt: 0xf3ead3, pants: 0x2f4a36 };
     this.position = startPos.clone();
     this.initialPosition = startPos.clone();
     this.baseFloorY = startPos.y; // 鎖定 NPC 所屬樓層高度基準
@@ -376,13 +452,14 @@ export class NPC {
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ';
     this.mesh.position.copy(this.position);
-    this.skillBubble = new SkillBubble(this.mesh, 2.45, NPC_BUBBLE_STYLE);
+    this.skillBubble = new SkillBubble(this.mesh, cfg.hpBarY + NPC_BUBBLE_ABOVE_HPBAR, NPC_BUBBLE_STYLE);
 
     // 依角色建造不同 3D 外觀模型
     if (cfg.isCanine) {
       this.buildModel(buildDogModel);
     } else if (role === 'BIKE_PATROL') {
       this.isOriginalBikePatrol = true;
+      this.bikePersona = BIKE_PERSONAS[NPC.bikePatrolCount++ % BIKE_PERSONAS.length];
       this.buildModel(buildBikePatrolModel);
       // 記錄騎士身體(軀幹/頭/帽/臂/腿)與單車全部子物件，被搶車時一併移除
       this.bikeModelParts = this.mesh.children.slice();
@@ -395,19 +472,6 @@ export class NPC {
         this.bossTelegraphGroup = buildBossTelegraphMesh(rig);
         this.readRig(rig);
         this.mesh.add(this.bossTelegraphGroup);
-
-        const barrierGeo = new THREE.SphereGeometry(1.35, 16, 12);
-        const barrierMat = new THREE.MeshBasicMaterial({
-          color: 0xf59e0b,
-          transparent: true,
-          opacity: 0.38,
-          wireframe: true,
-          depthWrite: false
-        });
-        this.bossBarrierMesh = new THREE.Mesh(barrierGeo, barrierMat);
-        this.bossBarrierMesh.position.set(0, 1.05, 0);
-        this.bossBarrierMesh.visible = false;
-        this.mesh.add(this.bossBarrierMesh);
       }
     }
 
@@ -427,15 +491,17 @@ export class NPC {
 
     // 2. 綠色/黃色/紅色動態血條 (錨點設在左側，縮放時從左向右展開；狀態色以切換共用材質呈現)
     this.hpBarMesh = new THREE.Mesh(hpRes.barGeo, getHpBarMaterial(0x2ecc71));
-    this.hpBarMesh.position.set(-0.40, 0, 0.01);
+    // 血條前移 0.03：前後表面都不與底框共面 (原 0.01 時背面與底框背面重疊造成 Z-fighting 閃爍)
+    this.hpBarMesh.position.set(-0.40, 0, 0.03);
     this.hpBarFrame.add(this.hpBarMesh);
 
     // 3. 昏睡倒地狀態告示牌 (CanvasTexture 呈現動態倒數秒數)
     // 尚未繪製前以全透明呈現，首次繪製時才掛上畫布貼圖
     const spriteMat = new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthTest: false });
     this.koBadgeSprite = new THREE.Sprite(spriteMat);
-    this.koBadgeSprite.scale.set(1.4, 0.35, 1);
-    this.koBadgeSprite.position.set(0, 0.28, 0);
+    // 告示牌放大約 1.35 倍 (原 1.4×0.35m) 以利辨識，中心同步上移避免壓到血條
+    this.koBadgeSprite.scale.set(1.9, 0.475, 1);
+    this.koBadgeSprite.position.set(0, 0.34, 0);
     this.koBadgeSprite.visible = false;
     this.hpBarGroup.add(this.koBadgeSprite);
 
@@ -497,7 +563,7 @@ export class NPC {
     this.drawDynamicBadge(BADGE_KO, `💫 昏迷中 (${sec}s)`);
   }
 
-  // 顯示自定義頭頂動態文字徽章 (如金鐘護體、破盾硬直等)
+  // 顯示自定義頭頂動態文字徽章 (如金鐘護體、撞柱硬直等)
   public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
     // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)
     const key = text + bgColor + borderColor;
@@ -663,7 +729,7 @@ export class NPC {
     if (this.bossStunStars) this.bossStunStars.rotation.y = t * 5.0;
   }
 
-  public stunBoss(duration: number = 3.5) {
+  public stunBoss(duration: number = 5.0) {
     if (this.role !== 'DETENTION_BOSS' || this.isKnockedDown) return;
     this.isBossStunned = true;
     this.bossStunTimer = duration;
@@ -677,9 +743,9 @@ export class NPC {
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
     this.getStunStars().visible = true;
 
-    // 顯示破盾硬直告示牌 (固定內容，共用貼圖)
+    // 顯示撞柱硬直告示牌 (固定內容，共用貼圖)
     this.lastKoBadgeSec = -103;
-    this.setBadgeTexture(getSharedBadgeTexture('boss-stun', BADGE_STUN, '⚡ 破盾硬直！快繞背！'));
+    this.setBadgeTexture(getSharedBadgeTexture('boss-stun', BADGE_STUN, '⚡ 撞柱硬直！快繞背！'));
     this.koBadgeSprite.visible = true;
   }
 
@@ -689,6 +755,7 @@ export class NPC {
       mesh: this.mesh,
       role: this.role,
       studentOutfit: this.studentOutfit,
+      look: this.look,
       hasUmbrella: this.hasUmbrella,
       humanoidParts: this.humanoidParts,
       headMesh: this.headMesh,
@@ -847,12 +914,6 @@ export class NPC {
         this.whistleCooldown = 12.0;
       }
     } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長受擊：20% 機率施展「閃身步」避開攻擊，反擊前搖留有公平反應間隔
-      if (!this.isDodging && Math.random() < 0.20) {
-        this.performFlashStep();
-        this.attackCooldown = 0.65;
-        return false;
-      }
       if (this.hp < this.maxHp * 0.35 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
         this.whistleCooldown = 16.0;
@@ -920,6 +981,8 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
+    // 鐵面總長受擊：撞柱硬直中 20%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.20 : 0.50)) return false;
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
@@ -1031,6 +1094,7 @@ export class NPC {
       disposeNonShared(part);
     }
     this.umbrellaMesh = undefined;
+    this.phoneMesh = undefined;
     this.humanoidParts.length = 0;
     this.leftArm = undefined;
     this.rightArm = undefined;
@@ -1249,11 +1313,59 @@ export class NPC {
     this.resetPose();
   }
 
+  // 正以小跑動作執行校園生活活動 (前往途中)
+  private get isLifeRunning(): boolean {
+    return !!this.lifeTask && this.lifeTask.phase === 'GO' && this.lifeTask.run;
+  }
+
+  // 指派校園生活活動 (中斷目前的駐足待機)
+  public assignLifeTask(task: NPCLifeTask) {
+    if (this.isPaused) this.cancelPause();
+    task.phase = 'GO';
+    this.lifeTask = task;
+    this.lastRecordedPos.copy(this.position);
+    this.stuckCheckTimer = 0;
+  }
+
+  // 收回校園生活活動 (正在執行時一併結束動作)，恢復原巡邏路線
+  public clearLifeTask() {
+    if (!this.lifeTask) return;
+    if (this.lifeTask.phase === 'HOLD' && this.isPaused) this.cancelPause();
+    this.lifeTask = null;
+    this.lifeSitBack = 0;
+  }
+
+  private startLifeHold(task: NPCLifeTask) {
+    task.phase = 'HOLD';
+    this.isPaused = true;
+    this.pauseAnimTimer = 0;
+    this.pauseTimer = task.holdTime;
+    this.currentIdleBehavior = task.hold;
+    this.lifeSitBack = task.hold === 'SIT' ? task.sitBack : 0;
+    if (task.hasFace) {
+      const dx = task.faceX - this.position.x;
+      const dz = task.faceZ - this.position.z;
+      if (dx * dx + dz * dz > 0.0001) {
+        this.rotationY = Math.atan2(dx, dz);
+        this.mesh.rotation.y = this.rotationY;
+      }
+    }
+    if (task.bubble) this.showSpeechBubble(task.bubble, false, 2.4);
+  }
+
+  // 校園生活導演用：轉身面向指定點 (待機中說話、被叫住時)
+  public faceTowards(x: number, z: number) {
+    const dx = x - this.position.x;
+    const dz = z - this.position.z;
+    if (dx * dx + dz * dz < 0.0001) return;
+    this.rotationY = Math.atan2(dx, dz);
+    this.mesh.rotation.y = this.rotationY;
+  }
+
   // 過場動畫演員模式：隱藏血條、昏迷告示、護盾與衝撞預警，只保留角色外觀 (不加入 NPC 清單、不跑 AI)
   public setCutsceneActor() {
     this.hpBarGroup.visible = false;
     this.koBadgeSprite.visible = false;
-    if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
   }
 
@@ -1307,7 +1419,24 @@ export class NPC {
     }
   }
 
+  // 顯示手機 (首次使用時建立並掛到目前的右臂；手臂重建後自動改掛)
+  private showPhone() {
+    if (!this.rightArm) return;
+    if (!this.phoneMesh) {
+      const { geometry, material } = getPhoneResources();
+      this.phoneMesh = new THREE.Mesh(geometry, material);
+      this.phoneMesh.castShadow = false;
+      this.phoneMesh.receiveShadow = false;
+      // 位於右手掌心略偏身體內側，螢幕朝上後方 (朝向低頭的視線)
+      this.phoneMesh.position.set(-0.09, -0.37, 0.08);
+      this.phoneMesh.rotation.set(-Math.PI / 2 + 0.6, 0, 0);
+    }
+    if (this.phoneMesh.parent !== this.rightArm) this.rightArm.add(this.phoneMesh);
+    this.phoneMesh.visible = true;
+  }
+
   public resetPose() {
+    if (this.phoneMesh) this.phoneMesh.visible = false;
     if (this.headMesh) {
       this.headMesh.rotation.set(0, 0, 0);
     }
@@ -1324,7 +1453,8 @@ export class NPC {
     if (this.mesh) {
       this.mesh.rotation.x = 0;
       this.mesh.rotation.z = 0;
-      this.mesh.position.y = this.baseFloorY;
+      // 坐姿等待機動作會位移模型，復位時一併對齊角色位置
+      this.mesh.position.set(this.position.x, this.baseFloorY, this.position.z);
     }
   }
 
@@ -1424,6 +1554,7 @@ export class NPC {
     switch (this.currentIdleBehavior) {
       case 'PHONE': {
         // 低頭滑手機 (頭部前傾約 20 度，雙手曲肘於胸前捧著手機操作)
+        this.showPhone();
         if (this.headMesh) {
           this.headMesh.rotation.x = 0.36 + Math.sin(this.pauseAnimTimer * 2.0) * 0.02;
           this.headMesh.rotation.y = 0;
@@ -1475,6 +1606,99 @@ export class NPC {
         if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
         break;
       }
+      case 'SIT': {
+        // 坐在椅面/花台邊緣：身體後移 lifeSitBack、下沉，大腿前伸，低頭滑手機
+        this.showPhone();
+        const back = this.lifeSitBack;
+        const fx = Math.sin(this.rotationY);
+        const fz = Math.cos(this.rotationY);
+        this.mesh.position.set(this.position.x - fx * back, this.baseFloorY - 0.22, this.position.z - fz * back);
+        this.mesh.rotation.x = 0;
+        if (this.headMesh) {
+          this.headMesh.rotation.x = 0.3 + Math.sin(this.pauseAnimTimer * 1.6) * 0.04;
+          this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 0.5) * 0.15;
+        }
+        if (this.leftLeg) this.leftLeg.rotation.set(-1.45, 0, 0.05);
+        if (this.rightLeg) this.rightLeg.rotation.set(-1.45, 0, -0.05);
+        if (this.leftArm) this.leftArm.rotation.set(-0.9, 0.3, -0.1);
+        if (this.rightArm) this.rightArm.rotation.set(-0.95, -0.3, 0.1);
+        break;
+      }
+      case 'SHOOT_HOOP': {
+        // 空手練投籃：屈膝蓄力 → 雙手上舉出手 (1.4 秒一循環，含小跳)
+        const t = (this.pauseAnimTimer % 1.4) / 1.4;
+        const shoot = t < 0.45 ? t / 0.45 : (t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4));
+        const crouch = t < 0.35 ? Math.sin((t / 0.35) * Math.PI) * 0.12 : 0;
+        this.mesh.position.y = this.baseFloorY - crouch + (t >= 0.4 && t < 0.6 ? Math.sin(((t - 0.4) / 0.2) * Math.PI) * 0.25 : 0);
+        if (this.headMesh) this.headMesh.rotation.x = -0.25 * shoot;
+        if (this.leftArm) this.leftArm.rotation.set(-0.9 - 1.9 * shoot, 0, -0.1);
+        if (this.rightArm) this.rightArm.rotation.set(-0.9 - 2.1 * shoot, 0, 0.1);
+        if (this.leftLeg) this.leftLeg.rotation.set(-crouch * 2.5, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(-crouch * 2.5, 0, 0);
+        break;
+      }
+      case 'FILM': {
+        // 舉高手機錄影圍觀 (雙手舉至頭前，身體微微左右晃動找角度)
+        this.showPhone();
+        if (this.headMesh) {
+          this.headMesh.rotation.x = -0.05;
+          this.headMesh.rotation.y = Math.sin(this.pauseAnimTimer * 1.2) * 0.1;
+        }
+        this.mesh.rotation.z = Math.sin(this.pauseAnimTimer * 1.2) * 0.04;
+        if (this.leftArm) this.leftArm.rotation.set(-1.75, 0.35, -0.1);
+        if (this.rightArm) this.rightArm.rotation.set(-1.8, -0.35, 0.1);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'CHEER': {
+        // 起鬨歡呼：雙手高舉揮動、原地跳躍
+        const hop = Math.abs(Math.sin(this.pauseAnimTimer * 7.0));
+        this.mesh.position.y = this.baseFloorY + hop * 0.18;
+        if (this.headMesh) this.headMesh.rotation.x = -0.15;
+        if (this.leftArm) this.leftArm.rotation.set(-2.7 + Math.sin(this.pauseAnimTimer * 9.0) * 0.25, 0, -0.35);
+        if (this.rightArm) this.rightArm.rotation.set(-2.7 - Math.sin(this.pauseAnimTimer * 9.0) * 0.25, 0, 0.35);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'COWER': {
+        // 驚嚇抱頭蹲低、身體發抖
+        const shiver = Math.sin(this.pauseAnimTimer * 30.0) * 0.03;
+        this.mesh.position.y = this.baseFloorY - 0.25;
+        this.mesh.rotation.x = 0.35;
+        this.mesh.rotation.z = shiver;
+        if (this.headMesh) this.headMesh.rotation.x = 0.45;
+        if (this.leftArm) this.leftArm.rotation.set(-2.6, 0, -0.7);
+        if (this.rightArm) this.rightArm.rotation.set(-2.6, 0, 0.7);
+        if (this.leftLeg) this.leftLeg.rotation.set(-0.7, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(-0.7, 0, 0);
+        break;
+      }
+      case 'SCOLD': {
+        // 師長訓話：一手插腰、一手指著對方上下比劃
+        const jab = Math.sin(this.pauseAnimTimer * 6.0);
+        if (this.headMesh) {
+          this.headMesh.rotation.x = 0.08 + jab * 0.05;
+          this.headMesh.rotation.y = 0;
+        }
+        if (this.leftArm) this.leftArm.rotation.set(0.2, 0, -0.9);
+        if (this.rightArm) this.rightArm.rotation.set(-1.45 + jab * 0.18, -0.15, 0.1);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
+      case 'WASH': {
+        // 洗手：低頭、雙手於身前搓洗
+        const rub = Math.sin(this.pauseAnimTimer * 10.0) * 0.12;
+        this.mesh.rotation.x = 0.12;
+        if (this.headMesh) this.headMesh.rotation.x = 0.4;
+        if (this.leftArm) this.leftArm.rotation.set(-1.0 + rub, 0.4, -0.1);
+        if (this.rightArm) this.rightArm.rotation.set(-1.0 - rub, -0.4, 0.1);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0, 0, 0);
+        break;
+      }
       case 'CHAT': {
         // 學生交談互動、點頭回應、手勢比劃
         if (this.headMesh) {
@@ -1507,6 +1731,7 @@ export class NPC {
   // 清除仇恨與追擊狀態
   public resetAggro() {
     this.isChasing = false;
+    this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
@@ -1522,11 +1747,13 @@ export class NPC {
   // 玩家死亡重生時完整重置 NPC 至初始狀態 (位置、警戒狀態、巡邏狀態、HP 與肢體)
   public resetToInitialState() {
     this.position.copy(this.initialPosition);
+    this.baseFloorY = this.initialPosition.y; // 被擊飛落到其他樓層後，回到原樓層基準
     this.mesh.position.copy(this.initialPosition);
     this.velocity.set(0, 0, 0);
     this.rotationY = this.initialRotationY;
     this.mesh.rotation.y = this.initialRotationY;
     this.isChasing = false;
+    this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
     this.chasePacingTimer = 1.5;
@@ -1549,6 +1776,11 @@ export class NPC {
     this.isPermanentlyKnockedOut = false;
     this.reviveTimer = 0;
     this.mesh.visible = true;
+    // 倒地時隱藏的血條與昏迷告示牌一併復原
+    this.hpBarBgMesh.visible = true;
+    this.hpBarMesh.visible = true;
+    this.koBadgeSprite.visible = false;
+    this.lastKoBadgeSec = -1;
 
     // Boss 專屬狀態重置
     if (this.role === 'DETENTION_BOSS') {
@@ -1569,7 +1801,6 @@ export class NPC {
       this.koBadgeSprite.visible = false;
       this.lastKoBadgeSec = -1;
       if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
-      if (this.bossBarrierMesh) this.bossBarrierMesh.visible = true;
     }
 
     this.resetPose();
@@ -1935,10 +2166,14 @@ export class NPC {
     }
   }
 
-  // 計算追捕移動速度 (包含火柴人自行車騎士 15.0、校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
-  private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number): number {
+  // 計算追捕移動速度 (包含火柴人自行車騎士 14.8、校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
+  private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number, delta: number): number {
     if (this.role === 'BIKE_PATROL') {
-      return 15.0;
+      if (!isPlayerRidingBike) {
+        this.resetBikePursuit();
+        return this.chaseSpeed; // 追步行玩家：14.8 (roleConfig)
+      }
+      return this.updateBikePursuit(Math.sqrt(distToPlayerSq), delta);
     }
 
     if (this.role === 'DOG') {
@@ -1964,7 +2199,93 @@ export class NPC {
     return this.speed;
   }
 
+  private resetBikePursuit() {
+    this.bikePhase = 'STALK';
+    this.bikePhaseTimer = 0;
+    this.bikeStraightTimer = 0;
+  }
+
+  // 跟蹤曲線：理想距離 ±1m 內與玩家同速咬住；拉開越遠追得越急 (最高 16.5)，靠太近則柔和收油 (最低 13.5)
+  private bikeStalkSpeed(dist: number): number {
+    const e = dist - this.bikePersona.followDist;
+    if (e > BIKE_BUFFER) {
+      return BIKE_MATCH_SPEED + (BIKE_STALK_MAX - BIKE_MATCH_SPEED) * THREE.MathUtils.smoothstep(e - BIKE_BUFFER, 0, 6.0);
+    }
+    if (e < -BIKE_BUFFER) {
+      return BIKE_MATCH_SPEED - (BIKE_MATCH_SPEED - BIKE_STALK_MIN) * THREE.MathUtils.smoothstep(-e - BIKE_BUFFER, 0, 1.5);
+    }
+    return BIKE_MATCH_SPEED;
+  }
+
+  // 追逐騎車玩家的節奏狀態機，回傳本幀目標速度
+  private updateBikePursuit(dist: number, delta: number): number {
+    const playerSpeed = NPC.playerBikeSpeed;
+    const turnTime = NPC.playerBikeTurnTime;
+    // 以本幀即將移動後的距離判斷 (避免高速時一步跨入攻擊距離)
+    const nextDist = dist - this.dynamicSpeed * delta;
+    const guard = (v: number) => (nextDist < BIKE_GUARD_DIST ? Math.max(0, Math.min(v, playerSpeed - 2.5)) : v);
+
+    switch (this.bikePhase) {
+      case 'STALK': {
+        const isCruising = playerSpeed >= 14.5 && turnTime <= 0;
+        this.bikeStraightTimer = isCruising ? this.bikeStraightTimer + delta : 0;
+        if (dist <= BIKE_POUNCE_MAX_DIST) {
+          if (playerSpeed < BIKE_SLOW_TRIGGER || turnTime > BIKE_TURN_TRIGGER) {
+            this.startBikeWarn(false);
+          } else if (this.bikeStraightTimer >= BIKE_PROBE_INTERVAL && nextDist > BIKE_PROBE_STOP + 0.4) {
+            this.startBikeWarn(true);
+          }
+        }
+        return guard(this.bikeStalkSpeed(dist));
+      }
+      case 'WARN':
+        this.bikePhaseTimer -= delta;
+        if (this.bikePhaseTimer <= 0) {
+          this.bikePhase = 'POUNCE';
+          this.bikePhaseTimer = BIKE_POUNCE_TIME;
+        }
+        return guard(this.bikeStalkSpeed(dist));
+      case 'POUNCE': {
+        this.bikePhaseTimer -= delta;
+        const reached = this.bikePounceIsProbe ? nextDist <= BIKE_PROBE_STOP : nextDist <= BIKE_POUNCE_CONTACT;
+        if (this.bikePhaseTimer <= 0 || reached) {
+          this.bikePhase = 'REST';
+          this.bikePhaseTimer = this.bikePersona.restTime;
+          // 試探撲收手：立即降速，避免平滑減速期間衝入攻擊距離
+          if (this.bikePounceIsProbe) this.dynamicSpeed = Math.min(this.dynamicSpeed, BIKE_REST_SPEED);
+          return guard(BIKE_REST_SPEED);
+        }
+        return this.bikePersona.pounceSpeed;
+      }
+      case 'REST':
+      default:
+        this.bikePhaseTimer -= delta;
+        if (this.bikePhaseTimer <= 0) {
+          this.bikePhase = 'STALK';
+          this.bikeStraightTimer = 0;
+        }
+        return guard(BIKE_REST_SPEED);
+    }
+  }
+
+  private startBikeWarn(isProbe: boolean) {
+    this.bikePhase = 'WARN';
+    this.bikePhaseTimer = BIKE_WARN_TIME;
+    this.bikePounceIsProbe = isProbe;
+    this.bikeStraightTimer = 0;
+    soundManager.playBicycleBell();
+    this.showSpeechBubble('🔔 叮叮！', true, 1.0);
+  }
+
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
+  // 總教官依機率施展「閃身步」閃避，反擊前搖留有公平反應間隔
+  public tryBossFlashStep(chance: number): boolean {
+    if (this.isDodging || Math.random() >= chance) return false;
+    this.performFlashStep();
+    this.attackCooldown = 0.65;
+    return true;
+  }
+
   public performFlashStep() {
     if (this.isKnockedDown) return;
 
@@ -2102,6 +2423,9 @@ export class NPC {
         this.umbrellaMesh.visible = false;
       }
     }
+
+    // 手機每幀預設收起，僅待機動畫 (滑手機/錄影) 執行時再顯示：待機結束、中斷、倒地、換世界皆自動隱藏
+    if (this.phoneMesh) this.phoneMesh.visible = false;
 
     // 校犬柴柴避雨邏輯：下雨時主動前往避雨走廊端坐，雨停後解除並恢復原校園巡邏路徑
     if (this.role === 'DOG') {
@@ -2390,28 +2714,19 @@ export class NPC {
       this.bossInvulnerableTimer -= delta;
       this.isBossInvulnerable = true;
 
-      if (this.bossBarrierMesh) {
-        this.bossBarrierMesh.visible = true;
-        this.bossBarrierMesh.rotation.y += delta * 3.5;
-        (this.bossBarrierMesh.material as THREE.MeshBasicMaterial).opacity = 0.25 + Math.sin(this.bossInvulnerableTimer * 16.0) * 0.2;
-      }
-
       this.showStatusBadge(`🛡️ 護盾中 (${this.bossInvulnerableTimer.toFixed(1)}s)`, 'rgba(234, 88, 12, 0.95)', '#fde047');
 
       if (this.bossInvulnerableTimer <= 0) {
         this.bossInvulnerableTimer = 0;
         this.isBossInvulnerable = false;
-        if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
         this.hideStatusBadge();
         this.setAlertState('ALERT');
         this.isChasing = true;
         this.bossChargeCooldown = 3.5;
       }
-    } else if (this.bossBarrierMesh && this.bossBarrierMesh.visible && this.bossInvulnerableTimer <= 0) {
-      this.bossBarrierMesh.visible = false;
     }
 
-    // 總教官破盾硬直：原地凍結 (不受 AI 移動與轉向)，暈眩搖晃 + 頭頂星星，結束後甩頭回神再恢復戰鬥
+    // 總教官撞柱硬直：原地凍結 (不受 AI 移動與轉向)，暈眩搖晃 + 頭頂星星，結束後甩頭回神再恢復戰鬥
     if (this.role === 'DETENTION_BOSS' && !this.isKnockedDown && (this.isBossStunned || this.bossRecoverTimer > 0)) {
       if (this.isBossStunned) {
         this.bossStunTimer -= delta;
@@ -2517,8 +2832,8 @@ export class NPC {
         if (this.mesh.parent) impactDust.burst(this.mesh.parent, _bossImpactPoint, _bossKnockDir);
         this.moveBossSwept(colliders, _bossKnockDir, 0.5);
         if (this.position.distanceToSquared(playerPos) < 625.0) requestCameraShake(0.85);
-        // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
-        this.stunBoss(3.5);
+        // 猛烈撞擊加固水泥柱！陷入 5 秒重度眩暈硬直！
+        this.stunBoss(5.0);
         soundManager.playPunch();
         soundManager.playBatHit();
         if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
@@ -2575,7 +2890,8 @@ export class NPC {
       if (this.role === 'BIKE_PATROL') {
         this.isBurstSprinting = true;
         this.chasePacingTimer = 2.0;
-        if (Math.random() < 0.05 && this.whistleCooldown <= 0) {
+        // 追騎車玩家時由撲咬預告響鈴，不另外隨機按鈴以免混淆
+        if (!isPlayerRidingBike && Math.random() < 0.05 && this.whistleCooldown <= 0) {
           soundManager.playBicycleBell();
           this.whistleCooldown = 4.0;
         }
@@ -2601,7 +2917,7 @@ export class NPC {
 
       // 目標速度計算 (0-GC 避免重複距離計算)
       const distToPlayerSq = this.position.distanceToSquared(playerPos);
-      const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq);
+      const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq, delta);
 
       // 平滑速度過渡
       const accelRate = this.cfg.chaseAccelRate;
@@ -2641,7 +2957,11 @@ export class NPC {
         if (this.pauseTimer <= 0) {
           this.isPaused = false;
           this.resetPose();
-          this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+          if (this.lifeTask && this.lifeTask.phase === 'HOLD') {
+            this.lifeTask.phase = 'DONE'; // 校園生活活動結束，交由導演收回或指派下一項
+          } else {
+            this.currentWaypointIdx = (this.currentWaypointIdx + 1) % this.patrolWaypoints.length;
+          }
           this.lastRecordedPos.copy(this.position);
           this.stuckCheckTimer = 0;
         }
@@ -2651,6 +2971,27 @@ export class NPC {
         return;
       }
 
+      // 校園生活活動：前往指定地點，抵達後轉向並執行指定動作
+      const task = this.lifeTask;
+      if (task && task.phase === 'GO') {
+        targetPos = task.target;
+        currentSpeed = Math.max(currentSpeed, this.speed * task.speedMul);
+        this.dynamicSpeed = currentSpeed;
+        if (this.position.distanceToSquared(targetPos) < task.arriveDist * task.arriveDist) {
+          this.startLifeHold(task);
+          this.faceHpBar(playerPos);
+          return;
+        }
+        // 受阻 1.2 秒無位移：放棄此活動 (直線移動無尋路，交由導演改派)
+        this.stuckCheckTimer += delta;
+        if (this.stuckCheckTimer >= 1.2) {
+          const dxl = this.position.x - this.lastRecordedPos.x;
+          const dzl = this.position.z - this.lastRecordedPos.z;
+          if (dxl * dxl + dzl * dzl < 0.04) task.phase = 'DONE';
+          this.lastRecordedPos.copy(this.position);
+          this.stuckCheckTimer = 0;
+        }
+      } else {
       targetPos = this.patrolWaypoints[this.currentWaypointIdx];
       const isDetention = this.cfg.isDetention;
       const wpDistSq = isDetention ? 2.25 : (this.role === 'BIKE_PATROL' ? 12.25 : (this.movementStyle === 'JOGGING' ? 4.84 : 3.24));
@@ -2679,6 +3020,7 @@ export class NPC {
         }
         this.lastRecordedPos.copy(this.position);
         this.stuckCheckTimer = 0;
+      }
       }
     }
 
@@ -2793,7 +3135,7 @@ export class NPC {
           ? (this.isBurstSprinting ? 16.0 : 9.5)
           : (isDetention
             ? Math.max(2.6, currentSpeed * 2.6)
-            : (this.movementStyle === 'JOGGING' ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5))));
+            : ((this.movementStyle === 'JOGGING' || this.isLifeRunning) ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5))));
       this.animTimer += delta * animRate;
 
       if (isCanine) {
@@ -2865,8 +3207,8 @@ export class NPC {
               this.mesh.rotation.x = 0;
             }
 
-            // 非追擊時根據 movementStyle 呈現豐富步行風格
-            if (this.movementStyle === 'JOGGING') {
+            // 非追擊時根據 movementStyle 呈現豐富步行風格 (校園生活小跑活動沿用慢跑動作)
+            if (this.movementStyle === 'JOGGING' || this.isLifeRunning) {
               // 操場跑者慢跑：雙臂 90 度屈肘前後大幅度擺動，步伐輕快且帶有垂直律動
               const swing = Math.sin(this.animTimer) * 0.52;
               if (this.leftArm) this.leftArm.rotation.set(-0.75 - swing, 0, -0.15);

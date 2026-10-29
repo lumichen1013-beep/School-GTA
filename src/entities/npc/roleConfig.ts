@@ -49,8 +49,8 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   BANDIT: { ...BASE, maxHp: 180, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 44, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
   // 校犬柴柴：敏捷四足犬
   DOG: { ...BASE, maxHp: 630, baseSpeed: 3.8, jitterScale: 0.4, chaseSpeed: 11.5, attackPower: 30, attackRange: 2.0, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.65, isCanine: true, hpBarY: 1.05, viewDist: 22.0, eyeHeight: 0.6, chaseAccelRate: 6.0 },
-  // 火柴人自行車騎士：巡邏與追捕速度統一為 15.0
-  BIKE_PATROL: { ...BASE, maxHp: 225, baseSpeed: 15.0, jitterScale: 0, chaseSpeed: 15.0, attackPower: 26, attackRange: 2.4, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.30, viewDist: 16.0, chaseAccelRate: 8.0 },
+  // 火柴人自行車騎士：巡邏與追捕速度統一為 14.8 (略低於玩家騎車 15.0：直線上緊咬在後但追不上)
+  BIKE_PATROL: { ...BASE, maxHp: 225, baseSpeed: 14.8, jitterScale: 0, chaseSpeed: 14.8, attackPower: 26, attackRange: 2.4, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.30, viewDist: 16.0, chaseAccelRate: 8.0 },
   // 風紀糾察 (步巡)
   INSPECTOR: { ...BASE, maxHp: 158, baseSpeed: 4.9, jitterScale: 1, chaseSpeed: 10.0, attackPower: 18, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
   // 平民學生：速度依移動風格決定

@@ -1,13 +1,22 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { NPCRole } from '../NPC';
+import type { NPCRole, NPCLook } from '../NPC';
 import { bakeNode, bakeStaticParts } from './modelCache';
 import { buildUmbrella } from '../shared/umbrella';
 
 // NPC 3D 模型建構 (自 NPC.ts 抽出)：各建構函式讀寫 NPCModelRig，由 NPC 於建構與角色切換時套用結果
+// 校隊選手外觀 (校園 NPC 與陪賽對手 RaceRival 共用同一套配色，確保上場比賽的是同一個人)：無袖背心露出手臂、深色短褲、彩色帽
+export interface AthleteLook { label: string; jersey: number; shorts: number; cap: number }
+export const SWIM_TEAM_LOOK: AthleteLook = { label: '🏊 游泳隊 小魚', jersey: 0x0e7490, shorts: 0x1f2937, cap: 0xef4444 };
+export const TRACK_TEAM_LOOK: AthleteLook = { label: '🏃 田徑隊 阿凱', jersey: 0x2563eb, shorts: 0x1f2937, cap: 0xfacc15 };
+export function getAthleteLook(look: NPCLook): AthleteLook | null {
+  return look === 'SWIMMER' ? SWIM_TEAM_LOOK : (look === 'TRACK' ? TRACK_TEAM_LOOK : null);
+}
+
 export interface NPCModelRig {
   readonly mesh: THREE.Group;
   readonly role: NPCRole;
+  readonly look: NPCLook;
   readonly studentOutfit: { shirt: number; pants: number };
   readonly hasUmbrella: boolean;
   humanoidParts: THREE.Object3D[];
@@ -307,6 +316,13 @@ export function buildHumanoidModel(rig: NPCModelRig) {
   // 學生、糾察隊、單車巡邏同學 (徒步) 預設穿著學生服裝
   let shirtColor = rig.studentOutfit.shirt;
   let pantsColor = rig.studentOutfit.pants;
+  // 校隊選手 (游泳隊小魚、田徑隊阿凱)：無袖背心、深色短褲、彩色帽 (手臂露出膚色)
+  const athlete = rig.role === 'STUDENT' ? getAthleteLook(rig.look) : null;
+  const isAthlete = athlete !== null;
+  if (athlete) {
+    shirtColor = athlete.jersey;
+    pantsColor = athlete.shorts;
+  }
 
   if (rig.role === 'TEACHER') {
     shirtColor = 0x2c3e50;
@@ -344,7 +360,7 @@ export function buildHumanoidModel(rig: NPCModelRig) {
   const shirtMat = new THREE.MeshLambertMaterial({ color: shirtColor });
   const pantsMat = new THREE.MeshLambertMaterial({ color: pantsColor });
   const skinMat = new THREE.MeshLambertMaterial({ color: 0xfad390 });
-  const hairMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const hairMat = new THREE.MeshLambertMaterial({ color: athlete ? athlete.cap : 0x111111 });
 
   // 軀幹
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.35), shirtMat);
@@ -585,11 +601,12 @@ export function buildHumanoidModel(rig: NPCModelRig) {
 
   // 手腳
   const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
-  rig.leftArm = new THREE.Mesh(armGeo, shirtMat);
+  const armMat = isAthlete ? skinMat : shirtMat;
+  rig.leftArm = new THREE.Mesh(armGeo, armMat);
   rig.leftArm.position.set(-0.45, 1.05, 0);
   addHumanoidPart(rig.leftArm);
 
-  rig.rightArm = new THREE.Mesh(armGeo, shirtMat);
+  rig.rightArm = new THREE.Mesh(armGeo, armMat);
   rig.rightArm.position.set(0.45, 1.05, 0);
   addHumanoidPart(rig.rightArm);
 
@@ -672,7 +689,7 @@ export function buildHumanoidModel(rig: NPCModelRig) {
 
   // 烘焙合併：頭與四肢保留各自動畫關節 (手持裝備併入手臂、雨傘保留可切換顯示)，
   // 軀幹與配飾合併為單一靜態網格；同角色同服裝的 NPC 共用同一份幾何體
-  const lookKey = `${rig.role}|${shirtColor}|${pantsColor}`;
+  const lookKey = `${rig.role}|${shirtColor}|${pantsColor}${isAthlete ? '|athlete' : ''}`;
   const umbrella = rig.umbrellaMesh;
   bakeNode(head, `${lookKey}|head`, undefined, false);
   bakeNode(rig.leftArm, `${lookKey}|armL`, undefined, false);
