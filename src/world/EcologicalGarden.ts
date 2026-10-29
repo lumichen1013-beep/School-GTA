@@ -392,6 +392,13 @@ export class EcologicalGarden {
     bridge.position.set(px + 4.2, 0.42, pz);
     bridge.castShadow = true;
     this.group.add(bridge);
+    // 棧道可站立 (頂面 Y = 0.53，低於階梯攀爬容許度可直接走上)；僅提供落腳面不阻擋水平移動，
+    // 從池中游向棧道時才能沿出水攀岸邏輯爬上去 (實心碰撞盒會把水中的玩家擋在棧道邊緣)
+    this.colliders.push({
+      min: new THREE.Vector3(px + 3.2, 0.31, pz - 2.25),
+      max: new THREE.Vector3(px + 5.2, 0.53, pz + 2.25),
+      isFloorOnly: true
+    });
 
     // 許願古樸石碑 (Wishing Stone Tablet)
     const tabletMat = new THREE.MeshLambertMaterial({ color: 0x34495e });
@@ -1177,6 +1184,8 @@ export class EcologicalGarden {
   public isInsideWishingPond(pos: THREE.Vector3): boolean {
     const dx = pos.x - this.pondPos.x;
     const dz = pos.z - this.pondPos.z;
+    // 棧道伸入池面的部分 (x 3.2~5.2、z ±2.25) 為陸地，站上去不切換游泳
+    if (dx >= 3.2 && dx <= 5.2 && dz >= -2.25 && dz <= 2.25) return false;
     return (dx * dx + dz * dz) < 19.36 && pos.y <= 1.2 && pos.y >= -1.5;
   }
 
