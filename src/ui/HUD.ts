@@ -733,6 +733,52 @@ export class HUD {
     }
   }
 
+  // 總教官暗殺時機計量表 (沿用投籃計量表外觀)：zoneStart/zoneWidth 為綠區位置 (0~1)
+  private takedownMeterTimer: ReturnType<typeof setTimeout> | null = null;
+  public showTakedownMeter(zoneStart: number, zoneWidth: number, hint: string) {
+    const el = this.$('takedown-meter');
+    if (!el) return;
+    if (this.takedownMeterTimer) clearTimeout(this.takedownMeterTimer);
+    this.takedownMeterTimer = null;
+    const zone = this.$('takedown-sweetspot');
+    if (zone) {
+      zone.style.left = `${zoneStart * 100}%`;
+      zone.style.width = `${zoneWidth * 100}%`;
+    }
+    const hintEl = this.$('takedown-meter-hint');
+    if (hintEl) hintEl.textContent = hint;
+    const fb = this.$('takedown-feedback');
+    if (fb) fb.className = 'shot-meter-feedback';
+    el.classList.remove('resolved');
+    this.updateTakedownMeter(0);
+    el.style.display = 'block';
+  }
+
+  public updateTakedownMeter(ratio: number) {
+    const needle = this.$('takedown-needle');
+    if (needle) needle.style.left = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+  }
+
+  // 顯示判定結果並於 ms 毫秒後收起計量表
+  public showTakedownResult(success: boolean, ms: number) {
+    const el = this.$('takedown-meter');
+    const fb = this.$('takedown-feedback');
+    if (fb) {
+      fb.textContent = success ? '✔ 成功！時機完美！' : '✖ 失誤！時機錯過！';
+      fb.className = `shot-meter-feedback ${success ? 'perfect' : 'bad'}`;
+    }
+    if (el) el.classList.add('resolved');
+    if (this.takedownMeterTimer) clearTimeout(this.takedownMeterTimer);
+    this.takedownMeterTimer = setTimeout(() => this.hideTakedownMeter(), ms);
+  }
+
+  public hideTakedownMeter() {
+    if (this.takedownMeterTimer) clearTimeout(this.takedownMeterTimer);
+    this.takedownMeterTimer = null;
+    const el = this.$('takedown-meter');
+    if (el) el.style.display = 'none';
+  }
+
   public hideShotMeter() {
     if (this.shotMeterEl) {
       this.shotMeterEl.style.display = 'none';

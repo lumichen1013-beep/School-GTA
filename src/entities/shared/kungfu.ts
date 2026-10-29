@@ -228,7 +228,7 @@ const NPC_BATON_CHOP = defineMove('警棍下劈', { dur: 0.66, strike: 0.48 }, [
   [1, E_SMOOTH, REST]
 ]);
 // 特訓院守衛舉盾格擋 (不造成傷害)：沉身後仰、左臂防暴盾猛然前舉護住正面
-export const NPC_SHIELD_BLOCK = defineMove('舉盾格擋', { dur: 0.45, strike: 1 }, [
+export const NPC_SHIELD_BLOCK = defineMove('舉盾格擋', { dur: 0.45, strike: 1, dmg: 0 }, [
   [0.18, E_OUT, { tw: 0.25, ln: -0.12, h: -0.12, la: [-1.4, 0, 0.25], ra: [0.35, 0, 0.15], ll: [-0.3, 0, -0.08], rr: [0.35, 0, 0.08] }],
   [0.65, E_SMOOTH, { tw: 0.2, ln: -0.08, h: -0.1, la: [-1.35, 0, 0.22], ra: [0.3, 0, 0.12], ll: [-0.28, 0, -0.08], rr: [0.32, 0, 0.08] }],
   [1, E_SMOOTH, REST]
@@ -245,6 +245,51 @@ const NPC_SPINKICK = defineMove('迴旋踢', { dur: 0.8, strike: 0.5, reach: 1.1
   [0.5, E_IN, { tw: 4.71, ln: -0.08, rl: 0.3, h: 0.04, la: [-0.2, 0, -1.25], ra: [-0.2, 0, 1.2], ll: [0.05, 0, -0.08], rr: [-0.25, 0, 1.35] }],
   [0.72, E_OUT, { tw: 5.7, ln: -0.04, rl: 0.18, la: [-0.3, 0, -1.0], ra: [-0.3, 0, 0.9], ll: [0.05, 0, -0.08], rr: [-0.2, 0, 0.7] }],
   [1, E_SMOOTH, { tw: TWO_PI }]
+]);
+
+// 暗殺時機失誤反制招式 (不造成傷害；擊退由戰鬥系統於命中時間點結算)。起始扭腰由呼叫端帶入原本朝向，回身轉體與前一姿勢連續
+// 徒手守衛/總教官：回身十字格擋 → 沉身震掌推開
+export const TAKEDOWN_PALM_PARRY = defineMove('回身十字格擋·震掌', { dur: 0.8, strike: 0.42, dmg: 0 }, [
+  [0.32, E_SMOOTH, { tw: 0.35, ln: -0.1, h: -0.12, la: [-1.5, 0, 0.7], ra: [-1.5, 0, -0.7], ll: [-0.4, 0, -0.12], rr: [0.35, 0, 0.12] }],
+  [0.42, E_IN, { tw: -0.2, ln: 0.2, h: -0.15, la: [0.4, 0, -0.2], ra: [-1.6, 0, -0.1], ll: [-0.65, 0, -0.1], rr: [0.55, 0, 0.1] }],
+  [0.68, E_OUT, { tw: -0.26, ln: 0.17, h: -0.14, la: [0.35, 0, -0.2], ra: [-1.5, 0, -0.08], ll: [-0.62, 0, -0.1], rr: [0.52, 0, 0.1] }],
+  [1, E_SMOOTH, REST]
+]);
+// 持盾守衛：回身舉盾護住正面 → 上步盾擊
+export const TAKEDOWN_SHIELD_PARRY = defineMove('回身舉盾·盾擊', { dur: 0.8, strike: 0.42, dmg: 0 }, [
+  [0.32, E_SMOOTH, { tw: 0.25, ln: -0.1, h: -0.1, la: [-1.45, 0, 0.25], ra: [0.35, 0, 0.15], ll: [-0.3, 0, -0.08], rr: [0.35, 0, 0.08] }],
+  [0.42, E_IN, { tw: -0.15, ln: 0.28, h: -0.12, la: [-1.6, 0, 0.15], ra: [0.45, 0, 0.15], ll: [-0.65, 0, -0.08], rr: [0.55, 0, 0.08] }],
+  [0.68, E_OUT, { tw: -0.18, ln: 0.24, h: -0.11, la: [-1.55, 0, 0.18], ra: [0.4, 0, 0.15], ll: [-0.6, 0, -0.08], rr: [0.52, 0, 0.08] }],
+  [1, E_SMOOTH, REST]
+]);
+// 警戒犬：回身後躍閃開 → 前撲猛咬逼退 (僅根節點動作)
+export const TAKEDOWN_WOLF_PARRY = defineMove('回身後躍·撲咬', { dur: 0.8, strike: 0.42, dmg: 0 }, [
+  [0.32, E_SMOOTH, { tw: 0.2, ln: -0.3, h: 0.2 }],
+  [0.42, E_IN, { ln: 0.22, h: 0.02 }],
+  [0.68, E_OUT, { ln: 0.16 }],
+  [1, E_SMOOTH, REST]
+]);
+
+// 玩家暗殺被格擋：收勢架起十字手 → 承受震擊後仰沉身、前腳撐地向後滑退 → 收勢站穩 (命中點 = 對方格擋擊中瞬間)
+export const PLAYER_TAKEDOWN_BLOCKED = defineMove('十字護身·滑步卸力', { dur: 1.04, strike: 0.32, cancel: 0.82 }, [
+  [0.2, E_SMOOTH, { ln: -0.05, h: -0.08, la: [-1.5, 0, 0.6], ra: [-1.5, 0, -0.6], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
+  [0.32, E_SMOOTH, { ln: -0.08, h: -0.12, la: [-1.52, 0, 0.62], ra: [-1.52, 0, -0.62], ll: [-0.38, 0, -0.06], rr: [0.34, 0, 0.06] }],
+  [0.42, E_OUT, { ln: -0.28, h: -0.2, la: [-1.25, 0, 0.75], ra: [-1.25, 0, -0.75], ll: [-0.7, 0, -0.1], rr: [0.5, 0, 0.1] }],
+  [0.75, E_SMOOTH, { ln: -0.16, h: -0.2, la: [-1.1, 0, 0.6], ra: [-1.1, 0, -0.6], ll: [-0.72, 0, -0.14], rr: [0.52, 0, 0.14] }],
+  [1, E_SMOOTH, REST]
+]);
+
+// 玩家暗殺總教官專用：上步沉身、雙拳後拉蓄勢 → 雙峰貫耳 (雙拳弧線合擊兩耳) → 前壓延展 → 收勢站樁
+// 命中點占全長 27%，結尾回到站姿，讓收招淡出在後空翻起跳前完成 (時間縮放見 CombatSystem)；
+// 蓄勢頂點 (PLAYER_TAKEDOWN_WINDUP) 為時機計量表暫停點
+export const PLAYER_TAKEDOWN_WINDUP = 0.17;
+export const PLAYER_TAKEDOWN = defineMove('雙峰貫耳', { dur: 0.5, strike: 0.27, cancel: 1 }, [
+  [0.09, E_SMOOTH, { ln: 0.06, h: -0.05, la: [0.15, 0, -0.18], ra: [0.15, 0, 0.18], ll: [-0.38, 0, -0.05], rr: [0.26, 0, 0.05] }],
+  [0.17, E_OUT, { ln: 0.18, h: -0.16, la: [0.6, 0, -0.8], ra: [0.6, 0, 0.8], ll: [-0.62, 0, -0.1], rr: [0.5, 0, 0.1] }],
+  [0.27, E_IN, { ln: 0.28, h: -0.18, la: [-1.45, 0, 0.38], ra: [-1.45, 0, -0.38], ll: [-0.76, 0, -0.1], rr: [0.6, 0, 0.1] }],
+  [0.45, E_OUT, { ln: 0.32, h: -0.2, la: [-1.38, 0, 0.48], ra: [-1.38, 0, -0.48], ll: [-0.78, 0, -0.1], rr: [0.62, 0, 0.1] }],
+  [0.75, E_SMOOTH, { ln: 0.08, h: -0.06, la: [-0.3, 0, 0.05], ra: [-0.3, 0, -0.05], ll: [-0.2, 0, -0.02], rr: [0.15, 0, 0.02] }],
+  [1, E_SMOOTH, REST]
 ]);
 
 const NPC_MOVESETS: Record<string, readonly KfMove[]> = {
@@ -273,7 +318,7 @@ function ease(kind: number, u: number): number {
   return u * u * (3 - 2 * u);
 }
 
-function wrapAngle(a: number): number {
+export function wrapAngle(a: number): number {
   return a - TWO_PI * Math.round(a / TWO_PI);
 }
 
@@ -305,7 +350,8 @@ export class KungFuLayer {
   public get beforeStrike(): boolean { return !!this.move && this.time < this.move.strike * this.move.dur * this.scale; }
   public get rise(): number { return this.appliedRise; }
 
-  public start(move: KfMove, scale: number, mesh: THREE.Object3D, la?: THREE.Object3D | null, ra?: THREE.Object3D | null, ll?: THREE.Object3D | null, rl?: THREE.Object3D | null) {
+  // twistFrom：指定起始扭腰 (例如角色朝向瞬間改變時帶入「舊畫面朝向 − 新朝向」，由招式平滑轉回)
+  public start(move: KfMove, scale: number, mesh: THREE.Object3D, la?: THREE.Object3D | null, ra?: THREE.Object3D | null, ll?: THREE.Object3D | null, rl?: THREE.Object3D | null, twistFrom?: number) {
     const s = this.snap;
     if (!this.mesh) {
       this.mesh = mesh;
@@ -324,7 +370,7 @@ export class KungFuLayer {
       this.appliedRise = 0;
     }
     // 以目前畫面姿勢為第 0 格，與前一招或走路動作無縫銜接
-    s[0] = wrapAngle(this.appliedTwist);
+    s[0] = twistFrom ?? wrapAngle(this.appliedTwist);
     s[1] = mesh.rotation.x;
     s[2] = mesh.rotation.z;
     s[3] = this.appliedRise;

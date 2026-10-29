@@ -308,7 +308,8 @@ export class DetentionMode {
   private updateCqcTarget(targetPosition: THREE.Vector3) {
     const { player, hud } = this.ctx;
     this.nearbyCqcTarget = null;
-    if (!player.isDead) {
+    // 暗殺時機計量表與運鏡期間不顯示暗殺提示
+    if (!player.isDead && !this.ctx.combat.isExecutionActive) {
       for (const npc of this.ctx.detentionNPCs) {
         if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
 

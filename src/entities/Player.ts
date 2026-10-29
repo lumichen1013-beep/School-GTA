@@ -4,7 +4,7 @@ import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildUmbrella } from './shared/umbrella';
-import { KungFuLayer, PLAYER_COMBOS, type KfMove, type PlayerComboSet } from './shared/kungfu';
+import { KungFuLayer, PLAYER_COMBOS, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_BLOCKED, wrapAngle, type KfMove, type PlayerComboSet } from './shared/kungfu';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
@@ -269,6 +269,12 @@ export class Player {
   private backflipSpeed: number = 0;
   private backflipGravity: number = -24.0; // 後空翻專用等效重力 (使滯空時間 = 翻轉時間且頂點高度固定)
   private readonly backflipDir: THREE.Vector3 = new THREE.Vector3();
+  // 暗殺被格擋：受震後向後滑退 (等速遞減，遇牆即停)
+  public isParrySkidding: boolean = false;
+  private skidTimer: number = 0;
+  private skidDuration: number = 0.5;
+  private skidDistance: number = 4.0;
+  private readonly skidDir: THREE.Vector3 = new THREE.Vector3();
 
   // 狗熊哆嗦毛 (連續瞬移 3 次，間隔 0.5s，圓形範圍隨機閃現)
   public isBearShaking: boolean = false;
@@ -682,6 +688,8 @@ export class Player {
     this.isDodging = false;
     this.isBackflipping = false;
     this.backflipTimer = 0;
+    this.isParrySkidding = false;
+    this.skidTimer = 0;
     this.isBearShaking = false;
     this.bearBlinkCount = 0;
     this.bearBlinkTimer = 0;
@@ -821,14 +829,43 @@ export class Player {
     return true;
   }
 
-  // 暗殺運鏡出手：以第一段招式配合運鏡命中時間點 (模擬秒) 縮放節奏，不計入連段
-  public performCinematicStrike(strikeAt: number) {
+  // 暗殺運鏡出手：專用招式「雙峰貫耳」依運鏡命中時間點 (模擬秒) 縮放節奏，不計入連段；
+  // twistFrom 為轉身面向目標前的畫面朝向差，由招式起手平滑轉正
+  public performCinematicStrike(strikeAt: number, twistFrom: number = 0) {
     if (this.isDead) return;
-    this.startComboMove(strikeAt);
+    this.attackQueued = false;
+    this.comboIndex = 0;
+    this.sinceStrike = 99;
+    const move = PLAYER_TAKEDOWN;
+    this.kf.start(move, strikeAt / (move.strike * move.dur), this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
+    this.isAttacking = true;
   }
 
-  // cinematicStrikeAt > 0：暗殺運鏡專用，強制第一段並縮放節奏使命中落在指定秒數
-  private startComboMove(cinematicStrikeAt: number = 0) {
+  // 暗殺被格擋：面向目標架起十字手，guardTime 秒後 (對方格擋擊中瞬間) 承受震擊後仰滑退
+  public performTakedownBlocked(targetPos: THREE.Vector3, guardTime: number) {
+    if (this.isDead) return;
+    const face = Math.atan2(targetPos.x - this.position.x, targetPos.z - this.position.z);
+    const twistFrom = wrapAngle(this.mesh.rotation.y - face);
+    this.rotationY = face;
+    this.attackQueued = false;
+    const move = PLAYER_TAKEDOWN_BLOCKED;
+    this.kf.start(move, guardTime / (move.strike * move.dur), this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
+    this.isAttacking = true;
+  }
+
+  // 被格擋震退：自目標往外滑退 dist 公尺 (duration 秒內速度線性遞減至 0，位移交由一般碰撞處理，遇牆即停)，全程面向目標
+  public performParrySkid(targetPos: THREE.Vector3, dist: number, duration: number) {
+    if (this.isDead) return;
+    this.skidDir.subVectors(this.position, targetPos).setY(0);
+    if (this.skidDir.lengthSq() < 0.0001) this.skidDir.set(-Math.sin(this.rotationY), 0, -Math.cos(this.rotationY));
+    else this.skidDir.normalize();
+    this.isParrySkidding = true;
+    this.skidDistance = dist;
+    this.skidDuration = duration;
+    this.skidTimer = duration;
+  }
+
+  private startComboMove() {
     this.attackQueued = false;
     const set: PlayerComboSet = this.isHoldingRacket
       ? 'RACKET'
@@ -836,14 +873,13 @@ export class Player {
         ? 'FIST'
         : (this.currentWeapon === 'NORMAL_BAT' && this.worldType === 'DETENTION' ? 'BATON' : 'BAT');
     const moves = PLAYER_COMBOS[set];
-    const chain = cinematicStrikeAt <= 0 && set === this.comboSet && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
+    const chain = set === this.comboSet && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
     this.comboIndex = chain ? this.comboIndex + 1 : 0;
     this.comboSet = set;
     this.sinceStrike = 99;
     // 黃金雷霆棒較沉重，整體節奏放慢 (沿用原本 0.48 / 0.42 揮棒間隔比例)
     const move = moves[this.comboIndex];
-    let scale = set === 'BAT' && this.currentWeapon === 'SPECIAL_BAT' ? 1.14 : 1;
-    if (cinematicStrikeAt > 0) scale = cinematicStrikeAt / (move.strike * move.dur);
+    const scale = set === 'BAT' && this.currentWeapon === 'SPECIAL_BAT' ? 1.14 : 1;
     this.kf.start(move, scale, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.isAttacking = true;
     if (set === 'RACKET') soundManager.playBadmintonWhoosh();
@@ -1113,6 +1149,16 @@ export class Player {
         this.backflipTimer -= delta;
         this.velocity.x = this.backflipDir.x * this.backflipSpeed;
         this.velocity.z = this.backflipDir.z * this.backflipSpeed;
+      } else if (this.isParrySkidding) {
+        // 速度 v(t) = 2d/T × (1 - t/T)，以本幀中點取樣使總位移 = d
+        const prev = this.skidTimer;
+        this.skidTimer = Math.max(0, prev - delta);
+        const step = prev - this.skidTimer;
+        const mid = (prev + this.skidTimer) * 0.5;
+        const v = step > 0 ? (2 * this.skidDistance / this.skidDuration) * (mid / this.skidDuration) * (step / Math.max(delta, 1e-6)) : 0;
+        this.velocity.x = this.skidDir.x * v;
+        this.velocity.z = this.skidDir.z * v;
+        if (this.skidTimer <= 0) this.isParrySkidding = false;
       } else if (this.isDodging) {
         this.dodgeTimer -= delta;
         if (this.dodgeTimer <= 0) {

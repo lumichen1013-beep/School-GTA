@@ -940,6 +940,60 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   display: block;
 }
 
+/* 總教官暗殺時機計量表 (沿用投籃計量表樣式，加寬加高並改紅色外框) */
+#takedown-meter {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 18px rgba(239, 68, 68, 0.45);
+  display: none;
+  pointer-events: none;
+  z-index: var(--z-hud-prompt);
+}
+
+#takedown-meter .shot-meter-header {
+  font-size: 13px;
+  color: #fca5a5;
+}
+
+#takedown-meter .shot-meter-hint {
+  font-size: 11px;
+}
+
+.takedown-meter-track {
+  height: 22px;
+  border-radius: 11px;
+}
+
+.takedown-meter-needle {
+  width: 4px;
+  top: -3px;
+  bottom: -3px;
+}
+
+#takedown-meter .shot-meter-feedback {
+  font-size: 15px;
+}
+
+#takedown-meter.resolved .takedown-meter-needle {
+  box-shadow: 0 0 10px #ffffff, 0 0 18px #ff3b30;
+}
+
+@media (max-height: 500px) {
+  #takedown-meter {
+    top: 30%;
+    padding: 6px 12px;
+  }
+}
+
 #action-prompt {
   position: absolute;
   top: 58%;
