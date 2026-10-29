@@ -70,7 +70,6 @@ const EXEC_REACT_HIT_STOP_RATE = 0.2; // 命中停格期間受擊動作推進倍
 const TAKEDOWN_QTE_ZONE_MIN = 0.08; // 綠區起點隨機範圍 (避開兩端折返點)
 const TAKEDOWN_QTE_ZONE_MAX = 0.92; // 綠區終點上限
 const TAKEDOWN_QTE_TIMEOUT = 3.0; // 未按下自動判定失誤 (真實秒；最慢速度下仍可掃過 2 趟)
-const TAKEDOWN_QTE_RESULT_MS = 700; // 判定結果文字顯示毫秒
 // 總教官：50% 出現、綠區 5%、游標單程秒數依目前血量線性變化，血量越低越快 (500 HP 1.4 秒 ~ 100 HP 0.8 秒)；失誤扣 15 HP
 const BOSS_QTE_CHANCE = 0.5;
 const BOSS_QTE_ZONE = 0.05;
@@ -486,7 +485,8 @@ export class CombatSystem {
     const target = this.execTarget;
     const { hud, player, wantedSystem, detention } = this.ctx;
     this.qteRunning = false;
-    hud.showTakedownResult(success, TAKEDOWN_QTE_RESULT_MS);
+    // 判定後立即收起計量表 (成功直接出手、失誤由橫幅提示)，避免與失誤橫幅同時停留畫面
+    hud.hideTakedownMeter();
     if (success || !target) return;
 
     this.execFailed = true;

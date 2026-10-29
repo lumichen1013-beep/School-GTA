@@ -979,17 +979,11 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   bottom: -3px;
 }
 
-#takedown-meter .shot-meter-feedback {
-  font-size: 15px;
-}
-
-#takedown-meter.resolved .takedown-meter-needle {
-  box-shadow: 0 0 10px #ffffff, 0 0 18px #ff3b30;
-}
-
-@media (max-height: 500px) {
+/* 手機橫屏：Boss 血條貼頂 (top 36px、高約 60px)，計量表改由血條下方起算避免重疊 */
+@media (max-height: 520px) {
   #takedown-meter {
-    top: 30%;
+    top: calc(env(safe-area-inset-top, 0px) + 104px);
+    transform: translateX(-50%);
     padding: 6px 12px;
   }
 }
