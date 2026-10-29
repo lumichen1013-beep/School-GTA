@@ -107,6 +107,31 @@ function getSharedBadgeTexture(key: string, style: BadgeStyle, text: string, tex
 const ALERT_BADGE_CODE = { NORMAL: -1, CAUTION: -101, ALERT: -102 } as const;
 // 失去單車後步行數值 (學生步速依移動風格決定，徒步騎士固定採用一般步行/追逐速度)
 const BIKELESS_WALK_SPEED = 5.0;
+
+// ===== 火柴人自行車騎士追逐「騎車中的玩家」：跟蹤 → 響鈴預告 → 撲咬 → 喘息 =====
+// 完全依玩家騎法觸發 (無隨機)：減速、持續轉彎時撲咬；全速直線每 6 秒固定一次試探撲 (停在攻擊距離外)
+interface BikePersona { followDist: number; pounceSpeed: number; restTime: number }
+// 4 名騎士的固定個性 (依生成順序輪流套用)
+const BIKE_PERSONAS: BikePersona[] = [
+  { followDist: 4.0, pounceSpeed: 16.5, restTime: 2.0 }, // 最兇，貼最近
+  { followDist: 5.0, pounceSpeed: 16.2, restTime: 2.0 }, // 標準
+  { followDist: 6.0, pounceSpeed: 16.0, restTime: 2.0 }, // 保守，跟較遠
+  { followDist: 4.5, pounceSpeed: 15.8, restTime: 1.5 }  // 撲較弱、喘息較短
+];
+const BIKE_MATCH_SPEED = 15.0;     // 跟蹤緩衝區內與玩家騎車極速相同
+const BIKE_STALK_MIN = 13.5;
+const BIKE_STALK_MAX = 16.5;
+const BIKE_BUFFER = 1.0;           // 理想跟車距離 ±1m 緩衝區
+const BIKE_SLOW_TRIGGER = 13.0;    // 玩家車速低於此值即撲咬
+const BIKE_TURN_TRIGGER = 0.4;     // 玩家持續轉彎超過此秒數即撲咬
+const BIKE_PROBE_INTERVAL = 6.0;   // 全速直線持續此秒數發動試探撲
+const BIKE_PROBE_STOP = 2.8;       // 試探撲逼近至此距離 (預測下一步) 即收手，保持在攻擊距離 2.4m 之外
+const BIKE_GUARD_DIST = 3.0;       // 非撲咬階段的安全距離：預測距離小於此值時車速壓在玩家車速 -2.5 以下，不主動貼身
+const BIKE_WARN_TIME = 0.5;        // 響鈴預告
+const BIKE_POUNCE_TIME = 1.5;
+const BIKE_POUNCE_CONTACT = 1.3;   // 真撲咬貼身即結束 (交由近戰攻擊結算)
+const BIKE_REST_SPEED = 14.0;
+const BIKE_POUNCE_MAX_DIST = 10.0; // 距離過遠時先以跟蹤曲線追近，不發動撲咬
 const BIKELESS_CHASE_SPEED = 10.0;
 
 // 各角色攻擊傷害與擊飛衝量靜態常數快取 (0-GC，免除每幀攻擊判定重複配置物件)
@@ -321,6 +346,16 @@ export class NPC {
   private originalDogWaypoints: THREE.Vector3[] = [];
   public static readonly DOG_SHELTER_POS = new THREE.Vector3(24.0, 0, 15.0);
 
+  // 玩家騎車遙測 (main 每幀寫入：目前車速、持續轉彎秒數)，供單車騎士判斷撲咬時機
+  public static playerBikeSpeed: number = 0;
+  public static playerBikeTurnTime: number = 0;
+  private static bikePatrolCount: number = 0;
+  private bikePersona: BikePersona = BIKE_PERSONAS[1];
+  private bikePhase: 'STALK' | 'WARN' | 'POUNCE' | 'REST' = 'STALK';
+  private bikePhaseTimer: number = 0;
+  private bikeStraightTimer: number = 0;
+  private bikePounceIsProbe: boolean = false;
+
   // 頭頂技能名稱對話氣泡 (3D Billboard Sprite)
   private skillBubble!: SkillBubble;
 
@@ -382,6 +417,7 @@ export class NPC {
       this.buildModel(buildDogModel);
     } else if (role === 'BIKE_PATROL') {
       this.isOriginalBikePatrol = true;
+      this.bikePersona = BIKE_PERSONAS[NPC.bikePatrolCount++ % BIKE_PERSONAS.length];
       this.buildModel(buildBikePatrolModel);
       // 記錄騎士身體(軀幹/頭/帽/臂/腿)與單車全部子物件，被搶車時一併移除
       this.bikeModelParts = this.mesh.children.slice();
@@ -1489,6 +1525,7 @@ export class NPC {
   // 清除仇恨與追擊狀態
   public resetAggro() {
     this.isChasing = false;
+    this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
     this.chasePacingTimer = 1.5 + Math.random() * 2.0;
@@ -1509,6 +1546,7 @@ export class NPC {
     this.rotationY = this.initialRotationY;
     this.mesh.rotation.y = this.initialRotationY;
     this.isChasing = false;
+    this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
     this.chasePacingTimer = 1.5;
@@ -1916,10 +1954,14 @@ export class NPC {
     }
   }
 
-  // 計算追捕移動速度 (包含火柴人自行車騎士 15.0、校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
-  private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number): number {
+  // 計算追捕移動速度 (包含火柴人自行車騎士 14.8、校犬敏捷變頻追逐、衝刺爆發與喘氣放緩)
+  private calculateTargetChaseSpeed(isPlayerRidingBike: boolean, distToPlayerSq: number, delta: number): number {
     if (this.role === 'BIKE_PATROL') {
-      return 15.0;
+      if (!isPlayerRidingBike) {
+        this.resetBikePursuit();
+        return this.chaseSpeed; // 追步行玩家：14.8 (roleConfig)
+      }
+      return this.updateBikePursuit(Math.sqrt(distToPlayerSq), delta);
     }
 
     if (this.role === 'DOG') {
@@ -1943,6 +1985,84 @@ export class NPC {
 
     if (this.role === 'BANDIT') return 8.5;
     return this.speed;
+  }
+
+  private resetBikePursuit() {
+    this.bikePhase = 'STALK';
+    this.bikePhaseTimer = 0;
+    this.bikeStraightTimer = 0;
+  }
+
+  // 跟蹤曲線：理想距離 ±1m 內與玩家同速咬住；拉開越遠追得越急 (最高 16.5)，靠太近則柔和收油 (最低 13.5)
+  private bikeStalkSpeed(dist: number): number {
+    const e = dist - this.bikePersona.followDist;
+    if (e > BIKE_BUFFER) {
+      return BIKE_MATCH_SPEED + (BIKE_STALK_MAX - BIKE_MATCH_SPEED) * THREE.MathUtils.smoothstep(e - BIKE_BUFFER, 0, 6.0);
+    }
+    if (e < -BIKE_BUFFER) {
+      return BIKE_MATCH_SPEED - (BIKE_MATCH_SPEED - BIKE_STALK_MIN) * THREE.MathUtils.smoothstep(-e - BIKE_BUFFER, 0, 1.5);
+    }
+    return BIKE_MATCH_SPEED;
+  }
+
+  // 追逐騎車玩家的節奏狀態機，回傳本幀目標速度
+  private updateBikePursuit(dist: number, delta: number): number {
+    const playerSpeed = NPC.playerBikeSpeed;
+    const turnTime = NPC.playerBikeTurnTime;
+    // 以本幀即將移動後的距離判斷 (避免高速時一步跨入攻擊距離)
+    const nextDist = dist - this.dynamicSpeed * delta;
+    const guard = (v: number) => (nextDist < BIKE_GUARD_DIST ? Math.max(0, Math.min(v, playerSpeed - 2.5)) : v);
+
+    switch (this.bikePhase) {
+      case 'STALK': {
+        const isCruising = playerSpeed >= 14.5 && turnTime <= 0;
+        this.bikeStraightTimer = isCruising ? this.bikeStraightTimer + delta : 0;
+        if (dist <= BIKE_POUNCE_MAX_DIST) {
+          if (playerSpeed < BIKE_SLOW_TRIGGER || turnTime > BIKE_TURN_TRIGGER) {
+            this.startBikeWarn(false);
+          } else if (this.bikeStraightTimer >= BIKE_PROBE_INTERVAL && nextDist > BIKE_PROBE_STOP + 0.4) {
+            this.startBikeWarn(true);
+          }
+        }
+        return guard(this.bikeStalkSpeed(dist));
+      }
+      case 'WARN':
+        this.bikePhaseTimer -= delta;
+        if (this.bikePhaseTimer <= 0) {
+          this.bikePhase = 'POUNCE';
+          this.bikePhaseTimer = BIKE_POUNCE_TIME;
+        }
+        return guard(this.bikeStalkSpeed(dist));
+      case 'POUNCE': {
+        this.bikePhaseTimer -= delta;
+        const reached = this.bikePounceIsProbe ? nextDist <= BIKE_PROBE_STOP : nextDist <= BIKE_POUNCE_CONTACT;
+        if (this.bikePhaseTimer <= 0 || reached) {
+          this.bikePhase = 'REST';
+          this.bikePhaseTimer = this.bikePersona.restTime;
+          // 試探撲收手：立即降速，避免平滑減速期間衝入攻擊距離
+          if (this.bikePounceIsProbe) this.dynamicSpeed = Math.min(this.dynamicSpeed, BIKE_REST_SPEED);
+          return guard(BIKE_REST_SPEED);
+        }
+        return this.bikePersona.pounceSpeed;
+      }
+      case 'REST':
+      default:
+        this.bikePhaseTimer -= delta;
+        if (this.bikePhaseTimer <= 0) {
+          this.bikePhase = 'STALK';
+          this.bikeStraightTimer = 0;
+        }
+        return guard(BIKE_REST_SPEED);
+    }
+  }
+
+  private startBikeWarn(isProbe: boolean) {
+    this.bikePhase = 'WARN';
+    this.bikePhaseTimer = BIKE_WARN_TIME;
+    this.bikePounceIsProbe = isProbe;
+    this.bikeStraightTimer = 0;
+    soundManager.playBicycleBell();
+    this.showSpeechBubble('🔔 叮叮！', true, 1.0);
   }
 
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
@@ -2555,7 +2675,8 @@ export class NPC {
       if (this.role === 'BIKE_PATROL') {
         this.isBurstSprinting = true;
         this.chasePacingTimer = 2.0;
-        if (Math.random() < 0.05 && this.whistleCooldown <= 0) {
+        // 追騎車玩家時由撲咬預告響鈴，不另外隨機按鈴以免混淆
+        if (!isPlayerRidingBike && Math.random() < 0.05 && this.whistleCooldown <= 0) {
           soundManager.playBicycleBell();
           this.whistleCooldown = 4.0;
         }
@@ -2581,7 +2702,7 @@ export class NPC {
 
       // 目標速度計算 (0-GC 避免重複距離計算)
       const distToPlayerSq = this.position.distanceToSquared(playerPos);
-      const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq);
+      const targetChaseSpeed = this.calculateTargetChaseSpeed(isPlayerRidingBike, distToPlayerSq, delta);
 
       // 平滑速度過渡
       const accelRate = this.cfg.chaseAccelRate;

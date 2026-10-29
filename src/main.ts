@@ -41,6 +41,7 @@ const _campusRespawnPos = new THREE.Vector3(0, 0, 15); // 天天國中保健室�
  * 各玩法細節分別位於 game/ (成長、戰鬥、互動、校園玩法、特訓院玩法)。
  */
 class SchoolGTASandbox implements GameContext {
+  private lastBikeYaw: number = 0; // 上一幀騎車朝向 (計算轉彎持續時間)
   public engine!: Engine;
   public input!: InputManager;
   public cameraCtrl!: ThirdPersonCamera;
@@ -646,6 +647,11 @@ class SchoolGTASandbox implements GameContext {
       this.player.updateUmbrella(isRaining, true, this.currentWorldType);
       // 騎車時不走步行更新：受擊保護計時於此遞減 (騎車被攻擊只扣血不摔車)
       if (this.player.hitCooldown > 0) this.player.hitCooldown -= delta;
+      // 玩家騎車遙測 (車速、持續轉彎秒數) 供單車騎士判斷撲咬時機
+      NPC.playerBikeSpeed = ridingBike.speed;
+      const yawDiff = Math.atan2(Math.sin(playerRotY - this.lastBikeYaw), Math.cos(playerRotY - this.lastBikeYaw));
+      NPC.playerBikeTurnTime = delta > 0 && Math.abs(yawDiff) / delta > 0.5 ? NPC.playerBikeTurnTime + delta : 0;
+      this.lastBikeYaw = playerRotY;
 
       // 更新非騎乘中之所有單車 (套用重力與貼地，防止懸空)
       if (isCampus) {
@@ -658,6 +664,8 @@ class SchoolGTASandbox implements GameContext {
       // 火柴人自行車衝撞 NPC
       this.combat.updateBikeRam(targetPosition, playerRotY);
     } else {
+      NPC.playerBikeSpeed = 0;
+      NPC.playerBikeTurnTime = 0;
       // 玩家步行時，更新場景中所有閒置單車 (套用重力與貼地，防止懸空)
       if (isCampus) {
         for (let i = 0; i < this.bicycles.length; i++) {
