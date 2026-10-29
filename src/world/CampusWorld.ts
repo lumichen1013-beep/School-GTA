@@ -42,6 +42,8 @@ export class CampusWorld {
   public lift1FDoors: { left: THREE.Mesh; right: THREE.Mesh } | null = null;
   public lift4FDoors: { left: THREE.Mesh; right: THREE.Mesh } | null = null;
   public liftDoorOpenRatio: number = 1.0; // 預設敞開狀態
+  // 校舍玻璃窗透明材質：窗面互不重疊，可於同空間格合併繪製
+  private readonly windowGlassMats = new Set<THREE.Material>();
 
   public setElevatorDoorsOpen(ratio: number) {
     this.liftDoorOpenRatio = THREE.MathUtils.clamp(ratio, 0, 1);
@@ -88,7 +90,7 @@ export class CampusWorld {
     }
     for (const spot of this.shootingHotspots) dynamicObjects.add(spot.ringMesh);
     // 先合併靜態幾何 (同材質/陰影/空間格合為單一 draw call)，再凍結剩餘物件矩陣
-    bakeStatic(this.group, dynamicObjects);
+    bakeStatic(this.group, dynamicObjects, 40, this.windowGlassMats);
     freezeStaticMatrices(this.group, dynamicObjects);
   }
 
@@ -257,6 +259,8 @@ export class CampusWorld {
     const innerWallMat = new THREE.MeshLambertMaterial({ color: innerWallColor });
     const woodMat = new THREE.MeshLambertMaterial({ color: woodColor });
     const blackboardMat = new THREE.MeshLambertMaterial({ color: blackboardColor });
+    const corridorGlassMat = sharedLambert(0x74b9ff, { transparent: true, opacity: 0.6 }); // 走廊玻璃窗 (各窗共用以合併繪製)
+    this.windowGlassMats.add(corridorGlassMat);
 
     const bW = 20; // X 向寬度 (走廊 6.0m + 教室 14.0m)
     const bL = 34; // Z 向長度
@@ -446,7 +450,7 @@ export class CampusWorld {
       this.addCollider(classMinX - 0.2, classMinX + 0.2, baseZ - 13.4, baseZ - 4.1, curFloorY, curFloorY + floorH);
 
       // 走廊玻璃窗
-      const winNorth = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.6, 5.0), new THREE.MeshLambertMaterial({ color: 0x74b9ff, transparent: true, opacity: 0.6 }));
+      const winNorth = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.6, 5.0), corridorGlassMat);
       winNorth.position.set(classMinX, curFloorY + 2.2, baseZ - 8.75);
       this.group.add(winNorth);
 
@@ -483,7 +487,7 @@ export class CampusWorld {
       this.addCollider(classMinX - 0.2, classMinX + 0.2, baseZ + 4.1, baseZ + 13.4, curFloorY, curFloorY + floorH);
 
       // 走廊玻璃窗
-      const winSouth = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.6, 5.0), new THREE.MeshLambertMaterial({ color: 0x74b9ff, transparent: true, opacity: 0.6 }));
+      const winSouth = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.6, 5.0), corridorGlassMat);
       winSouth.position.set(classMinX, curFloorY + 2.2, baseZ + 8.75);
       this.group.add(winSouth);
 
@@ -593,6 +597,7 @@ export class CampusWorld {
     const landingMat = sharedLambert(0x95a5a6);
     const railMat = sharedLambert(0x27ae60); // 經典學校綠欄杆
     const glassMat = sharedLambert(0x74b9ff, { transparent: true, opacity: 0.65 });
+    this.windowGlassMats.add(glassMat);
 
     // 樓梯間 X 向寬度：外擴至 7.4m，提供 3.2m 寬闊跑道與 0.3m 碰撞隔離緩衝，杜絕擠角卡腳
     const stairMinX = corridorMinX - 0.7; // 27.3
@@ -2197,7 +2202,7 @@ export class CampusWorld {
     const cinemaArmMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, roughness: 0.5, metalness: 0.6 }); // 深灰金屬/黑塑料扶手
     const cupHolderMat = new THREE.MeshStandardMaterial({ color: 0x0f141c, roughness: 0.8, metalness: 0.3 }); // 杯架
     const cupDrinkMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); // 電影院飲料紙杯
-    const stepLightMat = new THREE.MeshBasicMaterial({ color: 0x00cec9, transparent: true, opacity: 0.9 }); // 階梯冰藍導引燈
+    const stepLightMat = new THREE.MeshBasicMaterial({ color: 0x00cec9 }); // 階梯冰藍導引燈
 
     const seatW = 0.58;
     const seatD = 0.50;
