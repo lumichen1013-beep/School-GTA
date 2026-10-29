@@ -181,6 +181,7 @@ const _ATTACK_SPECS: Record<string, AttackSpec> = {
   DETENTION_SENIOR: { hForce: 8.0, vForce: 3.5 },
   BANDIT: { hForce: 10.0, vForce: 5.5 },
   TEACHER: { hForce: 10.0, vForce: 6.0 },
+  INSTRUCTOR: { hForce: 10.0, vForce: 6.0 },
   DOG: { hForce: 11.5, vForce: 5.0 },
   BIKE_PATROL: { hForce: 12.5, vForce: 6.5 },
   INSPECTOR: { hForce: 8.0, vForce: 4.5 },

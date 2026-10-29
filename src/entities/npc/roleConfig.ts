@@ -44,7 +44,7 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   PE_TEACHER_BOSS: { ...BASE, maxHp: 950, baseSpeed: 4.2, jitterScale: 0, chaseSpeed: 8.5, attackPower: 20, attackRange: 2.4, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.40, hpBarY: 2.4 },
   // 生教組長 / 教官：威嚴步巡
   TEACHER: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
-  INSTRUCTOR: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 8, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
+  INSTRUCTOR: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
   // 校外強盜：手持砍刀在圍牆外徘徊
   BANDIT: { ...BASE, maxHp: 180, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 44, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
   // 校犬柴柴：敏捷四足犬
