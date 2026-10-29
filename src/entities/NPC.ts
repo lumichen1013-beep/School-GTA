@@ -7,7 +7,7 @@ import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
 import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
-import { KungFuLayer, getNpcMoveset, type KfMove } from './shared/kungfu';
+import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, type KfMove } from './shared/kungfu';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
@@ -932,9 +932,7 @@ export class NPC {
       }
       return false;
     } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官防暴海綿盾格擋：免傷 35%，吹哨冷卻拉長至 12 秒且低血量才吹哨
-      amount = Math.max(1, Math.round(amount * 0.65));
-      soundManager.playBanditSlash();
+      // 特訓院守衛：吹哨冷卻拉長至 12 秒且低血量才吹哨 (盾擋判定於 launchFlying)
       if (this.hp < this.maxHp * 0.40 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
         this.whistleCooldown = 12.0;
@@ -1007,8 +1005,10 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
-    // 鐵面總長受擊：撞柱硬直中 20%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
-    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.20 : 0.50)) return false;
+    // 鐵面總長受擊：撞柱硬直中 30%、其餘 70% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.70)) return false;
+    // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
+    if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
@@ -2330,6 +2330,20 @@ export class NPC {
     return true;
   }
 
+  // 持盾守衛舉盾格擋：攻擊方向 (impactDir) 與面向相反即為正面受擊
+  private tryShieldBlock(impactDir: THREE.Vector3): boolean {
+    if (!this.rightArm) return false;
+    if (impactDir.x * Math.sin(this.rotationY) + impactDir.z * Math.cos(this.rotationY) >= 0) return false;
+    if (Math.random() >= 0.5) return false;
+    if (this.isPaused) this.cancelPause();
+    this.isChasing = true;
+    this.kf.start(NPC_SHIELD_BLOCK, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.attackCooldown = Math.max(this.attackCooldown, 0.45);
+    this.showSkillBubble('🛡️ 盾擋！', false);
+    soundManager.playBanditSlash();
+    return true;
+  }
+
   public performFlashStep() {
     if (this.isKnockedDown) return;
 
@@ -2951,7 +2965,7 @@ export class NPC {
         this.mesh.rotation.set(0, this.rotationY, 0);
       } else {
         const move = this.kf.move;
-        if (this.kf.update(delta) && move) {
+        if (this.kf.update(delta) && move && move !== NPC_SHIELD_BLOCK) {
           this.kfStrike = move;
           this.playAttackSound();
         }
