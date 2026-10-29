@@ -25,6 +25,7 @@ const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: numbe
   DETENTION_SENIOR: { color: '#f59e0b', radius: 4.5 },
   DETENTION_WOLF: { color: '#ea580c', radius: 4.6 },
   TEACHER: { color: '#dc2626', radius: 5.5 },
+  DISCIPLINE_CHIEF: { color: '#dc2626', radius: 5.5 },
   INSTRUCTOR: { color: '#b91c1c', radius: 5.5 },
   BANDIT: { color: '#be123c', radius: 5.0 },
   DOG: { color: '#f59e0b', radius: 4.5 },

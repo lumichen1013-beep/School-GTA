@@ -21,10 +21,16 @@ export interface NPCRoleConfig {
   viewDist: number;
   eyeHeight: number;
   chaseAccelRate: number;
+  // 戰鬥積極度 (第二世界特訓群與校園執法者)：一般受擊踉蹌取代擊飛、出招過半霸體、追捕最低速度、多人包夾站位
+  aggressiveCombat: boolean;
+  // 第一世界出手間隔 (秒)；第二世界依警戒階段另計
+  attackInterval: number;
 }
 
 const BASE: Omit<NPCRoleConfig, 'maxHp' | 'baseSpeed' | 'jitterScale' | 'chaseSpeed' | 'attackPower' | 'attackRange' | 'defaultStyle' | 'pauseChance'> = {
   styleFixed: false,
+  aggressiveCombat: false,
+  attackInterval: 0.85,
   isCanine: false,
   isDetention: false,
   canCarryUmbrella: false,
@@ -35,16 +41,18 @@ const BASE: Omit<NPCRoleConfig, 'maxHp' | 'baseSpeed' | 'jitterScale' | 'chaseSp
 };
 
 // 少年院特訓群：慢速規律巡邏、必定駐足警戒、不持傘；潛行優先難度 (血量厚、攻擊力為校園同級約 1.6 倍)
-const DETENTION = { ...BASE, isDetention: true, pauseChance: 1.0, attackRange: 2.0, jitterScale: 0 };
+const DETENTION = { ...BASE, isDetention: true, aggressiveCombat: true, pauseChance: 1.0, attackRange: 2.0, jitterScale: 0 };
 
 export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 閃身步老師 (教學大樓身法宗師)
   DODGE_TEACHER: { ...BASE, maxHp: 9999, baseSpeed: 4.5, jitterScale: 0, chaseSpeed: 9.0, attackPower: 0, attackRange: 2.0, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.50, canCarryUmbrella: true },
   // 大如老師 (4F 羽球教練)：爆炸頭頂約 2.19m，血條抬高避免被頭髮遮擋
   PE_TEACHER_BOSS: { ...BASE, maxHp: 950, baseSpeed: 4.2, jitterScale: 0, chaseSpeed: 8.5, attackPower: 20, attackRange: 2.4, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.40, hpBarY: 2.4 },
-  // 生教組長 / 教官：威嚴步巡
+  // 巡堂老師：威嚴步巡
   TEACHER: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
-  INSTRUCTOR: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
+  // 校園執法者 (生教組長 / 主任教官)：威嚴步巡，戰鬥積極度比照第二世界守衛 (踉蹌、霸體、追捕最低速度、包夾)
+  DISCIPLINE_CHIEF: { ...BASE, maxHp: 750, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 16, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.7 },
+  INSTRUCTOR: { ...BASE, maxHp: 900, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.65 },
   // 校外強盜：手持砍刀在圍牆外徘徊
   BANDIT: { ...BASE, maxHp: 180, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 44, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
   // 校犬柴柴：敏捷四足犬
@@ -64,7 +72,7 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 特訓狼犬：敏捷
   DETENTION_WOLF: { ...DETENTION, maxHp: 260, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 11, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
   // 總教官 Boss【鐵面總長】
-  DETENTION_BOSS: { ...DETENTION, maxHp: 500, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 22, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
+  DETENTION_BOSS: { ...DETENTION, aggressiveCombat: false, maxHp: 500, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 22, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
 };
 
 // 平民學生各移動風格數值 (散步、疾走、慢跑、步巡)

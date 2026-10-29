@@ -201,7 +201,9 @@ class SchoolGTASandbox implements GameContext {
       for (const n of this.npcs) {
         n.resetAggro();
       }
+      this.campus.onWantedCleared();
     };
+    this.wantedSystem.onMaxWanted = () => this.campus.onMaxWanted();
     this.hud = new HUD();
     this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
@@ -727,7 +729,13 @@ class SchoolGTASandbox implements GameContext {
     // 8. NPC AI 更新
     this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
     // 8.1 少年院全域警戒階段：依本幀守衛實際目擊結果推進 (須在 NPC AI 更新之後)
-    if (!isCampus) this.detention.updateAlertPhase(delta, targetPosition);
+    if (!isCampus) {
+      this.detention.updateAlertPhase(delta, targetPosition);
+      this.detention.updateSurround(delta, targetPosition);
+    }
+
+    // 8.2 校園執法者包夾、留校察看暴怒與傳送追捕
+    if (isCampus) this.campus.updateEnforcers(delta, targetPosition);
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
     if (isCampus) this.campusLife.update(delta, targetPosition);

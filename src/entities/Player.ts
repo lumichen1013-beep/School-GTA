@@ -298,6 +298,8 @@ export class Player {
   public isKnockedFlying: boolean = false;
   public knockTimer: number = 0;
   public hitCooldown: number = 0;
+  // 被摔倒地 (如主任教官擒拿摔)：落地後倒地剩餘秒數，期間無法移動、攻擊與施展身法
+  public knockdownTimer: number = 0;
 
   // 下雨天專屬雨傘系統
   public isHoldingUmbrella: boolean = false;
@@ -531,7 +533,7 @@ export class Player {
 
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
   public performFlashStep() {
-    if (this.isDead || this.isRidingVehicle || this.isSwimming) return;
+    if (this.isDead || this.isRidingVehicle || this.isSwimming || this.knockdownTimer > 0) return;
 
     this.isDodging = true;
     this.dodgeDuration = 0.24;
@@ -560,7 +562,7 @@ export class Player {
 
   // 施展技能：狗熊哆嗦毛 (4 個身位半徑內連續瞬移 3 次，間隔 0.5s，紫色暗芒殘影，100% 障礙物安全)
   public performBearShake(colliders: CollidableBox[] = []) {
-    if (this.isDead || this.isRidingVehicle || this.isSwimming) return;
+    if (this.isDead || this.isRidingVehicle || this.isSwimming || this.knockdownTimer > 0) return;
 
     this.isBearShaking = true;
     this.isDodging = true; // 同步設置無敵標記
@@ -706,6 +708,7 @@ export class Player {
     this.isKnockedFlying = false;
     this.knockVelocity.set(0, 0, 0);
     this.hitCooldown = 0;
+    this.knockdownTimer = 0;
     this.cancelAttack();
     this.punchTimer = 0;
     this.position.copy(pos);
@@ -948,13 +951,30 @@ export class Player {
     if (!this.kf.engaged) this.applyArmPivot();
   }
 
+  // 被摔倒地：拋起後落地倒地 downTime 秒 (不受受擊保護時間限制，閃身/無敵中無效)
+  public knockDown(impactDir: THREE.Vector3, damage: number, reason: string, downTime: number): boolean {
+    if (this.isDead || this.isCinematicLocked) return false;
+    if (this.isDodging || this.isBearShaking || this.isBackflipping) return false;
+    this.cancelAttack();
+    this.hitCooldown = 0.55;
+    this.isKnockedFlying = true;
+    this.isHoldingUmbrella = false;
+    if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
+    this.knockTimer = 0.5;
+    this.isGrounded = false;
+    this.knockVelocity.set(impactDir.x * 5.0, 6.5, impactDir.z * 5.0);
+    this.knockdownTimer = downTime;
+    soundManager.playFallHit();
+    return this.takeDamage(damage, reason);
+  }
+
   // 設置玩家攻擊硬直/技能間隔冷卻 (如第二世界正面攻擊巡邏守衛時間隔 0.5 秒)
   public setAttackCooldown(seconds: number) {
     this.punchTimer = Math.max(this.punchTimer, seconds);
   }
 
   public get canAttack(): boolean {
-    return !this.isDead && !this.isSwimming && this.punchTimer <= 0 && this.kf.canChain;
+    return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain;
   }
 
   public update(
@@ -1038,7 +1058,10 @@ export class Player {
     _playerMoveDir.set(0, 0, 0);
     let analogSpeedScale = 1.0;
 
-    const locked = this.isCinematicLocked;
+    // 被摔倒地期間不讀取操作 (落地後才開始倒數)
+    if (this.knockdownTimer > 0 && !this.isKnockedFlying) this.knockdownTimer = Math.max(0, this.knockdownTimer - delta);
+    const isDowned = this.knockdownTimer > 0;
+    const locked = this.isCinematicLocked || isDowned;
     const hasVirtualJoystick = input.virtualAxisMagnitude > 0.05;
     const hasKeyboard = !!(input.keys['KeyW'] || input.keys['ArrowUp'] ||
                           input.keys['KeyS'] || input.keys['ArrowDown'] ||
@@ -1279,6 +1302,13 @@ export class Player {
       } else {
         this.applyBackflipPose(delta);
       }
+    }
+
+    // 被摔倒地：仰躺於地面 (落地前維持拋飛動作)；起身由一般動作平滑回正
+    if (isDowned && !this.isKnockedFlying) {
+      this.mesh.rotation.x = -Math.PI / 2;
+      this.mesh.rotation.z = 0;
+      this.mesh.position.y = this.position.y + 0.25;
     }
   }
 

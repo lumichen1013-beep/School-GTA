@@ -5,9 +5,23 @@ import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { SurroundCoordinator } from './SurroundCoordinator';
+import { findSafeTeleportPos } from '../entities/shared/teleport';
+import type { CollidableBox } from '../world/CampusWorld';
 
 const _scratchCamDir = new THREE.Vector3();
 const _scratchCamForward = new THREE.Vector3();
+const _scratchEnforcerSpot = new THREE.Vector3();
+const _placedEnforcerSpots: THREE.Vector3[] = [new THREE.Vector3(), new THREE.Vector3()];
+
+// 留校察看 (5 級處分) 執法者傳送追捕
+const ENFORCER_TELEPORT_MIN = 5.0; // 落點與玩家距離 (m)
+const ENFORCER_TELEPORT_MAX = 9.0;
+const ENFORCER_TELEPORT_ATTEMPTS = 40;
+const ENFORCER_RECHECK_INTERVAL = 20.0; // 維持 5 級期間每 20 秒檢查一次
+const ENFORCER_ENGAGE_RANGE_SQ = 625.0; // 25m 內有執法者追捕中即視為仍在纏鬥
+const ENFORCER_FLOOR_HEIGHT = 6.0; // 樓層高度 (1F 0 / 2F 6 / 3F 12)
+const CAMPUS_TELEPORT_BOUND = 104.0;
 
 // 路邊閒置的被搶單車上限 (超過時回收最舊者，防止單車無限堆積)
 const MAX_LOOSE_STOLEN_BIKES = 3;
@@ -33,6 +47,12 @@ export class CampusMode {
   private wasDogChasing: boolean = false;
   private lastTrackRecord: number | null | undefined = undefined;
   private lastSwimRecord: number | null | undefined = undefined;
+  // 校園執法者 (主任教官 / 生教組長)：多人包夾、留校察看傳送追捕與處分解除後返回崗位
+  private enforcerList: NPC[] | null = null;
+  private readonly teleportedEnforcers = new Set<NPC>();
+  private enforcerRecheckTimer: number = 0;
+  private enforcerTeleportPending: boolean = false;
+  private readonly enforcerSurround = new SurroundCoordinator();
 
   private readonly missionTracker: MissionTrackerData = {
     studentDefeated: 0,
@@ -76,6 +96,133 @@ export class CampusMode {
       this.ctx.world.setElevatorDoorsOpen(1.0);
     }
     this.wasDogChasing = false;
+  }
+
+  // ===== 校園執法者：留校察看傳送追捕 =====
+
+  private get enforcers(): NPC[] {
+    if (!this.enforcerList) this.enforcerList = this.ctx.campusNPCs.filter(n => n.isEnforcer);
+    return this.enforcerList;
+  }
+
+  // 處分升到 5 級 (留校察看)：執法者立即傳送至玩家附近追捕
+  public onMaxWanted() {
+    if (this.ctx.currentWorldType !== 'CAMPUS') return;
+    this.enforcerTeleportPending = true;
+  }
+
+  // 處分解除：被傳送離開崗位的執法者 (未倒地者) 返回原本崗位並解除暴怒
+  public onWantedCleared() {
+    for (const e of this.enforcers) e.setEnraged(false);
+    this.enforcerTeleportPending = false;
+    this.returnTeleportedEnforcers();
+  }
+
+  private returnTeleportedEnforcers() {
+    for (const e of this.teleportedEnforcers) {
+      if (e.isKnockedDown || e.isPermanentlyKnockedOut || e.isKnockedFlying) continue; // 倒地者起身後再返回
+      e.returnHome();
+      this.teleportedEnforcers.delete(e);
+    }
+  }
+
+  // 每幀 (NPC AI 更新之後)：執法者包夾、留校察看暴怒與傳送追捕
+  public updateEnforcers(delta: number, playerPos: THREE.Vector3) {
+    const enforcers = this.enforcers;
+    this.enforcerSurround.update(delta, enforcers, playerPos);
+    const isMax = this.ctx.wantedSystem.stars >= 5;
+    for (const e of enforcers) e.setEnraged(isMax);
+    if (!isMax) {
+      this.enforcerTeleportPending = false;
+      if (this.teleportedEnforcers.size > 0) this.returnTeleportedEnforcers();
+      return;
+    }
+
+    if (!this.enforcerTeleportPending) {
+      this.enforcerRecheckTimer -= delta;
+      if (this.enforcerRecheckTimer > 0) return;
+      // 仍有執法者在 25m 內同樓層追捕中：不打擾，稍後再檢查
+      if (this.isEnforcerEngaged(playerPos)) {
+        this.enforcerRecheckTimer = ENFORCER_RECHECK_INTERVAL;
+        return;
+      }
+    }
+    // 玩家處於不適合傳送的狀態 (游泳、電梯、羽球賽、過場、死亡)：下一幀再試
+    if (!this.canTeleportEnforcers()) return;
+    this.enforcerTeleportPending = false;
+    this.enforcerRecheckTimer = ENFORCER_RECHECK_INTERVAL;
+    this.teleportEnforcers(playerPos);
+  }
+
+  private isEnforcerEngaged(playerPos: THREE.Vector3): boolean {
+    for (const e of this.enforcers) {
+      if (e.isKnockedDown || e.isPermanentlyKnockedOut || !e.isChasing) continue;
+      if (Math.abs(e.position.y - playerPos.y) > 2.0) continue;
+      if (e.position.distanceToSquared(playerPos) < ENFORCER_ENGAGE_RANGE_SQ) return true;
+    }
+    return false;
+  }
+
+  private canTeleportEnforcers(): boolean {
+    const { player, tennisGame } = this.ctx;
+    if (this.ctx.currentWorldType !== 'CAMPUS') return false;
+    if (player.isDead || player.isCinematicLocked || player.isSwimming) return false;
+    if (this.elevatorTransition) return false;
+    return tennisGame.tennisState === 'IDLE';
+  }
+
+  // 將存活的執法者傳送至玩家所在樓層 5~9m 內、與玩家之間無牆阻隔的安全落點，並吹哨追捕
+  private teleportEnforcers(playerPos: THREE.Vector3) {
+    const floorY = Math.max(0, Math.round(playerPos.y / ENFORCER_FLOOR_HEIGHT) * ENFORCER_FLOOR_HEIGHT);
+    let placed = 0;
+    for (const e of this.enforcers) {
+      if (e.isKnockedDown || e.isPermanentlyKnockedOut || e.isKnockedFlying) continue;
+      if (!this.findEnforcerSpot(playerPos, floorY, placed, _scratchEnforcerSpot)) continue;
+      _placedEnforcerSpots[Math.min(placed, _placedEnforcerSpots.length - 1)].copy(_scratchEnforcerSpot);
+      placed++;
+      e.teleportTo(_scratchEnforcerSpot, floorY, playerPos);
+      this.teleportedEnforcers.add(e);
+    }
+    if (placed > 0) {
+      this.ctx.wantedSystem.showBanner('🚨 留校察看！主任教官與生教組長火速趕到現場追捕！', 3000);
+    }
+  }
+
+  private findEnforcerSpot(playerPos: THREE.Vector3, floorY: number, placed: number, out: THREE.Vector3): boolean {
+    const colliders = this.ctx.activeColliders;
+    const opts = { minRadius: ENFORCER_TELEPORT_MIN, maxRadius: ENFORCER_TELEPORT_MAX, attempts: 1, baseGroundY: 0 };
+    for (let i = 0; i < ENFORCER_TELEPORT_ATTEMPTS; i++) {
+      findSafeTeleportPos(out, playerPos.x, playerPos.z, floorY, colliders, opts);
+      const dx = out.x - playerPos.x;
+      const dz = out.z - playerPos.z;
+      const d2 = dx * dx + dz * dz;
+      // 取樣失敗會退回中心點；落點須在同一樓層 (排除樓外懸空落回地面)、校園範圍內且不在水中
+      if (d2 < ENFORCER_TELEPORT_MIN * ENFORCER_TELEPORT_MIN - 0.01) continue;
+      if (Math.abs(out.y - floorY) > 0.5) continue;
+      if (Math.abs(out.x) > CAMPUS_TELEPORT_BOUND || Math.abs(out.z) > CAMPUS_TELEPORT_BOUND) continue;
+      if (this.ctx.world.isInsideSwimmingPool(out) || this.ctx.ecologicalGarden.isInsideWishingPond(out)) continue;
+      let crowded = false;
+      for (let k = 0; k < Math.min(placed, _placedEnforcerSpots.length); k++) {
+        if (_placedEnforcerSpots[k].distanceToSquared(out) < 2.25) crowded = true;
+      }
+      if (crowded) continue;
+      if (this.isWallBetween(out, playerPos, floorY, colliders)) continue;
+      out.y = floorY;
+      return true;
+    }
+    return false;
+  }
+
+  // 落點與玩家之間 (胸口高度) 是否有牆體阻隔
+  private isWallBetween(from: THREE.Vector3, playerPos: THREE.Vector3, floorY: number, colliders: readonly CollidableBox[]): boolean {
+    const y1 = floorY + 1.2;
+    const y2 = playerPos.y + 1.2;
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (box.isFloorOnly || box.isRamp) continue;
+      if (NPC.segmentIntersectsAABBCoords(from.x, y1, from.z, playerPos.x, y2, playerPos.z, box.min, box.max)) return true;
+    }
+    return false;
   }
 
   // ===== 電梯 =====

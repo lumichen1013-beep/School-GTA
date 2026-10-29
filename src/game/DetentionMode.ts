@@ -3,6 +3,7 @@ import { soundManager } from '../audio/SoundEffects';
 import type { NPC } from '../entities/NPC';
 import type { DetentionRadarData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { SurroundCoordinator } from './SurroundCoordinator';
 
 const _scratchCqcScreenPos = new THREE.Vector3();
 
@@ -49,6 +50,7 @@ export class DetentionMode {
   private searchlightLocked: boolean = false;
   private alertHoldTimer: number = 0;
   private pendingSighting: boolean = false;
+  private readonly surround = new SurroundCoordinator();
 
   private readonly radarData: DetentionRadarData = {
     isGateAOpen: false,
@@ -313,6 +315,11 @@ export class DetentionMode {
     const hunt = this.alertPhase === 'ALERT' || this.alertPhase === 'EVASION';
     for (let i = 0; i < npcs.length; i++) npcs[i].detentionHuntActive = hunt;
     hud.updateMgsAlert(this.alertPhase, this.alertTimer);
+  }
+
+  // 多人包夾 (見 SurroundCoordinator)
+  public updateSurround(delta: number, playerPos: THREE.Vector3) {
+    this.surround.update(delta, this.ctx.detentionNPCs, playerPos);
   }
 
   // 背後暗殺擊昏判定 與 刺客教條草堆暗殺判定
