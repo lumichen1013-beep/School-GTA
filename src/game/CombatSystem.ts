@@ -53,9 +53,9 @@ const DETENTION_BOSS_DMG_MULT = 0.5;
 const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
 // NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
 const NPC_ATTACK_INTERVAL = 0.85;
-const GRAB_THROW_DAMAGE = 30; // 主任教官擒拿摔
-const GRAB_THROW_DOWN_TIME = 1.0; // 擒拿摔落地後倒地秒數
-const RULER_STRIKE_DAMAGE = 12; // 生教組長戒尺連打 (每下)
+const GRAB_THROW_DAMAGE = 20; // 主任教官擒拿摔
+const GRAB_THROW_DOWN_TIME = 0.7; // 擒拿摔落地後倒地秒數
+const RULER_STRIKE_DAMAGE = 8; // 生教組長戒尺連打 (每下)
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
@@ -862,7 +862,7 @@ export class CombatSystem {
       // 校園執法者招牌技 (擒拿摔 3m 內撲抓、戒尺連打貼身)：追捕中冷卻完畢且未在出招時發動
       if (
         npc.isEnforcer && !isSpawnGraceActive && npc.isChasing && !player.isDead && npc.attackCooldown <= 0 &&
-        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0
+        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0 && !npc.enforcerHoldAttack
       ) {
         const sig = npc.canStartSignature(distToPlayer, targetPosition.y - npc.position.y);
         if (sig) {
@@ -870,8 +870,8 @@ export class CombatSystem {
           continue;
         }
       }
-      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)
-      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning) continue;
+      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)；執法者輪流出手時非本輪者不出手
+      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning || npc.enforcerHoldAttack) continue;
 
       npc.attackCooldown = this.getNpcAttackInterval(npc);
       // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算
@@ -901,7 +901,7 @@ export class CombatSystem {
     return (dx * Math.sin(npc.rotationY) + dz * Math.cos(npc.rotationY)) / dist >= NPC_STRIKE_ARC;
   }
 
-  // 校園執法者招牌技命中結算：擒拿摔 30 傷害並摔倒 1 秒、戒尺連打每下 12 傷害 (各段分別判定)；
+  // 校園執法者招牌技命中結算：擒拿摔 20 傷害並摔倒 0.7 秒、戒尺連打每下 8 傷害 (各段分別判定)；
   // 閃身中落空；騎車中只扣血不摔車
   private applySignatureHit(npc: NPC, targetPosition: THREE.Vector3, isGrab: boolean) {
     const { player, wantedSystem } = this.ctx;

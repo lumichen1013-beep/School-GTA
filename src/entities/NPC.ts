@@ -88,8 +88,12 @@ const W2_SURROUND_TRAVEL_TIMEOUT = 1.5;
 // 校園執法者 (主任教官 / 生教組長)：受擊防衛、招牌技與留校察看暴怒
 const ENFORCER_PARRY_CHANCE = 0.25; // 主任教官格擋反擊
 const ENFORCER_FLASH_CHANCE = 0.2; // 生教組長閃身步
+const ENFORCER_COUNTER_COOLDOWN = 0.4; // 格擋 / 閃身成功後的反擊延遲 (秒)
 const ENFORCER_RAGE_SPEED_MULT = 1.15;
 const ENFORCER_SIG_FIRST_DELAY = 3.0; // 進入追捕後首次招牌技的最短等待 (秒)
+const ENFORCER_ORBIT_RADIUS = 2.75; // 輪流出手：等待方環繞玩家的半徑 (m)
+const ENFORCER_ORBIT_STEP = 0.5; // 每次朝前方繞行的角度 (rad)
+const ENFORCER_ORBIT_SPEED = 3.2; // 環繞側移速度 (m/s)
 const GRAB_LUNGE_DIST = 1.2; // 擒拿摔預備期間向前撲抓距離 (m)
 const GRAB_LUNGE_START = 0.12; // 撲抓開始時間點 (占全長比例)
 const GRAB_LUNGE_STOP_DIST = 0.9; // 與玩家相距此距離內停止撲抓 (不推擠玩家)
@@ -368,6 +372,9 @@ export class NPC {
   public freezeTimer: number = 0;   // 全校廣播定格發呆時間
   // 校園執法者招牌技 (擒拿摔 / 戒尺連打) 冷卻與撲抓方向；留校察看 (5 級處分) 暴怒
   public sigCooldown: number = ENFORCER_SIG_FIRST_DELAY;
+  public enforcerHoldAttack: boolean = false; // 輪流出手：非本輪出手方暫不出招
+  public enforcerOrbit: boolean = false; // 輪流出手：等待方環繞玩家
+  private orbitDir: number = 1;
   private readonly grabLungeDir: THREE.Vector3 = new THREE.Vector3();
   public isEnraged: boolean = false;
 
@@ -1200,7 +1207,7 @@ export class NPC {
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.60)) return false;
     // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
     if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
-    // 校園執法者：主任教官 40% 格擋反擊、生教組長 30% 閃身步 (施展招牌技期間不防衛)
+    // 校園執法者：主任教官 25% 格擋反擊、生教組長 20% 閃身步 (施展招牌技期間不防衛)
     if (this.tryEnforcerDefense()) return false;
     // 特訓資深守衛 / 重裝守衛：受擊 (任意方向) 30% 機率施展「狗熊哆嗦毛」避開 (不受傷也不被擊飛)；施展期間免疫攻擊
     if (this.role === 'DETENTION_SENIOR' || this.role === 'DETENTION_HEAVY') {
@@ -1269,7 +1276,7 @@ export class NPC {
     return m === NPC_GRAB_THROW || m === NPC_RULER_FLURRY;
   }
 
-  // 校園執法者受擊防衛：成功時不受傷也不被擊退，攻擊冷卻設為 0.2 秒立即反擊
+  // 校園執法者受擊防衛：成功時不受傷也不被擊退，攻擊冷卻設為 0.4 秒後反擊
   private tryEnforcerDefense(): boolean {
     if (!this.isEnforcer || this.isSignatureActive) return false;
     if (this.role === 'DISCIPLINE_CHIEF') {
@@ -1280,7 +1287,7 @@ export class NPC {
       this.mesh.rotation.set(0, this.rotationY, 0);
       this.performFlashStep();
       this.isChasing = true;
-      this.attackCooldown = W2_COUNTER_COOLDOWN;
+      this.attackCooldown = ENFORCER_COUNTER_COOLDOWN;
       return true;
     }
     if (!this.rightArm || Math.random() >= ENFORCER_PARRY_CHANCE) return false;
@@ -1288,7 +1295,7 @@ export class NPC {
     this.isChasing = true;
     this.staggerTimer = 0;
     this.kf.start(NPC_CROSS_PARRY, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
-    this.attackCooldown = W2_COUNTER_COOLDOWN;
+    this.attackCooldown = ENFORCER_COUNTER_COOLDOWN;
     this.showSkillBubble('🥋 格擋反擊！', false);
     soundManager.playBanditSlash();
     return true;
@@ -1310,8 +1317,8 @@ export class NPC {
     this.mesh.rotation.y = this.rotationY;
     this.grabLungeDir.set(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
     this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
-    // 冷卻於出招結束後才倒數：擒拿摔約每 8 秒、戒尺連打約每 6 秒
-    this.sigCooldown = kind === 'GRAB' ? 6.0 + Math.random() : 4.0 + Math.random();
+    // 冷卻於出招結束後才倒數：擒拿摔約每 10 秒、戒尺連打約每 8 秒
+    this.sigCooldown = kind === 'GRAB' ? 8.2 + Math.random() : 6.2 + Math.random();
     this.attackCooldown = move.dur + 0.1; // 招式期間不接一般攻擊
     this.showSpeechBubble(kind === 'GRAB' ? '🥋 擒拿摔！' : '📏 戒尺連打！', true, 1.4);
     soundManager.playWhistle();
@@ -1407,8 +1414,7 @@ export class NPC {
     if (move && move.dmg > 0 && this.kf.strikeProgress < W2_HYPER_ARMOR_PROGRESS) {
       this.kf.cancel();
       this.mesh.rotation.set(0, this.rotationY, 0);
-      // 校園執法者：出招被打斷後踉蹌一結束即重新出手 (避免被連打壓制到無法還手)
-      if (this.isEnforcer) this.attackCooldown = Math.min(this.attackCooldown, W2_STAGGER_TIME);
+      // 攻擊冷卻 (出招時已設為角色出手間隔) 照常倒數不縮短：被打斷後仍約每個出手間隔重新出手一次
     }
   }
 
@@ -1425,6 +1431,23 @@ export class NPC {
     const nextZ = this.position.z + this.staggerDirZ * step;
     if (!isBlockedXZ(colliders, this.position.x, nextZ, radius, this.position.y, 0.3, 1.6)) this.position.z = nextZ;
     depenetrateXZ(colliders, this.position, radius, 0.3, 1.6, 0.02, 1, 'npc');
+  }
+
+  // 校園執法者正在出招 (一般攻擊或招牌技，不含格擋動作)
+  public get isEnforcerAttacking(): boolean {
+    const m = this.kf.move;
+    return m !== null && m.dmg > 0;
+  }
+
+  // 輪流出手等待方：沿目前方位朝固定方向繞行，維持約 2.75m 半徑 (共用包夾 scratch 向量)
+  public setEnforcerOrbit(on: boolean) {
+    if (on && !this.enforcerOrbit) this.orbitDir = Math.random() < 0.5 ? 1 : -1;
+    this.enforcerOrbit = on;
+  }
+
+  private computeEnforcerOrbitTarget(playerPos: THREE.Vector3): THREE.Vector3 {
+    const a = Math.atan2(this.position.x - playerPos.x, this.position.z - playerPos.z) + this.orbitDir * ENFORCER_ORBIT_STEP;
+    return _npcSurroundTarget.set(playerPos.x + Math.sin(a) * ENFORCER_ORBIT_RADIUS, this.position.y, playerPos.z + Math.cos(a) * ENFORCER_ORBIT_RADIUS);
   }
 
   // 包夾繞行中 (尚未抵達站位方位且未逾時) 暫不出手，先散開再圍攻
@@ -3470,6 +3493,10 @@ export class NPC {
       if (this.hasSurroundSlot && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
         targetPos = this.computeSurroundTarget(playerPos, delta);
       }
+      // 校園執法者輪流出手：等待方於玩家周圍約 2.75m 環繞側移
+      if (this.enforcerOrbit && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
+        targetPos = this.computeEnforcerOrbitTarget(playerPos);
+      }
 
       // 追捕動態節奏計時 (忽快忽慢：爆發衝刺 vs 喘氣慢跑)
       if (this.role === 'BIKE_PATROL') {
@@ -3508,6 +3535,7 @@ export class NPC {
       const accelRate = this.cfg.chaseAccelRate;
       this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
+      if (targetPos === _npcSurroundTarget && this.enforcerOrbit) currentSpeed = Math.min(currentSpeed, ENFORCER_ORBIT_SPEED);
     } else if (this.isReclaimingBike && this.ownedBike && !this.ownedBike.isMounted) {
       // 走回被搶的愛車旁牽車 (玩家正在騎乘時改為一般巡邏，待玩家下車後再前往)
       this.isBurstSprinting = false;
@@ -3703,7 +3731,7 @@ export class NPC {
       if (usingSurroundSlot) {
         const pdx = playerPos.x - this.position.x;
         const pdz = playerPos.z - this.position.z;
-        if (isTooCloseToPlayer || pdx * pdx + pdz * pdz < 4.0) {
+        if (isTooCloseToPlayer || this.enforcerOrbit || pdx * pdx + pdz * pdz < 4.0) {
           faceX = pdx;
           faceZ = pdz;
         }

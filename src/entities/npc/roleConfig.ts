@@ -51,8 +51,8 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 巡堂老師：威嚴步巡
   TEACHER: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
   // 校園執法者 (生教組長 / 主任教官)：威嚴步巡，戰鬥積極度比照第二世界守衛 (踉蹌、霸體、追捕最低速度、包夾)
-  DISCIPLINE_CHIEF: { ...BASE, maxHp: 750, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 16, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.7 },
-  INSTRUCTOR: { ...BASE, maxHp: 900, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.65 },
+  DISCIPLINE_CHIEF: { ...BASE, maxHp: 500, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 16, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.85 },
+  INSTRUCTOR: { ...BASE, maxHp: 600, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.8 },
   // 校外強盜：手持砍刀在圍牆外徘徊
   BANDIT: { ...BASE, maxHp: 180, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 44, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
   // 校犬柴柴：敏捷四足犬

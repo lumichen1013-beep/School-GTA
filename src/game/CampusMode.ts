@@ -22,6 +22,10 @@ const ENFORCER_RECHECK_INTERVAL = 20.0; // 維持 5 級期間每 20 秒檢查一
 const ENFORCER_ENGAGE_RANGE_SQ = 625.0; // 25m 內有執法者追捕中即視為仍在纏鬥
 const ENFORCER_FLOOR_HEIGHT = 6.0; // 樓層高度 (1F 0 / 2F 6 / 3F 12)
 const CAMPUS_TELEPORT_BOUND = 104.0;
+// 執法者輪流出手 (兩人皆於玩家 4m 內纏鬥時同一時間僅一人出招)
+const ENFORCER_TURN_RANGE_SQ = 16.0;
+const ENFORCER_TURN_GAP = 0.3; // 出手方招式結束後的換手間隔 (秒)
+const ENFORCER_TURN_MAX_IDLE = 1.5; // 出手方遲遲未出招 (追趕/冷卻中) 即換手 (秒)
 
 // 路邊閒置的被搶單車上限 (超過時回收最舊者，防止單車無限堆積)
 const MAX_LOOSE_STOLEN_BIKES = 3;
@@ -53,6 +57,10 @@ export class CampusMode {
   private enforcerRecheckTimer: number = 0;
   private enforcerTeleportPending: boolean = false;
   private readonly enforcerSurround = new SurroundCoordinator();
+  private turnHolder: NPC | null = null;
+  private turnGap: number = 0;
+  private turnHoldTime: number = 0;
+  private turnHolderAttacked: boolean = false;
 
   private readonly missionTracker: MissionTrackerData = {
     studentDefeated: 0,
@@ -118,6 +126,53 @@ export class CampusMode {
     this.returnTeleportedEnforcers();
   }
 
+  private isEnforcerInMelee(n: NPC, playerPos: THREE.Vector3): boolean {
+    if (!n.isChasing || n.isInvestigatingNoise || n.lostSightTimer > 0) return false;
+    if (n.isKnockedDown || n.isPermanentlyKnockedOut || n.isKnockedFlying) return false;
+    const dx = n.position.x - playerPos.x;
+    const dz = n.position.z - playerPos.z;
+    return dx * dx + dz * dz <= ENFORCER_TURN_RANGE_SQ && Math.abs(n.position.y - playerPos.y) <= 2.0;
+  }
+
+  // 輪流出手：兩名執法者皆貼近纏鬥時僅本輪出手方可出招，另一人於外圈環繞等待；
+  // 出手方招式結束 (含被打斷) 或遲遲未出招時，間隔 0.3 秒後換手
+  private updateEnforcerTurns(delta: number, enforcers: NPC[], playerPos: THREE.Vector3) {
+    const a = enforcers[0];
+    const b = enforcers[1];
+    if (!a || !b || !this.isEnforcerInMelee(a, playerPos) || !this.isEnforcerInMelee(b, playerPos)) {
+      this.turnHolder = null;
+      for (const e of enforcers) {
+        e.enforcerHoldAttack = false;
+        e.setEnforcerOrbit(false);
+      }
+      return;
+    }
+    if (!this.turnHolder) {
+      this.turnHolder = a.isEnforcerAttacking ? a : b.isEnforcerAttacking ? b : (a.attackCooldown <= b.attackCooldown ? a : b);
+      this.turnGap = 0;
+      this.turnHoldTime = 0;
+      this.turnHolderAttacked = false;
+    }
+    if (this.turnGap > 0) {
+      this.turnGap -= delta;
+      if (this.turnGap <= 0) {
+        this.turnHolder = this.turnHolder === a ? b : a;
+        this.turnHoldTime = 0;
+        this.turnHolderAttacked = false;
+      }
+    } else {
+      this.turnHoldTime += delta;
+      if (this.turnHolder.isEnforcerAttacking) this.turnHolderAttacked = true;
+      else if (this.turnHolderAttacked || this.turnHoldTime > ENFORCER_TURN_MAX_IDLE) this.turnGap = ENFORCER_TURN_GAP;
+    }
+    const holder = this.turnHolder;
+    const waiter = holder === a ? b : a;
+    holder.enforcerHoldAttack = this.turnGap > 0;
+    holder.setEnforcerOrbit(false);
+    waiter.enforcerHoldAttack = true;
+    waiter.setEnforcerOrbit(true);
+  }
+
   private returnTeleportedEnforcers() {
     for (const e of this.teleportedEnforcers) {
       if (e.isKnockedDown || e.isPermanentlyKnockedOut || e.isKnockedFlying) continue; // 倒地者起身後再返回
@@ -130,6 +185,7 @@ export class CampusMode {
   public updateEnforcers(delta: number, playerPos: THREE.Vector3) {
     const enforcers = this.enforcers;
     this.enforcerSurround.update(delta, enforcers, playerPos);
+    this.updateEnforcerTurns(delta, enforcers, playerPos);
     const isMax = this.ctx.wantedSystem.stars >= 5;
     for (const e of enforcers) e.setEnraged(isMax);
     if (!isMax) {
