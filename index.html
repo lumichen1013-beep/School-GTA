@@ -159,6 +159,18 @@
       <div class="shot-meter-feedback" id="shot-feedback">PERFECT!</div>
     </div>
 
+    <!-- 總教官暗殺時機計量表 (Takedown Timing Meter) -->
+    <div id="takedown-meter">
+      <div class="shot-meter-header">
+        <span class="shot-meter-title">🎯 暗殺時機</span>
+        <span class="shot-meter-hint" id="takedown-meter-hint">綠區內再按 F / 左鍵</span>
+      </div>
+      <div class="shot-meter-track takedown-meter-track">
+        <div class="shot-meter-sweetspot" id="takedown-sweetspot"></div>
+        <div class="shot-meter-needle takedown-meter-needle" id="takedown-needle"></div>
+      </div>
+    </div>
+
     <!-- Alert / Incident Banner -->
     <div id="hud-banner">生教組長發動走廊巡查！</div>
 
@@ -638,7 +650,9 @@
       <div id="escape-rank-title" class="victory-rank-title">傳奇特務 (BIG BOSS)</div>
       <div class="victory-stats">
         <div>⏱️ 逃脫耗時：<b id="stat-escape-time" class="victory-stat stat-time">00:00</b></div>
-        <div>🥷 潛行擊昏守衛：<b id="stat-escape-takedowns" class="victory-stat stat-takedowns">0 人</b></div>
+        <div>🥷 暗殺擊昏守衛：<b id="stat-escape-takedowns" class="victory-stat stat-takedowns">0 人</b></div>
+        <div>👊 正面擊倒人數：<b id="stat-escape-frontal" class="victory-stat stat-frontal">0 人</b></div>
+        <div>⚖️ 暗殺 / 正面：<b id="stat-escape-ratio" class="victory-stat stat-ratio">0 : 0</b></div>
         <div>🚨 觸發警報次數：<b id="stat-escape-alerts" class="victory-stat stat-alerts">0 次</b></div>
       </div>
       <!-- 主按鈕：空白鍵 (PC) 或點擊任意處 (MOBILE) 回主畫面 -->

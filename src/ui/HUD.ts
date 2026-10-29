@@ -53,6 +53,27 @@ export interface CommissaryItem {
   desc: string;
 }
 
+// 越獄評級 (潛行優先)：幽靈 = 0 警戒 + 0 正面擊倒 + 180 秒內；S = 0 警戒 + 正面擊倒 ≤ 2 + 180 秒內；
+// 其餘依警戒次數與時間：警戒 ≤ 3 且 300 秒內為 A，否則 B (正面擊倒 3 人以上最高只到 A)
+const ESCAPE_S_TIME = 180;
+const ESCAPE_A_TIME = 300;
+const ESCAPE_S_MAX_FRONTAL = 2;
+const ESCAPE_A_MAX_ALERTS = 3;
+export function getEscapeRank(escapeTimeSec: number, alerts: number, frontalKos: number): { rank: string; title: string; color: string } {
+  if (alerts === 0 && escapeTimeSec <= ESCAPE_S_TIME) {
+    if (frontalKos === 0) return { rank: '幽靈', title: '無影幽靈 (GHOST)', color: '#e2e8f0' };
+    if (frontalKos <= ESCAPE_S_MAX_FRONTAL) return { rank: 'S', title: '傳奇特務 (BIG BOSS)', color: '#fbbf24' };
+  }
+  if (alerts <= ESCAPE_A_MAX_ALERTS && escapeTimeSec <= ESCAPE_A_TIME) return { rank: 'A', title: '潛入專家 (INFILTRATOR)', color: '#38bdf8' };
+  return { rank: 'B', title: '逃獄狂徒 (RENEGADE)', color: '#f87171' };
+}
+
+// 第二世界特訓小賣部物價為校園合作社 2 倍 (共用同一份菜單，顯示與結帳皆經此換算)
+const DETENTION_PRICE_MULTIPLIER = 2;
+export function getCommissaryPrice(item: CommissaryItem, isDetention: boolean): number {
+  return isDetention ? item.price * DETENTION_PRICE_MULTIPLIER : item.price;
+}
+
 export const COMMISSARY_MENU: CommissaryItem[] = [
   { id: 'first-aid', name: '戰術急救止血繃帶', icon: '🩹', price: 25, healHp: 40, restoreStamina: false, desc: '防暴常備急救物資，快速止血穩固傷勢！(+40 HP)' },
   { id: 'glucose', name: '高能葡萄糖補給液', icon: '💉', price: 45, healHp: 80, restoreStamina: false, desc: '極速吸收，強效重傷回血！(+80 HP)' },
@@ -733,6 +754,31 @@ export class HUD {
     }
   }
 
+  // 總教官暗殺時機計量表 (沿用投籃計量表外觀)：zoneStart/zoneWidth 為綠區位置 (0~1)
+  public showTakedownMeter(zoneStart: number, zoneWidth: number, hint: string) {
+    const el = this.$('takedown-meter');
+    if (!el) return;
+    const zone = this.$('takedown-sweetspot');
+    if (zone) {
+      zone.style.left = `${zoneStart * 100}%`;
+      zone.style.width = `${zoneWidth * 100}%`;
+    }
+    const hintEl = this.$('takedown-meter-hint');
+    if (hintEl) hintEl.textContent = hint;
+    this.updateTakedownMeter(0);
+    el.style.display = 'block';
+  }
+
+  public updateTakedownMeter(ratio: number) {
+    const needle = this.$('takedown-needle');
+    if (needle) needle.style.left = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+  }
+
+  public hideTakedownMeter() {
+    const el = this.$('takedown-meter');
+    if (el) el.style.display = 'none';
+  }
+
   public hideShotMeter() {
     if (this.shotMeterEl) {
       this.shotMeterEl.style.display = 'none';
@@ -1136,9 +1182,10 @@ export class HUD {
         ? `💚 +${item.healHp} HP & ⚡ 精力全滿`
         : `💚 +${item.healHp} HP 體力`;
 
+      const itemPrice = getCommissaryPrice(item, isDetention);
       const price = document.createElement('div');
       price.className = 'food-price';
-      price.textContent = `NT$ ${item.price}`;
+      price.textContent = `NT$ ${itemPrice}`;
 
       info.appendChild(name);
       info.appendChild(effect);
@@ -1147,7 +1194,7 @@ export class HUD {
       const buyBtn = document.createElement('button');
       buyBtn.className = 'food-buy-btn';
       buyBtn.textContent = '購買品嚐';
-      if (playerCash < item.price) {
+      if (playerCash < itemPrice) {
         buyBtn.disabled = true;
         buyBtn.textContent = '餘額不足';
       } else {
@@ -1955,6 +2002,7 @@ export class HUD {
   public showDetentionVictory(
     escapeTimeSec: number,
     takedowns: number,
+    frontalKos: number,
     alerts: number,
     onReplay: () => void,
     onReturnCampus: () => void
@@ -1973,27 +2021,19 @@ export class HUD {
     const sec = Math.floor(escapeTimeSec % 60).toString().padStart(2, '0');
     const timeEl = document.getElementById('stat-escape-time');
     const takedownsEl = document.getElementById('stat-escape-takedowns');
+    const frontalEl = document.getElementById('stat-escape-frontal');
+    const ratioEl = document.getElementById('stat-escape-ratio');
     const alertsEl = document.getElementById('stat-escape-alerts');
     const badgeEl = document.getElementById('escape-rank-badge');
     const titleEl = document.getElementById('escape-rank-title');
 
     if (timeEl) timeEl.textContent = `${min}:${sec}`;
     if (takedownsEl) takedownsEl.textContent = `${takedowns} 人`;
+    if (frontalEl) frontalEl.textContent = `${frontalKos} 人`;
+    if (ratioEl) ratioEl.textContent = `${takedowns} : ${frontalKos}`;
     if (alertsEl) alertsEl.textContent = `${alerts} 次`;
 
-    // 評級計算
-    let rank = 'S';
-    let title = '傳奇特務 (BIG BOSS)';
-    let color = '#fbbf24';
-    if (alerts > 3 || escapeTimeSec > 300) {
-      rank = 'B';
-      title = '逃獄狂徒 (RENEGADE)';
-      color = '#f87171';
-    } else if (alerts > 0 || escapeTimeSec > 180) {
-      rank = 'A';
-      title = '潛入專家 (INFILTRATOR)';
-      color = '#38bdf8';
-    }
+    const { rank, title, color } = getEscapeRank(escapeTimeSec, alerts, frontalKos);
 
     if (badgeEl) {
       badgeEl.textContent = rank;

@@ -11,6 +11,7 @@ type AlertPhase = 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION';
 const ALERT_HOLD_TIME = 1.0; // 短暫失去視線 (如總教官衝撞、轉角) 不立即轉入搜索，避免警戒橫幅閃爍
 const EVASION_TIME = 5.0;
 const CAUTION_TIME = 4.0;
+const FIGHT_NOISE_RADIUS = 20.0; // 正面打鬥聲響傳播半徑 (m)；暗殺為無聲
 
 /**
  * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
@@ -33,6 +34,7 @@ export class DetentionMode {
   // 越獄進度狀態
   public escapeStartTime: number = 0;
   public takedownCount: number = 0;
+  public frontalKoCount: number = 0; // 以一般攻擊 (非暗殺) 擊倒的人數
   public alertCount: number = 0;
   public alertPhase: AlertPhase = 'NORMAL';
   public alertTimer: number = 0; // EVASION / CAUTION 階段剩餘秒數
@@ -71,6 +73,7 @@ export class DetentionMode {
   public reset() {
     this.escapeStartTime = performance.now();
     this.takedownCount = 0;
+    this.frontalKoCount = 0;
     this.alertCount = 0;
     this.hasKeycardA = false;
     this.hasKeycardB = false;
@@ -171,6 +174,14 @@ export class DetentionMode {
     npc.detentionHuntActive = true; // 本幀即生效，避免守衛在警戒階段推進前自行放棄
     npc.lastKnownPos.copy(this.ctx.player.position);
     this.pendingSighting = true;
+  }
+
+  // 正面打鬥聲響 (玩家一般攻擊命中、守衛攻擊命中)：半徑 20m 內未在追捕的守衛前往聲源察看 (不直接觸發警戒)
+  public emitFightNoise(pos: THREE.Vector3) {
+    const r2 = FIGHT_NOISE_RADIUS * FIGHT_NOISE_RADIUS;
+    for (const n of this.ctx.detentionNPCs) {
+      if (n.position.distanceToSquared(pos) <= r2) n.hearNoise(pos);
+    }
   }
 
   // 每幀：草堆匿蹤、鑰匙卡/探照燈動畫、MGS 警戒倒數與背後暗殺目標鎖定
@@ -308,7 +319,8 @@ export class DetentionMode {
   private updateCqcTarget(targetPosition: THREE.Vector3) {
     const { player, hud } = this.ctx;
     this.nearbyCqcTarget = null;
-    if (!player.isDead) {
+    // 暗殺時機計量表與運鏡期間不顯示暗殺提示
+    if (!player.isDead && !this.ctx.combat.isExecutionActive) {
       for (const npc of this.ctx.detentionNPCs) {
         if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
 
@@ -382,6 +394,7 @@ export class DetentionMode {
     this.ctx.hud.showDetentionVictory(
       totalTime,
       this.takedownCount,
+      this.frontalKoCount,
       this.alertCount,
       () => {
         this.ctx.switchWorld('DETENTION', true);

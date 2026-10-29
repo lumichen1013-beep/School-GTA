@@ -7,7 +7,7 @@ import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
 import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
-import { KungFuLayer, getNpcMoveset, type KfMove } from './shared/kungfu';
+import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, TAKEDOWN_PALM_PARRY, TAKEDOWN_SHIELD_PARRY, TAKEDOWN_WOLF_PARRY, wrapAngle, type KfMove } from './shared/kungfu';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
@@ -223,6 +223,59 @@ const _shuttleThreadMat = new THREE.MeshBasicMaterial({ color: 0xdcdde1 });
 // 羽球 3D 模型物件池 (0-GC，循環復用 Group)
 const _shuttlecockPool: THREE.Group[] = [];
 
+// 人型角色 (總教官與特訓院守衛) 暗殺受擊倒地關鍵影格：t, 俯仰(前傾+), 扭腰, 側傾, 根高度(相對地面), 左臂/右臂/左腿/右腿 xyz, 頭 xyz
+// 第 0 格於命中瞬間由 captureTakedownStartPose 寫入目前姿勢；最後一格四肢歸零 = 倒地狀態俯臥姿勢
+const TD_CH = 19;
+const TD_STRIDE = TD_CH + 1;
+const _takedownKeys = new Float32Array([
+  0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // 頭部前甩、雙臂反射性甩開、身體被打得扭轉
+  0.12, 0.3, 0.22, -0.08, -0.03, -1.25, 0, -0.75, -0.5, 0, 1.0, -0.25, 0, -0.05, 0.2, 0, 0.05, 0.45, 0.1, 0.1,
+  // 踉蹌跨步：反向扭身、手臂亂揮找平衡
+  0.34, 0.42, -0.18, 0.14, -0.07, -0.4, 0, -1.15, -1.35, 0, 0.5, -0.75, 0, -0.08, 0.4, 0, 0.08, 0.2, -0.25, -0.15,
+  // 膝蓋發軟、重心下沉前傾
+  0.58, 0.78, 0.12, -0.1, -0.13, -1.15, 0, -0.5, -1.0, 0, 0.6, -1.0, 0, -0.1, -0.55, 0, 0.1, -0.15, 0.1, 0.05,
+  // 伸手撐地緩衝
+  0.8, 1.28, 0.05, 0.05, 0.02, -1.6, 0, -0.35, -1.7, 0, 0.35, -0.35, 0, -0.06, -0.15, 0, 0.06, -0.3, 0.15, 0,
+  // 俯臥
+  1.0, Math.PI / 2, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.6, 0
+]);
+const TD_COUNT = _takedownKeys.length / TD_STRIDE;
+const _takedownPose = new Float32Array(TD_CH);
+const _takedownEuler = new THREE.Euler();
+const _takedownStartQuat = new THREE.Quaternion();
+const _takedownEndQuat = new THREE.Quaternion();
+const _takedownTop = new THREE.Vector3();
+const _takedownLimbBase = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+// 三次 Hermite 插值 (Catmull-Rom 式切線，首尾切線為 0：起訖平順、經過中間影格不停頓)
+function sampleTakedownKeys(t: number, out: Float32Array) {
+  const k = _takedownKeys;
+  let i = 1;
+  while (i < TD_COUNT - 1 && t > k[i * TD_STRIDE]) i++;
+  const b0 = (i - 1) * TD_STRIDE;
+  const b1 = i * TD_STRIDE;
+  const t0 = k[b0];
+  const t1 = k[b1];
+  const h = t1 - t0;
+  const s = h > 0 ? (t - t0) / h : 1;
+  const s2 = s * s;
+  const s3 = s2 * s;
+  const h00 = 2 * s3 - 3 * s2 + 1;
+  const h10 = s3 - 2 * s2 + s;
+  const h01 = -2 * s3 + 3 * s2;
+  const h11 = s3 - s2;
+  const bp = i >= 2 ? (i - 2) * TD_STRIDE : -1;
+  const bn = i + 1 < TD_COUNT ? (i + 1) * TD_STRIDE : -1;
+  for (let c = 1; c <= TD_CH; c++) {
+    const p0 = k[b0 + c];
+    const p1 = k[b1 + c];
+    const m0 = bp >= 0 ? ((p1 - k[bp + c]) / (t1 - k[bp])) * h : 0;
+    const m1 = bn >= 0 ? ((k[bn + c] - p0) / (k[bn] - t0)) * h : 0;
+    out[c - 1] = h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1;
+  }
+}
+
 export class NPC {
   public mesh: THREE.Group;
   public position: THREE.Vector3;
@@ -289,6 +342,8 @@ export class NPC {
   public seesPlayerNow: boolean = false;
   public detentionHuntActive: boolean = false;
   private searchAnchor: THREE.Vector3 = new THREE.Vector3(); // 搜索期間以最後目擊點為中心巡查
+  // 第二世界：循打鬥聲響前往察看中 (未親眼看見玩家；不接收無線電位置通報、不出手攻擊)
+  public isInvestigatingNoise: boolean = false;
 
   // NPC 多樣性行為與移動風格系統
   public movementStyle: NPCMovementStyle = 'CASUAL_WALK';
@@ -603,6 +658,7 @@ export class NPC {
   // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)；狀態與圖示皆未變時略過 (追捕/探照燈期間每幀呼叫)
   public setAlertState(state: 'NORMAL' | 'CAUTION' | 'ALERT') {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return;
+    if (state === 'ALERT') this.isInvestigatingNoise = false; // 已確認敵蹤，改為正式追捕
     if (state === this.alertState && this.lastKoBadgeSec === ALERT_BADGE_CODE[state]) return;
     this.alertState = state;
     this.lastKoBadgeSec = ALERT_BADGE_CODE[state];
@@ -774,6 +830,99 @@ export class NPC {
     this.koBadgeSprite.visible = true;
   }
 
+  // 暗殺時機失誤：目標回身格擋並出手逼退玩家 (擊退與扣血由戰鬥系統於招式命中時間點結算)；
+  // 總教官立即解除硬直。回傳使用的格擋招式 (供戰鬥系統取得命中時間點)
+  public performTakedownParry(playerPos: THREE.Vector3): KfMove {
+    const face = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+    // 回身轉體自目前畫面朝向起算，避免朝向瞬間跳轉
+    const twistFrom = wrapAngle(this.mesh.rotation.y - face);
+    if (this.role === 'DETENTION_BOSS') {
+      this.isBossStunned = false;
+      this.bossStunTimer = 0;
+      this.bossStunElapsed = 0;
+      this.bossRecoverTimer = 0;
+      this.bossBackstepTimer = 0;
+      this.isBossWindingUp = false;
+      this.bossIsCharging = false;
+      if (this.bossStunStars) this.bossStunStars.visible = false;
+      this.bossChargeCooldown = Math.max(this.bossChargeCooldown, 2.5);
+      this.koBadgeSprite.visible = false;
+      this.lastKoBadgeSec = -1;
+    }
+    // 結束駐足待機但不重設姿勢 (由格擋招式自目前姿勢平滑接手)
+    this.isPaused = false;
+    this.pauseTimer = 0;
+    this.rotationY = face;
+    this.setAlertState('ALERT');
+    this.isChasing = true;
+    this.lostSightTimer = 0;
+    this.lastKnownPos.copy(playerPos);
+    this.attackCooldown = Math.max(this.attackCooldown, 1.0);
+    const move = this.cfg.isCanine ? TAKEDOWN_WOLF_PARRY : this.role === 'DETENTION_GUARD' ? TAKEDOWN_SHIELD_PARRY : TAKEDOWN_PALM_PARRY;
+    this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
+    this.showSkillBubble(this.cfg.isCanine ? '💢 閃開反撲！' : '🛡️ 格擋！', false);
+    soundManager.playBanditSlash();
+    return move;
+  }
+
+  // 暗殺命中瞬間記錄目前畫面姿勢 (須在倒地結算歸零四肢之前呼叫)，作為受擊倒地動作的起始影格
+  public captureTakedownStartPose() {
+    const p = _takedownKeys; // 第 0 格 = 目前姿勢
+    _takedownStartQuat.copy(this.mesh.quaternion);
+    _takedownEuler.setFromQuaternion(this.mesh.quaternion, 'YXZ');
+    p[1] = _takedownEuler.x;
+    p[2] = wrapAngle(_takedownEuler.y - this.rotationY);
+    p[3] = _takedownEuler.z;
+    p[4] = this.mesh.position.y - this.baseFloorY;
+    const limbs = [this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
+    for (let i = 0; i < 4; i++) {
+      const o = limbs[i];
+      p[5 + i * 3] = o ? o.rotation.x : 0;
+      p[6 + i * 3] = o ? o.rotation.y : 0;
+      p[7 + i * 3] = o ? o.rotation.z : 0;
+      if (o) _takedownLimbBase[i].copy(o.position);
+    }
+    const h = this.headMesh;
+    p[17] = h ? h.rotation.x : 0;
+    p[18] = h ? h.rotation.y : 0;
+    p[19] = h ? h.rotation.z : 0;
+  }
+
+  // 受擊倒地動作 (u: 0 命中 ~ 1 俯臥落地)：頭部前甩、雙臂亂揮、踉蹌跨步扭身、膝蓋發軟重心下沉、伸手撐地後俯臥；
+  // 各關鍵影格以三次 Hermite 曲線連續插值 (速度連續、不停頓)，最終姿勢與倒地狀態的俯臥姿勢一致
+  public applyTakedownFallPose(u: number): number {
+    if (this.cfg.isCanine) {
+      // 犬類：自目前姿勢平滑側倒 (終點與倒地狀態的側躺姿勢一致)
+      const c = Math.min(1, Math.max(0, u));
+      const k = c * c * (3 - 2 * c);
+      _takedownEndQuat.setFromEuler(_takedownEuler.set(0, this.rotationY, Math.PI / 2, 'YXZ'));
+      this.mesh.quaternion.slerpQuaternions(_takedownStartQuat, _takedownEndQuat, k);
+      const y0 = _takedownKeys[4];
+      this.mesh.position.set(this.position.x, this.baseFloorY + y0 + (0.2 - y0) * k, this.position.z);
+      return k * (Math.PI / 2);
+    }
+    const v = _takedownPose;
+    sampleTakedownKeys(Math.min(1, Math.max(0, u)), v);
+    this.mesh.quaternion.setFromEuler(_takedownEuler.set(v[0], this.rotationY + v[1], v[2], 'YXZ'));
+    this.mesh.position.set(this.position.x, this.baseFloorY + v[3], this.position.z);
+    // 四肢改以肩/髖為軸 (起始影格沿用原本以中心為軸的硬直姿勢，於前 10% 漸進切換)
+    const c = Math.min(1, u / 0.1);
+    const pivotW = c * c * (3 - 2 * c);
+    const limbs = [this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
+    for (let i = 0; i < 4; i++) {
+      const o = limbs[i];
+      if (!o) continue;
+      const r = o.rotation;
+      r.set(v[4 + i * 3], v[5 + i * 3], v[6 + i * 3]);
+      const half = (i < 2 ? 0.325 : 0.35) * o.scale.y;
+      _takedownTop.set(0, half, 0).applyEuler(r);
+      const b = _takedownLimbBase[i];
+      o.position.set(b.x - _takedownTop.x * pivotW, b.y + (half - _takedownTop.y) * pivotW, b.z - _takedownTop.z * pivotW);
+    }
+    if (this.headMesh) this.headMesh.rotation.set(v[16], v[17], v[18]);
+    return v[0];
+  }
+
   // 建立模型建構用 rig (帶入目前肢體參考，未被建構函式改寫的欄位維持原值)
   private createRig(): NPCModelRig {
     return {
@@ -932,9 +1081,7 @@ export class NPC {
       }
       return false;
     } else if (this.role === 'DETENTION_GUARD') {
-      // 特訓教官防暴海綿盾格擋：免傷 35%，吹哨冷卻拉長至 12 秒且低血量才吹哨
-      amount = Math.max(1, Math.round(amount * 0.65));
-      soundManager.playBanditSlash();
+      // 特訓院守衛：吹哨冷卻拉長至 12 秒且低血量才吹哨 (盾擋判定於 launchFlying)
       if (this.hp < this.maxHp * 0.40 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
         this.whistleCooldown = 12.0;
@@ -1007,8 +1154,19 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
-    // 鐵面總長受擊：撞柱硬直中 20%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
-    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.20 : 0.50)) return false;
+    // 鐵面總長受擊：撞柱硬直中 30%、其餘 60% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.60)) return false;
+    // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
+    if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
+    // 特訓資深守衛 / 重裝守衛：受擊 (任意方向) 30% 機率施展「狗熊哆嗦毛」避開 (不受傷也不被擊飛)；施展期間免疫攻擊
+    if (this.role === 'DETENTION_SENIOR' || this.role === 'DETENTION_HEAVY') {
+      if (this.isDodging || this.isBearShaking) return false;
+      if (Math.random() < 0.3) {
+        this.performBearShake(this.lastColliders);
+        this.isChasing = true;
+        return false;
+      }
+    }
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
@@ -1763,17 +1921,36 @@ export class NPC {
     }
   }
 
-  // 第二世界無線電通報：其他守衛目擊時同步最後目擊位置 (自己正看見玩家時不覆寫)
+  // 第二世界無線電通報：其他守衛目擊時同步最後目擊位置 (自己正看見玩家、或循聲察看中時不覆寫)
   public receiveSightingReport(pos: THREE.Vector3) {
-    if (!this.isChasing || this.seesPlayerNow) return;
+    if (!this.isChasing || this.seesPlayerNow || this.isInvestigatingNoise) return;
     this.lastKnownPos.copy(pos);
     this.searchAnchor.copy(pos);
     if (this.lostSightTimer <= 0) this.lostSightTimer = 0.01;
   }
 
+  // 第二世界打鬥聲響：未在追捕的守衛前往聲源察看 (疑惑狀態、以聲源為中心搜索，親眼看見玩家才轉為警戒)
+  // 總教官不受聲響吸引 (避免未目擊即發動衝撞)；回傳是否開始察看
+  public hearNoise(pos: THREE.Vector3): boolean {
+    if (this.isChasing || this.isKnockedDown || this.isPermanentlyKnockedOut || this.role === 'DETENTION_BOSS') return false;
+    if (this.isPaused) this.cancelPause();
+    this.isInvestigatingNoise = true;
+    this.isChasing = true;
+    this.lostSightTimer = 0.01; // 前往聲源 (lastKnownPos) 而非玩家實際位置
+    this.lastKnownPos.copy(pos);
+    this.searchAnchor.copy(pos);
+    if (this.alertState !== 'ALERT') {
+      this.setAlertState('CAUTION');
+      this.cautionTimer = 4.0;
+    }
+    this.rotationY = Math.atan2(pos.x - this.position.x, pos.z - this.position.z);
+    return true;
+  }
+
   // 清除仇恨與追擊狀態
   public resetAggro() {
     this.isChasing = false;
+    this.isInvestigatingNoise = false;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -1797,6 +1974,7 @@ export class NPC {
     this.rotationY = this.initialRotationY;
     this.mesh.rotation.y = this.initialRotationY;
     this.isChasing = false;
+    this.isInvestigatingNoise = false;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -1809,6 +1987,8 @@ export class NPC {
     this.isPaused = false;
     this.pauseTimer = 0;
     this.isKnockedFlying = false;
+    this.isDodging = false;
+    this.isBearShaking = false;
     this.hitCooldown = 0;
     this.attackCooldown = 0;
     this.freezeTimer = 0;
@@ -2086,8 +2266,9 @@ export class NPC {
       // 1. 視覺發現判定 (正面 90 度視線錐 + 射線無障礙)；全域警戒階段由 DetentionMode 依 seesPlayerNow 彙整
       if (seesPlayer) {
         if (this.isPaused) this.cancelPause();
-        const wasChasing = this.isChasing;
+        const wasChasing = this.isChasing && !this.isInvestigatingNoise;
         this.seesPlayerNow = true;
+        this.isInvestigatingNoise = false;
         this.setAlertState('ALERT');
         this.isChasing = true;
         this.lostSightTimer = 0;
@@ -2330,6 +2511,20 @@ export class NPC {
     return true;
   }
 
+  // 持盾守衛舉盾格擋：攻擊方向 (impactDir) 與面向相反即為正面受擊
+  private tryShieldBlock(impactDir: THREE.Vector3): boolean {
+    if (!this.rightArm) return false;
+    if (impactDir.x * Math.sin(this.rotationY) + impactDir.z * Math.cos(this.rotationY) >= 0) return false;
+    if (Math.random() >= 0.5) return false;
+    if (this.isPaused) this.cancelPause();
+    this.isChasing = true;
+    this.kf.start(NPC_SHIELD_BLOCK, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.attackCooldown = Math.max(this.attackCooldown, 0.45);
+    this.showSkillBubble('🛡️ 盾擋！', false);
+    soundManager.playBanditSlash();
+    return true;
+  }
+
   public performFlashStep() {
     if (this.isKnockedDown) return;
 
@@ -2533,7 +2728,8 @@ export class NPC {
       }
     }
 
-    // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法邏輯更新
+    // 閃身步老師 (DODGE_TEACHER) 演武計時；身法 (閃身步 / 狗熊哆嗦毛) 推進適用所有會施展身法的角色
+    // (閃身步老師、鐵面總長、特訓資深 / 重裝守衛)
     if (this.role === 'DODGE_TEACHER') {
       // 演武計時器 (若未倒地、未處於對話中、未在施展身法中，每 8~14 秒自主展示身法絕學)
       if (!this.isKnockedDown && !this.isConversing && !this.isDodging && !this.isBearShaking) {
@@ -2548,7 +2744,9 @@ export class NPC {
           }
         }
       }
+    }
 
+    if ((this.isDodging || this.isBearShaking) && !this.isKnockedDown) {
       // 狗熊哆嗦毛連續瞬移中 (連續瞬移 3 次，間隔 0.5s)
       if (this.isBearShaking) {
         this.bearBlinkTimer += delta;
@@ -2561,6 +2759,9 @@ export class NPC {
           this.isBearShaking = false;
           this.isDodging = false;
           this.mesh.rotation.z = 0;
+          if (this.leftArm) this.leftArm.rotation.z = 0;
+          if (this.rightArm) this.rightArm.rotation.z = 0;
+          if (this.headMesh) this.headMesh.rotation.y = 0;
         }
 
         if (this.isBearShaking) {
@@ -2613,7 +2814,8 @@ export class NPC {
           return;
         }
       }
-
+    }
+    if (this.role === 'DODGE_TEACHER') {
       this.updateSkillBubble(delta);
       this.updateAfterimages(delta);
     }
@@ -2951,9 +3153,16 @@ export class NPC {
         this.mesh.rotation.set(0, this.rotationY, 0);
       } else {
         const move = this.kf.move;
-        if (this.kf.update(delta) && move) {
+        // 格擋類招式 (dmg 0) 不造成傷害
+        if (this.kf.update(delta) && move && move.dmg > 0) {
           this.kfStrike = move;
           this.playAttackSound();
+        }
+        // 格擋招式期間頭部平滑回正 (總教官硬直搖晃的頭部)
+        if (move && move.dmg === 0 && this.headMesh) {
+          const k = Math.max(0, 1 - delta * 10);
+          const hr = this.headMesh.rotation;
+          hr.set(hr.x * k, hr.y * k, hr.z * k);
         }
       }
     }

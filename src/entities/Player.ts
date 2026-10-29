@@ -4,7 +4,7 @@ import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildUmbrella } from './shared/umbrella';
-import { KungFuLayer, PLAYER_COMBOS, type KfMove, type PlayerComboSet } from './shared/kungfu';
+import { ARM_HALF, KungFuLayer, PLAYER_COMBOS, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_BLOCKED, wrapAngle, type KfMove, type PlayerComboSet } from './shared/kungfu';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
@@ -16,6 +16,14 @@ export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 // 模組頂層靜態共享 Scratch 物件 (0-GC 避免每幀垃圾回收引發微卡頓)
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
+const _armTop = new THREE.Vector3();
+// 潛行姿勢 A「持棍戒備」：蹲姿時雙臂以肩為軸隨身體下沉並縮短，右手持武器斜擋身前、左臂半舉前伸平衡
+const ARM_X = 0.45;
+const ARM_STAND_Y = 1.05;
+const CROUCH_ARM_SCALE = 0.85;
+const READY_RIGHT_WEAPON = { x: -0.6, y: -0.5, z: -0.35 };
+const READY_RIGHT_FIST = { x: -1.2, y: 0, z: -0.25 };
+const READY_LEFT = { x: -1.0, y: 0.2, z: 0.2 };
 // 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.9 視為潛行 (特訓院)
 export const JOYSTICK_SNEAK_RADIUS = 0.9;
 const _safeTeleportResult = new THREE.Vector3();
@@ -269,6 +277,12 @@ export class Player {
   private backflipSpeed: number = 0;
   private backflipGravity: number = -24.0; // 後空翻專用等效重力 (使滯空時間 = 翻轉時間且頂點高度固定)
   private readonly backflipDir: THREE.Vector3 = new THREE.Vector3();
+  // 暗殺被格擋：受震後向後滑退 (等速遞減，遇牆即停)
+  public isParrySkidding: boolean = false;
+  private skidTimer: number = 0;
+  private skidDuration: number = 0.5;
+  private skidDistance: number = 4.0;
+  private readonly skidDir: THREE.Vector3 = new THREE.Vector3();
 
   // 狗熊哆嗦毛 (連續瞬移 3 次，間隔 0.5s，圓形範圍隨機閃現)
   public isBearShaking: boolean = false;
@@ -682,6 +696,8 @@ export class Player {
     this.isDodging = false;
     this.isBackflipping = false;
     this.backflipTimer = 0;
+    this.isParrySkidding = false;
+    this.skidTimer = 0;
     this.isBearShaking = false;
     this.bearBlinkCount = 0;
     this.bearBlinkTimer = 0;
@@ -821,14 +837,43 @@ export class Player {
     return true;
   }
 
-  // 暗殺運鏡出手：以第一段招式配合運鏡命中時間點 (模擬秒) 縮放節奏，不計入連段
-  public performCinematicStrike(strikeAt: number) {
+  // 暗殺運鏡出手：專用招式「雙峰貫耳」依運鏡命中時間點 (模擬秒) 縮放節奏，不計入連段；
+  // twistFrom 為轉身面向目標前的畫面朝向差，由招式起手平滑轉正
+  public performCinematicStrike(strikeAt: number, twistFrom: number = 0) {
     if (this.isDead) return;
-    this.startComboMove(strikeAt);
+    this.attackQueued = false;
+    this.comboIndex = 0;
+    this.sinceStrike = 99;
+    const move = PLAYER_TAKEDOWN;
+    this.kf.start(move, strikeAt / (move.strike * move.dur), this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
+    this.isAttacking = true;
   }
 
-  // cinematicStrikeAt > 0：暗殺運鏡專用，強制第一段並縮放節奏使命中落在指定秒數
-  private startComboMove(cinematicStrikeAt: number = 0) {
+  // 暗殺被格擋：面向目標架起十字手，guardTime 秒後 (對方格擋擊中瞬間) 承受震擊後仰滑退
+  public performTakedownBlocked(targetPos: THREE.Vector3, guardTime: number) {
+    if (this.isDead) return;
+    const face = Math.atan2(targetPos.x - this.position.x, targetPos.z - this.position.z);
+    const twistFrom = wrapAngle(this.mesh.rotation.y - face);
+    this.rotationY = face;
+    this.attackQueued = false;
+    const move = PLAYER_TAKEDOWN_BLOCKED;
+    this.kf.start(move, guardTime / (move.strike * move.dur), this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
+    this.isAttacking = true;
+  }
+
+  // 被格擋震退：自目標往外滑退 dist 公尺 (duration 秒內速度線性遞減至 0，位移交由一般碰撞處理，遇牆即停)，全程面向目標
+  public performParrySkid(targetPos: THREE.Vector3, dist: number, duration: number) {
+    if (this.isDead) return;
+    this.skidDir.subVectors(this.position, targetPos).setY(0);
+    if (this.skidDir.lengthSq() < 0.0001) this.skidDir.set(-Math.sin(this.rotationY), 0, -Math.cos(this.rotationY));
+    else this.skidDir.normalize();
+    this.isParrySkidding = true;
+    this.skidDistance = dist;
+    this.skidDuration = duration;
+    this.skidTimer = duration;
+  }
+
+  private startComboMove() {
     this.attackQueued = false;
     const set: PlayerComboSet = this.isHoldingRacket
       ? 'RACKET'
@@ -836,14 +881,13 @@ export class Player {
         ? 'FIST'
         : (this.currentWeapon === 'NORMAL_BAT' && this.worldType === 'DETENTION' ? 'BATON' : 'BAT');
     const moves = PLAYER_COMBOS[set];
-    const chain = cinematicStrikeAt <= 0 && set === this.comboSet && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
+    const chain = set === this.comboSet && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
     this.comboIndex = chain ? this.comboIndex + 1 : 0;
     this.comboSet = set;
     this.sinceStrike = 99;
     // 黃金雷霆棒較沉重，整體節奏放慢 (沿用原本 0.48 / 0.42 揮棒間隔比例)
     const move = moves[this.comboIndex];
-    let scale = set === 'BAT' && this.currentWeapon === 'SPECIAL_BAT' ? 1.14 : 1;
-    if (cinematicStrikeAt > 0) scale = cinematicStrikeAt / (move.strike * move.dur);
+    const scale = set === 'BAT' && this.currentWeapon === 'SPECIAL_BAT' ? 1.14 : 1;
     this.kf.start(move, scale, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.isAttacking = true;
     if (set === 'RACKET') soundManager.playBadmintonWhoosh();
@@ -895,7 +939,13 @@ export class Player {
     }
     if (this.attackQueued && this.canAttack) this.startComboMove();
     if (!this.kf.move) this.isAttacking = false;
-    this.kf.apply(this.rotationY, this.isHoldingUmbrella ? 1 : 0);
+    // 出招圖層以目前肩部基準位置為軸 (蹲姿時肩部隨身體下沉)
+    const rest = this.armRest;
+    this.kf.setLimbBase(0, -rest.x, rest.y, rest.z);
+    this.kf.setLimbBase(1, rest.x, rest.y, rest.z);
+    this.kf.apply(this.rotationY, this.isHoldingUmbrella ? 1 : 0, this.armPivot);
+    // 出招淡出結束當幀四肢已還原為基準位置，立即依目前姿勢重設肩軸位置 (避免蹲姿收招閃一幀)
+    if (!this.kf.engaged) this.applyArmPivot();
   }
 
   // 設置玩家攻擊硬直/技能間隔冷卻 (如第二世界正面攻擊巡邏守衛時間隔 0.5 秒)
@@ -1113,6 +1163,16 @@ export class Player {
         this.backflipTimer -= delta;
         this.velocity.x = this.backflipDir.x * this.backflipSpeed;
         this.velocity.z = this.backflipDir.z * this.backflipSpeed;
+      } else if (this.isParrySkidding) {
+        // 速度 v(t) = 2d/T × (1 - t/T)，以本幀中點取樣使總位移 = d
+        const prev = this.skidTimer;
+        this.skidTimer = Math.max(0, prev - delta);
+        const step = prev - this.skidTimer;
+        const mid = (prev + this.skidTimer) * 0.5;
+        const v = step > 0 ? (2 * this.skidDistance / this.skidDuration) * (mid / this.skidDuration) * (step / Math.max(delta, 1e-6)) : 0;
+        this.velocity.x = this.skidDir.x * v;
+        this.velocity.z = this.skidDir.z * v;
+        if (this.skidTimer <= 0) this.isParrySkidding = false;
       } else if (this.isDodging) {
         this.dodgeTimer -= delta;
         if (this.dodgeTimer <= 0) {
@@ -1413,6 +1473,7 @@ export class Player {
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean, currentSpeed: number = 5.0) {
     if (this.isSwimming !== this.isSwimOutfit) this.setSwimOutfit(this.isSwimming);
     if (this.isSwimming) {
+      if (this.armRigScale !== 1) this.updateArmRig(0); // 游泳時還原雙臂骨架 (原尺寸、站立肩高)
       // 1. 身體俯仰趴平姿態 (Prone Freestyle vs Treading Water)
       // 自由式划水衝刺/前進時：前傾俯趴約 70~75 度 (1.20 ~ 1.28 rad)
       // 靜止浮水踩水時：約 18~22 度 (0.32 ~ 0.38 rad)，身體立起、頭部浮出水面踏水
@@ -1534,22 +1595,22 @@ export class Player {
 
     if (isMoving) {
       if (this.isSneaking) {
-        // 潛行蹲姿移動：依移動速度動態縮放擺幅與步頻 (4.0 m/s 敏捷潛行，6.5 m/s 疾行潛行)
-        const sneakAnimRate = (currentSpeed / 4.0) * 10.5;
+        // 潛行蹲姿移動：依移動速度動態縮放擺幅與步頻 (4.0 m/s 敏捷潛行，6.5 m/s 疾行潛行)；步幅較大、步頻較慢、起伏較小
+        const sneakAnimRate = (currentSpeed / 4.0) * 8.5;
         this.animTimer += delta * sneakAnimRate;
-        const swingMag = currentSpeed > 5.0 ? 0.42 : 0.30;
+        const swingMag = currentSpeed > 5.0 ? 0.48 : 0.36;
         const swing = Math.sin(this.animTimer) * swingMag;
         if (this.isHoldingUmbrella) {
           const bob = Math.sin(this.animTimer) * 0.02;
           this.leftArm.rotation.set(-Math.PI * 0.65 + bob, -0.12, 0.12);
         } else {
-          this.leftArm.rotation.set(-swing * 0.5 - 0.2, 0, 0.22);
+          this.leftArm.rotation.set(-swing * 0.5, 0, 0);
         }
-        this.rightArm.rotation.set(swing * 0.5 - 0.2, 0, -0.22);
+        this.rightArm.rotation.set(swing * 0.5, 0, 0);
         this.leftLeg.rotation.x = swing;
         this.rightLeg.rotation.x = -swing;
 
-        const bob = Math.abs(Math.sin(this.animTimer * 2)) * 0.025;
+        const bob = Math.abs(Math.sin(this.animTimer * 2)) * 0.015;
         this.bodyMesh.position.y = crouchY + bob;
         this.headMesh.position.y = headCrouchY + bob;
       } else {
@@ -1578,35 +1639,107 @@ export class Player {
       }
     } else {
       // 靜止閒置姿態
+      // 雙臂回到站立待機 (蹲姿時再由持棍戒備姿勢依蹲姿比例混合)
+      if (this.isHoldingUmbrella) {
+        // 閒置站立時左手維持穩固握傘高舉姿態
+        this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, -Math.PI * 0.65, delta * 12.0);
+        this.leftArm.rotation.y = THREE.MathUtils.lerp(this.leftArm.rotation.y, -0.12, delta * 12.0);
+        this.leftArm.rotation.z = THREE.MathUtils.lerp(this.leftArm.rotation.z, 0.12, delta * 12.0);
+      } else {
+        this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, 0, delta * 10);
+        this.leftArm.rotation.y = 0;
+        this.leftArm.rotation.z = 0;
+      }
+      this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, delta * 10);
+      this.rightArm.rotation.y = 0;
+      this.rightArm.rotation.z = 0;
       if (this.crouchRatio > 0.05) {
-        // 蹲下靜止待機 (單膝蹲伏/刺客蹲姿)
+        // 蹲下靜止待機 (刺客蹲姿)
         this.bodyMesh.position.y = crouchY;
         this.headMesh.position.y = headCrouchY;
         this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0.15, delta * 10);
         this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, -0.15, delta * 10);
-        if (!this.isHoldingUmbrella) {
-          this.leftArm.rotation.set(-0.25, 0, 0.2);
-        }
-        this.rightArm.rotation.set(-0.25, 0, -0.2);
       } else {
-        if (this.isHoldingUmbrella) {
-          // 閒置站立時左手維持穩固握傘高舉姿態
-          this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, -Math.PI * 0.65, delta * 12.0);
-          this.leftArm.rotation.y = THREE.MathUtils.lerp(this.leftArm.rotation.y, -0.12, delta * 12.0);
-          this.leftArm.rotation.z = THREE.MathUtils.lerp(this.leftArm.rotation.z, 0.12, delta * 12.0);
-        } else {
-          this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, 0, delta * 10);
-          this.leftArm.rotation.y = 0;
-          this.leftArm.rotation.z = 0;
-        }
-        this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, delta * 10);
-        this.rightArm.rotation.y = 0;
-        this.rightArm.rotation.z = 0;
         this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0, delta * 10);
         this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, delta * 10);
         this.bodyMesh.position.y = 1.05;
         this.headMesh.position.y = 1.62;
       }
+    }
+
+    this.applyCrouchReadyPose(isMoving);
+  }
+
+  // 潛行姿勢 A「持棍戒備」：依蹲姿比例混合雙臂姿勢 (右手持武器斜擋身前 / 徒手握拳、左臂半舉前伸平衡，移動時小幅擺動)、
+  // 雙腳略為外開，並讓雙臂肩部隨身體下沉、手臂縮短
+  private applyCrouchReadyPose(isMoving: boolean) {
+    const c = this.crouchRatio;
+    if (c > 0.001) {
+      const sway = isMoving ? Math.sin(this.animTimer) * 0.08 : 0;
+      const right = this.currentWeapon === 'FIST' && !this.isHoldingRacket ? READY_RIGHT_FIST : READY_RIGHT_WEAPON;
+      const ra = this.rightArm.rotation;
+      ra.set(
+        THREE.MathUtils.lerp(ra.x, right.x + sway * 0.5, c),
+        THREE.MathUtils.lerp(ra.y, right.y, c),
+        THREE.MathUtils.lerp(ra.z, right.z, c)
+      );
+      if (!this.isHoldingUmbrella) {
+        const la = this.leftArm.rotation;
+        la.set(
+          THREE.MathUtils.lerp(la.x, READY_LEFT.x - sway, c),
+          THREE.MathUtils.lerp(la.y, READY_LEFT.y, c),
+          THREE.MathUtils.lerp(la.z, READY_LEFT.z, c)
+        );
+      }
+      this.leftLeg.rotation.z = -0.07 * c;
+      this.rightLeg.rotation.z = 0.07 * c;
+    }
+    this.updateArmRig(c);
+  }
+
+  // 雙臂骨架：縮放、肩部基準位置 (站立維持原本以手臂中心為軸；蹲姿以肩為軸) 並同步給出招圖層
+  private armRigScale: number = 1;
+  private armPivot: number = 0; // 雙臂以肩為軸的比例 (= 蹲姿比例)
+  private readonly armRest = new THREE.Vector3(ARM_X, ARM_STAND_Y, 0);
+  private updateArmRig(crouch: number) {
+    const c = crouch < 0.001 ? 0 : crouch;
+    this.armPivot = c;
+    const scale = THREE.MathUtils.lerp(1, CROUCH_ARM_SCALE, c);
+    if (scale !== this.armRigScale) {
+      this.armRigScale = scale;
+      this.leftArm.scale.setScalar(scale);
+      this.rightArm.scale.setScalar(scale);
+      // 手上物件維持原尺寸 (只隨手臂位置移動)
+      const inv = 1 / scale;
+      this.umbrellaMesh.scale.setScalar(inv);
+      this.normalBatMesh.scale.setScalar(inv);
+      this.specialBatMesh.scale.setScalar(inv);
+      this.racketMesh.scale.setScalar(inv);
+    }
+    // 肩部位置：身體中心上方 ARM_HALF，隨前傾角度前移
+    const tilt = this.bodyMesh.rotation.x;
+    const h = ARM_HALF * scale;
+    const shoulderY = this.bodyMesh.position.y + ARM_HALF * Math.cos(tilt);
+    const restY = THREE.MathUtils.lerp(ARM_STAND_Y, shoulderY - h, c);
+    const restZ = ARM_HALF * Math.sin(tilt) * c;
+    this.armRest.set(ARM_X, restY, restZ);
+    if (!this.kf.engaged) this.applyArmPivot();
+  }
+
+  // 依目前手臂旋轉設定位置：蹲姿比例越高越以肩為軸 (補償旋轉位移使肩部固定)
+  private applyArmPivot() {
+    const c = this.armPivot;
+    const h = ARM_HALF * this.armRigScale;
+    const rest = this.armRest;
+    for (let i = 0; i < 2; i++) {
+      const arm = i === 0 ? this.leftArm : this.rightArm;
+      const x = i === 0 ? -rest.x : rest.x;
+      if (c === 0) {
+        arm.position.set(x, rest.y, rest.z);
+        continue;
+      }
+      _armTop.set(0, h, 0).applyEuler(arm.rotation);
+      arm.position.set(x - _armTop.x * c, rest.y + (h - _armTop.y) * c, rest.z - _armTop.z * c);
     }
   }
 
