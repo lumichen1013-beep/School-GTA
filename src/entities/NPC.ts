@@ -646,7 +646,8 @@ export class NPC {
     soundManager.playWhistle();
   }
 
-  // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物；起點已重疊的碰撞盒忽略 (允許自行脫離)
+  // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物
+  // 起點已重疊的碰撞盒 (步行半徑 0.45 < 衝撞半徑 0.65，貼牆/貼柱站立時必然重疊) 僅在嵌入深度不增加時放行 (沿牆滑行或脫離)，往內推進仍視為撞上
   private bossBodyBlockedAt(colliders: CollidableBox[], x: number, z: number, startX: number, startZ: number): boolean {
     const r = NPC.BOSS_CHARGE_RADIUS;
     const y = this.position.y;
@@ -656,7 +657,11 @@ export class NPC {
       if (box.isFloorOnly) continue;
       if (!(y + 0.3 < box.max.y && y + 1.9 > box.min.y)) continue;
       if (x + r <= box.min.x || x - r >= box.max.x || z + r <= box.min.z || z - r >= box.max.z) continue;
-      if (startX + r > box.min.x && startX - r < box.max.x && startZ + r > box.min.z && startZ - r < box.max.z) continue;
+      if (startX + r > box.min.x && startX - r < box.max.x && startZ + r > box.min.z && startZ - r < box.max.z) {
+        const startDepth = Math.min(startX + r - box.min.x, box.max.x - startX + r, startZ + r - box.min.z, box.max.z - startZ + r);
+        const depth = Math.min(x + r - box.min.x, box.max.x - x + r, z + r - box.min.z, box.max.z - z + r);
+        if (depth <= startDepth + 1e-6) continue;
+      }
       return true;
     }
     return false;
