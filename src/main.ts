@@ -383,7 +383,7 @@ class SchoolGTASandbox implements GameContext {
       this.cameraCtrl.resetBehind(this.player.position, Math.PI / 2 + Math.PI);
       // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
       this.detention.startEscape();
-      this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
+      this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推桿 90% 內）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
       this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     }
   }

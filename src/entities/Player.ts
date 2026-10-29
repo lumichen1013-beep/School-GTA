@@ -15,8 +15,8 @@ export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 // 模組頂層靜態共享 Scratch 物件 (0-GC 避免每幀垃圾回收引發微卡頓)
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
-// 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.8 視為潛行 (特訓院)
-export const JOYSTICK_SNEAK_RADIUS = 0.8;
+// 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.9 視為潛行 (特訓院)
+export const JOYSTICK_SNEAK_RADIUS = 0.9;
 const _safeTeleportResult = new THREE.Vector3();
 // 玩家瞬移落點取樣參數
 const PLAYER_TELEPORT_OPTS = { minRadius: 2.0, maxRadius: 4.2, attempts: 12, baseGroundY: 0 };
@@ -929,7 +929,7 @@ export class Player {
 
     // 潛龍諜影潛行步態 (MGS Sneak Mode)
     // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）。
-    // 手機版 (特訓院)：預設為潛行姿態，搖桿推至半徑 80% 內 (含靜止不動) 皆維持潛行，超過 80% 才改為一般步行，按「跑」則取消潛行改為衝刺。
+    // 手機版 (特訓院)：預設為潛行姿態，搖桿推至半徑 90% 內 (含靜止不動) 皆維持潛行，超過 90% 才改為一般步行，按「跑」則取消潛行改為衝刺。
     // 躲入草堆掩體時一律保持潛行，不受搖桿影響。
     const isSneakTriggered = input.mouseButtons.right || !!(
       input.keys['ControlLeft'] ||
