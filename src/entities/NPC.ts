@@ -5,7 +5,7 @@ import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
-import { SkillBubble } from './shared/SkillBubble';
+import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
@@ -65,8 +65,15 @@ export interface ShuttlecockProjectile {
 const _npcMoveDir = new THREE.Vector3();
 const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
-// NPC 技能/對話氣泡外觀 (字級依文字長度縮放)
-const NPC_BUBBLE_STYLE = { fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: (text: string) => (text.length > 9 ? 24 : (text.length > 6 ? 28 : 34)) };
+// NPC 技能/對話氣泡外觀：大字版 (世界尺寸約為舊版 1.8 倍、畫布 512×160)，長句換成 2 行而不縮小字級，
+// 底部對齊於血條/告示牌上方
+const NPC_BUBBLE_STYLE: SkillBubbleStyle = {
+  fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: () => 46,
+  canvasW: 512, canvasH: 160, worldW: 3.9, worldH: 1.21875,
+  wrap: true, minFontSize: 38, anchorBottom: true
+};
+// 氣泡底部 (箭頭尖端) 位於血條上方的高度：讓開放大後的 KO/警戒告示牌
+const NPC_BUBBLE_ABOVE_HPBAR = 0.62;
 const _npcSightNear: CollidableBox[] = [];
 const _bossNear: CollidableBox[] = [];
 const _bossKnockDir = new THREE.Vector3();
@@ -435,7 +442,7 @@ export class NPC {
     this.mesh = new THREE.Group();
     this.mesh.rotation.order = 'YXZ';
     this.mesh.position.copy(this.position);
-    this.skillBubble = new SkillBubble(this.mesh, 2.45, NPC_BUBBLE_STYLE);
+    this.skillBubble = new SkillBubble(this.mesh, cfg.hpBarY + NPC_BUBBLE_ABOVE_HPBAR, NPC_BUBBLE_STYLE);
 
     // 依角色建造不同 3D 外觀模型
     if (cfg.isCanine) {
@@ -482,8 +489,9 @@ export class NPC {
     // 尚未繪製前以全透明呈現，首次繪製時才掛上畫布貼圖
     const spriteMat = new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthTest: false });
     this.koBadgeSprite = new THREE.Sprite(spriteMat);
-    this.koBadgeSprite.scale.set(1.4, 0.35, 1);
-    this.koBadgeSprite.position.set(0, 0.28, 0);
+    // 告示牌放大約 1.35 倍 (原 1.4×0.35m) 以利辨識，中心同步上移避免壓到血條
+    this.koBadgeSprite.scale.set(1.9, 0.475, 1);
+    this.koBadgeSprite.position.set(0, 0.34, 0);
     this.koBadgeSprite.visible = false;
     this.hpBarGroup.add(this.koBadgeSprite);
 

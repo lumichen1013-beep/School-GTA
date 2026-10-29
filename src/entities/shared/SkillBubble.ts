@@ -5,7 +5,19 @@ export interface SkillBubbleStyle {
   fillAlpha: number;
   strokeAlpha: number;
   fontSize: (text: string) => number;
+  // 以下為選用的大字版面 (NPC 使用)：未設定時沿用 380×110 畫布、2.2×0.64m 單行置中 (玩家氣泡)
+  canvasW?: number;
+  canvasH?: number;
+  worldW?: number;
+  worldH?: number;
+  // 長句換行 (最多 2 行) 取代縮小字級；字級僅在兩行仍放不下時才縮小，最小 minFontSize
+  wrap?: boolean;
+  minFontSize?: number;
+  // 以氣泡底部 (箭頭尖端) 對齊 baseY，氣泡依行數向上長高
+  anchorBottom?: boolean;
 }
+
+const BUBBLE_FONT_FAMILY = '"Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
 
 // 頭頂技能名稱 / 對話氣泡 (3D Billboard Sprite，CanvasTexture 0-GC，可延遲建立)
 export class SkillBubble {
@@ -31,8 +43,8 @@ export class SkillBubble {
     if (this.sprite) return;
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 380;
-    this.canvas.height = 110;
+    this.canvas.width = this.style.canvasW ?? 380;
+    this.canvas.height = this.style.canvasH ?? 110;
     this.context = this.canvas.getContext('2d')!;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.minFilter = THREE.LinearFilter;
@@ -45,10 +57,31 @@ export class SkillBubble {
       depthWrite: false
     });
     this.sprite = new THREE.Sprite(bubbleMat);
-    this.sprite.scale.set(2.2, 0.64, 1.0);
+    this.sprite.scale.set(this.style.worldW ?? 2.2, this.style.worldH ?? 0.64, 1.0);
+    if (this.style.anchorBottom) this.sprite.center.set(0.5, 0);
     this.sprite.position.set(0, this.baseY, 0);
     this.sprite.visible = false;
     this.parent.add(this.sprite);
+  }
+
+  // 依字級把文字斷成最多 2 行 (逐字量測寬度)；放不下時回傳 null
+  private static wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] | null {
+    if (ctx.measureText(text).width <= maxW) return [text];
+    const chars = Array.from(text);
+    // 從中間附近找最平均的斷點，兩行皆需放得下
+    let best: string[] | null = null;
+    let bestDiff = Infinity;
+    for (let i = 1; i < chars.length; i++) {
+      const a = chars.slice(0, i).join('');
+      const b = chars.slice(i).join('');
+      const wa = ctx.measureText(a).width;
+      const wb = ctx.measureText(b).width;
+      if (wa <= maxW && wb <= maxW && Math.abs(wa - wb) < bestDiff) {
+        bestDiff = Math.abs(wa - wb);
+        best = [a, b.trimStart()];
+      }
+    }
+    return best;
   }
 
   private draw(text: string, isAdvanced: boolean) {
@@ -59,11 +92,39 @@ export class SkillBubble {
     const h = this.canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const bubbleW = w - 24;
-    const bubbleH = h - 28;
-    const x = 12;
-    const y = 8;
+    let fontSize = this.style.fontSize(text);
+    let lines = [text];
+    let bubbleW = w - 24;
+    let bubbleH = h - 28;
+    let x = 12;
+    let y = 8;
     const r = 22;
+
+    if (this.style.wrap) {
+      // 大字版面：維持大字級，長句換成 2 行；依文字寬度收窄氣泡，依行數決定氣泡高度並貼齊畫布底部
+      const padX = 22;
+      const maxTextW = w - 24 - padX * 2;
+      const minFont = this.style.minFontSize ?? fontSize;
+      let wrapped: string[] | null = null;
+      for (; fontSize >= minFont; fontSize -= 2) {
+        ctx.font = `bold ${fontSize}px ${BUBBLE_FONT_FAMILY}`;
+        wrapped = SkillBubble.wrapLines(ctx, text, maxTextW);
+        if (wrapped) break;
+      }
+      if (!wrapped) {
+        fontSize = minFont;
+        ctx.font = `bold ${fontSize}px ${BUBBLE_FONT_FAMILY}`;
+        wrapped = SkillBubble.wrapLines(ctx, text, maxTextW) ?? [text];
+      }
+      lines = wrapped;
+      let textW = 0;
+      for (const line of lines) textW = Math.max(textW, ctx.measureText(line).width);
+      bubbleW = Math.min(w - 24, Math.max(textW + padX * 2, w * 0.4));
+      x = (w - bubbleW) / 2;
+      const lineH = fontSize * 1.18;
+      bubbleH = Math.min(h - 28, lines.length * lineH + 26);
+      y = h - 20 - bubbleH;
+    }
 
     ctx.save();
     ctx.beginPath();
@@ -93,7 +154,7 @@ export class SkillBubble {
     ctx.lineWidth = 3.5;
     ctx.stroke();
 
-    ctx.font = `bold ${this.style.fontSize(text)}px "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif`;
+    ctx.font = `bold ${fontSize}px ${BUBBLE_FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#f8fafc';
@@ -101,7 +162,9 @@ export class SkillBubble {
     ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
-    ctx.fillText(text, w / 2, y + bubbleH / 2 - 1);
+    const lineH = fontSize * 1.18;
+    const firstY = y + bubbleH / 2 - 1 - ((lines.length - 1) * lineH) / 2;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], w / 2, firstY + i * lineH);
 
     ctx.restore();
     if (this.texture) this.texture.needsUpdate = true;
