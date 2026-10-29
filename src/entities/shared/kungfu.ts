@@ -13,7 +13,7 @@ import * as THREE from 'three';
 const CH = 16; // tw, ln, rl, h, la(xyz), ra(xyz), ll(xyz), rr(xyz)
 const STRIDE = CH + 2; // t, ease, 16 channels
 const TAIL = 0.16; // 收招後淡出回一般動作的秒數
-const ARM_HALF = 0.325;
+export const ARM_HALF = 0.325;
 const LEG_HALF = 0.35;
 const TWO_PI = Math.PI * 2;
 
@@ -434,8 +434,17 @@ export class KungFuLayer {
     }
   }
 
+  // 擁有者更新肢體基準位置 (index 0~3 對應左臂/右臂/左腿/右腿；例如蹲姿時肩部隨身體下移)
+  public setLimbBase(index: number, x: number, y: number, z: number) {
+    const bi = index * 3;
+    this.base[bi] = x;
+    this.base[bi + 1] = y;
+    this.base[bi + 2] = z;
+  }
+
   // 套用姿勢 (skipMask: 位元 0~3 對應左臂/右臂/左腿/右腿，略過者維持一般動作，例如撐傘的手)
-  public apply(baseYaw: number, skipMask: number = 0) {
+  // armPivot：雙臂以肩為軸的最低權重 (擁有者一般動作本身已以肩為軸時傳入，例如玩家蹲姿)，淡出時位置與一般動作一致
+  public apply(baseYaw: number, skipMask: number = 0, armPivot: number = 0) {
     const mesh = this.mesh;
     if (!mesh) return;
     let w = 1;
@@ -454,17 +463,21 @@ export class KungFuLayer {
       const o = this.limbs[i];
       if (!o) continue;
       const bi = i * 3;
-      if (skipMask & (1 << i)) {
+      const skip = (skipMask & (1 << i)) !== 0;
+      const r = o.rotation;
+      if (!skip) {
+        const ci = 4 + bi;
+        r.set(r.x + (p[ci] - r.x) * w, r.y + (p[ci + 1] - r.y) * w, r.z + (p[ci + 2] - r.z) * w);
+      }
+      // 肩/髖為軸：補償位移使肢體上端固定
+      const pw = Math.max(skip ? 0 : w, i < 2 ? armPivot : 0);
+      if (pw <= 0) {
         o.position.set(this.base[bi], this.base[bi + 1], this.base[bi + 2]);
         continue;
       }
-      const ci = 4 + bi;
-      const r = o.rotation;
-      r.set(r.x + (p[ci] - r.x) * w, r.y + (p[ci + 1] - r.y) * w, r.z + (p[ci + 2] - r.z) * w);
-      // 肩/髖為軸：補償位移使肢體上端固定
       const h = (i < 2 ? ARM_HALF : LEG_HALF) * o.scale.y;
       _top.set(0, h, 0).applyEuler(r);
-      o.position.set(this.base[bi] - _top.x * w, this.base[bi + 1] + (h - _top.y) * w, this.base[bi + 2] - _top.z * w);
+      o.position.set(this.base[bi] - _top.x * pw, this.base[bi + 1] + (h - _top.y) * pw, this.base[bi + 2] - _top.z * pw);
     }
     if (!this.move && this.tail <= 0) this.finish();
   }
