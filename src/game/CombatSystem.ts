@@ -4,6 +4,7 @@ import { queryColliders, isBlockedXZ } from '../physics/aabb';
 import { requestCameraShake } from '../effects/cameraShake';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
+import type { KfMove } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import { isBehindNpc, isBossStunOpening } from './DetentionMode';
 
@@ -33,7 +34,13 @@ const EXEC_FOCUS_TO_BOSS = 0.35; // 倒地階段視線往總教官偏移比例
 const EXEC_STAGGER_DIST = 0.45; // 總教官向前踉蹌距離
 const EXEC_LEAP_DIST = 4.0;
 const EXEC_LEAP_SIM_TIME = 0.55; // 後空翻模擬秒數 (×0.6 ≈ 0.92 真實秒，於 1.0 秒階段內落地)
-const BOSS_DOWN_TIME = 2.0; // 總教官倒地秒數 (自玩家恢復操控起算)
+const BOSS_DOWN_TIME = 2.0;
+const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
+const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
+const HIT_STOP_FINISHER = 0.08; // 連段終結技命中停格
+const HIT_STOP_SCALE = 0.05;
+const NPC_STRIKE_REACH_GRACE = 0.35; // NPC 出招命中時的距離寬容 (預備動作期間玩家退出此範圍即落空)
+const NPC_STRIKE_ARC = 0.25; // NPC 出招命中方向門檻 (面向與玩家方向內積下限，約正面 ±75°) // 總教官倒地秒數 (自玩家恢復操控起算)
 const EXEC_LEAP_PEAK = 1.1; // 後空翻頂點高度 (m)
 const EXEC_RESULT_SHOW_MS = 1800; // 恢復操控後 QTE 打擊橫幅顯示毫秒 (之後才播出運鏡期間暫存的頂部橫幅)
 
@@ -58,12 +65,15 @@ export class CombatSystem {
   private damageText: THREE.Sprite | null = null;
   private wasBossWindingUp: boolean = false;
   private wasBossStunned: boolean = false;
+  private hitStop: number = 0; // 一般攻擊命中停格剩餘真實秒數
 
   constructor(private readonly ctx: GameContext) {}
 
   // 切換世界時中止暗殺運鏡，避免在另一個世界延續
   public resetTransientState() {
     if (this.execPhase !== 'NONE') this.finishExecution(true);
+    this.hitStop = 0;
+    this.ctx.player.cancelAttack();
   }
 
   // 暗殺運鏡進行中：鎖定玩家操控，NPC 不攻擊玩家
@@ -73,7 +83,13 @@ export class CombatSystem {
 
   // 推進暗殺運鏡階段 (真實時間) 並回傳套用時間倍率後的模擬時間步長
   public scaleDelta(rawDelta: number): number {
-    if (this.execPhase === 'NONE') return rawDelta;
+    if (this.execPhase === 'NONE') {
+      if (this.hitStop > 0) {
+        this.hitStop -= rawDelta;
+        return rawDelta * HIT_STOP_SCALE;
+      }
+      return rawDelta;
+    }
     this.execPhaseTime += rawDelta;
     this.execElapsed += rawDelta;
     let phase: ExecPhase = this.execPhase;
@@ -160,7 +176,7 @@ export class CombatSystem {
     player.rotationY = Math.atan2(this.execStrikeDir.x, this.execStrikeDir.z);
     player.mesh.rotation.y = player.rotationY;
     player.isCinematicLocked = true;
-    player.attack();
+    player.performCinematicStrike((EXEC_IMPACT_AT + (isFinal ? 0.1 : 0)) * EXEC_TIME_SCALE.STAB);
 
     const orbit = isFinal ? EXEC_FINAL_ORBIT : 0;
     cameraCtrl.beginExecutionShot(player.position, target.position, isFinal ? EXEC_SHOT_DISTANCE + 1.0 : EXEC_SHOT_DISTANCE, EXEC_SHOT_DOLLY, orbit, this.ctx.activeColliders);
@@ -350,8 +366,12 @@ export class CombatSystem {
       this.ctx.currentRidingBike.ringBell();
       return;
     }
-    // 暗殺運鏡期間鎖定攻擊；若玩家處於攻擊間隔冷卻中，不執行攻擊
-    if (this.execPhase !== 'NONE' || !player.canAttack) return;
+    // 暗殺運鏡期間鎖定攻擊；出招中提早按下則預先輸入下一段連招
+    if (this.execPhase !== 'NONE') return;
+    if (!player.canAttack) {
+      player.attack();
+      return;
+    }
 
     // 第二世界：若處於守衛身後觸發暗殺擊昏
     const cqcTarget = this.ctx.detention.nearbyCqcTarget;
@@ -360,21 +380,35 @@ export class CombatSystem {
       return;
     }
 
-    if (!player.attack()) return;
-    this.resolvePlayerHit();
+    // 傷害於招式命中時間點 (預備動作之後) 才結算，見 updatePlayerStrike
+    player.attack();
   };
 
-  private resolvePlayerHit() {
+  // 每幀於玩家更新後呼叫：招式到達命中時間點時結算傷害 (暗殺運鏡中的出刀僅為動作)
+  public updatePlayerStrike() {
+    const move = this.ctx.player.strikeMove;
+    if (!move || this.execPhase !== 'NONE' || this.ctx.player.isDead) return;
+    this.resolvePlayerHit(move);
+  }
+
+  // 命中回饋：短暫停格，終結技加長並震動鏡頭
+  private onPlayerHitLanded(move: KfMove) {
+    this.hitStop = move.finisher ? HIT_STOP_FINISHER : HIT_STOP;
+    if (move.finisher) requestCameraShake(0.3);
+  }
+
+  private resolvePlayerHit(move: KfMove) {
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
-    const reach = player.getWeaponReach();
-    const damage = player.getWeaponDamage();
-    const knockback = player.getWeaponKnockback();
+    const reach = player.getWeaponReach() * move.reach;
+    const damage = Math.round(player.getWeaponDamage() * move.dmg);
+    const knockback = player.getWeaponKnockback() * move.knock;
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
 
     // 1. 檢測是否命中生態園植物生物
     const plantHit = ecologicalGarden.tryHitByPlayer(player.position, reach, damage, _scratchPlayerForward);
     if (plantHit.hit) {
+      this.onPlayerHitLanded(move);
       if (plantHit.isBoss) {
         if (plantHit.defeated) {
           this.ctx.progression.cash += 500;
@@ -392,42 +426,50 @@ export class CombatSystem {
       return;
     }
 
-    // 2. 檢測是否命中附近的 NPC (只結算第一個命中者)
+    // 2. 檢測是否命中附近的 NPC (只結算第一個命中者；依招式攻擊範圍判定方向，旋身招式為全方位)
     for (const npc of this.ctx.npcs) {
-      if (npc.position.distanceTo(player.position) < reach + 0.3 && !npc.isKnockedDown && !npc.isPermanentlyKnockedOut) {
-        let actualKnockback = knockback;
+      if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
+      const dx = npc.position.x - player.position.x;
+      const dz = npc.position.z - player.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (npc.position.distanceTo(player.position) >= reach + 0.3) continue;
+      if (move.arc > -1 && dist > 0.6 && (dx * _scratchPlayerForward.x + dz * _scratchPlayerForward.z) / dist < move.arc) continue;
+      let actualKnockback = knockback;
 
-        // 校園打人：附近同學依個性圍觀 / 起鬨 / 逃跑 / 叫老師 (打強盜可解救被勒索的同學)
-        if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onFight(npc);
+      // 校園打人：附近同學依個性圍觀 / 起鬨 / 逃跑 / 叫老師 (打強盜可解救被勒索的同學)
+      if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onFight(npc);
 
-        if (this.ctx.currentWorldType === 'DETENTION') {
-          this.ctx.detention.onPlayerAttackedGuard(npc);
+      if (this.ctx.currentWorldType === 'DETENTION') {
+        this.ctx.detention.onPlayerAttackedGuard(npc);
 
-          if (npc.role === 'DETENTION_BOSS') {
-            if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
-              wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
-              soundManager.playPunch();
-              player.setAttackCooldown(0.5);
-              return;
-            }
-          }
-
-          // 正面攻擊 (非背後盲區)：技能間隔 0.5 秒且擊退效果減半
-          if (!isBehindNpc(npc, player.position.x, player.position.z)) {
-            actualKnockback = knockback * 0.5;
-            player.setAttackCooldown(0.5);
-            wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
+        if (npc.role === 'DETENTION_BOSS') {
+          if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
+            wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
+            soundManager.playPunch();
+            player.setAttackCooldown(FRONTAL_LOCK);
+            return;
           }
         }
 
-        if (npc.launchFlying(_scratchPlayerForward, actualKnockback, damage)) {
-          this.handleNpcDefeated(npc, 'ATTACK');
-        } else {
-          wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
-          npc.isChasing = true;
+        // 正面攻擊 (非背後盲區)：技能間隔 0.5 秒且擊退效果減半
+        if (!isBehindNpc(npc, player.position.x, player.position.z)) {
+          actualKnockback = knockback * 0.5;
+          player.setAttackCooldown(FRONTAL_LOCK);
+          wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
         }
-        return;
       }
+
+      this.onPlayerHitLanded(move);
+      // 擊退方向：玩家指向目標 (旋身招式可擊中側後方目標)
+      if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
+      else _scratchImpactDir.copy(_scratchPlayerForward);
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, damage)) {
+        this.handleNpcDefeated(npc, 'ATTACK');
+      } else {
+        wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
+        npc.isChasing = true;
+      }
+      return;
     }
   }
 
@@ -570,49 +612,80 @@ export class CombatSystem {
         }
       }
 
+      // 人型 NPC 出招到達命中時間點：預備動作期間玩家已退出範圍或繞到側後方即落空
+      const strike = npc.kfStrike;
+      if (strike) {
+        npc.kfStrike = null;
+        if (!isSpawnGraceActive && !player.isDead && this.isNpcStrikeInRange(npc, targetPosition, strike)) {
+          this.applyNpcHit(npc, targetPosition);
+        }
+      }
+
       if (npc.isBossWindingUp || npc.bossIsCharging || npc.isBossStunned) continue;
 
       const distToPlayer = npc.position.distanceTo(targetPosition);
-      const attackDist = (this.ctx.currentWorldType === 'DETENTION') ? 2.0 : Math.max(1.8, npc.attackRange);
+      const attackDist = this.getNpcAttackDist(npc);
 
       // 兩個世界皆僅在追捕狀態 (通緝或被激怒) 且進入攻擊距離時發動攻擊，第一世界 NPC 不會無故主動攻擊
       const shouldAttack = !isSpawnGraceActive && npc.isChasing && distToPlayer <= attackDist;
       if (!shouldAttack || player.isDead || npc.attackCooldown > 0) continue;
 
       npc.attackCooldown = 0.85;
-      npc.triggerAttackAnimation();
-      if (player.isDodging) {
-        this.showDodgeBanner('💨 閃身步！成功規避攻擊！', '🐻 狗熊哆嗦毛！神速規避攻擊！', 1500);
-        continue;
-      }
+      // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算
+      if (npc.triggerAttackAnimation()) continue;
+      this.applyNpcHit(npc, targetPosition);
+    }
+  }
 
-      _scratchImpactDir.subVectors(targetPosition, npc.position);
-      _scratchImpactDir.y = 0;
-      if (_scratchImpactDir.lengthSq() < 0.001) {
-        _scratchImpactDir.set(0, 0, 1);
-      } else {
-        _scratchImpactDir.normalize();
-      }
+  private getNpcAttackDist(npc: NPC): number {
+    return (this.ctx.currentWorldType === 'DETENTION') ? 2.0 : Math.max(1.8, npc.attackRange);
+  }
 
-      const specs = npc.getAttackSpecs();
-      // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
-      if (this.ctx.currentRidingBike) {
-        if (player.hitCooldown > 0) continue;
-        player.hitCooldown = 0.55;
-        soundManager.playPunch();
-        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
-        wantedSystem.notifyAttacked();
-        if (player.takeDamage(npc.attackPower, npc.getRoleTitle())) {
-          this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
-        }
-        continue;
-      }
-      wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
+  private isNpcStrikeInRange(npc: NPC, targetPosition: THREE.Vector3, move: KfMove): boolean {
+    const reach = this.getNpcAttackDist(npc) * move.reach + NPC_STRIKE_REACH_GRACE;
+    if (npc.position.distanceToSquared(targetPosition) > reach * reach) return false;
+    if (move.arc <= -1) return true;
+    const dx = targetPosition.x - npc.position.x;
+    const dz = targetPosition.z - npc.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.6) return true;
+    return (dx * Math.sin(npc.rotationY) + dz * Math.cos(npc.rotationY)) / dist >= NPC_STRIKE_ARC;
+  }
 
+  // NPC 攻擊命中玩家結算 (閃避、騎車只扣血、擊飛)
+  private applyNpcHit(npc: NPC, targetPosition: THREE.Vector3) {
+    const { player, wantedSystem } = this.ctx;
+    if (player.isDodging) {
+      this.showDodgeBanner('💨 閃身步！成功規避攻擊！', '🐻 狗熊哆嗦毛！神速規避攻擊！', 1500);
+      return;
+    }
+
+    _scratchImpactDir.subVectors(targetPosition, npc.position);
+    _scratchImpactDir.y = 0;
+    if (_scratchImpactDir.lengthSq() < 0.001) {
+      _scratchImpactDir.set(0, 0, 1);
+    } else {
+      _scratchImpactDir.normalize();
+    }
+
+    const specs = npc.getAttackSpecs();
+    // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
+    if (this.ctx.currentRidingBike) {
+      if (player.hitCooldown > 0) return;
+      player.hitCooldown = 0.55;
+      soundManager.playPunch();
+      wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
       wantedSystem.notifyAttacked();
-      if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, npc.attackPower, npc.getRoleTitle())) {
+      if (player.takeDamage(npc.attackPower, npc.getRoleTitle())) {
         this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
       }
+      return;
+    }
+    wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
+
+    wantedSystem.notifyAttacked();
+    if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, npc.attackPower, npc.getRoleTitle())) {
+      this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
     }
   }
 

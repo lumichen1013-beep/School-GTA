@@ -4,6 +4,7 @@ import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildUmbrella } from './shared/umbrella';
+import { KungFuLayer, PLAYER_COMBOS, type KfMove, type PlayerComboSet } from './shared/kungfu';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
@@ -312,8 +313,18 @@ export class Player {
   private skillBubble: SkillBubble;
 
   private animTimer: number = 0;
-  private punchTimer: number = 0;
+  private punchTimer: number = 0; // 攻擊硬直 (禁止出招秒數，例如正面攻擊守衛後的技能間隔)
   public isAttacking: boolean = false;
+
+  // 功夫連段：出招姿勢圖層、目前招式組與段數、距上次命中時間點秒數、預先輸入
+  private readonly kf = new KungFuLayer();
+  private comboSet: PlayerComboSet = 'FIST';
+  private comboIndex: number = 0;
+  private sinceStrike: number = 99;
+  private attackQueued: boolean = false;
+  private worldType: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
+  // 本幀到達命中時間點的招式 (由戰鬥系統取用並結算傷害)
+  public strikeMove: KfMove | null = null;
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
@@ -453,6 +464,7 @@ export class Player {
       this.onTakeDamageCallback(amount, reason);
     }
     if (this.hp <= 0) {
+      this.cancelAttack();
       this.isDead = true;
       this.isHoldingUmbrella = false;
       if (this.umbrellaMesh) this.umbrellaMesh.visible = false;
@@ -678,6 +690,8 @@ export class Player {
     this.isKnockedFlying = false;
     this.knockVelocity.set(0, 0, 0);
     this.hitCooldown = 0;
+    this.cancelAttack();
+    this.punchTimer = 0;
     this.position.copy(pos);
     this.mesh.position.copy(pos);
     this.mesh.rotation.x = 0;
@@ -689,6 +703,7 @@ export class Player {
 
   // 裝備羽球拍造型 (4F 羽球比賽專用，只改變視覺外觀，比賽結束或搭電梯時還原)
   public equipBadmintonRacket(equip: boolean) {
+    if (equip !== this.isHoldingRacket) this.releaseAttack();
     if (equip) {
       this.isHoldingRacket = true;
       if (this.racketMesh) this.racketMesh.visible = true;
@@ -709,6 +724,7 @@ export class Player {
     if (type === 'NORMAL_BAT' && !this.hasNormalBat) return false;
     if (type === 'SPECIAL_BAT' && !this.hasSpecialBat) return false;
 
+    if (type !== this.currentWeapon) this.releaseAttack();
     this.currentWeapon = type;
     if (this.isHoldingRacket) {
       if (this.racketMesh) this.racketMesh.visible = true;
@@ -794,29 +810,92 @@ export class Player {
     }
   }
 
+  // 出招 (連段)：上一招命中後 0.6 秒內再按接續下一段，否則從第一段開始；出招中提早按下則預先輸入
   public attack(): boolean {
     if (this.isDead || this.isSwimming) return false; // 游泳狀態下雙手劃水，不可出拳揮棒
-    if (this.punchTimer <= 0) {
-      if (this.isHoldingRacket) {
-        this.punchTimer = 0.38;
-        this.isAttacking = true;
-        soundManager.playBadmintonWhoosh();
-      } else if (this.currentWeapon === 'SPECIAL_BAT') {
-        this.punchTimer = 0.48;
-        this.isAttacking = true;
-        soundManager.playSpecialBatHit();
-      } else if (this.currentWeapon === 'NORMAL_BAT') {
-        this.punchTimer = 0.42;
-        this.isAttacking = true;
-        soundManager.playBatHit();
-      } else {
-        this.punchTimer = 0.35;
-        this.isAttacking = true;
-        soundManager.playPunch();
-      }
-      return true;
+    if (!this.canAttack) {
+      if (this.kf.move && !this.kf.beforeStrike && this.punchTimer <= 0) this.attackQueued = true;
+      return false;
     }
-    return false;
+    this.startComboMove();
+    return true;
+  }
+
+  // 暗殺運鏡出手：以第一段招式配合運鏡命中時間點 (模擬秒) 縮放節奏，不計入連段
+  public performCinematicStrike(strikeAt: number) {
+    if (this.isDead) return;
+    this.startComboMove(strikeAt);
+  }
+
+  // cinematicStrikeAt > 0：暗殺運鏡專用，強制第一段並縮放節奏使命中落在指定秒數
+  private startComboMove(cinematicStrikeAt: number = 0) {
+    this.attackQueued = false;
+    const set: PlayerComboSet = this.isHoldingRacket
+      ? 'RACKET'
+      : this.currentWeapon === 'FIST'
+        ? 'FIST'
+        : (this.currentWeapon === 'NORMAL_BAT' && this.worldType === 'DETENTION' ? 'BATON' : 'BAT');
+    const moves = PLAYER_COMBOS[set];
+    const chain = cinematicStrikeAt <= 0 && set === this.comboSet && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
+    this.comboIndex = chain ? this.comboIndex + 1 : 0;
+    this.comboSet = set;
+    this.sinceStrike = 99;
+    // 黃金雷霆棒較沉重，整體節奏放慢 (沿用原本 0.48 / 0.42 揮棒間隔比例)
+    const move = moves[this.comboIndex];
+    let scale = set === 'BAT' && this.currentWeapon === 'SPECIAL_BAT' ? 1.14 : 1;
+    if (cinematicStrikeAt > 0) scale = cinematicStrikeAt / (move.strike * move.dur);
+    this.kf.start(move, scale, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.isAttacking = true;
+    if (set === 'RACKET') soundManager.playBadmintonWhoosh();
+  }
+
+  // 本幀命中時間點的打擊音效
+  private playStrikeSound() {
+    if (this.isHoldingRacket) return;
+    if (this.currentWeapon === 'SPECIAL_BAT') soundManager.playSpecialBatHit();
+    else if (this.currentWeapon === 'NORMAL_BAT') soundManager.playBatHit();
+    else soundManager.playPunch();
+  }
+
+  // 中止出招 (受擊、騎車、游泳、換世界、死亡等)，四肢位置立即還原
+  public cancelAttack() {
+    if (this.kf.engaged) {
+      this.kf.cancel();
+      this.mesh.rotation.y = this.rotationY;
+      this.mesh.rotation.z = 0;
+    }
+    this.isAttacking = false;
+    this.attackQueued = false;
+    this.strikeMove = null;
+    this.comboIndex = 0;
+    this.sinceStrike = 99;
+  }
+
+  // 提前收招並淡出 (切換武器時)
+  private releaseAttack() {
+    if (this.kf.move) this.kf.release();
+    this.isAttacking = false;
+    this.attackQueued = false;
+    this.strikeMove = null;
+    this.comboIndex = 0;
+    this.sinceStrike = 99;
+  }
+
+  // 每幀推進出招時間與命中事件，並將姿勢疊加於一般動作之上 (於 animatePlayer 之後呼叫)
+  private updateKungFu(delta: number) {
+    this.strikeMove = null;
+    if (this.punchTimer > 0) this.punchTimer -= delta;
+    this.sinceStrike += delta;
+    if (!this.kf.engaged) return;
+    const move = this.kf.move;
+    if (this.kf.update(delta) && move) {
+      this.strikeMove = move;
+      this.sinceStrike = 0;
+      this.playStrikeSound();
+    }
+    if (this.attackQueued && this.canAttack) this.startComboMove();
+    if (!this.kf.move) this.isAttacking = false;
+    this.kf.apply(this.rotationY, this.isHoldingUmbrella ? 1 : 0);
   }
 
   // 設置玩家攻擊硬直/技能間隔冷卻 (如第二世界正面攻擊巡邏守衛時間隔 0.5 秒)
@@ -825,7 +904,7 @@ export class Player {
   }
 
   public get canAttack(): boolean {
-    return !this.isDead && !this.isSwimming && this.punchTimer <= 0;
+    return !this.isDead && !this.isSwimming && this.punchTimer <= 0 && this.kf.canChain;
   }
 
   public update(
@@ -839,6 +918,12 @@ export class Player {
     currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS'
   ) {
     this.updateUmbrella(isRaining, isRidingBike, currentWorld);
+    this.worldType = currentWorld;
+
+    // 受擊擊飛、閃身、後空翻、游泳、騎乘或死亡時中止出招
+    if (this.kf.engaged && (this.isDead || this.isRidingVehicle || this.isSwimming || this.isKnockedFlying || this.isDodging || this.isBackflipping)) {
+      this.cancelAttack();
+    }
 
     if (this.isDead) {
       this.isHoldingUmbrella = false;
@@ -985,6 +1070,15 @@ export class Player {
 
     currentSpeed *= analogSpeedScale;
 
+    // 出招中 (至可接招點前) 紮穩馬步只能小幅移動；收招階段一移動即提前收招回到跑步動作
+    if (this.kf.move && !this.isSwimming) {
+      if (!this.kf.canChain) currentSpeed *= 0.3;
+      else if (isMoving && !this.attackQueued) {
+        this.kf.release();
+        this.isAttacking = false;
+      }
+    }
+
     // 蹲姿插值平滑過渡 (Smooth Crouch Transition - 潛行與草堆匿蹤均觸發蹲下身姿)
     const targetCrouch = (this.isSneaking || this.isHidingInCover) ? 1.0 : 0.0;
     this.crouchRatio = THREE.MathUtils.lerp(this.crouchRatio, targetCrouch, Math.min(delta * 14.0, 1.0));
@@ -1112,6 +1206,7 @@ export class Player {
     const isSprinting = isMoving && sprintActive;
     this.isSprinting = isSprinting;
     this.animatePlayer(delta, isMoving, isSprinting, currentSpeed);
+    this.updateKungFu(delta);
 
     // 後空翻：覆寫翻轉姿勢；時間到且落地後收招站穩
     if (this.isBackflipping) {
@@ -1389,7 +1484,7 @@ export class Player {
         this.leftArm.rotation.y = THREE.MathUtils.lerp(this.leftArm.rotation.y, 0, Math.min(delta * 14.0, 1.0));
         this.leftArm.rotation.z = THREE.MathUtils.lerp(this.leftArm.rotation.z, 0, Math.min(delta * 14.0, 1.0));
       }
-      if (this.punchTimer <= 0) {
+      if (!this.kf.engaged) {
         this.rightArm.rotation.y = THREE.MathUtils.lerp(this.rightArm.rotation.y, 0, Math.min(delta * 14.0, 1.0));
         this.rightArm.rotation.z = THREE.MathUtils.lerp(this.rightArm.rotation.z, 0, Math.min(delta * 14.0, 1.0));
       }
@@ -1401,7 +1496,7 @@ export class Player {
           this.leftArm.rotation.z = 0;
         }
         this.leftArm.position.set(-0.45, 1.05, 0);
-        if (this.punchTimer <= 0) {
+        if (!this.kf.engaged) {
           this.rightArm.rotation.y = 0;
           this.rightArm.rotation.z = 0;
           this.rightArm.position.set(0.45, 1.05, 0);
@@ -1417,7 +1512,7 @@ export class Player {
         if (Math.abs(this.leftArm.rotation.y) < 0.005) this.leftArm.rotation.y = 0;
         if (Math.abs(this.leftArm.rotation.z) < 0.005) this.leftArm.rotation.z = 0;
       }
-      if (this.punchTimer <= 0) {
+      if (!this.kf.engaged) {
         if (Math.abs(this.rightArm.rotation.y) < 0.005) this.rightArm.rotation.y = 0;
         if (Math.abs(this.rightArm.rotation.z) < 0.005) this.rightArm.rotation.z = 0;
       }
@@ -1437,33 +1532,7 @@ export class Player {
     this.rightLeg.position.y = legY;
     this.rightLeg.scale.y = legScaleY;
 
-    if (this.punchTimer > 0) {
-      this.punchTimer -= delta;
-      // 若下雨天撐傘中，右手揮擊時左手依然穩健撐傘
-      if (this.isHoldingUmbrella) {
-        this.leftArm.rotation.set(-Math.PI * 0.65, -0.12, 0.12);
-      }
-      // 揮擊動作 (球棒/羽球拍寬幅橫掃 / 拳頭直擊)
-      if (this.currentWeapon !== 'FIST' || this.isHoldingRacket) {
-        const totalDuration = this.isHoldingRacket ? 0.38 : (this.currentWeapon === 'SPECIAL_BAT' ? 0.48 : 0.42);
-        const swingProgress = 1 - Math.max(0, this.punchTimer / totalDuration);
-        const swingCurve = Math.sin(swingProgress * Math.PI);
-        this.rightArm.rotation.x = -swingCurve * 1.1;
-        this.rightArm.rotation.y = -swingCurve * 1.3;
-        this.rightArm.position.z = swingCurve * 0.25;
-      } else {
-        this.rightArm.rotation.x = -Math.PI / 2 + Math.sin(this.punchTimer * 15) * 0.5;
-        this.rightArm.rotation.y = 0;
-        this.rightArm.position.z = 0.25;
-      }
-      if (this.punchTimer <= 0) {
-        this.isAttacking = false;
-        this.rightArm.rotation.x = 0;
-        this.rightArm.rotation.y = 0;
-        this.rightArm.rotation.z = 0;
-        this.rightArm.position.z = 0;
-      }
-    } else if (isMoving) {
+    if (isMoving) {
       if (this.isSneaking) {
         // 潛行蹲姿移動：依移動速度動態縮放擺幅與步頻 (4.0 m/s 敏捷潛行，6.5 m/s 疾行潛行)
         const sneakAnimRate = (currentSpeed / 4.0) * 10.5;

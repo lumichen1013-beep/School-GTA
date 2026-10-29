@@ -7,6 +7,7 @@ import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
 import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
+import { KungFuLayer, getNpcMoveset, type KfMove } from './shared/kungfu';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
@@ -308,6 +309,11 @@ export class NPC {
   private animTimer: number = 0;
   private whistleCooldown: number = 0;
   private attackAnimTimer: number = 0;
+  // 人型角色功夫出招：姿勢圖層、招式輪替序號、本幀是否已套用姿勢；kfStrike 為本幀到達命中時間點 (由戰鬥系統結算)
+  private readonly kf = new KungFuLayer();
+  private kfSeq: number = 0;
+  private kfApplied: boolean = false;
+  public kfStrike: KfMove | null = null;
 
   // 人型角色肢體
   private humanoidParts: THREE.Object3D[] = [];
@@ -817,6 +823,7 @@ export class NPC {
 
   // 執行模型建構函式 (實作位於 npc/models.ts) 並套用結果
   private buildModel(build: (rig: NPCModelRig) => void) {
+    this.kf.cancel();
     const rig = this.createRig();
     build(rig);
     this.readRig(rig);
@@ -1031,9 +1038,22 @@ export class NPC {
     return wasKnockedDown;
   }
 
-  // 觸發攻擊動作動畫 (近戰出拳、狗咬、單車衝撞、強盜劈砍、羽球拍扣殺)
-  public triggerAttackAnimation() {
+  // 觸發攻擊動作：人型角色依角色招式組輪替出招，傷害於命中時間點結算 (回傳 true)；
+  // 犬類、單車糾察、羽球賽中的大如老師維持原本即時動作 (回傳 false，由呼叫端立即結算)
+  public triggerAttackAnimation(allowKungFu: boolean = true): boolean {
+    const set = allowKungFu && this.rightArm && !this.isInBadmintonMatch ? getNpcMoveset(this.role) : null;
+    if (set) {
+      const move = set[this.kfSeq % set.length];
+      this.kfSeq++;
+      this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+      return true;
+    }
     this.attackAnimTimer = 0.35;
+    this.playAttackSound();
+    return false;
+  }
+
+  private playAttackSound() {
     if (this.cfg.isCanine) {
       soundManager.playDogBark();
     } else if (this.role === 'BIKE_PATROL') {
@@ -1218,7 +1238,7 @@ export class NPC {
 
     this.shuttlecockCooldown = cooldown; // 發球間隔
     soundManager.playBadmintonWhoosh();
-    this.triggerAttackAnimation();
+    this.triggerAttackAnimation(false);
 
     // 建立/復用標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏 0-GC)
     const group = NPC.createShuttlecockMesh();
@@ -1458,6 +1478,7 @@ export class NPC {
   }
 
   public resetPose() {
+    this.kf.cancel();
     if (this.phoneMesh) this.phoneMesh.visible = false;
     if (this.headMesh) {
       this.headMesh.rotation.set(0, 0, 0);
@@ -2426,6 +2447,38 @@ export class NPC {
     isPlayerHiding: boolean = false,
     isPlayerMoving: boolean = true
   ) {
+    this.kfStrike = null;
+    this.kfApplied = false;
+    if (this.kf.engaged) {
+      // 先移除上一幀疊加的扭腰/側傾/升降，讓本幀其他動作邏輯從原始姿勢開始
+      this.mesh.rotation.y = this.rotationY;
+      this.mesh.rotation.z = 0;
+      this.mesh.position.y -= this.kf.rise;
+    }
+    this.updateInner(
+      delta, playerPos, wantedLevel, colliders, onSpotPlayer, isPlayerRidingBike, isPlayerDead, isRaining,
+      isThunderstorm, isSpawnGraceActive, isPlayerSneaking, isPlayerSprinting, isPlayerHiding, isPlayerMoving
+    );
+    // 本幀走了倒地、擊飛、定格、總教官衝撞等其他分支：中止出招並還原四肢
+    if (this.kf.engaged && !this.kfApplied) this.kf.cancel();
+  }
+
+  private updateInner(
+    delta: number,
+    playerPos: THREE.Vector3,
+    wantedLevel: number,
+    colliders: CollidableBox[],
+    onSpotPlayer: () => void,
+    isPlayerRidingBike: boolean = false,
+    isPlayerDead: boolean = false,
+    isRaining: boolean = false,
+    isThunderstorm: boolean = false,
+    isSpawnGraceActive: boolean = false,
+    isPlayerSneaking: boolean = false,
+    isPlayerSprinting: boolean = false,
+    isPlayerHiding: boolean = false,
+    isPlayerMoving: boolean = true
+  ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
     this.seesPlayerNow = false;
     this.lastColliders = colliders;
@@ -2568,6 +2621,10 @@ export class NPC {
     // 全校廣播定格發呆 (聽廣播立正站好，中斷一切追擊與攻擊動作)
     if (this.freezeTimer > 0) {
       this.freezeTimer -= delta;
+      if (this.kf.engaged) {
+        this.kf.cancel();
+        this.mesh.rotation.set(0, this.rotationY, 0);
+      }
       this.zeroLimbs();
       return;
     }
@@ -2887,6 +2944,20 @@ export class NPC {
       return;
     }
 
+    // 功夫出招推進：停止追捕即收招；到達命中時間點時播放打擊音效並通知戰鬥系統結算
+    if (this.kf.engaged) {
+      if (!this.isChasing) {
+        this.kf.cancel();
+        this.mesh.rotation.set(0, this.rotationY, 0);
+      } else {
+        const move = this.kf.move;
+        if (this.kf.update(delta) && move) {
+          this.kfStrike = move;
+          this.playAttackSound();
+        }
+      }
+    }
+
     // 2. 仇恨判定 (AI 狀態機)
     this.updateAggroState(
       delta,
@@ -3059,7 +3130,8 @@ export class NPC {
       // 近戰警戒距離停止前進：當追捕中看得見玩家且距離小於 1.15m 時，站在近戰打擊範圍內專注攻擊，避免強推玩家進牆角
       const isTooCloseToPlayer = this.isChasing && this.lostSightTimer <= 0 && distToTargetSq < 1.32; // ~1.15m
 
-      if (!isTooCloseToPlayer) {
+      // 出招中紮穩腳步不前進 (僅原地轉向)
+      if (!isTooCloseToPlayer && !this.kf.move) {
         const moveStepX = _npcMoveDir.x * currentSpeed * delta;
         const moveStepZ = _npcMoveDir.z * currentSpeed * delta;
         const radius = this.cfg.isCanine ? 0.35 : 0.45;
@@ -3137,7 +3209,7 @@ export class NPC {
         ? (this.isChasing ? 14.0 : 4.0)
         : (this.role === 'BIKE_PATROL'
           ? 12.0
-          : (isDetention && !this.isChasing ? 3.2 : 10.0));
+          : (isDetention && !this.isChasing ? 3.2 : (this.kf.move ? 4.0 : 10.0)));
       this.rotationY += diff * Math.min(delta * turnRate, 1.0);
       this.mesh.rotation.y = this.rotationY;
 
@@ -3269,6 +3341,10 @@ export class NPC {
     }
 
     this.mesh.position.copy(this.position);
+    if (this.kf.engaged) {
+      this.kf.apply(this.rotationY);
+      this.kfApplied = true;
+    }
     // 犬科四足奔馳顛簸保留：修復覆蓋 Y 軸動畫起伏問題，保留垂直四足奔跑顛簸
     const isCanineRole = this.cfg.isCanine;
     if (isCanineRole && _npcMoveDir.lengthSq() > 0.05) {

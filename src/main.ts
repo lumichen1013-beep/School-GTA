@@ -737,7 +737,8 @@ class SchoolGTASandbox implements GameContext {
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
 
-    // NPC 攻擊玩家判定
+    // 玩家招式命中結算與 NPC 攻擊玩家判定
+    this.combat.updatePlayerStrike();
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
 
     // 9. 角色推擠排除
