@@ -999,6 +999,19 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   transform: translateX(-50%) translateY(0);
 }
 
+/* 橫幅過長 (手機窄螢幕)：取消省略號，文字由左向右捲動至結尾 (時間由 WantedSystem 依超出寬度計算) */
+#hud-banner .hud-banner-text {
+  display: inline-block;
+}
+#hud-banner.marquee {
+  text-overflow: clip;
+  text-align: left;
+}
+@keyframes hud-banner-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--marquee-shift, 0px)); }
+}
+
 /* 第二世界 MGS 警戒列：固定於頂部中央最上方 (單行精簡)，一般橫幅位於其下 (桌面橫幅 top 52px 已在警戒列下方)；
    背景/邊框/光暈顏色由 HUD.updateMgsAlert 依警戒階段設定 */
 /* MGS 警戒列各階段配色 (由 HUD 依階段切換 class) */

@@ -179,9 +179,15 @@ export class WantedSystem {
 
     // 1. 與目前顯示中的橫幅相同 (或僅數字不同)：原地更新文字並延長顯示
     if (this.bannerCurrentKey === key) {
-      banner.textContent = text;
+      // 文字相同時不重設跑馬燈 (避免持續更新的訊息每次從頭捲動)
+      if (text !== this.bannerCurrentText) {
+        this.bannerCurrentText = text;
+        const marqueeMs = this.setBannerText(banner, text);
+        this.bannerCurrentMinMs = Math.max(WantedSystem.BANNER_MIN_SHOW_MS, marqueeMs);
+        duration = Math.max(duration, marqueeMs);
+      }
       const remaining = this.bannerCurrentDuration - (now - this.bannerShownAt);
-      if (this.bannerQueue.length === 0 && duration > remaining) {
+      if ((this.bannerQueue.length === 0 || this.bannerCurrentMinMs > WantedSystem.BANNER_MIN_SHOW_MS) && duration > remaining) {
         this.bannerShownAt = now;
         this.bannerCurrentDuration = duration;
         this.scheduleBannerEnd(banner, duration);
@@ -211,7 +217,8 @@ export class WantedSystem {
     }
     const elapsed = now - this.bannerShownAt;
     const remaining = this.bannerCurrentDuration - elapsed;
-    const minLeft = Math.max(0, WantedSystem.BANNER_MIN_SHOW_MS - elapsed);
+    // 跑馬燈訊息至少完整捲動一次才輪替
+    const minLeft = Math.max(0, this.bannerCurrentMinMs - elapsed);
     if (remaining > minLeft) {
       this.bannerCurrentDuration = elapsed + minLeft;
       this.scheduleBannerEnd(banner, minLeft);
@@ -224,6 +231,41 @@ export class WantedSystem {
   private bannerCurrentKey: string | null = null;
   private bannerShownAt: number = 0;
   private bannerCurrentDuration: number = 0;
+  private bannerCurrentText: string = '';
+  private bannerCurrentMinMs: number = WantedSystem.BANNER_MIN_SHOW_MS; // 本則最短停留 (跑馬燈需捲完)
+  private bannerTextEl: HTMLSpanElement | null = null;
+
+  // 跑馬燈參數：開頭停留、捲動速度 (px/s)、捲到底後停留
+  private static readonly MARQUEE_LEAD_S = 0.9;
+  private static readonly MARQUEE_SPEED = 70;
+  private static readonly MARQUEE_TAIL_S = 1.2;
+
+  // 寫入橫幅文字；超出橫幅寬度 (如手機窄螢幕) 時改為跑馬燈捲動，回傳完整捲完所需毫秒 (未超出回傳 0)
+  private setBannerText(banner: HTMLElement, text: string): number {
+    let span = this.bannerTextEl;
+    if (!span || span.parentElement !== banner) {
+      banner.textContent = '';
+      span = document.createElement('span');
+      span.className = 'hud-banner-text';
+      banner.appendChild(span);
+      this.bannerTextEl = span;
+    }
+    span.textContent = text;
+    banner.classList.remove('marquee');
+    span.style.animation = 'none';
+
+    const cs = getComputedStyle(banner);
+    const avail = banner.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const overflow = span.offsetWidth - avail;
+    if (avail <= 0 || overflow <= 4) return 0;
+
+    const travelS = Math.max(1.2, overflow / WantedSystem.MARQUEE_SPEED);
+    banner.classList.add('marquee');
+    span.style.setProperty('--marquee-shift', `${-Math.ceil(overflow)}px`);
+    void span.offsetWidth; // 重新觸發動畫
+    span.style.animation = `hud-banner-marquee ${travelS.toFixed(2)}s linear ${WantedSystem.MARQUEE_LEAD_S}s forwards`;
+    return Math.ceil((WantedSystem.MARQUEE_LEAD_S + travelS + WantedSystem.MARQUEE_TAIL_S) * 1000);
+  }
 
   // 去除數字後的比對鍵，讓「來回 3 拍 / 來回 4 拍」等連續訊息視為同一則
   private static bannerKey(text: string): string {
@@ -231,12 +273,15 @@ export class WantedSystem {
   }
 
   private displayBanner(banner: HTMLElement, text: string, key: string, duration: number) {
-    banner.textContent = text;
+    const marqueeMs = this.setBannerText(banner, text);
     banner.classList.add('show');
     this.bannerCurrentKey = key;
+    this.bannerCurrentText = text;
+    this.bannerCurrentMinMs = Math.max(WantedSystem.BANNER_MIN_SHOW_MS, marqueeMs);
     this.bannerShownAt = performance.now();
-    // 後方仍有排隊訊息時僅停留最短時間，加速輪替避免訊息過時
-    const showMs = this.bannerQueue.length > 0 ? Math.min(duration, WantedSystem.BANNER_MIN_SHOW_MS) : duration;
+    // 後方仍有排隊訊息時僅停留最短時間，加速輪替避免訊息過時；跑馬燈訊息至少停留到完整捲完
+    const baseMs = this.bannerQueue.length > 0 ? Math.min(duration, WantedSystem.BANNER_MIN_SHOW_MS) : duration;
+    const showMs = Math.max(baseMs, marqueeMs);
     this.bannerCurrentDuration = showMs;
     this.scheduleBannerEnd(banner, showMs);
   }
