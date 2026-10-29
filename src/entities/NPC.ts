@@ -86,8 +86,8 @@ const W2_SURROUND_SETTLE_ANGLE = 0.6; // 與站位方位差小於約 34 度即�
 const W2_SURROUND_TRAVEL_TIMEOUT = 1.5;
 
 // 校園執法者 (主任教官 / 生教組長)：受擊防衛、招牌技與留校察看暴怒
-const ENFORCER_PARRY_CHANCE = 0.4; // 主任教官格擋反擊
-const ENFORCER_FLASH_CHANCE = 0.3; // 生教組長閃身步
+const ENFORCER_PARRY_CHANCE = 0.25; // 主任教官格擋反擊
+const ENFORCER_FLASH_CHANCE = 0.2; // 生教組長閃身步
 const ENFORCER_RAGE_SPEED_MULT = 1.15;
 const ENFORCER_SIG_FIRST_DELAY = 3.0; // 進入追捕後首次招牌技的最短等待 (秒)
 const GRAB_LUNGE_DIST = 1.2; // 擒拿摔預備期間向前撲抓距離 (m)
