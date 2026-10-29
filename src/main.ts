@@ -218,7 +218,8 @@ class SchoolGTASandbox implements GameContext {
     this.weatherSystem.onWeatherChange = (preset, isManual) => {
       this.hud.updateWeatherHUD(preset.badgeText);
       if (isManual) {
-        this.wantedSystem.showBanner(`${preset.bannerText} (按 [P] 鍵切換)`, 2500);
+        const text = this.currentWorldType === 'DETENTION' ? preset.detentionBannerText : preset.bannerText;
+        this.wantedSystem.showBanner(`${text} (按 [P] 鍵切換)`, 2500);
       }
     };
     this.hud.onWeatherToggle = () => {
@@ -295,6 +296,7 @@ class SchoolGTASandbox implements GameContext {
     this.cameraCtrl.currentWorld = targetWorld;
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
+    this.hud.setBGMWorld(targetWorld);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
     }
@@ -383,7 +385,7 @@ class SchoolGTASandbox implements GameContext {
       this.cameraCtrl.resetBehind(this.player.position, Math.PI / 2 + Math.PI);
       // 略過開場 (重新挑戰)：與開場結束相同，配發 150 HP 與防暴棒並從此刻開始計時
       this.detention.startEscape();
-      this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推半程）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
+      this.wantedSystem.showBanner('🥷 已潛入【第七特訓院】！按住滑鼠右鍵（手機搖桿推桿 90% 內）靜音慢步，從背後靠近守衛進行【暗殺擊昏】！', 5000);
       this.hud.showCenterPrompt('前往中央警衛室取得門禁卡 A');
     }
   }
@@ -469,7 +471,10 @@ class SchoolGTASandbox implements GameContext {
     if (isMuted) {
       this.wantedSystem.showBanner('🔇 背景音樂 (BGM) 已靜音', 2000);
     } else {
-      const modeText = bgmManager.getMode() === 'PURSUIT' ? '通緝逃亡熱血節奏' : '校園漫步放鬆旋律';
+      const isDetention = this.currentWorldType === 'DETENTION';
+      const modeText = bgmManager.getMode() === 'PURSUIT'
+        ? (isDetention ? '警戒追捕熱血節奏' : '通緝逃亡熱血節奏')
+        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律');
       this.wantedSystem.showBanner(`🎵 背景音樂 (BGM) 已開啟【${modeText}】`, 2500);
     }
   }
@@ -593,6 +598,7 @@ class SchoolGTASandbox implements GameContext {
       } else {
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
+        this.engine.updateShadowFocus(this.player.position);
         this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
         return;
       }
@@ -788,7 +794,8 @@ class SchoolGTASandbox implements GameContext {
     // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
     this.weatherSystem.update(rawDelta, targetPosition);
 
-    // 16. 渲染畫面
+    // 16. 渲染畫面 (陽光陰影跟隨玩家)
+    this.engine.updateShadowFocus(targetPosition);
     this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
   };
 }

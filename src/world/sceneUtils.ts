@@ -38,7 +38,7 @@ export function freezeStaticMatrices(root: THREE.Object3D, exclude: Set<THREE.Ob
 
 // 材質外觀鍵：外觀完全相同的獨立材質實例可視為同一材質合併繪製
 const TEXTURE_SLOTS = ['map', 'alphaMap', 'aoMap', 'bumpMap', 'emissiveMap', 'envMap', 'lightMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'specularMap', 'displacementMap'] as const;
-function materialKey(mat: THREE.Material): string {
+function materialKey(mat: THREE.Material, ignoreColor: boolean = false): string {
   const m = mat as THREE.Material & Record<string, unknown>;
   const parts: unknown[] = [
     mat.type, mat.side, mat.transparent, mat.opacity, mat.vertexColors, mat.depthWrite, mat.depthTest,
@@ -46,7 +46,7 @@ function materialKey(mat: THREE.Material): string {
   ];
   for (const prop of ['color', 'emissive'] as const) {
     const c = m[prop] as THREE.Color | undefined;
-    parts.push(c ? c.getHex() : '-');
+    parts.push(c && !(ignoreColor && prop === 'color') ? c.getHex() : '-');
   }
   for (const prop of ['emissiveIntensity', 'roughness', 'metalness', 'wireframe', 'flatShading', 'fog'] as const) {
     parts.push(m[prop]);
@@ -58,15 +58,29 @@ function materialKey(mat: THREE.Material): string {
   return parts.join('|');
 }
 
+// 可改以頂點色呈現的材質：無貼圖、未使用頂點色的 Basic/Lambert/Standard 材質。
+// 漫射色烘焙進頂點色後，僅非顏色屬性 (粗糙度/金屬度/自發光/面向…) 相同即可共用同一材質合併繪製
+const VERTEX_COLOR_TYPES = new Set(['MeshBasicMaterial', 'MeshLambertMaterial', 'MeshStandardMaterial']);
+function isVertexColorable(mat: THREE.Material): boolean {
+  const m = mat as THREE.Material & Record<string, unknown>;
+  return VERTEX_COLOR_TYPES.has(mat.type) && !mat.vertexColors && TEXTURE_SLOTS.every(slot => !m[slot]);
+}
+
 // 靜態幾何合併 (Static Batching)：將外觀相同、陰影設定相同且位於同一空間格的靜態 Mesh
 // 烘焙世界矩陣後合併為單一 Mesh，大幅減少 draw call；保留空間分格以維持視錐剔除效果。
 // exclude 內的物件 (及其子孫) 於執行期會移動/縮放/換材質，維持原樣不合併。
-// 透明物件因合併後無法逐物件排序，亦維持原樣。
-export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, cellSize: number = 40) {
+// 透明物件因合併後無法逐物件排序，亦維持原樣；mergeableTransparent 內的透明材質 (互不重疊的玻璃窗) 例外。
+// 不透明且無貼圖的材質改烘焙為頂點色，不同顏色的物件可共用同一材質合併 (同 NPC 模型烘焙作法)。
+export function bakeStatic(
+  root: THREE.Object3D,
+  exclude: Set<THREE.Object3D>,
+  cellSize: number = 40,
+  mergeableTransparent: Set<THREE.Material> = new Set()
+) {
   root.updateMatrixWorld(true);
   const rootInverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const canonicalMats = new Map<string, THREE.Material>();
-  const buckets = new Map<string, { material: THREE.Material; castShadow: boolean; receiveShadow: boolean; meshes: THREE.Mesh[] }>();
+  const buckets = new Map<string, { material: THREE.Material; vertexColor: boolean; castShadow: boolean; receiveShadow: boolean; meshes: THREE.Mesh[] }>();
   const center = new THREE.Vector3();
 
   const visit = (obj: THREE.Object3D) => {
@@ -78,13 +92,14 @@ export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, c
       !(mesh as THREE.Mesh & { isInstancedMesh?: boolean }).isInstancedMesh &&
       !(mesh as THREE.Mesh & { isSkinnedMesh?: boolean }).isSkinnedMesh &&
       !Array.isArray(mesh.material) &&
-      !mesh.material.transparent &&
+      (!mesh.material.transparent || mergeableTransparent.has(mesh.material)) &&
       mesh.visible &&
       mesh.frustumCulled &&
       mesh.renderOrder === 0 &&
       Object.keys(mesh.geometry.morphAttributes).length === 0
     ) {
-      const mKey = materialKey(mesh.material);
+      const vertexColor = !mesh.material.transparent && isVertexColorable(mesh.material);
+      const mKey = vertexColor ? `vc|${materialKey(mesh.material, true)}` : materialKey(mesh.material);
       let material = canonicalMats.get(mKey);
       if (!material) {
         material = mesh.material;
@@ -93,11 +108,14 @@ export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, c
       const geo = mesh.geometry;
       if (!geo.boundingSphere) geo.computeBoundingSphere();
       center.copy(geo.boundingSphere!.center).applyMatrix4(mesh.matrixWorld);
-      const attrKey = Object.keys(geo.attributes).sort().join(',') + (geo.index ? '|i' : '|n');
+      // 頂點色合併僅保留 position/normal 並新增 color (無貼圖不需 uv)
+      const attrNames = Object.keys(geo.attributes).filter(n => !vertexColor || n === 'position' || n === 'normal');
+      if (vertexColor) attrNames.push('color');
+      const attrKey = attrNames.sort().join(',') + (geo.index ? '|i' : '|n');
       const key = `${mKey}#${mesh.castShadow}${mesh.receiveShadow}#${Math.floor(center.x / cellSize)},${Math.floor(center.z / cellSize)}#${attrKey}`;
       let bucket = buckets.get(key);
       if (!bucket) {
-        bucket = { material, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, meshes: [] };
+        bucket = { material, vertexColor, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, meshes: [] };
         buckets.set(key, bucket);
       }
       bucket.meshes.push(mesh);
@@ -108,6 +126,7 @@ export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, c
 
   const removedGeometries = new Set<THREE.BufferGeometry>();
   const removedMaterials = new Set<THREE.Material>();
+  const vertexColorMats = new Map<THREE.Material, THREE.Material>(); // 代表材質 → 白色頂點色版本
   const relMatrix = new THREE.Matrix4();
   let before = 0;
   let after = 0;
@@ -117,13 +136,35 @@ export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, c
     const geos: THREE.BufferGeometry[] = [];
     for (const mesh of bucket.meshes) {
       relMatrix.multiplyMatrices(rootInverse, mesh.matrixWorld);
-      geos.push(mesh.geometry.clone().applyMatrix4(relMatrix));
+      const geo = mesh.geometry.clone().applyMatrix4(relMatrix);
+      if (bucket.vertexColor) {
+        for (const name of Object.keys(geo.attributes)) {
+          if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
+        }
+        const color = (mesh.material as THREE.MeshLambertMaterial).color;
+        const count = geo.attributes.position.count;
+        const colors = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) color.toArray(colors, i * 3);
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      }
+      geos.push(geo);
     }
     const merged = mergeGeometries(geos, false);
     for (const g of geos) g.dispose();
     if (!merged) continue;
 
-    const bakedMesh = new THREE.Mesh(merged, bucket.material);
+    let material = bucket.material;
+    if (bucket.vertexColor) {
+      let vcMat = vertexColorMats.get(material);
+      if (!vcMat) {
+        vcMat = material.clone();
+        (vcMat as THREE.MeshLambertMaterial).color.set(0xffffff);
+        vcMat.vertexColors = true;
+        vertexColorMats.set(material, vcMat);
+      }
+      material = vcMat;
+    }
+    const bakedMesh = new THREE.Mesh(merged, material);
     bakedMesh.castShadow = bucket.castShadow;
     bakedMesh.receiveShadow = bucket.receiveShadow;
     bakedMesh.matrixAutoUpdate = false;
@@ -133,7 +174,7 @@ export function bakeStatic(root: THREE.Object3D, exclude: Set<THREE.Object3D>, c
     for (const mesh of bucket.meshes) {
       mesh.removeFromParent();
       removedGeometries.add(mesh.geometry);
-      if (mesh.material !== bucket.material) removedMaterials.add(mesh.material as THREE.Material);
+      if (mesh.material !== material) removedMaterials.add(mesh.material as THREE.Material);
     }
     before += bucket.meshes.length;
     after++;

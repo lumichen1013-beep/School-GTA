@@ -279,6 +279,7 @@ export class NPC {
   private bikeModelParts: THREE.Object3D[] = []; // 騎車姿態模型全部零件 (單車 + 坐姿騎士)
 
   private hpBarGroup: THREE.Group;
+  private hpBarFrame: THREE.Group;
   private hpBarBgMesh: THREE.Mesh;
   private hpBarMesh: THREE.Mesh;
   private koBadgeSprite: THREE.Sprite;
@@ -415,15 +416,19 @@ export class NPC {
     this.hpBarGroup = new THREE.Group();
     this.hpBarGroup.position.set(0, hpY, 0);
 
+    // 血條底框與血量條收於同一子群組，依距離/受傷/追捕狀態整組顯示或隱藏 (見 update)
+    this.hpBarFrame = new THREE.Group();
+    this.hpBarGroup.add(this.hpBarFrame);
+
     // 1. 血條深色底襯框 (全體 NPC 共用幾何體與材質)
     const hpRes = getHpBarResources();
     this.hpBarBgMesh = new THREE.Mesh(hpRes.bgGeo, hpRes.bgMat);
-    this.hpBarGroup.add(this.hpBarBgMesh);
+    this.hpBarFrame.add(this.hpBarBgMesh);
 
     // 2. 綠色/黃色/紅色動態血條 (錨點設在左側，縮放時從左向右展開；狀態色以切換共用材質呈現)
     this.hpBarMesh = new THREE.Mesh(hpRes.barGeo, getHpBarMaterial(0x2ecc71));
     this.hpBarMesh.position.set(-0.40, 0, 0.01);
-    this.hpBarGroup.add(this.hpBarMesh);
+    this.hpBarFrame.add(this.hpBarMesh);
 
     // 3. 昏睡倒地狀態告示牌 (CanvasTexture 呈現動態倒數秒數)
     // 尚未繪製前以全透明呈現，首次繪製時才掛上畫布貼圖
@@ -2081,6 +2086,10 @@ export class NPC {
     this.seesPlayerNow = false;
     this.lastColliders = colliders;
 
+    // 頭頂血條僅於受傷、追捕/警戒中或玩家 20 米內顯示，省下遠方滿血 NPC 的血條 Draw Call
+    this.hpBarFrame.visible = this.hp < this.maxHp || this.isChasing || this.alertState !== 'NORMAL'
+      || this.position.distanceToSquared(playerPos) < 400;
+
     // 依 NPC 所屬世界套用對應室內區域 (少年院守衛不可誤用天天國中的室內範圍)；室內外僅影響雨天行為，晴天略過查詢
     const isOutdoor = isRaining && !IndoorManager.isIndoors(this.position, this.cfg.isDetention ? 'DETENTION' : 'CAMPUS');
     const isOutdoorHumanoid = isOutdoor && this.role !== 'DOG' && this.role !== 'BIKE_PATROL' && this.role !== 'BANDIT';
@@ -2903,8 +2912,8 @@ export class NPC {
     // 頭頂 3D 浮動血條與告示牌永遠面朝視角/玩家 (0-GC 純量計算)
     this.faceHpBar(playerPos);
 
-    // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC)
-    if (isRaining && isOutdoorHumanoid && !this.isKnockedDown && !this.isChasing) {
+    // 下雨天隨機對話氣泡 (限玩家周圍 25 米內，避免全場嘈雜，0-GC；特訓警戒犬不說人話)
+    if (isRaining && isOutdoorHumanoid && !this.cfg.isCanine && !this.isKnockedDown && !this.isChasing) {
       const distToPlayerSq = this.position.distanceToSquared(playerPos);
       if (distToPlayerSq < 625.0) { // < 25m
         this.rainChatTimer += delta;

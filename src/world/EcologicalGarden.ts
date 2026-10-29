@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CollidableBox } from './CampusWorld';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bakeStatic, freezeStaticMatrices } from './sceneUtils';
 
 const _ecoScratchDir = new THREE.Vector3();
@@ -17,6 +18,16 @@ const GLOW_HALO_GEO = new THREE.SphereGeometry(1.1, 16, 12);
 function makeAdditiveGlowMat(color: number, opacity: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
 }
+// 將同一父節點下多個同材質靜態小零件依各自局部變換烘焙為單一網格 (仍隨父節點一起動畫)，減少 Draw Call
+function mergeParts(parts: THREE.Mesh[]): THREE.Mesh {
+  const geos = parts.map(p => {
+    p.updateMatrix();
+    return p.geometry.clone().applyMatrix4(p.matrix);
+  });
+  return new THREE.Mesh(mergeGeometries(geos), parts[0].material);
+}
+// 玩家距園區圍欄外緣超過此距離時隱藏園內動態生物 (僅影響繪製，AI 與互動邏輯照常運作)
+const DYNAMIC_VISIBLE_DIST_SQ = 70 * 70;
 
 export interface HostileVine {
   id: number;
@@ -94,6 +105,8 @@ export interface GoddessTossResult {
 export class EcologicalGarden {
   public scene: THREE.Scene;
   public group: THREE.Group = new THREE.Group();
+  // 園內動態生物 (藤蔓、Boss、野菇、甲蟲、湖中女神) 集中於此子群組，遠離園區時整組隱藏
+  private dynamicGroup: THREE.Group = new THREE.Group();
   public colliders: CollidableBox[] = [];
 
   // 敵意生物：食人刺藤
@@ -146,10 +159,12 @@ export class EcologicalGarden {
 
     // 靜態場景 (地形、圍欄、拱門、花草、樹、池畔石、棧道、石碑) 依材質與空間格合併並凍結矩陣；
     // 排除執行期會移動、變色或切換顯示的物件：食人花藤蔓、Boss、野菇、甲蟲、湖中女神
-    const dynamicObjects = new Set<THREE.Object3D>([this.lakeGoddessMesh, this.boss.mesh]);
-    for (const vine of this.hostileVines) dynamicObjects.add(vine.mesh);
-    for (const m of this.mushrooms) dynamicObjects.add(m.mesh);
-    for (const bug of this.bugs) dynamicObjects.add(bug.mesh);
+    this.dynamicGroup.add(this.lakeGoddessMesh, this.boss.mesh);
+    for (const vine of this.hostileVines) this.dynamicGroup.add(vine.mesh);
+    for (const m of this.mushrooms) this.dynamicGroup.add(m.mesh);
+    for (const bug of this.bugs) this.dynamicGroup.add(bug.mesh);
+    this.group.add(this.dynamicGroup);
+    const dynamicObjects = new Set<THREE.Object3D>([this.dynamicGroup]);
     bakeStatic(this.group, dynamicObjects);
     freezeStaticMatrices(this.group, dynamicObjects);
 
@@ -521,13 +536,12 @@ export class EcologicalGarden {
       body.castShadow = true;
       bugGroup.add(body);
 
-      // 發光綠眼
+      // 發光綠眼 (雙眼合併為單一網格)
       const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
       eyeL.position.set(0.14, 0.32, 0.42);
-      bugGroup.add(eyeL);
       const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
       eyeR.position.set(-0.14, 0.32, 0.42);
-      bugGroup.add(eyeR);
+      bugGroup.add(mergeParts([eyeL, eyeR]));
 
       // 6 條爬行節肢
       const legs: THREE.Mesh[] = [];
@@ -596,14 +610,16 @@ export class EcologicalGarden {
       cap.position.y = 0.9;
       group.add(cap);
 
-      // 菇斑圓點
+      // 菇斑圓點 (5 顆合併為單一網格)
       const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const dots: THREE.Mesh[] = [];
       for (let i = 0; i < 5; i++) {
         const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), dotMat);
         const ang = (i / 5) * Math.PI * 2;
         dot.position.set(Math.cos(ang) * 0.32, 0.8, Math.sin(ang) * 0.32);
-        group.add(dot);
+        dots.push(dot);
       }
+      group.add(mergeParts(dots));
 
       // 地面光暈 (加法混色光圈，隨菇群組一併顯示/隱藏)
       const glow = new THREE.Mesh(GLOW_DISC_GEO, makeAdditiveGlowMat(cfg.glow, 0.32));
@@ -795,27 +811,33 @@ export class EcologicalGarden {
     this.boss.headGroup.add(lower);
     this.boss.lowerJaw = lower;
 
-    // 銳利鋸齒尖牙 (Sharp Triangular Teeth)
+    // 銳利鋸齒尖牙 (Sharp Triangular Teeth；上下顎各自合併為單一網格，隨顎開合)
+    const upperTeeth: THREE.Mesh[] = [];
+    const lowerTeeth: THREE.Mesh[] = [];
     for (let i = 0; i < 8; i++) {
       const angle = (i / 7) * Math.PI - Math.PI / 2;
       const toothU = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), toothMat);
       toothU.position.set(Math.sin(angle) * 1.05, 0.05, Math.cos(angle) * 0.95);
       toothU.rotation.x = -Math.PI / 2;
-      upper.add(toothU);
+      upperTeeth.push(toothU);
 
       const toothL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), toothMat);
       toothL.position.set(Math.sin(angle) * 0.98, -0.05, Math.cos(angle) * 0.88);
       toothL.rotation.x = Math.PI / 2;
-      lower.add(toothL);
+      lowerTeeth.push(toothL);
     }
+    upper.add(mergeParts(upperTeeth));
+    lower.add(mergeParts(lowerTeeth));
 
-    // 經典白斑點裝飾 (Polka Dots)
+    // 經典白斑點裝飾 (Polka Dots；合併為單一網格)
+    const spots: THREE.Mesh[] = [];
     for (let j = 0; j < 6; j++) {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 6), spotMat);
       const theta = j * 1.0;
       dot.position.set(Math.sin(theta) * 0.9, 0.6, Math.cos(theta) * 0.9);
-      upper.add(dot);
+      spots.push(dot);
     }
+    upper.add(mergeParts(spots));
 
     // D. 兩側抽動的大葉手 (Left and Right Lashing Tendrils)
     const tendrilGeo = new THREE.BoxGeometry(0.25, 0.8, 1.8);
@@ -846,6 +868,11 @@ export class EcologicalGarden {
     onPlayerHit: (amount: number, reason: string) => void,
     _onBossDefeated?: () => void
   ) {
+    // 遠離園區 (距圍欄外緣 X: -95~-45、Z: -104~-77 超過 70 米) 時隱藏動態生物省下 Draw Call
+    const outX = Math.max(-95 - playerPos.x, 0, playerPos.x + 45);
+    const outZ = Math.max(-104 - playerPos.z, 0, playerPos.z + 77);
+    this.dynamicGroup.visible = outX * outX + outZ * outZ < DYNAMIC_VISIBLE_DIST_SQ;
+
     // A. 食人藤蔓怪物邏輯
     for (const vine of this.hostileVines) {
       if (vine.isDead) continue;
@@ -1114,7 +1141,7 @@ export class EcologicalGarden {
 
         if (vine.hp <= 0) {
           vine.isDead = true;
-          this.group.remove(vine.mesh);
+          this.dynamicGroup.remove(vine.mesh);
           return { hit: true, name: '食人藤蔓', defeated: true, isBoss: false };
         }
         return { hit: true, name: '食人藤蔓', defeated: false, isBoss: false };
@@ -1162,7 +1189,7 @@ export class EcologicalGarden {
       this.boss.mesh.position.y -= 0.08;
       if (timer > 1.2) {
         clearInterval(interval);
-        this.group.remove(this.boss.mesh);
+        this.dynamicGroup.remove(this.boss.mesh);
       }
     }, 50);
   }

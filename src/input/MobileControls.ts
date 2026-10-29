@@ -49,7 +49,7 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
     const RADIUS_RATIO = 45 / 115;
     let maxRadius = 45;
 
-    // 潛行範圍提示環 (半徑 80%)：特訓院中按住搖桿時顯示，推桿在環內為潛行 (綠)，超出改為步行 (淡白)
+    // 潛行範圍提示環 (半徑 90%)：特訓院中按住搖桿時顯示，推桿在環內為潛行 (綠)，超出改為步行 (淡白)
     const sneakRing = document.createElement('div');
     const ringPct = (RADIUS_RATIO * 2 * JOYSTICK_SNEAK_RADIUS * 100).toFixed(1);
     sneakRing.style.cssText = `position:absolute;left:50%;top:50%;width:${ringPct}%;height:${ringPct}%;` +

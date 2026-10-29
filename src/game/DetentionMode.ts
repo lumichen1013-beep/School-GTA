@@ -9,8 +9,8 @@ const _scratchCqcScreenPos = new THREE.Vector3();
 // 第二世界全域警戒階段 (MGS 式)：NORMAL → ALERT (有守衛看見) → EVASION (失去目標、搜索最後目擊點並倒數) → CAUTION (提高戒備回崗) → NORMAL
 type AlertPhase = 'NORMAL' | 'ALERT' | 'EVASION' | 'CAUTION';
 const ALERT_HOLD_TIME = 1.0; // 短暫失去視線 (如總教官衝撞、轉角) 不立即轉入搜索，避免警戒橫幅閃爍
-const EVASION_TIME = 10.0;
-const CAUTION_TIME = 8.0;
+const EVASION_TIME = 5.0;
+const CAUTION_TIME = 4.0;
 
 /**
  * 第二世界【特訓院】潛入越獄玩法：門禁鑰匙卡、存檔點、探照燈警戒、背後暗殺目標鎖定、出生保護與通關結算
@@ -61,7 +61,7 @@ export class DetentionMode {
     alertLevel: 'NORMAL',
     alertTimer: 0,
     checkpointPos: new THREE.Vector3(),
-    checkpointName: 'A區中央警衛室'
+    checkpointName: 'A區收容車道起點'
   };
 
   constructor(private readonly ctx: GameContext) {}

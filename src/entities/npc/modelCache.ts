@@ -165,8 +165,14 @@ export function disposeNonShared(root: THREE.Object3D) {
  * - root 自身的位置/旋轉/縮放保留 (動畫仍作用於 root)
  * - keep(obj) 為 true 的子樹原樣保留 (例如可切換顯示的雨傘)
  * - 同 cacheKey 的 NPC 共用同一份合併幾何體
+ * - castShadow 為 false 時合併後網格一律不投射陰影 (頭與四肢僅由軀幹投影，節省陰影 Draw Call)
  */
-export function bakeNode(root: THREE.Object3D, cacheKey: string, keep: (obj: THREE.Object3D) => boolean = () => false) {
+export function bakeNode(
+  root: THREE.Object3D,
+  cacheKey: string,
+  keep: (obj: THREE.Object3D) => boolean = () => false,
+  castShadow: boolean = true
+) {
   const entries: BakeEntry[] = [];
   const kept: THREE.Object3D[] = [];
   collectEntries(root, keep, entries, kept);
@@ -202,13 +208,13 @@ export function bakeNode(root: THREE.Object3D, cacheKey: string, keep: (obj: THR
     if (first && rootMesh.isMesh) {
       rootMesh.geometry = bucket.geometry;
       rootMesh.material = mat;
-      rootMesh.castShadow = bucket.castShadow;
+      rootMesh.castShadow = castShadow && bucket.castShadow;
       first = false;
       continue;
     }
     first = false;
     const mesh = new THREE.Mesh(bucket.geometry, mat);
-    mesh.castShadow = bucket.castShadow;
+    mesh.castShadow = castShadow && bucket.castShadow;
     root.add(mesh);
   }
   // 骨架節點為 Mesh 但完全沒有零件時 (理論上不會發生) 隱藏避免錯誤繪製

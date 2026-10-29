@@ -10,6 +10,7 @@ interface WeatherPreset {
   name: string;
   badgeText: string;
   bannerText: string;
+  detentionBannerText: string; // 第二世界【特訓院】手動切換天氣時的橫幅
   skyColor: number;
   fogColor: number;
   fogDensity: number;
@@ -32,6 +33,7 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '晴朗校園',
     badgeText: '☀️ 晴朗',
     bannerText: '☀️ 天氣晴朗：陽光明媚，微風拂面校園！',
+    detentionBannerText: '☀️ 天氣晴朗：烈日當空，特訓院崗哨視野一覽無遺！',
     skyColor: 0xa0c4e2,
     fogColor: 0xa0c4e2,
     fogDensity: 0.005,
@@ -52,6 +54,7 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '綿綿細雨',
     badgeText: '🌧️ 小雨',
     bannerText: '🌧️ 天降甘霖：細雨綿綿，校園水氣氤氳！',
+    detentionBannerText: '🌧️ 細雨綿綿：冷雨打在鐵絲網上，特訓院水氣氤氳！',
     skyColor: 0x8fa3b5,      // 明亮舒適的雨天淺藍天色，不再暗沉
     fogColor: 0x9cb0c0,      // 清爽微亮雨霧，不阻擋視線
     fogDensity: 0.006,       // 霧氣濃度降至 0.006，遠處景物一清二楚
@@ -72,6 +75,7 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '雷陣雨',
     badgeText: '⛈️ 雷雨',
     bannerText: '⛈️ 狂風驟雨：烏雲奔湧，電閃雷鳴席捲校園！',
+    detentionBannerText: '⛈️ 狂風驟雨：烏雲奔湧，電閃雷鳴席捲特訓院！',
     skyColor: 0x768898,      // 大幅提亮暴風雨天色 (原 0x415364 -> 0x768898，銀灰藍質感，視野開朗)
     fogColor: 0x8294a4,      // 提亮暴風雨霧氣 (原 0x415364 -> 0x8294a4)
     fogDensity: 0.0065,      // 霧氣濃度從 0.013 減半至 0.0065！徹底避免霧氣暗黑遮蔽視線
@@ -92,6 +96,7 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '清晨迷霧',
     badgeText: '🌫️ 濃霧',
     bannerText: '🌫️ 迷霧校園：晨霧縹緲，建築若隱若現宛如仙境！',
+    detentionBannerText: '🌫️ 迷霧院區：晨霧瀰漫，崗哨與高牆若隱若現！',
     skyColor: 0xd6dfe8,      // 晨霧淺白色
     fogColor: 0xd6dfe8,
     fogDensity: 0.012,       // 從 0.030 降至 0.012 (柔和仙氣晨霧，視野清晰不刺眼)
@@ -112,6 +117,7 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
     name: '金黃暮霞',
     badgeText: '🌅 暮霞',
     bannerText: '🌅 暮色金黃：夕陽染紅操場，校園沉浸浪漫餘暉！',
+    detentionBannerText: '🌅 暮色金黃：夕陽染紅訓練場，院區籠罩肅殺餘暉！',
     skyColor: 0xd86218,
     fogColor: 0xea8830,
     fogDensity: 0.006,
