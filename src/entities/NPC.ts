@@ -565,6 +565,18 @@ export class NPC {
     this.drawDynamicBadge(BADGE_KO, `💫 昏迷中 (${sec}s)`);
   }
 
+  // 暫時隱藏/恢復頭頂倒地倒數告示牌 (暗殺運鏡期間隱藏，恢復時依目前倒數重繪)
+  public setKOBadgeVisible(visible: boolean) {
+    if (!visible) {
+      this.koBadgeSprite.visible = false;
+      return;
+    }
+    if (!this.isKnockedDown) return;
+    this.lastKoBadgeSec = -1;
+    this.updateKOBadge(this.reviveTimer);
+    this.koBadgeSprite.visible = true;
+  }
+
   // 顯示自定義頭頂動態文字徽章 (如金鐘護體、撞柱硬直等)
   public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
     // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)

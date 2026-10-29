@@ -34,6 +34,8 @@ const EXEC_STAGGER_DIST = 0.45; // 總教官向前踉蹌距離
 const EXEC_LEAP_DIST = 4.0;
 const EXEC_LEAP_SIM_TIME = 0.55; // 後空翻模擬秒數 (×0.6 ≈ 0.92 真實秒，於 1.0 秒階段內落地)
 const BOSS_DOWN_TIME = 2.0; // 總教官倒地秒數 (自玩家恢復操控起算)
+const EXEC_LEAP_PEAK = 1.1; // 後空翻頂點高度 (m)
+const EXEC_RESULT_SHOW_MS = 1800; // 恢復操控後 QTE 打擊橫幅顯示毫秒 (之後才播出運鏡期間暫存的頂部橫幅)
 
 /**
  * 戰鬥系統：玩家攻擊判定、背後暗殺與慢動作特寫、NPC 擊倒結算、單車衝撞、NPC 攻擊玩家與角色推擠
@@ -61,7 +63,7 @@ export class CombatSystem {
 
   // 切換世界時中止暗殺運鏡，避免在另一個世界延續
   public resetTransientState() {
-    if (this.execPhase !== 'NONE') this.finishExecution();
+    if (this.execPhase !== 'NONE') this.finishExecution(true);
   }
 
   // 暗殺運鏡進行中：鎖定玩家操控，NPC 不攻擊玩家
@@ -104,6 +106,8 @@ export class CombatSystem {
       // 倒地倒數凍結至玩家恢復操控為止 (起身與 3 秒護盾皆自恢復操控後起算)
       if (!target.isPermanentlyKnockedOut) target.reviveTimer = BOSS_DOWN_TIME;
     }
+    // 運鏡期間隱藏頭頂倒地告示牌，避免與 -100 傷害數字搶畫面 (恢復操控後重新顯示並開始倒數)
+    target.setKOBadgeVisible(false);
     this.updateDamageText(target);
 
     if (this.execPhase === 'LAND') {
@@ -136,7 +140,7 @@ export class CombatSystem {
   }
 
   private startExecution(target: NPC, isFinal: boolean, isFromHiding: boolean) {
-    const { player, cameraCtrl, hud } = this.ctx;
+    const { player, cameraCtrl, hud, wantedSystem } = this.ctx;
     this.execTarget = target;
     this.execIsFinal = isFinal;
     this.execFromHiding = isFromHiding;
@@ -158,17 +162,19 @@ export class CombatSystem {
     player.isCinematicLocked = true;
     player.attack();
 
-    const d = this.execDurations;
     const orbit = isFinal ? EXEC_FINAL_ORBIT : 0;
     cameraCtrl.beginExecutionShot(player.position, target.position, isFinal ? EXEC_SHOT_DISTANCE + 1.0 : EXEC_SHOT_DISTANCE, EXEC_SHOT_DOLLY, orbit, this.ctx.activeColliders);
-    // 電影黑邊持續至落地收尾結束
+    // 電影黑邊持續至落地收尾結束；運鏡期間頂部橫幅暫存，QTE 打擊橫幅於恢復操控後才顯示
+    wantedSystem.holdBanners();
     const qteTitle = isFinal
       ? (isFromHiding ? '🗡️【刺客教條·草堆終結】' : '🗡️【刺客教條·終極處決】')
-      : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
+      : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【硬直破綻暴擊】');
     const qteSub = isFinal
       ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-      : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${Math.max(0, target.hp - 100)}/${target.maxHp}，總教官倒地癱瘓 2 秒！)`;
-    hud.triggerCinematicExecution(qteTitle, qteSub, d.STAB + d.FALL + d.FLIP + d.LAND);
+      : isFromHiding
+        ? `掩體突襲重擊要害！造成 100 傷害！(剩餘 HP: ${Math.max(0, target.hp - 100)}/${target.maxHp}，總教官倒地 2 秒！)`
+        : `趁撞柱硬直重擊要害！造成 100 傷害！(剩餘 HP: ${Math.max(0, target.hp - 100)}/${target.maxHp}，總教官倒地 2 秒！)`;
+    hud.beginCinematicExecution(qteTitle, qteSub);
 
     this.execPhase = 'STAB';
     this.execPhaseTime = 0;
@@ -185,7 +191,7 @@ export class CombatSystem {
     if (next === 'FALL') {
       this.showDamageText(target);
     } else if (next === 'FLIP') {
-      player.leapAwayFrom(target.position, EXEC_LEAP_DIST, EXEC_LEAP_SIM_TIME);
+      player.leapAwayFrom(target.position, EXEC_LEAP_DIST, EXEC_LEAP_SIM_TIME, EXEC_LEAP_PEAK);
     } else if (next === 'LAND') {
       // 落地面向總教官，鏡頭自運鏡機位平滑過渡至玩家正後方
       const dx = target.position.x - player.position.x;
@@ -230,13 +236,8 @@ export class CombatSystem {
       );
       soundManager.playSchoolBell();
     } else {
+      // 傷害與倒地資訊由恢復操控後的 QTE 打擊橫幅呈現，不另發頂部橫幅
       target.knockdownBoss(BOSS_DOWN_TIME);
-      wantedSystem.showBanner(
-        isFromHiding
-          ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`
-          : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`,
-        3000
-      );
     }
   }
 
@@ -282,16 +283,20 @@ export class CombatSystem {
     }
   }
 
-  // 結束暗殺運鏡：恢復操控與一般鏡頭 (總教官倒地倒數自此起算)
-  private finishExecution() {
-    const { player, cameraCtrl } = this.ctx;
+  // 結束暗殺運鏡：恢復操控與一般鏡頭 (總教官倒地倒數自此起算)；
+  // 正常結束時短暫顯示 QTE 打擊橫幅後再播出暫存的頂部橫幅，中止 (切換世界) 時直接恢復
+  private finishExecution(aborted: boolean = false) {
+    const { player, cameraCtrl, hud, wantedSystem } = this.ctx;
+    const target = this.execTarget;
     this.execPhase = 'NONE';
     this.execPhaseTime = 0;
     this.execHitStop = 0;
     this.execTarget = null;
     player.isCinematicLocked = false;
     if (this.damageText) this.damageText.visible = false;
+    if (target && !aborted) target.setKOBadgeVisible(true);
     cameraCtrl.endExecutionShot(player.position, player.rotationY + Math.PI);
+    hud.endCinematicExecution(aborted ? 0 : EXEC_RESULT_SHOW_MS, () => wantedSystem.releaseBannerHold());
   }
 
   // 總教官頭頂浮起的傷害數字 (首次使用時建立，之後重複使用)

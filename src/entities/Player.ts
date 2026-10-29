@@ -266,6 +266,7 @@ export class Player {
   // 暗殺運鏡期間：鎖定移動/跳躍/潛行輸入，且免疫一切傷害與擊飛
   public isCinematicLocked: boolean = false;
   private backflipSpeed: number = 0;
+  private backflipGravity: number = -24.0; // 後空翻專用等效重力 (使滯空時間 = 翻轉時間且頂點高度固定)
   private readonly backflipDir: THREE.Vector3 = new THREE.Vector3();
 
   // 狗熊哆嗦毛 (連續瞬移 3 次，間隔 0.5s，圓形範圍隨機閃現)
@@ -578,8 +579,8 @@ export class Player {
     this.bearBlinkCount++;
   }
 
-  // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位，面向 BOSS)；duration 為翻轉/滯空的模擬時間
-  public leapAwayFrom(targetPos: THREE.Vector3, jumpDist: number = 4.0, duration: number = 0.6) {
+  // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位，面向 BOSS)；duration 為翻轉/滯空的模擬時間，peakHeight 為拋物線頂點高度
+  public leapAwayFrom(targetPos: THREE.Vector3, jumpDist: number = 4.0, duration: number = 0.6, peakHeight: number = 1.1) {
     if (this.isDead) return;
 
     // 遠離 target 的水平方向
@@ -594,12 +595,14 @@ export class Player {
     this.rotationY = Math.atan2(-this.backflipDir.x, -this.backflipDir.z);
     this.mesh.rotation.y = this.rotationY;
 
-    // 水平位移交由一般碰撞處理 (遇牆即停，絕不穿牆)；起跳垂直速度使滯空時間 = 翻轉時間
+    // 水平位移交由一般碰撞處理 (遇牆即停，絕不穿牆)；
+    // 起跳速度 vy0 = 4h/t、等效重力 g = 8h/t²：滯空時間 = 翻轉時間，頂點高度 = peakHeight
     this.isBackflipping = true;
     this.backflipDuration = duration;
     this.backflipTimer = this.backflipDuration;
     this.backflipSpeed = jumpDist / this.backflipDuration;
-    this.velocity.y = -this.gravity * this.backflipDuration * 0.5;
+    this.backflipGravity = -8 * peakHeight / (duration * duration);
+    this.velocity.y = 4 * peakHeight / duration;
     this.isGrounded = false;
     this.afterimageSpawnTimer = 0;
 
@@ -1075,7 +1078,8 @@ export class Player {
             soundManager.playJump();
           }
         } else {
-          this.velocity.y += this.gravity * delta;
+          // 後空翻以半步積分 (位移前後各加半步重力)，頂點高度與滯空時間不受幀率影響
+          this.velocity.y += this.isBackflipping ? this.backflipGravity * delta * 0.5 : this.gravity * delta;
         }
       }
       if (!this.isSwimming && !this.isDodging && !this.isKnockedFlying) this.mesh.rotation.z = 0;
@@ -1083,6 +1087,7 @@ export class Player {
 
     // 5. 碰撞檢測與位移更新 (AABB Collision with Step Climbing)
     this.applyMovementAndCollision(delta, colliders);
+    if (this.isBackflipping && !this.isGrounded && !this.isSwimming) this.velocity.y += this.backflipGravity * delta * 0.5;
 
     // 落地檢測恢復正常控制
     if (this.isGrounded && this.isKnockedFlying && this.knockTimer <= 0.25) {

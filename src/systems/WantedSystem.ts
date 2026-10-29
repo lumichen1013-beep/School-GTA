@@ -174,6 +174,20 @@ export class WantedSystem {
     const banner = document.getElementById('hud-banner');
     if (!banner) return;
 
+    // 運鏡暫停期間：訊息暫存 (同類訊息以最新取代)，待 releaseBannerHold 時依序播出
+    if (this.bannerHeld) {
+      const key = WantedSystem.bannerKey(text);
+      const held = this.bannerHeldList.find(h => h.key === key);
+      if (held) {
+        held.text = text;
+        held.duration = duration;
+      } else {
+        this.bannerHeldList.push({ text, key, duration });
+        if (this.bannerHeldList.length > WantedSystem.BANNER_MAX_QUEUE) this.bannerHeldList.shift();
+      }
+      return;
+    }
+
     const key = WantedSystem.bannerKey(text);
     const now = performance.now();
 
@@ -225,6 +239,29 @@ export class WantedSystem {
     }
   }
 
+  // 暫停橫幅 (如暗殺運鏡期間)：立即收起目前與排隊中的橫幅 (運鏡前的訊息已過時，直接捨棄)，之後的訊息改為暫存
+  public holdBanners() {
+    if (this.bannerHeld) return;
+    this.bannerHeld = true;
+    this.bannerHeldList = [];
+    this.bannerQueue = [];
+    if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
+    this.bannerTimeout = 0;
+    this.bannerCurrentKey = null;
+    document.getElementById('hud-banner')?.classList.remove('show');
+  }
+
+  // 恢復橫幅：依序播出暫停期間暫存的訊息
+  public releaseBannerHold() {
+    if (!this.bannerHeld) return;
+    this.bannerHeld = false;
+    const held = this.bannerHeldList;
+    this.bannerHeldList = [];
+    for (const h of held) this.showBanner(h.text, h.duration);
+  }
+
+  private bannerHeld: boolean = false;
+  private bannerHeldList: { text: string; key: string; duration: number }[] = [];
   private static readonly BANNER_MAX_QUEUE = 3;
   private static readonly BANNER_MIN_SHOW_MS = 1400;
   private bannerQueue: { text: string; key: string; duration: number }[] = [];
