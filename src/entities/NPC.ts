@@ -342,6 +342,8 @@ export class NPC {
   public seesPlayerNow: boolean = false;
   public detentionHuntActive: boolean = false;
   private searchAnchor: THREE.Vector3 = new THREE.Vector3(); // 搜索期間以最後目擊點為中心巡查
+  // 第二世界：循打鬥聲響前往察看中 (未親眼看見玩家；不接收無線電位置通報、不出手攻擊)
+  public isInvestigatingNoise: boolean = false;
 
   // NPC 多樣性行為與移動風格系統
   public movementStyle: NPCMovementStyle = 'CASUAL_WALK';
@@ -656,6 +658,7 @@ export class NPC {
   // 設定 MGS 警戒狀態並更新頭頂懸浮圖示 (❓ / ❗)；狀態與圖示皆未變時略過 (追捕/探照燈期間每幀呼叫)
   public setAlertState(state: 'NORMAL' | 'CAUTION' | 'ALERT') {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return;
+    if (state === 'ALERT') this.isInvestigatingNoise = false; // 已確認敵蹤，改為正式追捕
     if (state === this.alertState && this.lastKoBadgeSec === ALERT_BADGE_CODE[state]) return;
     this.alertState = state;
     this.lastKoBadgeSec = ALERT_BADGE_CODE[state];
@@ -1155,6 +1158,15 @@ export class NPC {
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.70)) return false;
     // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
     if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
+    // 特訓資深守衛 / 重裝守衛：受擊 (任意方向) 30% 機率施展「狗熊哆嗦毛」避開 (不受傷也不被擊飛)；施展期間免疫攻擊
+    if (this.role === 'DETENTION_SENIOR' || this.role === 'DETENTION_HEAVY') {
+      if (this.isDodging || this.isBearShaking) return false;
+      if (Math.random() < 0.3) {
+        this.performBearShake(this.lastColliders);
+        this.isChasing = true;
+        return false;
+      }
+    }
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
@@ -1909,17 +1921,36 @@ export class NPC {
     }
   }
 
-  // 第二世界無線電通報：其他守衛目擊時同步最後目擊位置 (自己正看見玩家時不覆寫)
+  // 第二世界無線電通報：其他守衛目擊時同步最後目擊位置 (自己正看見玩家、或循聲察看中時不覆寫)
   public receiveSightingReport(pos: THREE.Vector3) {
-    if (!this.isChasing || this.seesPlayerNow) return;
+    if (!this.isChasing || this.seesPlayerNow || this.isInvestigatingNoise) return;
     this.lastKnownPos.copy(pos);
     this.searchAnchor.copy(pos);
     if (this.lostSightTimer <= 0) this.lostSightTimer = 0.01;
   }
 
+  // 第二世界打鬥聲響：未在追捕的守衛前往聲源察看 (疑惑狀態、以聲源為中心搜索，親眼看見玩家才轉為警戒)
+  // 總教官不受聲響吸引 (避免未目擊即發動衝撞)；回傳是否開始察看
+  public hearNoise(pos: THREE.Vector3): boolean {
+    if (this.isChasing || this.isKnockedDown || this.isPermanentlyKnockedOut || this.role === 'DETENTION_BOSS') return false;
+    if (this.isPaused) this.cancelPause();
+    this.isInvestigatingNoise = true;
+    this.isChasing = true;
+    this.lostSightTimer = 0.01; // 前往聲源 (lastKnownPos) 而非玩家實際位置
+    this.lastKnownPos.copy(pos);
+    this.searchAnchor.copy(pos);
+    if (this.alertState !== 'ALERT') {
+      this.setAlertState('CAUTION');
+      this.cautionTimer = 4.0;
+    }
+    this.rotationY = Math.atan2(pos.x - this.position.x, pos.z - this.position.z);
+    return true;
+  }
+
   // 清除仇恨與追擊狀態
   public resetAggro() {
     this.isChasing = false;
+    this.isInvestigatingNoise = false;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -1943,6 +1974,7 @@ export class NPC {
     this.rotationY = this.initialRotationY;
     this.mesh.rotation.y = this.initialRotationY;
     this.isChasing = false;
+    this.isInvestigatingNoise = false;
     this.resetBikePursuit();
     this.isBurstSprinting = false;
     this.dynamicSpeed = this.speed;
@@ -1955,6 +1987,8 @@ export class NPC {
     this.isPaused = false;
     this.pauseTimer = 0;
     this.isKnockedFlying = false;
+    this.isDodging = false;
+    this.isBearShaking = false;
     this.hitCooldown = 0;
     this.attackCooldown = 0;
     this.freezeTimer = 0;
@@ -2232,8 +2266,9 @@ export class NPC {
       // 1. 視覺發現判定 (正面 90 度視線錐 + 射線無障礙)；全域警戒階段由 DetentionMode 依 seesPlayerNow 彙整
       if (seesPlayer) {
         if (this.isPaused) this.cancelPause();
-        const wasChasing = this.isChasing;
+        const wasChasing = this.isChasing && !this.isInvestigatingNoise;
         this.seesPlayerNow = true;
+        this.isInvestigatingNoise = false;
         this.setAlertState('ALERT');
         this.isChasing = true;
         this.lostSightTimer = 0;
@@ -2693,7 +2728,8 @@ export class NPC {
       }
     }
 
-    // 閃身步老師 (DODGE_TEACHER) 專屬宗師身法邏輯更新
+    // 閃身步老師 (DODGE_TEACHER) 演武計時；身法 (閃身步 / 狗熊哆嗦毛) 推進適用所有會施展身法的角色
+    // (閃身步老師、鐵面總長、特訓資深 / 重裝守衛)
     if (this.role === 'DODGE_TEACHER') {
       // 演武計時器 (若未倒地、未處於對話中、未在施展身法中，每 8~14 秒自主展示身法絕學)
       if (!this.isKnockedDown && !this.isConversing && !this.isDodging && !this.isBearShaking) {
@@ -2708,7 +2744,9 @@ export class NPC {
           }
         }
       }
+    }
 
+    if ((this.isDodging || this.isBearShaking) && !this.isKnockedDown) {
       // 狗熊哆嗦毛連續瞬移中 (連續瞬移 3 次，間隔 0.5s)
       if (this.isBearShaking) {
         this.bearBlinkTimer += delta;
@@ -2721,6 +2759,9 @@ export class NPC {
           this.isBearShaking = false;
           this.isDodging = false;
           this.mesh.rotation.z = 0;
+          if (this.leftArm) this.leftArm.rotation.z = 0;
+          if (this.rightArm) this.rightArm.rotation.z = 0;
+          if (this.headMesh) this.headMesh.rotation.y = 0;
         }
 
         if (this.isBearShaking) {
@@ -2773,7 +2814,8 @@ export class NPC {
           return;
         }
       }
-
+    }
+    if (this.role === 'DODGE_TEACHER') {
       this.updateSkillBubble(delta);
       this.updateAfterimages(delta);
     }

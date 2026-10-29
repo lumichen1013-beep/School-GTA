@@ -1,7 +1,7 @@
 import { soundManager } from '../audio/SoundEffects';
 import type { WeaponType } from '../entities/Player';
 import type { NPCRole } from '../entities/NPC';
-import type { CommissaryItem } from '../ui/HUD';
+import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 
 // 武器切換提示文字 (第一世界 / 第二世界)
@@ -17,6 +17,13 @@ interface RoleDefeatReward {
   banner?: { text: string; duration: number };
   counts?: Array<'student' | 'teacher' | 'dog' | 'bikePatrol' | 'inspector'>;
 }
+// 第二世界特訓賞金：暗殺 (背後暗殺 / 草堆伏擊 / 總教官終結暗殺) 全額，一般攻擊擊倒減半
+interface DetentionBounty {
+  full: number;
+  icon: string;
+  name: string;
+  duration: number;
+}
 const ROLE_DEFEAT_REWARDS: Partial<Record<NPCRole, RoleDefeatReward>> = {
   STUDENT: { reward: 20, counts: ['student'] },
   INSPECTOR: { reward: 40, counts: ['inspector'] },
@@ -25,13 +32,22 @@ const ROLE_DEFEAT_REWARDS: Partial<Record<NPCRole, RoleDefeatReward>> = {
   BANDIT: { reward: 100 },
   DOG: { reward: 120, counts: ['dog'] },
   INSTRUCTOR: { reward: 150, counts: ['inspector', 'teacher'] },
-  PE_TEACHER_BOSS: { reward: 180, banner: { text: '🏸 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', duration: 5000 } },
-  DETENTION_SENIOR: { reward: 100, banner: { text: '💪 擊敗【特訓資深守衛】！獲得特訓賞金 +$100！', duration: 3000 } },
-  DETENTION_WOLF: { reward: 120, banner: { text: '🐺 擊退【特訓警戒犬】！獲得特訓賞金 +$120！', duration: 3000 } },
-  DETENTION_GUARD: { reward: 150, banner: { text: '🛡️ 突破【特訓院守衛】防線！獲得高額賞金 +$150！', duration: 3500 } },
-  DETENTION_HEAVY: { reward: 200, banner: { text: '🏋️ 破除【特訓重裝守衛】霸體！獲得重裝巨額賞金 +$200！', duration: 4000 } },
-  DETENTION_BOSS: { reward: 500, banner: { text: '🎖️ 震撼全院！擊倒特訓總教官【鐵面總長】！獲得傳奇特訓賞金 +$500！', duration: 6000 } }
+  PE_TEACHER_BOSS: { reward: 180, banner: { text: '🏸 震撼勝利！擊倒【大如老師】！獲得獎金 +$180！', duration: 5000 } }
 };
+const DETENTION_BOUNTIES: Partial<Record<NPCRole, DetentionBounty>> = {
+  DETENTION_GUARD: { full: 40, icon: '🛡️', name: '特訓院守衛', duration: 3000 },
+  DETENTION_SENIOR: { full: 35, icon: '💪', name: '特訓資深守衛', duration: 3000 },
+  DETENTION_WOLF: { full: 35, icon: '🐺', name: '特訓警戒犬', duration: 3000 },
+  DETENTION_HEAVY: { full: 55, icon: '🏋️', name: '特訓重裝守衛', duration: 3500 },
+  DETENTION_BOSS: { full: 250, icon: '🎖️', name: '鐵面總長', duration: 6000 }
+};
+
+// 第二世界賞金金額 (暗殺全額、一般攻擊擊倒減半並無條件捨去)
+function getDetentionBounty(role: NPCRole, isTakedown: boolean): number {
+  const b = DETENTION_BOUNTIES[role];
+  if (!b) return 0;
+  return isTakedown ? b.full : Math.floor(b.full / 2);
+}
 
 /**
  * 玩家成長進度：零用錢、擊倒統計、成就旗標、武器解鎖與身法技能
@@ -65,9 +81,10 @@ export class Progression {
 
   private readonly buyCommissaryItem = (item: CommissaryItem) => {
     const { player, hud, wantedSystem } = this.ctx;
-    if (this.cash < item.price) {
+    const price = getCommissaryPrice(item, this.ctx.currentWorldType === 'DETENTION');
+    if (this.cash < price) {
       wantedSystem.showBanner(
-        this.ctx.currentWorldType === 'DETENTION' ? '資金不足！正面擊倒守衛可賺取特訓賞金！' : '零用錢不足！快去探索校園賺錢吧！',
+        this.ctx.currentWorldType === 'DETENTION' ? '資金不足！暗殺守衛可賺取全額特訓賞金！' : '零用錢不足！快去探索校園賺錢吧！',
         2000
       );
       return;
@@ -75,7 +92,7 @@ export class Progression {
 
     this.hasTastedHotFood = true;
     if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onPlayerAte(); // 柴柴聞香跟來討食
-    this.cash -= item.price;
+    this.cash -= price;
     player.hp = Math.min(player.maxHp, player.hp + item.healHp);
     if (item.restoreStamina) {
       player.stamina = player.maxStamina;
@@ -93,8 +110,17 @@ export class Progression {
     this.openCommissary();
   };
 
-  // 記錄擊倒 (統計計數與普通球棒解鎖)，回傳該角色獎金與專屬提示
-  public recordDefeat(role: NPCRole): RoleDefeatReward {
+  // 記錄擊倒 (統計計數與普通球棒解鎖)，回傳該角色獎金與專屬提示；
+  // 第二世界角色依擊倒方式發放特訓賞金 (isTakedown：暗殺全額，否則減半)
+  public recordDefeat(role: NPCRole, isTakedown: boolean = false): RoleDefeatReward {
+    const bounty = DETENTION_BOUNTIES[role];
+    if (bounty) {
+      const reward = getDetentionBounty(role, isTakedown);
+      const text = isTakedown
+        ? `${bounty.icon} 暗殺【${bounty.name}】！獲得全額特訓賞金 +$${reward}！`
+        : `${bounty.icon} 正面擊倒【${bounty.name}】！特訓賞金減半 +$${reward}（暗殺可得 $${bounty.full}）`;
+      return { reward, banner: { text, duration: bounty.duration } };
+    }
     const entry = ROLE_DEFEAT_REWARDS[role] ?? { reward: 20 };
     if (entry.counts) {
       for (const c of entry.counts) {

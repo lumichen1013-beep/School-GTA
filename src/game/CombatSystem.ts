@@ -47,6 +47,13 @@ const EXEC_LEAP_DIST = 4.0;
 const EXEC_LEAP_SIM_TIME = 0.55; // 後空翻模擬秒數 (×0.6 ≈ 0.92 真實秒，於 1.0 秒階段內落地)
 const EXEC_SKID_DIST = 4.0; // 格擋震退距離 (與後空翻相同約 4 個身位)
 const BOSS_DOWN_TIME = 2.0;
+// 第二世界一般攻擊傷害倍率：正面 ×0.6 (背後盲區全額)，總教官另 ×0.5；暗殺不受影響
+const DETENTION_FRONTAL_DMG_MULT = 0.6;
+const DETENTION_BOSS_DMG_MULT = 0.5;
+const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
+// NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
+const NPC_ATTACK_INTERVAL = 0.85;
+const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
 const HIT_STOP_FINISHER = 0.08; // 連段終結技命中停格
@@ -338,10 +345,11 @@ export class CombatSystem {
       target.knockoutSilently();
       detention.takedownCount++;
       soundManager.playPunch();
+      const reward = this.payTakedownBounty(target);
       if (isFromHiding) {
-        wantedSystem.showBanner(`🗡️【刺客教條·掩體暗殺】將 ${target.getRoleTitle()} 拖入${this.execCoverName}無聲刺殺！無人察覺！`, 2500);
+        wantedSystem.showBanner(`🗡️【刺客教條·掩體暗殺】將 ${target.getRoleTitle()} 拖入${this.execCoverName}無聲刺殺！全額賞金 +$${reward}！`, 2500);
       } else {
-        wantedSystem.showBanner(`🥷 潛行擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷)`, 2000);
+        wantedSystem.showBanner(`🥷 潛行擊昏！(無聲排除 ${target.getRoleTitle()}，永久昏迷) 全額賞金 +$${reward}！`, 2000);
       }
       return;
     }
@@ -360,10 +368,11 @@ export class CombatSystem {
       target.knockoutSilently();
       detention.onBossDefeated(target);
       detention.takedownCount++;
+      const reward = this.payTakedownBounty(target);
       wantedSystem.showBanner(
         isFromHiding
-          ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-          : '🏆 狂賀！終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+          ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！全額賞金 +$${reward}！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
+          : `🏆 狂賀！終極暗殺擊破特訓總教官！全額賞金 +$${reward}！掉落【萬能逃脫鑰匙卡】！快前往南大門！`,
         5000
       );
       soundManager.playSchoolBell();
@@ -371,6 +380,14 @@ export class CombatSystem {
       // 傷害與倒地資訊由恢復操控後的 QTE 打擊橫幅呈現，不另發頂部橫幅
       target.knockdownBoss(BOSS_DOWN_TIME);
     }
+  }
+
+  // 暗殺擊倒：發放全額特訓賞金 (提示併入暗殺橫幅)，回傳金額
+  private payTakedownBounty(target: NPC): number {
+    const { progression } = this.ctx;
+    const { reward } = progression.recordDefeat(target.role, true);
+    progression.addCash(reward);
+    return reward;
   }
 
   // 目標受擊後動作 (以命中後真實秒數連續推進，跨越背刺/倒地階段不跳格)：
@@ -598,7 +615,8 @@ export class CombatSystem {
   private resolvePlayerHit(move: KfMove) {
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
     const reach = player.getWeaponReach() * move.reach;
-    const damage = Math.round(player.getWeaponDamage() * move.dmg);
+    const baseDamage = player.getWeaponDamage() * move.dmg;
+    const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
@@ -633,12 +651,17 @@ export class CombatSystem {
       if (npc.position.distanceTo(player.position) >= reach + 0.3) continue;
       if (move.arc > -1 && dist > 0.6 && (dx * _scratchPlayerForward.x + dz * _scratchPlayerForward.z) / dist < move.arc) continue;
       let actualKnockback = knockback;
+      let actualDamage = damage;
 
       // 校園打人：附近同學依個性圍觀 / 起鬨 / 逃跑 / 叫老師 (打強盜可解救被勒索的同學)
       if (this.ctx.currentWorldType === 'CAMPUS') this.ctx.campusLife.onFight(npc);
 
       if (this.ctx.currentWorldType === 'DETENTION') {
+        // 須於觸發警戒 (目標轉身) 前判定是否位於背後盲區
+        const isBehind = isBehindNpc(npc, player.position.x, player.position.z);
         this.ctx.detention.onPlayerAttackedGuard(npc);
+        // 打鬥聲響：附近守衛前往察看
+        this.ctx.detention.emitFightNoise(player.position);
 
         if (npc.role === 'DETENTION_BOSS') {
           if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
@@ -649,19 +672,22 @@ export class CombatSystem {
           }
         }
 
-        // 正面攻擊 (非背後盲區)：技能間隔 0.5 秒且擊退效果減半
-        if (!isBehindNpc(npc, player.position.x, player.position.z)) {
+        // 正面攻擊 (非背後盲區)：傷害 ×0.6、技能間隔 0.5 秒且擊退效果減半；總教官另承受一般攻擊傷害 ×0.5
+        let mult = npc.role === 'DETENTION_BOSS' ? DETENTION_BOSS_DMG_MULT : 1;
+        if (!isBehind) {
+          mult *= DETENTION_FRONTAL_DMG_MULT;
           actualKnockback = knockback * 0.5;
           player.setAttackCooldown(FRONTAL_LOCK);
-          wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！技能間隔 0.5s，擊退力減半！', 1600);
+          wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！', 1600);
         }
+        actualDamage = Math.max(1, Math.round(baseDamage * mult));
       }
 
       this.onPlayerHitLanded(move);
       // 擊退方向：玩家指向目標 (旋身招式可擊中側後方目標)
       if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
       else _scratchImpactDir.copy(_scratchPlayerForward);
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, damage)) {
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage)) {
         this.handleNpcDefeated(npc, 'ATTACK');
       } else {
         wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
@@ -709,7 +735,10 @@ export class CombatSystem {
   // 統一 NPC 擊倒/擊敗結算 (獎金、成就解鎖、通緝與提示)
   public handleNpcDefeated(npc: NPC, source: 'ATTACK' | 'BIKE' | 'FALL' = 'ATTACK') {
     const { progression, wantedSystem, tennisGame } = this.ctx;
-    const { reward, banner } = progression.recordDefeat(npc.role);
+    const isDetention = this.ctx.currentWorldType === 'DETENTION';
+    // 第二世界：一般攻擊 (非暗殺) 擊倒計入正面擊倒數，賞金減半
+    if (isDetention) this.ctx.detention.frontalKoCount++;
+    const { reward, banner } = progression.recordDefeat(npc.role, false);
     if (banner) {
       wantedSystem.showBanner(banner.text, banner.duration);
     }
@@ -722,9 +751,9 @@ export class CombatSystem {
 
     const sourceDesc = source === 'BIKE' ? '遭火柴人自行車強力撞飛' : source === 'FALL' ? '高處摔落' : '倒地';
     wantedSystem.reportCrime(1, `${npc.getRoleTitle()}${sourceDesc}`);
-    // 第二世界 NPC 倒地即永久昏迷，不會復活
-    const reviveNote = this.ctx.currentWorldType === 'DETENTION' ? '(永久昏迷)' : '(10秒後復活)';
-    wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！${reviveNote}`, 3500);
+    // 第二世界 NPC 倒地即永久昏迷，不會復活 (賞金已由專屬橫幅提示)
+    if (isDetention) return;
+    wantedSystem.showBanner(`${npc.getRoleTitle()} ${sourceDesc}！獲得獎金 +$${reward}！(10秒後復活)`, 3500);
   }
 
   // 火柴人自行車高速衝撞 NPC (每幀最多撞飛一人)
@@ -781,9 +810,10 @@ export class CombatSystem {
             if (npc.bossTelegraphGroup) npc.bossTelegraphGroup.visible = false;
             soundManager.playPunch();
             soundManager.playBatHit();
-            wantedSystem.showBanner('💥 遭到總教官狂暴衝撞重創！擊飛！(-30 HP)', 2500);
+            wantedSystem.showBanner(`💥 遭到總教官狂暴衝撞重創！擊飛！(-${BOSS_CHARGE_DAMAGE} HP)`, 2500);
             wantedSystem.notifyAttacked();
-            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, 21, '鐵面總長')) {
+            this.ctx.detention.emitFightNoise(targetPosition);
+            if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, BOSS_CHARGE_DAMAGE, '鐵面總長')) {
               this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
             }
           }
@@ -820,14 +850,21 @@ export class CombatSystem {
       const attackDist = this.getNpcAttackDist(npc);
 
       // 兩個世界皆僅在追捕狀態 (通緝或被激怒) 且進入攻擊距離時發動攻擊，第一世界 NPC 不會無故主動攻擊
-      const shouldAttack = !isSpawnGraceActive && npc.isChasing && distToPlayer <= attackDist;
+      // 循聲察看中的守衛尚未確認敵蹤，不出手
+      const shouldAttack = !isSpawnGraceActive && npc.isChasing && !npc.isInvestigatingNoise && distToPlayer <= attackDist;
       if (!shouldAttack || player.isDead || npc.attackCooldown > 0) continue;
 
-      npc.attackCooldown = 0.85;
+      npc.attackCooldown = this.getNpcAttackInterval(npc);
       // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算
       if (npc.triggerAttackAnimation()) continue;
       this.applyNpcHit(npc, targetPosition);
     }
+  }
+
+  // 第二世界守衛處於警戒 (個體 ALERT 或全域 ALERT 階段) 時出手加快
+  private getNpcAttackInterval(npc: NPC): number {
+    if (this.ctx.currentWorldType !== 'DETENTION') return NPC_ATTACK_INTERVAL;
+    return npc.alertState === 'ALERT' || this.ctx.detention.alertPhase === 'ALERT' ? NPC_ATTACK_INTERVAL_ALERT : NPC_ATTACK_INTERVAL;
   }
 
   private getNpcAttackDist(npc: NPC): number {
@@ -862,6 +899,8 @@ export class CombatSystem {
     }
 
     const specs = npc.getAttackSpecs();
+    // 第二世界打鬥聲響：附近守衛前往察看
+    if (this.ctx.currentWorldType === 'DETENTION') this.ctx.detention.emitFightNoise(targetPosition);
     // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
     if (this.ctx.currentRidingBike) {
       if (player.hitCooldown > 0) return;

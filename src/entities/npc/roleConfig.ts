@@ -34,7 +34,7 @@ const BASE: Omit<NPCRoleConfig, 'maxHp' | 'baseSpeed' | 'jitterScale' | 'chaseSp
   chaseAccelRate: 4.0
 };
 
-// 少年院特訓群：慢速規律巡邏、必定駐足警戒、不持傘
+// 少年院特訓群：慢速規律巡邏、必定駐足警戒、不持傘；潛行優先難度 (血量厚、攻擊力為校園同級約 1.6 倍)
 const DETENTION = { ...BASE, isDetention: true, pauseChance: 1.0, attackRange: 2.0, jitterScale: 0 };
 
 export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
@@ -56,15 +56,15 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 平民學生：速度依移動風格決定
   STUDENT: { ...BASE, maxHp: 112, baseSpeed: 0, jitterScale: 0, chaseSpeed: 0, attackPower: 8, attackRange: 1.6, defaultStyle: null, pauseChance: 0, canCarryUmbrella: true },
   // 特訓教官：防暴盾與指揮棒，慢速巡邏讓玩家潛行可追近背刺
-  DETENTION_GUARD: { ...DETENTION, maxHp: 160, baseSpeed: 1.45, chaseSpeed: 7.6, attackPower: 8, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 },
+  DETENTION_GUARD: { ...DETENTION, maxHp: 260, baseSpeed: 1.45, chaseSpeed: 7.6, attackPower: 13, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 },
   // 特訓資深學長
-  DETENTION_SENIOR: { ...DETENTION, maxHp: 130, baseSpeed: 1.50, chaseSpeed: 8.2, attackPower: 10, defaultStyle: 'OFFICER_PATROL' },
+  DETENTION_SENIOR: { ...DETENTION, maxHp: 200, baseSpeed: 1.50, chaseSpeed: 8.2, attackPower: 16, defaultStyle: 'OFFICER_PATROL' },
   // 重訓霸榜生
-  DETENTION_HEAVY: { ...DETENTION, maxHp: 220, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 13, defaultStyle: 'OFFICER_PATROL' },
-  // 特訓狼犬：脆皮敏捷
-  DETENTION_WOLF: { ...DETENTION, maxHp: 105, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 7, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
+  DETENTION_HEAVY: { ...DETENTION, maxHp: 380, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 21, defaultStyle: 'OFFICER_PATROL' },
+  // 特訓狼犬：敏捷
+  DETENTION_WOLF: { ...DETENTION, maxHp: 260, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 11, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
   // 總教官 Boss【鐵面總長】
-  DETENTION_BOSS: { ...DETENTION, maxHp: 500, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 14, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
+  DETENTION_BOSS: { ...DETENTION, maxHp: 500, baseSpeed: 1.35, chaseSpeed: 7.8, attackPower: 22, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 }
 };
 
 // 平民學生各移動風格數值 (散步、疾走、慢跑、步巡)
