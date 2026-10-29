@@ -247,6 +247,8 @@ export class NPC {
   public alertState: 'NORMAL' | 'CAUTION' | 'ALERT' = 'NORMAL'; // 警戒狀態 (綠/黃/紅)
   public cautionTimer: number = 0;
   public reviveTimer: number = 0;
+  // 倒地改為向前俯臥 (總教官遭背刺後向前踉蹌撲倒)；起身或重置時清除
+  public isDownFaceDown: boolean = false;
 
   // 小 Boss【鐵面總教官】專屬閃身與衝撞硬直機制
   public isBossStunned: boolean = false;
@@ -1406,7 +1408,10 @@ export class NPC {
 
   // 倒地姿勢與貼地高度 (依所在樓層基準)：sideways 為側躺 (犬類、單車)，否則仰躺
   private applyDownPose(sideways: boolean) {
-    if (sideways) {
+    if (this.isDownFaceDown) {
+      this.mesh.rotation.set(Math.PI / 2, 0, -this.rotationY);
+      this.mesh.position.y = this.baseFloorY + 0.25;
+    } else if (sideways) {
       this.mesh.rotation.set(0, this.rotationY, Math.PI / 2);
       this.mesh.position.y = this.baseFloorY + 0.2;
     } else {
@@ -1751,6 +1756,7 @@ export class NPC {
 
   // 玩家死亡重生時完整重置 NPC 至初始狀態 (位置、警戒狀態、巡邏狀態、HP 與肢體)
   public resetToInitialState() {
+    this.isDownFaceDown = false;
     this.position.copy(this.initialPosition);
     this.baseFloorY = this.initialPosition.y; // 被擊飛落到其他樓層後，回到原樓層基準
     this.mesh.position.copy(this.initialPosition);
@@ -2657,6 +2663,7 @@ export class NPC {
         if (this.role === 'DETENTION_BOSS') {
           // 特訓總教官暗殺倒地癱瘓結束：起身恢復戰鬥，保留剩餘血量不回滿血！
           this.isKnockedDown = false;
+          this.isDownFaceDown = false;
           this.isBossStunned = false;
           this.bossStunTimer = 0;
           this.koBadgeSprite.visible = false;

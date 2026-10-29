@@ -261,7 +261,10 @@ export class Player {
   // 暗殺總教官後的後空翻脫離 (朝遠離 Boss 方向翻越約 4 個身位，全程面向 Boss 並留下閃身步殘影)
   public isBackflipping: boolean = false;
   private backflipTimer: number = 0;
-  private readonly backflipDuration: number = 0.6;
+  private backflipDuration: number = 0.6;
+
+  // 暗殺運鏡期間：鎖定移動/跳躍/潛行輸入，且免疫一切傷害與擊飛
+  public isCinematicLocked: boolean = false;
   private backflipSpeed: number = 0;
   private readonly backflipDir: THREE.Vector3 = new THREE.Vector3();
 
@@ -439,7 +442,7 @@ export class Player {
   }
 
   public takeDamage(amount: number, reason: string = '受到傷害'): boolean {
-    if (this.isDead) return false;
+    if (this.isDead || this.isCinematicLocked) return false;
     if (this.isDodging || this.isBearShaking || this.isBackflipping) {
       // 處於閃身/無敵或狗熊哆嗦毛瞬移判定狀態，免疫一切傷害！
       return false;
@@ -474,7 +477,7 @@ export class Player {
     damage: number,
     reason: string = '受到攻擊'
   ): boolean {
-    if (this.isDead) return false;
+    if (this.isDead || this.isCinematicLocked) return false;
     if (this.isDodging || this.isBearShaking || this.isBackflipping) {
       // 處於閃身/無敵狀態，完全規避擊飛與擊退判定！
       return false;
@@ -575,8 +578,8 @@ export class Player {
     this.bearBlinkCount++;
   }
 
-  // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位 ~5.0m，面向 BOSS)
-  public leapAwayFrom(targetPos: THREE.Vector3, jumpDist: number = 4.0) {
+  // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位，面向 BOSS)；duration 為翻轉/滯空的模擬時間
+  public leapAwayFrom(targetPos: THREE.Vector3, jumpDist: number = 4.0, duration: number = 0.6) {
     if (this.isDead) return;
 
     // 遠離 target 的水平方向
@@ -593,6 +596,7 @@ export class Player {
 
     // 水平位移交由一般碰撞處理 (遇牆即停，絕不穿牆)；起跳垂直速度使滯空時間 = 翻轉時間
     this.isBackflipping = true;
+    this.backflipDuration = duration;
     this.backflipTimer = this.backflipDuration;
     this.backflipSpeed = jumpDist / this.backflipDuration;
     this.velocity.y = -this.gravity * this.backflipDuration * 0.5;
@@ -896,13 +900,18 @@ export class Player {
     _playerMoveDir.set(0, 0, 0);
     let analogSpeedScale = 1.0;
 
+    const locked = this.isCinematicLocked;
     const hasVirtualJoystick = input.virtualAxisMagnitude > 0.05;
     const hasKeyboard = !!(input.keys['KeyW'] || input.keys['ArrowUp'] ||
                           input.keys['KeyS'] || input.keys['ArrowDown'] ||
                           input.keys['KeyA'] || input.keys['ArrowLeft'] ||
                           input.keys['KeyD'] || input.keys['ArrowRight']);
+    const wantsSprint = !locked && input.sprint;
+    const wantsJump = !locked && input.jump;
 
-    if (hasVirtualJoystick && !hasKeyboard) {
+    if (locked) {
+      // 暗殺運鏡鎖定：不讀取移動輸入
+    } else if (hasVirtualJoystick && !hasKeyboard) {
       // 360 度真類比連續方向 (推桿 Y 負為前進，X 正為右移)
       _playerMoveDir.addScaledVector(forwardVec, -input.virtualAxisY);
       _playerMoveDir.addScaledVector(rightVec, input.virtualAxisX);
@@ -930,12 +939,12 @@ export class Player {
     // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）。
     // 手機版 (特訓院)：預設為潛行姿態，搖桿推至半徑 90% 內 (含靜止不動) 皆維持潛行，超過 90% 才改為一般步行，按「跑」則取消潛行改為衝刺。
     // 躲入草堆掩體時一律保持潛行，不受搖桿影響。
-    const isSneakTriggered = input.mouseButtons.right || !!(
+    const isSneakTriggered = !locked && (input.mouseButtons.right || !!(
       input.keys['ControlLeft'] ||
       input.keys['ControlRight']
-    );
-    const isJoystickSneak = input.isTouchDevice && input.joystickSneakEnabled && !hasKeyboard && !this.isSwimming &&
-      input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS && !(input.sprint && isMoving);
+    ));
+    const isJoystickSneak = !locked && input.isTouchDevice && input.joystickSneakEnabled && !hasKeyboard && !this.isSwimming &&
+      input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS && !(wantsSprint && isMoving);
     this.isSneaking = this.isHidingInCover || isSneakTriggered || isJoystickSneak;
 
     // 2. 衝刺、潛行與體力消耗 (Sprint, Sneak & Stamina)
@@ -943,7 +952,7 @@ export class Player {
     // 是否處於衝刺：於決定速度的分支直接記錄 (搖桿類比縮放後速度不等於 sprintSpeed，不可用速度比對)
     let sprintActive = false;
     if (this.isSneaking) {
-      if (input.sprint && isMoving && this.stamina > 5) {
+      if (wantsSprint && isMoving && this.stamina > 5) {
         // 刺客疾速潛行 (Crouch-Sprint 疾速低姿滑行 6.5 m/s，依舊 0 噪音，消耗極少體力)
         currentSpeed = 6.5;
         this.stamina = Math.max(0, this.stamina - delta * 12.0);
@@ -954,14 +963,14 @@ export class Player {
       }
     } else {
       if (this.isSwimming) {
-        currentSpeed = input.sprint && this.stamina > 5 ? this.swimSprintSpeed : this.swimSpeed;
-        if (input.sprint && isMoving && this.stamina > 5) {
+        currentSpeed = wantsSprint && this.stamina > 5 ? this.swimSprintSpeed : this.swimSpeed;
+        if (wantsSprint && isMoving && this.stamina > 5) {
           sprintActive = true;
           this.stamina = Math.max(0, this.stamina - delta * 14.0);
         } else {
           this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15.0);
         }
-      } else if (input.sprint && isMoving && this.stamina > 5) {
+      } else if (wantsSprint && isMoving && this.stamina > 5) {
         currentSpeed = this.sprintSpeed;
         sprintActive = true;
         this.stamina = Math.max(0, this.stamina - delta * 24.0);
@@ -1039,7 +1048,7 @@ export class Player {
 
       if (this.isSwimming) {
         // 水中浮力與踏水跳躍物理
-        if (input.jump) {
+        if (wantsJump) {
           // 水中踏水躍起 / 攀上池畔
           this.velocity.y = 6.8;
           this.isGrounded = false;
@@ -1060,7 +1069,7 @@ export class Player {
         // 重力與跳躍
         if (this.isGrounded) {
           this.velocity.y = 0;
-          if (input.jump) {
+          if (wantsJump) {
             this.velocity.y = this.jumpStrength;
             this.isGrounded = false;
             soundManager.playJump();

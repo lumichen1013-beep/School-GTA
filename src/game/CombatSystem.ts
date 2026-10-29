@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
-import { queryColliders } from '../physics/aabb';
+import { queryColliders, isBlockedXZ } from '../physics/aabb';
+import { requestCameraShake } from '../effects/cameraShake';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
 import type { GameContext } from './GameContext';
@@ -12,68 +13,322 @@ const _scratchBikeForward = new THREE.Vector3();
 const _scratchBikeSideVec = new THREE.Vector3();
 const _scratchBikeLaunchDir = new THREE.Vector3();
 const _separationNear: CollidableBox[] = [];
+const _scratchExecLook = new THREE.Vector3();
+const _scratchExecEuler = new THREE.Euler();
+
+// 總教官暗殺運鏡：背刺 → 倒地 → 後空翻 → 落地收尾，各階段以真實秒數計時並套用固定模擬倍率
+type ExecPhase = 'NONE' | 'STAB' | 'FALL' | 'FLIP' | 'LAND';
+type ActiveExecPhase = Exclude<ExecPhase, 'NONE'>;
+const EXEC_NEXT: Record<ActiveExecPhase, ExecPhase> = { STAB: 'FALL', FALL: 'FLIP', FLIP: 'LAND', LAND: 'NONE' };
+const EXEC_TIME_SCALE: Record<ActiveExecPhase, number> = { STAB: 0.25, FALL: 0.35, FLIP: 0.6, LAND: 1.0 };
+const EXEC_DURATION_NORMAL: Record<ActiveExecPhase, number> = { STAB: 0.8, FALL: 0.8, FLIP: 1.0, LAND: 0.5 };
+const EXEC_DURATION_FINAL: Record<ActiveExecPhase, number> = { STAB: 1.0, FALL: 1.4, FLIP: 1.0, LAND: 0.5 };
+const EXEC_IMPACT_AT = 0.3; // 背刺命中時間點 (真實秒，終結一擊 +0.1)
+const EXEC_HIT_STOP = 0.06; // 命中瞬間停格 (真實秒)
+const EXEC_HIT_STOP_SCALE = 0.02;
+const EXEC_SHOT_DISTANCE = 5.5; // 側面機位距離 (終結一擊 6.5)
+const EXEC_SHOT_DOLLY = 0.5; // 倒地階段緩慢後拉
+const EXEC_FINAL_ORBIT = THREE.MathUtils.degToRad(20); // 終結一擊整段緩慢環繞
+const EXEC_FOCUS_TO_BOSS = 0.35; // 倒地階段視線往總教官偏移比例
+const EXEC_STAGGER_DIST = 0.45; // 總教官向前踉蹌距離
+const EXEC_LEAP_DIST = 4.0;
+const EXEC_LEAP_SIM_TIME = 0.55; // 後空翻模擬秒數 (×0.6 ≈ 0.92 真實秒，於 1.0 秒階段內落地)
+const BOSS_DOWN_TIME = 2.0; // 總教官倒地秒數 (自玩家恢復操控起算)
 
 /**
  * 戰鬥系統：玩家攻擊判定、背後暗殺與慢動作特寫、NPC 擊倒結算、單車衝撞、NPC 攻擊玩家與角色推擠
  */
 export class CombatSystem {
-  // 慢動作特寫與時間膨脹 (Bullet Time & Boss Cinematic Execution)
-  private bulletTimeTimer: number = 0;
-  private bulletTimeDuration: number = 0;
-  private bulletTimeScale: number = 0.15;
-  private bossJumpDelayTimer: number = 0;
-  private isBossLeaping: boolean = false;
-  private readonly bossJumpTargetPos = new THREE.Vector3();
+  // 總教官暗殺運鏡狀態機
+  private execPhase: ExecPhase = 'NONE';
+  private execPhaseTime: number = 0; // 本階段已經過真實秒數
+  private execElapsed: number = 0; // 整段已經過真實秒數
+  private execDurations: Record<ActiveExecPhase, number> = EXEC_DURATION_NORMAL;
+  private execTarget: NPC | null = null;
+  private execIsFinal: boolean = false;
+  private execFromHiding: boolean = false;
+  private execImpactDone: boolean = false;
+  private execHitStop: number = 0;
+  private execStaggered: number = 0;
+  private execBossLanded: boolean = false;
+  private execFallRatio: number = 0; // 總教官倒地程度 (0 站立 ~ 1 俯臥)
+  private readonly execStrikeDir = new THREE.Vector3();
+  private damageText: THREE.Sprite | null = null;
   private wasBossWindingUp: boolean = false;
   private wasBossStunned: boolean = false;
 
   constructor(private readonly ctx: GameContext) {}
 
-  // 切換世界時清除慢動作與暗殺後跳計時，避免在另一個世界觸發
+  // 切換世界時中止暗殺運鏡，避免在另一個世界延續
   public resetTransientState() {
-    this.bulletTimeTimer = 0;
-    this.bossJumpDelayTimer = 0;
-    this.isBossLeaping = false;
+    if (this.execPhase !== 'NONE') this.finishExecution();
   }
 
-  // 套用慢動作時間膨脹後的模擬時間步長
+  // 暗殺運鏡進行中：鎖定玩家操控，NPC 不攻擊玩家
+  public get isExecutionActive(): boolean {
+    return this.execPhase !== 'NONE';
+  }
+
+  // 推進暗殺運鏡階段 (真實時間) 並回傳套用時間倍率後的模擬時間步長
   public scaleDelta(rawDelta: number): number {
-    if (this.bulletTimeTimer <= 0) return rawDelta;
-    this.bulletTimeTimer -= rawDelta;
-    const progress = Math.max(0, this.bulletTimeTimer / this.bulletTimeDuration);
-    // 特寫打擊慢動作平滑曲線：前期強烈時間膨脹，末期順滑恢復標準時間
-    const currentScale = THREE.MathUtils.lerp(1.0, this.bulletTimeScale, Math.pow(progress, 0.7));
-    return rawDelta * currentScale;
+    if (this.execPhase === 'NONE') return rawDelta;
+    this.execPhaseTime += rawDelta;
+    this.execElapsed += rawDelta;
+    let phase: ExecPhase = this.execPhase;
+    while (phase !== 'NONE' && this.execPhaseTime >= this.execDurations[phase]) {
+      this.execPhaseTime -= this.execDurations[phase];
+      phase = EXEC_NEXT[phase];
+      this.enterExecPhase(phase);
+    }
+    if (phase === 'NONE') return rawDelta;
+
+    const impactAt = EXEC_IMPACT_AT + (this.execIsFinal ? 0.1 : 0);
+    if (phase === 'STAB' && !this.execImpactDone && this.execPhaseTime >= impactAt) {
+      this.applyExecutionImpact();
+    }
+    if (this.execHitStop > 0) {
+      this.execHitStop -= rawDelta;
+      return rawDelta * EXEC_HIT_STOP_SCALE;
+    }
+    return rawDelta * EXEC_TIME_SCALE[phase];
   }
 
-  // 暗殺動畫播畢後玩家朝遠離 BOSS 方向後空翻跳離 4 個身位 (約 4m，留下閃身步殘影)；
-  // 起跳與落地時玩家與鏡頭都面向 BOSS (鏡頭置於玩家正後方)
-  public updateBossLeap(rawDelta: number) {
+  // 每幀於 NPC 更新之後、鏡頭更新之前呼叫：覆寫總教官倒地動作、傷害數字與運鏡機位
+  public updateExecution(rawDelta: number) {
+    const target = this.execTarget;
+    if (this.execPhase === 'NONE' || !target) return;
     const { player, cameraCtrl } = this.ctx;
-    if (this.bossJumpDelayTimer > 0) {
-      this.bossJumpDelayTimer -= rawDelta;
-      if (this.bossJumpDelayTimer <= 0) {
-        this.bossJumpDelayTimer = 0;
-        player.leapAwayFrom(this.bossJumpTargetPos, 4.0);
-        cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
-        this.isBossLeaping = true;
-      }
+
+    if (this.execImpactDone) {
+      this.updateExecutionBossPose(target);
+      // 倒地倒數凍結至玩家恢復操控為止 (起身與 3 秒護盾皆自恢復操控後起算)
+      if (!target.isPermanentlyKnockedOut) target.reviveTimer = BOSS_DOWN_TIME;
+    }
+    this.updateDamageText(target);
+
+    if (this.execPhase === 'LAND') {
+      const t = Math.min(1, this.execPhaseTime / this.execDurations.LAND);
+      cameraCtrl.blendExecutionToBehind(player.position, player.rotationY + Math.PI, t, rawDelta);
       return;
     }
-    if (this.isBossLeaping && !player.isBackflipping) {
-      this.isBossLeaping = false;
-      if (player.isDead) return;
-      // 落地：重新對準 BOSS 目前位置
-      const boss = this.ctx.npcs.find((n) => n.role === 'DETENTION_BOSS');
-      const focus = boss ? boss.position : this.bossJumpTargetPos;
-      const dx = focus.x - player.position.x;
-      const dz = focus.z - player.position.z;
+
+    // 視線：倒地階段逐漸偏向總教官，其餘階段看玩家與總教官目前位置的中點
+    // (總教官倒下後以身體中心計算，俯臥身軀沿打擊方向延伸約 0.9m)
+    const look = _scratchExecLook.copy(target.position).addScaledVector(this.execStrikeDir, 0.9 * this.execFallRatio);
+    look.add(player.position).multiplyScalar(0.5);
+    let dolly = 0;
+    if (this.execPhase === 'FALL') {
+      const u = this.execPhaseTime / this.execDurations.FALL;
+      const k = u * u * (3 - 2 * u);
+      dolly = EXEC_SHOT_DOLLY * k;
+      look.lerp(target.position, EXEC_FOCUS_TO_BOSS * k);
+      look.addScaledVector(this.execStrikeDir, 0.9 * this.execFallRatio * EXEC_FOCUS_TO_BOSS * k);
+    } else if (this.execPhase === 'FLIP') {
+      dolly = EXEC_SHOT_DOLLY;
+    }
+    let orbit = 0;
+    if (this.execIsFinal) {
+      const d = this.execDurations;
+      const u = Math.min(1, this.execElapsed / (d.STAB + d.FALL + d.FLIP));
+      orbit = EXEC_FINAL_ORBIT * u * u * (3 - 2 * u);
+    }
+    cameraCtrl.updateExecutionShot(dolly, orbit, look, rawDelta);
+  }
+
+  private startExecution(target: NPC, isFinal: boolean, isFromHiding: boolean) {
+    const { player, cameraCtrl, hud } = this.ctx;
+    this.execTarget = target;
+    this.execIsFinal = isFinal;
+    this.execFromHiding = isFromHiding;
+    this.execDurations = isFinal ? EXEC_DURATION_FINAL : EXEC_DURATION_NORMAL;
+    this.execImpactDone = false;
+    this.execHitStop = 0;
+    this.execStaggered = 0;
+    this.execBossLanded = false;
+    this.execFallRatio = 0;
+    this.execElapsed = 0;
+
+    this.execStrikeDir.subVectors(target.position, player.position).setY(0);
+    if (this.execStrikeDir.lengthSq() < 0.01) this.execStrikeDir.set(0, 0, 1);
+    else this.execStrikeDir.normalize();
+
+    // 面向總教官出刀，鎖定操控並免疫傷害
+    player.rotationY = Math.atan2(this.execStrikeDir.x, this.execStrikeDir.z);
+    player.mesh.rotation.y = player.rotationY;
+    player.isCinematicLocked = true;
+    player.attack();
+
+    const d = this.execDurations;
+    const orbit = isFinal ? EXEC_FINAL_ORBIT : 0;
+    cameraCtrl.beginExecutionShot(player.position, target.position, isFinal ? EXEC_SHOT_DISTANCE + 1.0 : EXEC_SHOT_DISTANCE, EXEC_SHOT_DOLLY, orbit, this.ctx.activeColliders);
+    // 電影黑邊持續至落地收尾結束
+    const qteTitle = isFinal
+      ? (isFromHiding ? '🗡️【刺客教條·草堆終結】' : '🗡️【刺客教條·終極處決】')
+      : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
+    const qteSub = isFinal
+      ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
+      : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${Math.max(0, target.hp - 100)}/${target.maxHp}，總教官倒地癱瘓 2 秒！)`;
+    hud.triggerCinematicExecution(qteTitle, qteSub, d.STAB + d.FALL + d.FLIP + d.LAND);
+
+    this.execPhase = 'STAB';
+    this.execPhaseTime = 0;
+  }
+
+  private enterExecPhase(next: ExecPhase) {
+    const { player, cameraCtrl } = this.ctx;
+    const target = this.execTarget;
+    // 保險：任何情況下都確保命中結算已發生
+    if (!this.execImpactDone) this.applyExecutionImpact();
+    this.execPhase = next;
+    if (!target) return;
+
+    if (next === 'FALL') {
+      this.showDamageText(target);
+    } else if (next === 'FLIP') {
+      player.leapAwayFrom(target.position, EXEC_LEAP_DIST, EXEC_LEAP_SIM_TIME);
+    } else if (next === 'LAND') {
+      // 落地面向總教官，鏡頭自運鏡機位平滑過渡至玩家正後方
+      const dx = target.position.x - player.position.x;
+      const dz = target.position.z - player.position.z;
       if (dx * dx + dz * dz > 0.0001) {
         player.rotationY = Math.atan2(dx, dz);
         player.mesh.rotation.y = player.rotationY;
       }
-      cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
+      if (this.damageText) this.damageText.visible = false;
+      cameraCtrl.markExecutionBlendStart();
+    } else if (next === 'NONE') {
+      this.finishExecution();
     }
+  }
+
+  // 背刺命中：停格、震動與音效，結算 100 傷害並讓總教官進入倒地 (倒地動作由運鏡覆寫)
+  private applyExecutionImpact() {
+    const target = this.execTarget;
+    this.execImpactDone = true;
+    if (!target) return;
+    const { wantedSystem, detention } = this.ctx;
+    const isFromHiding = this.execFromHiding;
+    this.execHitStop = EXEC_HIT_STOP;
+    soundManager.playCinematicExecutionHit();
+    requestCameraShake(0.55);
+
+    // 每次精確造成 100 傷害，500 HP 需暗殺 5 次才能擊破
+    target.isBossStunned = false;
+    target.bossStunTimer = 0;
+    target.isDownFaceDown = true;
+    target.applyAssassinationDamage(100);
+
+    if (target.hp <= 0) {
+      target.knockoutSilently();
+      detention.onBossDefeated(target);
+      detention.takedownCount++;
+      wantedSystem.showBanner(
+        isFromHiding
+          ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
+          : '🏆 狂賀！終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
+        5000
+      );
+      soundManager.playSchoolBell();
+    } else {
+      target.knockdownBoss(BOSS_DOWN_TIME);
+      wantedSystem.showBanner(
+        isFromHiding
+          ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`
+          : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`,
+        3000
+      );
+    }
+  }
+
+  // 總教官受擊後動作：命中微前傾 → 倒地階段向前踉蹌 (遇牆停止) → 向前撲倒為俯臥倒地姿勢
+  private updateExecutionBossPose(target: NPC) {
+    let tilt: number;
+    if (this.execPhase === 'STAB') {
+      tilt = 0.12;
+    } else if (this.execPhase === 'FALL') {
+      const s = Math.min(1, this.execPhaseTime / (this.execDurations.FALL * 0.75));
+      if (s < 0.35) {
+        const k = s / 0.35;
+        tilt = 0.12 + 0.23 * Math.sin(k * Math.PI * 0.5);
+        this.staggerBoss(target, EXEC_STAGGER_DIST * Math.sin(k * Math.PI * 0.5));
+      } else {
+        const k = (s - 0.35) / 0.65;
+        tilt = 0.35 + (Math.PI / 2 - 0.35) * k * k;
+        this.staggerBoss(target, EXEC_STAGGER_DIST);
+      }
+      if (s >= 1 && !this.execBossLanded) {
+        this.execBossLanded = true;
+        requestCameraShake(0.35);
+        soundManager.playPunch();
+      }
+    } else {
+      tilt = Math.PI / 2;
+    }
+    this.execFallRatio = tilt / (Math.PI / 2);
+    target.mesh.quaternion.setFromEuler(_scratchExecEuler.set(tilt, target.rotationY, 0, 'YXZ'));
+    target.mesh.position.set(target.position.x, target.baseFloorY + 0.25 * (tilt / (Math.PI / 2)), target.position.z);
+  }
+
+  // 沿打擊方向推移總教官至指定累計距離 (遇牆即停)
+  private staggerBoss(target: NPC, dist: number) {
+    const step = dist - this.execStaggered;
+    if (step <= 0) return;
+    this.execStaggered = dist;
+    const nx = target.position.x + this.execStrikeDir.x * step;
+    const nz = target.position.z + this.execStrikeDir.z * step;
+    if (!isBlockedXZ(this.ctx.activeColliders, nx, nz, 0.45, target.position.y, 0.3, 1.6)) {
+      target.position.x = nx;
+      target.position.z = nz;
+    }
+  }
+
+  // 結束暗殺運鏡：恢復操控與一般鏡頭 (總教官倒地倒數自此起算)
+  private finishExecution() {
+    const { player, cameraCtrl } = this.ctx;
+    this.execPhase = 'NONE';
+    this.execPhaseTime = 0;
+    this.execHitStop = 0;
+    this.execTarget = null;
+    player.isCinematicLocked = false;
+    if (this.damageText) this.damageText.visible = false;
+    cameraCtrl.endExecutionShot(player.position, player.rotationY + Math.PI);
+  }
+
+  // 總教官頭頂浮起的傷害數字 (首次使用時建立，之後重複使用)
+  private showDamageText(target: NPC) {
+    if (!this.damageText) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      const g = canvas.getContext('2d')!;
+      g.font = '900 96px "Segoe UI", sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.lineWidth = 10;
+      g.strokeStyle = '#1f0a0a';
+      g.strokeText('-100', 128, 64);
+      g.fillStyle = '#ff3b30';
+      g.fillText('-100', 128, 64);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter;
+      this.damageText = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+      this.damageText.scale.set(1.6, 0.8, 1);
+      this.damageText.renderOrder = 999;
+    }
+    if (this.damageText.parent !== this.ctx.engine.scene) this.ctx.engine.scene.add(this.damageText);
+    this.damageText.visible = true;
+    this.updateDamageText(target);
+  }
+
+  // 傷害數字於倒地與後空翻階段緩慢上浮，後段淡出
+  private updateDamageText(target: NPC) {
+    const sprite = this.damageText;
+    if (!sprite || !sprite.visible) return;
+    const d = this.execDurations;
+    const shown = this.execPhase === 'FALL' ? this.execPhaseTime : d.FALL + this.execPhaseTime;
+    const u = Math.min(1, shown / (d.FALL + d.FLIP));
+    sprite.position.set(target.position.x, target.baseFloorY + 1.9 + u * 0.5, target.position.z);
+    (sprite.material as THREE.SpriteMaterial).opacity = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
   }
 
   // 滑鼠左鍵 / 手機攻擊鍵：投籃蓄力 / 單車鳴鈴 / 背後暗殺 / 揮動武器攻擊
@@ -90,8 +345,8 @@ export class CombatSystem {
       this.ctx.currentRidingBike.ringBell();
       return;
     }
-    // 若玩家處於攻擊間隔冷卻中，不執行攻擊
-    if (!player.canAttack) return;
+    // 暗殺運鏡期間鎖定攻擊；若玩家處於攻擊間隔冷卻中，不執行攻擊
+    if (this.execPhase !== 'NONE' || !player.canAttack) return;
 
     // 第二世界：若處於守衛身後觸發暗殺擊昏
     const cqcTarget = this.ctx.detention.nearbyCqcTarget;
@@ -173,7 +428,7 @@ export class CombatSystem {
 
   // 潛行背後暗殺擊昏 / 刺客教條草堆伏擊
   private performCqcTakedown() {
-    const { player, wantedSystem, hud, cameraCtrl, detention } = this.ctx;
+    const { player, wantedSystem, hud, detention } = this.ctx;
     const target = detention.nearbyCqcTarget;
     if (!target || target.isKnockedDown || player.isDead) return;
     const isFromHiding = player.isHidingInCover;
@@ -193,61 +448,9 @@ export class CombatSystem {
         return;
       }
 
-      player.attack();
-
-      const isFinalBlow = (target.hp - 100) <= 0;
-      const bulletDuration = isFinalBlow ? 1.5 : 0.95;
-      this.bulletTimeTimer = bulletDuration;
-      this.bulletTimeDuration = bulletDuration;
-      this.bulletTimeScale = isFinalBlow ? 0.08 : 0.16;
-
-      soundManager.playCinematicExecutionHit();
-      cameraCtrl.triggerCinematicExecution(target.position, player.position, bulletDuration, isFinalBlow, this.ctx.activeColliders);
-
-      // 受創向外踉蹌微推
-      _scratchImpactDir.subVectors(target.position, player.position).setY(0);
-      if (_scratchImpactDir.lengthSq() < 0.01) _scratchImpactDir.set(0, 0, 1);
-      else _scratchImpactDir.normalize();
-      target.position.addScaledVector(_scratchImpactDir, 0.45);
-      target.mesh.position.copy(target.position);
-
-      // 每次精確造成 100 傷害，500 HP 需暗殺 5 次才能擊破
-      target.isBossStunned = false;
-      target.bossStunTimer = 0;
-      target.applyAssassinationDamage(100);
-
-      const qteTitle = isFinalBlow
-        ? (isFromHiding ? '🗡️【刺客教條·草堆終結】' : '🗡️【刺客教條·終極處決】')
-        : (isFromHiding ? '🗡️【刺客教條·掩體突襲】' : '⚡【弱點破甲暴擊】');
-      const qteSub = isFinalBlow
-        ? '徹底擊潰特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！'
-        : `破除防暴護甲！造成 100 重傷！(剩餘 HP: ${target.hp}/${target.maxHp}，總教官倒地癱瘓 2 秒！)`;
-      hud.triggerCinematicExecution(qteTitle, qteSub, bulletDuration);
-
-      if (target.hp <= 0) {
-        target.knockoutSilently();
-        detention.onBossDefeated(target);
-        detention.takedownCount++;
-        wantedSystem.showBanner(
-          isFromHiding
-            ? `🗡️【刺客教條·掩體致命突襲】一擊終結特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！`
-            : '🏆 狂賀！終極暗殺擊破特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！',
-          5000
-        );
-        soundManager.playSchoolBell();
-      } else {
-        // 暗殺 BOSS 後，BOSS 倒地癱瘓 2 秒不能動
-        target.knockdownBoss(2.0);
-        wantedSystem.showBanner(
-          isFromHiding
-            ? `🗡️【掩體突襲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`
-            : `⚡【破甲重創】造成 100 傷害！(剩餘 HP: ${target.hp}/${target.maxHp}) 總教官倒地癱瘓 2 秒！`,
-          3000
-        );
-      }
-
-      this.bossJumpDelayTimer = bulletDuration;
-      this.bossJumpTargetPos.copy(target.position);
+      // 命中前維持硬直，避免慢動作期間總教官恢復行動
+      target.bossStunTimer = Math.max(target.bossStunTimer, 1.0);
+      this.startExecution(target, target.hp - 100 <= 0, isFromHiding);
     } else {
       target.knockoutSilently();
       detention.takedownCount++;
@@ -320,6 +523,8 @@ export class CombatSystem {
 
   // NPC 攻擊玩家判定 (含總教官衝撞命中、預警/眩暈提示)
   public updateNpcAttacks(targetPosition: THREE.Vector3, isSpawnGraceActive: boolean) {
+    // 暗殺運鏡期間其他守衛暫停對玩家出手
+    if (this.execPhase !== 'NONE') return;
     const { player, wantedSystem } = this.ctx;
     for (const npc of this.ctx.npcs) {
       if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
