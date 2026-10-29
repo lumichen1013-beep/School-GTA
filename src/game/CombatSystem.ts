@@ -368,12 +368,19 @@ export class CombatSystem {
       }
 
       const specs = npc.getAttackSpecs();
+      // 騎車中被攻擊：只扣血不擊飛、不摔車 (沿用受擊保護時間避免連續秒殺)
       if (this.ctx.currentRidingBike) {
-        this.ctx.forceDismount();
-        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}猛烈衝擊，被擊飛摔下火柴人自行車！`, 2500);
-      } else {
-        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
+        if (player.hitCooldown > 0) continue;
+        player.hitCooldown = 0.55;
+        soundManager.playPunch();
+        wantedSystem.showBanner(`遭到${npc.getRoleTitle()}攻擊！穩住車身繼續騎行！`, 1500);
+        wantedSystem.notifyAttacked();
+        if (player.takeDamage(specs.damage, npc.getRoleTitle())) {
+          this.ctx.handlePlayerDeath(`被${npc.getRoleTitle()}逮捕擊倒！`);
+        }
+        continue;
       }
+      wantedSystem.showBanner(`遭到${npc.getRoleTitle()}重擊擊飛！`, 1500);
 
       wantedSystem.notifyAttacked();
       if (player.launchFlying(_scratchImpactDir, specs.hForce, specs.vForce, specs.damage, npc.getRoleTitle())) {

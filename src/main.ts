@@ -644,6 +644,8 @@ class SchoolGTASandbox implements GameContext {
       this.player.position.copy(targetPosition);
       this.player.updateSkillBubble(delta);
       this.player.updateUmbrella(isRaining, true, this.currentWorldType);
+      // 騎車時不走步行更新：受擊保護計時於此遞減 (騎車被攻擊只扣血不摔車)
+      if (this.player.hitCooldown > 0) this.player.hitCooldown -= delta;
 
       // 更新非騎乘中之所有單車 (套用重力與貼地，防止懸空)
       if (isCampus) {
