@@ -250,7 +250,8 @@ export function getHpBarResources() {
 export function getHpBarMaterial(hex: number): THREE.MeshBasicMaterial {
   let mat = hpBarMats.get(hex);
   if (!mat) {
-    mat = markShared(new THREE.MeshBasicMaterial({ color: hex }));
+    // 深度偏移把血條往鏡頭方向推：遠距離深度精度不足時也穩定疊在黑色底框之上，不會與底框閃爍互搶
+    mat = markShared(new THREE.MeshBasicMaterial({ color: hex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
     hpBarMats.set(hex, mat);
   }
   return mat;

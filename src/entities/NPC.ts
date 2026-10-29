@@ -413,7 +413,8 @@ export class NPC {
 
     // 2. 綠色/黃色/紅色動態血條 (錨點設在左側，縮放時從左向右展開；狀態色以切換共用材質呈現)
     this.hpBarMesh = new THREE.Mesh(hpRes.barGeo, getHpBarMaterial(0x2ecc71));
-    this.hpBarMesh.position.set(-0.40, 0, 0.01);
+    // 血條前移 0.03：前後表面都不與底框共面 (原 0.01 時背面與底框背面重疊造成 Z-fighting 閃爍)
+    this.hpBarMesh.position.set(-0.40, 0, 0.03);
     this.hpBarFrame.add(this.hpBarMesh);
 
     // 3. 昏睡倒地狀態告示牌 (CanvasTexture 呈現動態倒數秒數)
