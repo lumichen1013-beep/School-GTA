@@ -228,7 +228,7 @@ class SchoolGTASandbox implements GameContext {
       }
     };
     this.hud.onWeatherToggle = () => {
-      this.weatherSystem.cycleWeather(true);
+      this.weatherSystem.cycleWeather();
     };
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
@@ -452,7 +452,7 @@ class SchoolGTASandbox implements GameContext {
       } else if (e.code === 'KeyK') {
         hud.toggleControlsGuide();
       } else if (e.code === 'KeyP') {
-        this.weatherSystem.cycleWeather(true);
+        this.weatherSystem.cycleWeather();
       } else if (e.code === 'Escape') {
         if (hud.isFullMapOpen) hud.closeFullMap();
         if (hud.isCommissaryOpen) hud.closeCommissary();

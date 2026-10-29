@@ -137,6 +137,27 @@ const WEATHER_PRESETS: Record<WeatherType, WeatherPreset> = {
 
 const WEATHER_ORDER: WeatherType[] = ['SUNNY', 'RAIN', 'THUNDERSTORM', 'FOG', 'SUNSET'];
 
+// 自然天氣：加權隨機挑選下一種天氣與各自持續秒數 [最短, 最長]；雨天較短且不會連續兩段雨天
+const AUTO_WEATHER_WEIGHTS: Record<WeatherType, number> = { SUNNY: 40, SUNSET: 20, FOG: 15, RAIN: 17, THUNDERSTORM: 8 };
+const AUTO_WEATHER_DURATION: Record<WeatherType, [number, number]> = {
+  SUNNY: [130, 180], SUNSET: [110, 150], FOG: [90, 130], RAIN: [70, 110], THUNDERSTORM: [50, 80]
+};
+const isRainy = (w: WeatherType) => w === 'RAIN' || w === 'THUNDERSTORM';
+
+function pickAutoWeather(current: WeatherType): WeatherType {
+  let total = 0;
+  for (const w of WEATHER_ORDER) {
+    if (w !== current && !(isRainy(current) && isRainy(w))) total += AUTO_WEATHER_WEIGHTS[w];
+  }
+  let roll = Math.random() * total;
+  for (const w of WEATHER_ORDER) {
+    if (w === current || (isRainy(current) && isRainy(w))) continue;
+    roll -= AUTO_WEATHER_WEIGHTS[w];
+    if (roll < 0) return w;
+  }
+  return 'SUNNY';
+}
+
 // 模組頂層靜態共享 Scratch 色彩物件 (0-GC，完全避免 per-frame new THREE.Color)
 const _fromSkyColor = new THREE.Color();
 const _toSkyColor = new THREE.Color();
@@ -170,7 +191,7 @@ export class WeatherSystem {
   private toRainCount: number = 0;
   private currentRainCount: number = 0;
 
-  // 自然天氣循環計時器 (每 120~180 秒隨機切換)
+  // 自然天氣計時器 (持續秒數依當前天氣隨機決定)
   private autoCycleTimer: number = 0;
   private autoCycleInterval: number = 140.0;
 
@@ -221,7 +242,6 @@ export class WeatherSystem {
 
     // 2. 初始化初始天氣狀態 (SUNNY)
     this.setWeather('SUNNY', false, false);
-    this.autoCycleInterval = 130.0 + Math.random() * 50.0;
   }
 
   public getCurrentPreset(): WeatherPreset {
@@ -229,17 +249,22 @@ export class WeatherSystem {
   }
 
   // 手動循環切換下一種天氣 (按 [P] 鍵或點擊 HUD 天氣按鈕)
-  public cycleWeather(isManual: boolean = true) {
+  public cycleWeather() {
     const currentIdx = WEATHER_ORDER.indexOf(this.targetWeather);
     const nextIdx = (currentIdx + 1) % WEATHER_ORDER.length;
-    const nextWeather = WEATHER_ORDER[nextIdx];
-    this.setWeather(nextWeather, true, isManual);
+    this.setWeather(WEATHER_ORDER[nextIdx], true, true);
   }
 
   // 設定目標天氣 (支援平滑漸層插值過渡)
+  // notify：是否為手動切換 (顯示切換橫幅)；HUD 天氣徽章不論手動或自然變化都會同步
   public setWeather(type: WeatherType, smooth: boolean = true, notify: boolean = true) {
     const targetPreset = WEATHER_PRESETS[type];
     this.targetWeather = type;
+    // 任何天氣變更都重新計算這段天氣的持續時間
+    const [minDur, maxDur] = AUTO_WEATHER_DURATION[type];
+    this.autoCycleTimer = 0;
+    this.autoCycleInterval = minDur + Math.random() * (maxDur - minDur);
+    if (this.onWeatherChange) this.onWeatherChange(targetPreset, notify);
 
     if (!smooth) {
       // 瞬間套用天氣數值 (用於遊戲開局或重置)
@@ -261,9 +286,6 @@ export class WeatherSystem {
 
       soundManager.setRainIntensity(targetPreset.rainVolume, 0.5);
 
-      if (notify && this.onWeatherChange) {
-        this.onWeatherChange(targetPreset, false);
-      }
       return;
     }
 
@@ -297,9 +319,6 @@ export class WeatherSystem {
     // 音訊音量平滑線性過渡
     soundManager.setRainIntensity(targetPreset.rainVolume, this.transitionDuration);
 
-    if (notify && this.onWeatherChange) {
-      this.onWeatherChange(targetPreset, true);
-    }
   }
 
   public update(delta: number, playerPos: THREE.Vector3, currentWorld?: 'CAMPUS' | 'DETENTION') {
@@ -342,12 +361,10 @@ export class WeatherSystem {
         curPreset = tgtPreset;
       }
     } else {
-      // 2. 自然時間循環 (每隔 2~3 分鐘自然變更天氣)
+      // 2. 自然天氣 (當前天氣持續時間到後，加權隨機切換下一種)
       this.autoCycleTimer += delta;
       if (this.autoCycleTimer >= this.autoCycleInterval) {
-        this.autoCycleTimer = 0;
-        this.autoCycleInterval = 130.0 + Math.random() * 50.0;
-        this.cycleWeather(false);
+        this.setWeather(pickAutoWeather(this.currentWeather), true, false);
       }
       this.currentRainCount = curPreset.rainCount;
     }
