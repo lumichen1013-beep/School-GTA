@@ -4,7 +4,7 @@ import { queryColliders, isBlockedXZ } from '../physics/aabb';
 import { requestCameraShake } from '../effects/cameraShake';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
-import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, wrapAngle, type KfMove } from '../entities/shared/kungfu';
+import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, wrapAngle, type KfMove } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import { isBehindNpc, isBossStunOpening } from './DetentionMode';
 
@@ -53,6 +53,9 @@ const DETENTION_BOSS_DMG_MULT = 0.5;
 const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
 // NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
 const NPC_ATTACK_INTERVAL = 0.85;
+const GRAB_THROW_DAMAGE = 30; // 主任教官擒拿摔
+const GRAB_THROW_DOWN_TIME = 1.0; // 擒拿摔落地後倒地秒數
+const RULER_STRIKE_DAMAGE = 12; // 生教組長戒尺連打 (每下)
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
@@ -841,7 +844,8 @@ export class CombatSystem {
       if (strike) {
         npc.kfStrike = null;
         if (!isSpawnGraceActive && !player.isDead && this.isNpcStrikeInRange(npc, targetPosition, strike)) {
-          this.applyNpcHit(npc, targetPosition);
+          if (strike === NPC_GRAB_THROW || strike === NPC_RULER_FLURRY) this.applySignatureHit(npc, targetPosition, strike === NPC_GRAB_THROW);
+          else this.applyNpcHit(npc, targetPosition);
         }
       }
 
@@ -853,7 +857,20 @@ export class CombatSystem {
       // 兩個世界皆僅在追捕狀態 (通緝或被激怒) 且進入攻擊距離時發動攻擊，第一世界 NPC 不會無故主動攻擊
       // 循聲察看中的守衛尚未確認敵蹤，不出手
       const shouldAttack = !isSpawnGraceActive && npc.isChasing && !npc.isInvestigatingNoise && distToPlayer <= attackDist;
-      // 第二世界多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)
+      // 玩家被摔倒地期間不追打 (起身後再出手)
+      if (player.knockdownTimer > 0) continue;
+      // 校園執法者招牌技 (擒拿摔 3m 內撲抓、戒尺連打貼身)：追捕中冷卻完畢且未在出招時發動
+      if (
+        npc.isEnforcer && !isSpawnGraceActive && npc.isChasing && !player.isDead && npc.attackCooldown <= 0 &&
+        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0
+      ) {
+        const sig = npc.canStartSignature(distToPlayer, targetPosition.y - npc.position.y);
+        if (sig) {
+          npc.startSignature(sig, targetPosition);
+          continue;
+        }
+      }
+      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)
       if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning) continue;
 
       npc.attackCooldown = this.getNpcAttackInterval(npc);
@@ -863,9 +880,9 @@ export class CombatSystem {
     }
   }
 
-  // 第二世界守衛處於警戒 (個體 ALERT 或全域 ALERT 階段) 時出手加快
+  // 第一世界依角色出手間隔 (執法者較快)；第二世界守衛處於警戒 (個體 ALERT 或全域 ALERT 階段) 時出手加快
   private getNpcAttackInterval(npc: NPC): number {
-    if (this.ctx.currentWorldType !== 'DETENTION') return NPC_ATTACK_INTERVAL;
+    if (this.ctx.currentWorldType !== 'DETENTION') return npc.attackInterval;
     return npc.alertState === 'ALERT' || this.ctx.detention.alertPhase === 'ALERT' ? NPC_ATTACK_INTERVAL_ALERT : NPC_ATTACK_INTERVAL;
   }
 
@@ -882,6 +899,40 @@ export class CombatSystem {
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist < 0.6) return true;
     return (dx * Math.sin(npc.rotationY) + dz * Math.cos(npc.rotationY)) / dist >= NPC_STRIKE_ARC;
+  }
+
+  // 校園執法者招牌技命中結算：擒拿摔 30 傷害並摔倒 1 秒、戒尺連打每下 12 傷害 (各段分別判定)；
+  // 閃身中落空；騎車中只扣血不摔車
+  private applySignatureHit(npc: NPC, targetPosition: THREE.Vector3, isGrab: boolean) {
+    const { player, wantedSystem } = this.ctx;
+    if (player.isDodging) {
+      this.showDodgeBanner(
+        isGrab ? '💨 閃身步！掙脫主任教官擒拿摔！' : '💨 閃身步！避開生教組長戒尺！',
+        isGrab ? '🐻 狗熊哆嗦毛！掙脫主任教官擒拿摔！' : '🐻 狗熊哆嗦毛！避開生教組長戒尺！',
+        1500
+      );
+      return;
+    }
+    const title = npc.getRoleTitle();
+    const damage = isGrab ? GRAB_THROW_DAMAGE : RULER_STRIKE_DAMAGE;
+    wantedSystem.notifyAttacked();
+    let died: boolean;
+    if (this.ctx.currentRidingBike || !isGrab) {
+      soundManager.playPunch();
+      died = player.takeDamage(damage, title);
+      wantedSystem.showBanner(isGrab
+        ? `🥋 遭到主任教官擒拿！穩住車身繼續騎行！(-${damage} HP)`
+        : `📏 戒尺連打命中！(-${damage} HP)`, 1500);
+    } else {
+      _scratchImpactDir.subVectors(targetPosition, npc.position);
+      _scratchImpactDir.y = 0;
+      if (_scratchImpactDir.lengthSq() < 0.001) _scratchImpactDir.set(Math.sin(npc.rotationY), 0, Math.cos(npc.rotationY));
+      else _scratchImpactDir.normalize();
+      requestCameraShake(0.35);
+      died = player.knockDown(_scratchImpactDir, damage, title, GRAB_THROW_DOWN_TIME);
+      wantedSystem.showBanner(`🥋 被主任教官擒拿摔倒地！(-${damage} HP)`, 1800);
+    }
+    if (died) this.ctx.handlePlayerDeath(`被${title}逮捕擊倒！`);
   }
 
   // NPC 攻擊命中玩家結算 (閃避、騎車只扣血、擊飛)

@@ -29,6 +29,7 @@ const ROLE_DEFEAT_REWARDS: Partial<Record<NPCRole, RoleDefeatReward>> = {
   INSPECTOR: { reward: 40, counts: ['inspector'] },
   BIKE_PATROL: { reward: 60, counts: ['bikePatrol', 'inspector'] },
   TEACHER: { reward: 80, counts: ['teacher'] },
+  DISCIPLINE_CHIEF: { reward: 80, counts: ['teacher'] },
   BANDIT: { reward: 100 },
   DOG: { reward: 120, counts: ['dog'] },
   INSTRUCTOR: { reward: 150, counts: ['inspector', 'teacher'] },

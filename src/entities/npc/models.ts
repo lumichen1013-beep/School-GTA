@@ -324,7 +324,7 @@ export function buildHumanoidModel(rig: NPCModelRig) {
     pantsColor = athlete.shorts;
   }
 
-  if (rig.role === 'TEACHER') {
+  if (rig.role === 'TEACHER' || rig.role === 'DISCIPLINE_CHIEF') {
     shirtColor = 0x2c3e50;
     pantsColor = 0x34495e;
   } else if (rig.role === 'INSTRUCTOR') {
@@ -374,8 +374,8 @@ export function buildHumanoidModel(rig: NPCModelRig) {
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), armBandMat);
     band.position.set(-0.45, 1.25, 0);
     addHumanoidPart(band);
-  } else if (rig.role === 'TEACHER') {
-    // 生教組長螢光背心
+  } else if (rig.role === 'TEACHER' || rig.role === 'DISCIPLINE_CHIEF') {
+    // 生教組長 / 巡堂老師螢光背心
     const vestMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
     const vest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.7, 0.38), vestMat);
     vest.position.y = 1.05;

@@ -18,7 +18,7 @@ export interface NPCSpawnDef {
 const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
   // 1. 生教組長 (中庭綠帶與走廊威嚴步巡，巡邏路徑延伸至 95m+)
   {
-    role: 'TEACHER',
+    role: 'DISCIPLINE_CHIEF',
     pos: [15, 0, 15],
     waypoints: [[15, 0, 15], [15, 0, 50], [2, 0, 58], [-5, 0, 30], [5, 0, 12]],
     style: 'OFFICER_PATROL'

@@ -37,11 +37,13 @@ export interface KfMove {
   readonly dmg: number; // 傷害倍率
   readonly knock: number; // 擊退倍率
   readonly finisher: boolean;
+  // 額外命中時間點 (占全長比例，多段招式如戒尺連打；第一段為 strike)
+  readonly extraStrikes: readonly number[];
   readonly keys: Float32Array;
   readonly count: number;
 }
 
-interface MoveOpts { dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean }
+interface MoveOpts { dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[] }
 
 function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
   const data = new Float32Array(keys.length * STRIDE);
@@ -71,6 +73,7 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
     dmg: o.dmg ?? 1,
     knock: o.knock ?? 1,
     finisher: o.finisher ?? false,
+    extraStrikes: o.extraStrikes ?? [],
     keys: data,
     count: keys.length
   };
@@ -247,6 +250,31 @@ const NPC_SPINKICK = defineMove('迴旋踢', { dur: 0.8, strike: 0.5, reach: 1.1
   [1, E_SMOOTH, { tw: TWO_PI }]
 ]);
 
+// 主任教官「格擋反擊」(不造成傷害)：沉身雙臂十字架起封住正面，隨即由攻擊冷卻接回一般招式反擊
+export const NPC_CROSS_PARRY = defineMove('十字格擋', { dur: 0.4, strike: 1, dmg: 0 }, [
+  [0.2, E_OUT, { tw: 0.2, ln: -0.1, h: -0.1, la: [-1.5, 0, 0.65], ra: [-1.5, 0, -0.65], ll: [-0.35, 0, -0.1], rr: [0.35, 0, 0.1] }],
+  [0.65, E_SMOOTH, { tw: 0.15, ln: -0.06, h: -0.09, la: [-1.45, 0, 0.6], ra: [-1.45, 0, -0.6], ll: [-0.32, 0, -0.1], rr: [0.32, 0, 0.1] }],
+  [1, E_SMOOTH, REST]
+]);
+// 主任教官招牌技「擒拿摔」：沉身雙手前探 (預備期間向前短距撲抓) → 抓住後扭腰過肩摔
+export const NPC_GRAB_THROW = defineMove('擒拿摔', { dur: 1.3, strike: 0.45, cancel: 0.9, reach: 1.0 }, [
+  [0.3, E_SMOOTH, { tw: 0.15, ln: 0.18, h: -0.16, la: [-1.25, 0, 0.25], ra: [-1.25, 0, -0.25], ll: [-0.55, 0, -0.1], rr: [0.5, 0, 0.1] }],
+  [0.42, E_IN, { ln: 0.3, h: -0.18, la: [-1.6, 0, 0.1], ra: [-1.6, 0, -0.1], ll: [-0.7, 0, -0.1], rr: [0.6, 0, 0.1] }],
+  [0.6, E_SMOOTH, { tw: -0.5, ln: 0.05, h: -0.2, la: [-2.5, 0, 0.2], ra: [-2.5, 0, -0.2], ll: [-0.5, 0, -0.12], rr: [0.45, 0, 0.12] }],
+  [0.78, E_OUT, { tw: -1.7, ln: 0.35, h: -0.22, la: [-0.6, 0, 0.3], ra: [-0.4, 0, -0.3], ll: [-0.6, 0, -0.12], rr: [0.55, 0, 0.12] }],
+  [1, E_SMOOTH, REST]
+]);
+// 生教組長招牌技「戒尺連打」：高舉戒尺蓄勢 → 連續三下快速下劈 (各段分別判定命中)
+export const NPC_RULER_FLURRY = defineMove('戒尺連打', { dur: 1.25, strike: 0.36, cancel: 0.92, reach: 1.05, extraStrikes: [0.56, 0.76] }, [
+  [0.26, E_SMOOTH, { tw: 0.35, ln: -0.12, la: [-0.9, 0, 0.15], ra: [-2.8, 0, 0.2], ll: [-0.3, 0, -0.05], rr: [0.25, 0, 0.05] }],
+  [0.36, E_IN, { tw: -0.25, ln: 0.25, h: -0.08, la: [-0.8, 0, 0.15], ra: [-0.7, 0, -0.1], ll: [-0.5, 0, -0.08], rr: [0.45, 0, 0.08] }],
+  [0.46, E_OUT, { tw: 0.2, ln: 0.0, h: -0.04, la: [-0.85, 0, 0.15], ra: [-2.5, 0, 0.15], ll: [-0.45, 0, -0.08], rr: [0.4, 0, 0.08] }],
+  [0.56, E_IN, { tw: -0.3, ln: 0.27, h: -0.09, la: [-0.8, 0, 0.15], ra: [-0.65, 0, -0.12], ll: [-0.55, 0, -0.08], rr: [0.48, 0, 0.08] }],
+  [0.66, E_OUT, { tw: 0.25, ln: 0.0, h: -0.05, la: [-0.85, 0, 0.15], ra: [-2.6, 0, 0.15], ll: [-0.5, 0, -0.08], rr: [0.42, 0, 0.08] }],
+  [0.76, E_IN, { tw: -0.35, ln: 0.3, h: -0.11, la: [-0.75, 0, 0.15], ra: [-0.55, 0, -0.14], ll: [-0.6, 0, -0.08], rr: [0.5, 0, 0.08] }],
+  [1, E_SMOOTH, REST]
+]);
+
 // 暗殺時機失誤反制招式 (不造成傷害；擊退由戰鬥系統於命中時間點結算)。起始扭腰由呼叫端帶入原本朝向，回身轉體與前一姿勢連續
 // 徒手守衛/總教官：回身十字格擋 → 沉身震掌推開
 export const TAKEDOWN_PALM_PARRY = defineMove('回身十字格擋·震掌', { dur: 0.8, strike: 0.42, dmg: 0 }, [
@@ -295,6 +323,7 @@ export const PLAYER_TAKEDOWN = defineMove('雙峰貫耳', { dur: 0.5, strike: 0.
 const NPC_MOVESETS: Record<string, readonly KfMove[]> = {
   STUDENT: [NPC_FLAIL, NPC_PUSH],
   TEACHER: [NPC_PALM, NPC_SNAPKICK],
+  DISCIPLINE_CHIEF: [NPC_PALM, NPC_SNAPKICK],
   INSTRUCTOR: [NPC_PALM, NPC_SNAPKICK],
   DODGE_TEACHER: [NPC_PALM, NPC_SNAPKICK],
   PE_TEACHER_BOSS: [NPC_PALM, NPC_SNAPKICK],

@@ -7,7 +7,7 @@ import type { Bicycle } from '../vehicles/Bicycle';
 import { disposeNonShared, getHpBarMaterial, getHpBarResources, getPhoneResources, markShared } from './npc/modelCache';
 import { SkillBubble, SkillBubbleStyle } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
-import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, TAKEDOWN_PALM_PARRY, TAKEDOWN_SHIELD_PARRY, TAKEDOWN_WOLF_PARRY, wrapAngle, type KfMove } from './shared/kungfu';
+import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, NPC_CROSS_PARRY, NPC_GRAB_THROW, NPC_RULER_FLURRY, TAKEDOWN_PALM_PARRY, TAKEDOWN_SHIELD_PARRY, TAKEDOWN_WOLF_PARRY, wrapAngle, type KfMove } from './shared/kungfu';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
@@ -18,6 +18,7 @@ export type NPCRole =
   | 'STUDENT'
   | 'INSPECTOR'
   | 'TEACHER'
+  | 'DISCIPLINE_CHIEF'
   | 'INSTRUCTOR'
   | 'DOG'
   | 'BIKE_PATROL'
@@ -72,7 +73,7 @@ const _npcLookTarget = new THREE.Vector3();
 const _npcSafeTeleportResult = new THREE.Vector3();
 const _npcSurroundTarget = new THREE.Vector3();
 
-// 第二世界特訓群 (總教官除外) 戰鬥積極度
+// 戰鬥積極度 (第二世界特訓群與校園執法者，roleConfig.aggressiveCombat)
 const W2_COMBAT_MIN_SPEED = 5.5; // 追捕中最低移動速度 (潛行巡邏慢速不帶入戰鬥)
 const W2_STAGGER_TIME = 0.3; // 一般受擊踉蹌總時間 (前段後退、後段縮身)
 const W2_STAGGER_PUSH_TIME = 0.15;
@@ -83,6 +84,17 @@ const W2_SURROUND_RADIUS = 1.6; // 包夾站位半徑 (m)
 const W2_SURROUND_MAX_TURN = 0.9; // 每次朝站位繞行的最大角度 (rad)，沿圓弧繞行不穿過玩家
 const W2_SURROUND_SETTLE_ANGLE = 0.6; // 與站位方位差小於約 34 度即視為就位
 const W2_SURROUND_TRAVEL_TIMEOUT = 1.5;
+
+// 校園執法者 (主任教官 / 生教組長)：受擊防衛、招牌技與留校察看暴怒
+const ENFORCER_PARRY_CHANCE = 0.4; // 主任教官格擋反擊
+const ENFORCER_FLASH_CHANCE = 0.3; // 生教組長閃身步
+const ENFORCER_RAGE_SPEED_MULT = 1.15;
+const ENFORCER_SIG_FIRST_DELAY = 3.0; // 進入追捕後首次招牌技的最短等待 (秒)
+const GRAB_LUNGE_DIST = 1.2; // 擒拿摔預備期間向前撲抓距離 (m)
+const GRAB_LUNGE_START = 0.12; // 撲抓開始時間點 (占全長比例)
+const GRAB_LUNGE_STOP_DIST = 0.9; // 與玩家相距此距離內停止撲抓 (不推擠玩家)
+const RAGE_BADGE_CODE = -110;
+export type EnforcerSignature = 'GRAB' | 'RULER';
 // NPC 技能/對話氣泡外觀：大字版 (世界尺寸約為舊版 1.8 倍、畫布 512×160)，長句換成 2 行而不縮小字級，
 // 底部對齊於血條/告示牌上方
 const NPC_BUBBLE_STYLE: SkillBubbleStyle = {
@@ -195,6 +207,7 @@ const _ATTACK_SPECS: Record<string, AttackSpec> = {
   DETENTION_SENIOR: { hForce: 8.0, vForce: 3.5 },
   BANDIT: { hForce: 10.0, vForce: 5.5 },
   TEACHER: { hForce: 10.0, vForce: 6.0 },
+  DISCIPLINE_CHIEF: { hForce: 10.0, vForce: 6.0 },
   INSTRUCTOR: { hForce: 10.0, vForce: 6.0 },
   DOG: { hForce: 11.5, vForce: 5.0 },
   BIKE_PATROL: { hForce: 12.5, vForce: 6.5 },
@@ -353,6 +366,10 @@ export class NPC {
   private surroundSettled: boolean = true;
   private surroundTravelTimer: number = 0; // 繞行前往站位的累計時間 (逾時即就地出手，避免受阻永不攻擊)
   public freezeTimer: number = 0;   // 全校廣播定格發呆時間
+  // 校園執法者招牌技 (擒拿摔 / 戒尺連打) 冷卻與撲抓方向；留校察看 (5 級處分) 暴怒
+  public sigCooldown: number = ENFORCER_SIG_FIRST_DELAY;
+  private readonly grabLungeDir: THREE.Vector3 = new THREE.Vector3();
+  public isEnraged: boolean = false;
 
   // 追捕動態節奏系統 (忽快忽慢：衝刺爆發期 vs 喘氣調息期，給玩家合理甩脫機會)
   public isBurstSprinting: boolean = true;
@@ -1007,6 +1024,7 @@ export class NPC {
       case 'PE_TEACHER_BOSS': return '大如老師';
       case 'BANDIT': return '校外強盜';
       case 'TEACHER': return '巡堂老師';
+      case 'DISCIPLINE_CHIEF': return '生教組長';
       case 'INSTRUCTOR': return '主任教官';
       case 'DOG': return '校犬柴柴';
       case 'BIKE_PATROL': return '火柴人自行車騎士';
@@ -1182,6 +1200,8 @@ export class NPC {
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.60)) return false;
     // 持盾特訓院守衛：正面受擊 50% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
     if (this.role === 'DETENTION_GUARD' && this.tryShieldBlock(impactDir)) return false;
+    // 校園執法者：主任教官 40% 格擋反擊、生教組長 30% 閃身步 (施展招牌技期間不防衛)
+    if (this.tryEnforcerDefense()) return false;
     // 特訓資深守衛 / 重裝守衛：受擊 (任意方向) 30% 機率施展「狗熊哆嗦毛」避開 (不受傷也不被擊飛)；施展期間免疫攻擊
     if (this.role === 'DETENTION_SENIOR' || this.role === 'DETENTION_HEAVY') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1201,8 +1221,8 @@ export class NPC {
       this.isChasing = false;
     }
 
-    // 第二世界特訓群：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
-    if (this.isWorld2Minion && !this.isKnockedDown &&
+    // 戰鬥積極角色 (特訓群 / 校園執法者)：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
+    if (this.cfg.aggressiveCombat && !this.isKnockedDown &&
       (!canLaunch || (this.role === 'DETENTION_HEAVY' && this.hp > this.maxHp * 0.5))) {
       this.startStagger(impactDir);
       return wasKnockedDown;
@@ -1228,9 +1248,154 @@ export class NPC {
     return wasKnockedDown;
   }
 
-  // 第二世界特訓群 (總教官另有專屬規則)
-  public get isWorld2Minion(): boolean {
-    return this.cfg.isDetention && this.role !== 'DETENTION_BOSS';
+  // 戰鬥積極角色：第二世界特訓群 (總教官另有專屬規則) 與校園執法者 (見 roleConfig.aggressiveCombat)
+  public get hasAggressiveCombat(): boolean {
+    return this.cfg.aggressiveCombat;
+  }
+
+  // 第一世界出手間隔 (秒)
+  public get attackInterval(): number {
+    return this.cfg.attackInterval;
+  }
+
+  // 校園執法者 (主任教官 / 生教組長)
+  public get isEnforcer(): boolean {
+    return this.role === 'INSTRUCTOR' || this.role === 'DISCIPLINE_CHIEF';
+  }
+
+  // 正在施展招牌技 (擒拿摔 / 戒尺連打)
+  public get isSignatureActive(): boolean {
+    const m = this.kf.move;
+    return m === NPC_GRAB_THROW || m === NPC_RULER_FLURRY;
+  }
+
+  // 校園執法者受擊防衛：成功時不受傷也不被擊退，攻擊冷卻設為 0.2 秒立即反擊
+  private tryEnforcerDefense(): boolean {
+    if (!this.isEnforcer || this.isSignatureActive) return false;
+    if (this.role === 'DISCIPLINE_CHIEF') {
+      if (this.isDodging) return true; // 閃身中免疫
+      if (Math.random() >= ENFORCER_FLASH_CHANCE) return false;
+      if (this.isPaused) this.cancelPause();
+      this.kf.cancel();
+      this.mesh.rotation.set(0, this.rotationY, 0);
+      this.performFlashStep();
+      this.isChasing = true;
+      this.attackCooldown = W2_COUNTER_COOLDOWN;
+      return true;
+    }
+    if (!this.rightArm || Math.random() >= ENFORCER_PARRY_CHANCE) return false;
+    if (this.isPaused) this.cancelPause();
+    this.isChasing = true;
+    this.staggerTimer = 0;
+    this.kf.start(NPC_CROSS_PARRY, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.attackCooldown = W2_COUNTER_COOLDOWN;
+    this.showSkillBubble('🥋 格擋反擊！', false);
+    soundManager.playBanditSlash();
+    return true;
+  }
+
+  // 招牌技發動條件：追捕中、同樓層、進入招式距離且冷卻完畢 (擒拿摔可於 3m 內撲抓；戒尺連打需貼近)
+  public canStartSignature(distToPlayer: number, dy: number): EnforcerSignature | null {
+    if (!this.isEnforcer || this.sigCooldown > 0 || !this.rightArm) return null;
+    if (this.isDodging || this.staggerTimer > 0 || Math.abs(dy) > 1.2) return null;
+    if (this.role === 'INSTRUCTOR') return distToPlayer <= 3.0 ? 'GRAB' : null;
+    return distToPlayer <= 2.0 ? 'RULER' : null;
+  }
+
+  // 發動招牌技 (預備動作可被閃避；出招預備過半即霸體)
+  public startSignature(kind: EnforcerSignature, playerPos: THREE.Vector3) {
+    const move = kind === 'GRAB' ? NPC_GRAB_THROW : NPC_RULER_FLURRY;
+    if (this.isPaused) this.cancelPause();
+    this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+    this.mesh.rotation.y = this.rotationY;
+    this.grabLungeDir.set(Math.sin(this.rotationY), 0, Math.cos(this.rotationY));
+    this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    // 冷卻於出招結束後才倒數：擒拿摔約每 8 秒、戒尺連打約每 6 秒
+    this.sigCooldown = kind === 'GRAB' ? 6.0 + Math.random() : 4.0 + Math.random();
+    this.attackCooldown = move.dur + 0.1; // 招式期間不接一般攻擊
+    this.showSpeechBubble(kind === 'GRAB' ? '🥋 擒拿摔！' : '📏 戒尺連打！', true, 1.4);
+    soundManager.playWhistle();
+  }
+
+  // 擒拿摔預備期間沿起手方向短距撲抓 (逐軸碰撞檢測不穿牆；貼近玩家即停)
+  private updateGrabLunge(delta: number, colliders: CollidableBox[], playerPos: THREE.Vector3) {
+    const move = this.kf.move;
+    if (move !== NPC_GRAB_THROW) return;
+    const t0 = GRAB_LUNGE_START * move.dur;
+    const t1 = move.strike * move.dur;
+    const t = this.kf.time;
+    if (t <= t0 || t - delta >= t1) return;
+    const dt = Math.min(t, t1) - Math.max(t - delta, t0);
+    if (dt <= 0) return;
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    if (dx * dx + dz * dz < GRAB_LUNGE_STOP_DIST * GRAB_LUNGE_STOP_DIST) return;
+    const step = (GRAB_LUNGE_DIST / (t1 - t0)) * dt;
+    const nextX = this.position.x + this.grabLungeDir.x * step;
+    if (!isBlockedXZ(colliders, nextX, this.position.z, 0.45, this.position.y, 0.3, 1.6)) this.position.x = nextX;
+    const nextZ = this.position.z + this.grabLungeDir.z * step;
+    if (!isBlockedXZ(colliders, this.position.x, nextZ, 0.45, this.position.y, 0.3, 1.6)) this.position.z = nextZ;
+    depenetrateXZ(colliders, this.position, 0.45, 0.3, 1.6, 0.02, 1, 'npc');
+  }
+
+  // 留校察看 (5 級處分) 暴怒：追捕移動速度 +15%，頭頂顯示 💢
+  public setEnraged(on: boolean) {
+    if (this.isEnraged === on) return;
+    this.isEnraged = on;
+    if (!on && this.lastKoBadgeSec === RAGE_BADGE_CODE) this.hideStatusBadge();
+  }
+
+  private updateRageBadge() {
+    if (!this.isEnraged || this.lastKoBadgeSec === RAGE_BADGE_CODE) return;
+    this.setBadgeTexture(getSharedBadgeTexture('rage', BADGE_ALERT, '💢'));
+    this.lastKoBadgeSec = RAGE_BADGE_CODE;
+    this.koBadgeSprite.visible = true;
+  }
+
+  // 傳送至指定落點 (留校察看追捕)：設定所屬樓層並立即面向玩家追捕
+  public teleportTo(pos: THREE.Vector3, floorY: number, playerPos: THREE.Vector3) {
+    if (this.isPaused) this.cancelPause();
+    this.clearLifeTask();
+    this.kf.cancel();
+    this.isKnockedFlying = false;
+    this.knockVelocity.set(0, 0, 0);
+    this.staggerTimer = 0;
+    this.isDodging = false;
+    this.isBearShaking = false;
+    this.freezeTimer = 0;
+    this.position.copy(pos);
+    this.baseFloorY = floorY;
+    this.rotationY = Math.atan2(playerPos.x - pos.x, playerPos.z - pos.z);
+    this.mesh.rotation.set(0, this.rotationY, 0);
+    this.mesh.position.copy(pos);
+    this.lastRecordedPos.copy(pos);
+    this.isChasing = true;
+    this.isInvestigatingNoise = false;
+    this.isBurstSprinting = true;
+    this.chasePacingTimer = 1.5;
+    this.dynamicSpeed = this.chaseSpeed;
+    this.lostSightTimer = 0;
+    this.lastKnownPos.copy(playerPos);
+    this.attackCooldown = Math.max(this.attackCooldown, 0.5);
+    this.showSpeechBubble('站住！留校察看！', true, 2.5);
+    soundManager.playWhistle();
+  }
+
+  // 處分解除後返回原本崗位 (保留目前血量，僅重置位置、樓層與仇恨)
+  public returnHome() {
+    if (this.isPaused) this.cancelPause();
+    this.clearLifeTask();
+    this.kf.cancel();
+    this.resetAggro();
+    this.staggerTimer = 0;
+    this.position.copy(this.initialPosition);
+    this.baseFloorY = this.initialPosition.y;
+    this.rotationY = this.initialRotationY;
+    this.mesh.rotation.set(0, this.rotationY, 0);
+    this.mesh.position.copy(this.initialPosition);
+    this.lastRecordedPos.copy(this.initialPosition);
+    this.currentWaypointIdx = 0;
+    this.stuckCheckTimer = 0;
   }
 
   // 一般受擊踉蹌：沿受擊方向後退約 0.4m 並縮身；出招預備未過半時中斷出招，過半則霸體照常命中
@@ -1242,6 +1407,8 @@ export class NPC {
     if (move && move.dmg > 0 && this.kf.strikeProgress < W2_HYPER_ARMOR_PROGRESS) {
       this.kf.cancel();
       this.mesh.rotation.set(0, this.rotationY, 0);
+      // 校園執法者：出招被打斷後踉蹌一結束即重新出手 (避免被連打壓制到無法還手)
+      if (this.isEnforcer) this.attackCooldown = Math.min(this.attackCooldown, W2_STAGGER_TIME);
     }
   }
 
@@ -1552,6 +1719,7 @@ export class NPC {
       this.pauseTimer = 2.5 + Math.random() * 2.5;
     } else if (
       this.role === 'TEACHER' ||
+      this.role === 'DISCIPLINE_CHIEF' ||
       this.role === 'INSTRUCTOR' ||
       this.role === 'INSPECTOR' ||
       this.role === 'DODGE_TEACHER' ||
@@ -2509,9 +2677,11 @@ export class NPC {
       return this.isBurstSprinting ? 9.8 : 7.8;
     }
 
-    const pacedSpeed = this.isBurstSprinting ? this.chaseSpeed : (this.role === 'BANDIT' ? 8.5 : this.speed);
-    // 第二世界特訓群追捕 / 搜捕中不再以潛行巡邏慢速爬行 (循聲察看維持原節奏)
-    if (this.isWorld2Minion && !this.isInvestigatingNoise) return Math.max(pacedSpeed, W2_COMBAT_MIN_SPEED);
+    let pacedSpeed = this.isBurstSprinting ? this.chaseSpeed : (this.role === 'BANDIT' ? 8.5 : this.speed);
+    // 戰鬥積極角色追捕 / 搜捕中不再以巡邏慢速爬行 (循聲察看維持原節奏)
+    if (this.cfg.aggressiveCombat && !this.isInvestigatingNoise) pacedSpeed = Math.max(pacedSpeed, W2_COMBAT_MIN_SPEED);
+    // 留校察看暴怒：追捕速度 +15%
+    if (this.isEnraged) pacedSpeed *= ENFORCER_RAGE_SPEED_MULT;
     return pacedSpeed;
   }
 
@@ -3230,6 +3400,12 @@ export class NPC {
     if (this.attackAnimTimer > 0) this.attackAnimTimer -= delta;
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
+    // 招牌技冷卻：追捕中倒數，脫離追捕後重置為首次等待時間
+    if (this.isEnforcer) {
+      if (!this.isChasing) this.sigCooldown = Math.max(this.sigCooldown, ENFORCER_SIG_FIRST_DELAY);
+      else if (this.sigCooldown > 0 && !this.isSignatureActive) this.sigCooldown -= delta;
+      this.updateRageBadge();
+    }
 
     // 4F 羽球比賽中：交由 TennisGame 全權精準控制大如老師的跑位、步法與接發球動作
     if (this.role === 'PE_TEACHER_BOSS' && this.isInBadmintonMatch) {
@@ -3244,11 +3420,21 @@ export class NPC {
         this.mesh.rotation.set(0, this.rotationY, 0);
       } else {
         const move = this.kf.move;
-        // 格擋類招式 (dmg 0) 不造成傷害
-        if (this.kf.update(delta) && move && move.dmg > 0) {
+        const prevT = this.kf.time;
+        // 格擋類招式 (dmg 0) 不造成傷害；多段招式 (戒尺連打) 的後續命中點另行判定
+        let struck = this.kf.update(delta);
+        if (!struck && move && move.extraStrikes.length > 0) {
+          const nowT = this.kf.move === move ? this.kf.time : move.dur;
+          for (const f of move.extraStrikes) {
+            const at = f * move.dur;
+            if (prevT < at && nowT >= at) struck = true;
+          }
+        }
+        if (struck && move && move.dmg > 0) {
           this.kfStrike = move;
           this.playAttackSound();
         }
+        this.updateGrabLunge(delta, colliders, playerPos);
         // 格擋招式期間頭部平滑回正 (總教官硬直搖晃的頭部)
         if (move && move.dmg === 0 && this.headMesh) {
           const k = Math.max(0, 1 - delta * 10);

@@ -184,7 +184,7 @@ export class CampusLife {
         };
         this.students.push(st);
         this.studentByNpc.set(npc, st);
-      } else if (npc.role === 'TEACHER' || npc.role === 'INSTRUCTOR' || npc.role === 'INSPECTOR') {
+      } else if (npc.role === 'TEACHER' || npc.role === 'DISCIPLINE_CHIEF' || npc.role === 'INSTRUCTOR' || npc.role === 'INSPECTOR') {
         this.staff.push({ npc, eventCooldown: 15 + this.staff.length * 8, busy: false });
       } else if (npc.role === 'DOG') {
         this.dog = npc;
@@ -684,15 +684,16 @@ export class CampusLife {
         continue;
       }
 
-      // 巡堂老師：攔下快走的同學；主任教官：攔下任何同學檢查服儀
-      const range2 = n.role === 'TEACHER' ? 144 : 64;
+      // 巡堂老師 / 生教組長：攔下快走的同學；主任教官：攔下任何同學檢查服儀
+      const isTeacher = n.role === 'TEACHER' || n.role === 'DISCIPLINE_CHIEF';
+      const range2 = isTeacher ? 144 : 64;
       let target: StudentState | null = null;
       for (const st of this.students) {
         if (st.activity !== 'NONE' && st.activity !== 'POI') continue;
         if (st.npc.campusAnchor) continue;
         if (st.group && st.activity === 'NONE' && st !== st.group.members[0]) continue;
         if (this.isBusyNpc(st.npc) || !this.isGround(st.npc)) continue;
-        if (n.role === 'TEACHER' && st.npc.movementStyle !== 'HURRIED_WALK') continue;
+        if (isTeacher && st.npc.movementStyle !== 'HURRIED_WALK') continue;
         if (st.npc.position.distanceToSquared(n.position) > range2) continue;
         if (!this.pathClear(n.position.x, n.position.z, st.npc.position.x, st.npc.position.z, 0)) continue;
         target = st;
@@ -702,14 +703,13 @@ export class CampusLife {
         sf.eventCooldown = 2;
         continue;
       }
-      sf.eventCooldown = n.role === 'TEACHER' ? 40 : 45;
+      sf.eventCooldown = isTeacher ? 40 : 45;
       sf.busy = true;
       if (target.slot) {
         target.slot.occupant = null;
         target.slot = null;
       }
       const sp = target.npc.position;
-      const isTeacher = n.role === 'TEACHER';
       // 被叫住的同學原地低頭挨罵
       target.activity = 'EVENT';
       this.assign(target.npc, this.makeTask(sp.x, sp.z, {
