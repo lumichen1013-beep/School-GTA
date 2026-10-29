@@ -87,7 +87,7 @@ function drawBadge(ctx: CanvasRenderingContext2D, style: BadgeStyle, text: strin
   ctx.fillText(text, 128, 32);
 }
 
-// 固定內容告示牌 (❓ / ❗ / 永久擊昏 / 破盾硬直) 全體 NPC 共用一張貼圖，免除每隻 NPC 各自重繪與上傳
+// 固定內容告示牌 (❓ / ❗ / 永久擊昏 / 撞柱硬直) 全體 NPC 共用一張貼圖，免除每隻 NPC 各自重繪與上傳
 const _sharedBadgeTextures = new Map<string, THREE.CanvasTexture>();
 function getSharedBadgeTexture(key: string, style: BadgeStyle, text: string, textColor?: string): THREE.CanvasTexture {
   let tex = _sharedBadgeTextures.get(key);
@@ -192,7 +192,7 @@ export class NPC {
   public cautionTimer: number = 0;
   public reviveTimer: number = 0;
 
-  // 小 Boss【鐵面總教官】專屬破盾與衝撞硬直機制
+  // 小 Boss【鐵面總教官】專屬閃身與衝撞硬直機制
   public isBossStunned: boolean = false;
   public bossStunTimer: number = 0;
   public bossInvulnerableTimer: number = 0;
@@ -211,7 +211,6 @@ export class NPC {
   public bossChargeDir: THREE.Vector3 = new THREE.Vector3();
   public bossTelegraphGroup?: THREE.Group;
   private bossTelegraphMat?: THREE.MeshBasicMaterial;
-  public bossBarrierMesh?: THREE.Mesh;
 
   // 單車衝撞擊飛與無敵幀 (避免持續性傷害)
   public isKnockedFlying: boolean = false;
@@ -395,19 +394,6 @@ export class NPC {
         this.bossTelegraphGroup = buildBossTelegraphMesh(rig);
         this.readRig(rig);
         this.mesh.add(this.bossTelegraphGroup);
-
-        const barrierGeo = new THREE.SphereGeometry(1.35, 16, 12);
-        const barrierMat = new THREE.MeshBasicMaterial({
-          color: 0xf59e0b,
-          transparent: true,
-          opacity: 0.38,
-          wireframe: true,
-          depthWrite: false
-        });
-        this.bossBarrierMesh = new THREE.Mesh(barrierGeo, barrierMat);
-        this.bossBarrierMesh.position.set(0, 1.05, 0);
-        this.bossBarrierMesh.visible = false;
-        this.mesh.add(this.bossBarrierMesh);
       }
     }
 
@@ -497,7 +483,7 @@ export class NPC {
     this.drawDynamicBadge(BADGE_KO, `💫 昏迷中 (${sec}s)`);
   }
 
-  // 顯示自定義頭頂動態文字徽章 (如金鐘護體、破盾硬直等)
+  // 顯示自定義頭頂動態文字徽章 (如金鐘護體、撞柱硬直等)
   public showStatusBadge(text: string, bgColor: string = 'rgba(234, 88, 12, 0.95)', borderColor: string = '#fde047') {
     // 內容未變且仍在顯示中則略過重繪 (護盾倒數每幀呼叫，只在文字變動時重繪畫布並上傳貼圖)
     const key = text + bgColor + borderColor;
@@ -663,7 +649,7 @@ export class NPC {
     if (this.bossStunStars) this.bossStunStars.rotation.y = t * 5.0;
   }
 
-  public stunBoss(duration: number = 3.5) {
+  public stunBoss(duration: number = 5.0) {
     if (this.role !== 'DETENTION_BOSS' || this.isKnockedDown) return;
     this.isBossStunned = true;
     this.bossStunTimer = duration;
@@ -677,9 +663,9 @@ export class NPC {
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
     this.getStunStars().visible = true;
 
-    // 顯示破盾硬直告示牌 (固定內容，共用貼圖)
+    // 顯示撞柱硬直告示牌 (固定內容，共用貼圖)
     this.lastKoBadgeSec = -103;
-    this.setBadgeTexture(getSharedBadgeTexture('boss-stun', BADGE_STUN, '⚡ 破盾硬直！快繞背！'));
+    this.setBadgeTexture(getSharedBadgeTexture('boss-stun', BADGE_STUN, '⚡ 撞柱硬直！快繞背！'));
     this.koBadgeSprite.visible = true;
   }
 
@@ -847,12 +833,6 @@ export class NPC {
         this.whistleCooldown = 12.0;
       }
     } else if (this.role === 'DETENTION_BOSS') {
-      // 鐵面總長受擊：20% 機率施展「閃身步」避開攻擊，反擊前搖留有公平反應間隔
-      if (!this.isDodging && Math.random() < 0.20) {
-        this.performFlashStep();
-        this.attackCooldown = 0.65;
-        return false;
-      }
       if (this.hp < this.maxHp * 0.35 && this.whistleCooldown <= 0) {
         soundManager.playWhistle();
         this.whistleCooldown = 16.0;
@@ -920,6 +900,8 @@ export class NPC {
       return false;
     }
     if (this.hitCooldown > 0) return false;
+    // 鐵面總長受擊：撞柱硬直中 20%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
+    if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.20 : 0.50)) return false;
     this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
@@ -1253,7 +1235,6 @@ export class NPC {
   public setCutsceneActor() {
     this.hpBarGroup.visible = false;
     this.koBadgeSprite.visible = false;
-    if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
   }
 
@@ -1569,7 +1550,6 @@ export class NPC {
       this.koBadgeSprite.visible = false;
       this.lastKoBadgeSec = -1;
       if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
-      if (this.bossBarrierMesh) this.bossBarrierMesh.visible = true;
     }
 
     this.resetPose();
@@ -1965,6 +1945,14 @@ export class NPC {
   }
 
   // 施展技能：閃身步 (朝角色面朝方向的左右橫向衝刺 2 個身位，破空殘影，絕不穿牆)
+  // 總教官依機率施展「閃身步」閃避，反擊前搖留有公平反應間隔
+  public tryBossFlashStep(chance: number): boolean {
+    if (this.isDodging || Math.random() >= chance) return false;
+    this.performFlashStep();
+    this.attackCooldown = 0.65;
+    return true;
+  }
+
   public performFlashStep() {
     if (this.isKnockedDown) return;
 
@@ -2390,28 +2378,19 @@ export class NPC {
       this.bossInvulnerableTimer -= delta;
       this.isBossInvulnerable = true;
 
-      if (this.bossBarrierMesh) {
-        this.bossBarrierMesh.visible = true;
-        this.bossBarrierMesh.rotation.y += delta * 3.5;
-        (this.bossBarrierMesh.material as THREE.MeshBasicMaterial).opacity = 0.25 + Math.sin(this.bossInvulnerableTimer * 16.0) * 0.2;
-      }
-
       this.showStatusBadge(`🛡️ 護盾中 (${this.bossInvulnerableTimer.toFixed(1)}s)`, 'rgba(234, 88, 12, 0.95)', '#fde047');
 
       if (this.bossInvulnerableTimer <= 0) {
         this.bossInvulnerableTimer = 0;
         this.isBossInvulnerable = false;
-        if (this.bossBarrierMesh) this.bossBarrierMesh.visible = false;
         this.hideStatusBadge();
         this.setAlertState('ALERT');
         this.isChasing = true;
         this.bossChargeCooldown = 3.5;
       }
-    } else if (this.bossBarrierMesh && this.bossBarrierMesh.visible && this.bossInvulnerableTimer <= 0) {
-      this.bossBarrierMesh.visible = false;
     }
 
-    // 總教官破盾硬直：原地凍結 (不受 AI 移動與轉向)，暈眩搖晃 + 頭頂星星，結束後甩頭回神再恢復戰鬥
+    // 總教官撞柱硬直：原地凍結 (不受 AI 移動與轉向)，暈眩搖晃 + 頭頂星星，結束後甩頭回神再恢復戰鬥
     if (this.role === 'DETENTION_BOSS' && !this.isKnockedDown && (this.isBossStunned || this.bossRecoverTimer > 0)) {
       if (this.isBossStunned) {
         this.bossStunTimer -= delta;
@@ -2517,8 +2496,8 @@ export class NPC {
         if (this.mesh.parent) impactDust.burst(this.mesh.parent, _bossImpactPoint, _bossKnockDir);
         this.moveBossSwept(colliders, _bossKnockDir, 0.5);
         if (this.position.distanceToSquared(playerPos) < 625.0) requestCameraShake(0.85);
-        // 猛烈撞擊加固水泥柱！陷入 3.5 秒重度眩暈硬直！
-        this.stunBoss(3.5);
+        // 猛烈撞擊加固水泥柱！陷入 5 秒重度眩暈硬直！
+        this.stunBoss(5.0);
         soundManager.playPunch();
         soundManager.playBatHit();
         if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;

@@ -258,6 +258,13 @@ export class Player {
   public dodgeDir: THREE.Vector3 = new THREE.Vector3();
   private afterimageSpawnTimer: number = 0;
 
+  // 暗殺總教官後的後空翻脫離 (朝遠離 Boss 方向翻越約 4 個身位，全程面向 Boss 並留下閃身步殘影)
+  public isBackflipping: boolean = false;
+  private backflipTimer: number = 0;
+  private readonly backflipDuration: number = 0.6;
+  private backflipSpeed: number = 0;
+  private readonly backflipDir: THREE.Vector3 = new THREE.Vector3();
+
   // 狗熊哆嗦毛 (連續瞬移 3 次，間隔 0.5s，圓形範圍隨機閃現)
   public isBearShaking: boolean = false;
   private bearBlinkCount: number = 0;
@@ -433,7 +440,7 @@ export class Player {
 
   public takeDamage(amount: number, reason: string = '受到傷害'): boolean {
     if (this.isDead) return false;
-    if (this.isDodging || this.isBearShaking) {
+    if (this.isDodging || this.isBearShaking || this.isBackflipping) {
       // 處於閃身/無敵或狗熊哆嗦毛瞬移判定狀態，免疫一切傷害！
       return false;
     }
@@ -468,7 +475,7 @@ export class Player {
     reason: string = '受到攻擊'
   ): boolean {
     if (this.isDead) return false;
-    if (this.isDodging || this.isBearShaking) {
+    if (this.isDodging || this.isBearShaking || this.isBackflipping) {
       // 處於閃身/無敵狀態，完全規避擊飛與擊退判定！
       return false;
     }
@@ -569,66 +576,56 @@ export class Player {
   }
 
   // 刺客教條·暗殺 BOSS 後跳遠離 (後跳跳離約 4 個身位 ~5.0m，面向 BOSS)
-  public leapAwayFrom(targetPos: THREE.Vector3, colliders: CollidableBox[] = [], jumpDist: number = 5.0) {
+  public leapAwayFrom(targetPos: THREE.Vector3, jumpDist: number = 4.0) {
     if (this.isDead) return;
 
-    // 計算遠離 target 的方向
-    const awayDir = new THREE.Vector3().subVectors(this.position, targetPos).setY(0);
-    if (awayDir.lengthSq() < 0.001) {
-      awayDir.set(0, 0, 1);
+    // 遠離 target 的水平方向
+    this.backflipDir.subVectors(this.position, targetPos).setY(0);
+    if (this.backflipDir.lengthSq() < 0.001) {
+      this.backflipDir.set(-Math.sin(this.rotationY), 0, -Math.cos(this.rotationY));
     } else {
-      awayDir.normalize();
+      this.backflipDir.normalize();
     }
 
-    // 落地時面向 BOSS: 朝向 targetPos
-    const toBoss = new THREE.Vector3().subVectors(targetPos, this.position).setY(0).normalize();
-    this.rotationY = Math.atan2(toBoss.x, toBoss.z);
+    // 全程面向 BOSS (後退翻越)
+    this.rotationY = Math.atan2(-this.backflipDir.x, -this.backflipDir.z);
     this.mesh.rotation.y = this.rotationY;
 
-    // 步進防穿牆位移 (最高 jumpDist，約 4.8m ~ 5.2m)
-    const step = 0.2;
-    const steps = Math.floor(jumpDist / step);
-    const halfWidth = 0.4;
-    const height = 1.8;
-    let currentX = this.position.x;
-    let currentZ = this.position.z;
+    // 水平位移交由一般碰撞處理 (遇牆即停，絕不穿牆)；起跳垂直速度使滯空時間 = 翻轉時間
+    this.isBackflipping = true;
+    this.backflipTimer = this.backflipDuration;
+    this.backflipSpeed = jumpDist / this.backflipDuration;
+    this.velocity.y = -this.gravity * this.backflipDuration * 0.5;
+    this.isGrounded = false;
+    this.afterimageSpawnTimer = 0;
 
-    for (let s = 0; s < steps; s++) {
-      const nextX = currentX + awayDir.x * step;
-      const nextZ = currentZ + awayDir.z * step;
-      let blocked = false;
-
-      for (let i = 0; i < colliders.length; i++) {
-        const box = colliders[i];
-        if (box.isFloorOnly) continue;
-        if (
-          nextX + halfWidth > box.min.x &&
-          nextX - halfWidth < box.max.x &&
-          nextZ + halfWidth > box.min.z &&
-          nextZ - halfWidth < box.max.z &&
-          this.position.y + height > box.min.y &&
-          this.position.y + 0.3 < box.max.y
-        ) {
-          blocked = true;
-          break;
-        }
-      }
-
-      if (blocked) break;
-      currentX = nextX;
-      currentZ = nextZ;
-    }
-
-    this.position.x = currentX;
-    this.position.z = currentZ;
-    this.mesh.position.copy(this.position);
-
-    // 向上後跳騰空拋物線初速度
-    this.velocity.y = 5.5;
-
-    // 留下身法殘影與音效
-    this.spawnAfterimage(0x38bdf8, 0.45);
     soundManager.playDodge(false);
+  }
+
+  // 後空翻姿勢：繞身體中心 (離地 0.9m) 向後翻轉一圈，並於翻轉中留下青色殘影
+  private applyBackflipPose(delta: number) {
+    const progress = THREE.MathUtils.clamp(1 - this.backflipTimer / this.backflipDuration, 0, 1);
+    const theta = -Math.PI * 2 * progress;
+    const pivot = 0.9;
+    const offsetLocalZ = -pivot * Math.sin(theta);
+    this.mesh.rotation.x = theta;
+    this.mesh.position.set(
+      this.position.x + Math.sin(this.rotationY) * offsetLocalZ,
+      this.position.y + pivot - pivot * Math.cos(theta),
+      this.position.z + Math.cos(this.rotationY) * offsetLocalZ
+    );
+    // 收腿抱膝
+    const tuck = Math.sin(progress * Math.PI);
+    this.leftLeg.rotation.x = -1.2 * tuck;
+    this.rightLeg.rotation.x = -1.2 * tuck;
+    this.leftArm.rotation.x = -0.9 * tuck;
+    this.rightArm.rotation.x = -0.9 * tuck;
+
+    this.afterimageSpawnTimer -= delta;
+    if (this.afterimageSpawnTimer <= 0) {
+      this.afterimageSpawnTimer = 0.05;
+      this.afterimagePool.spawn(0x38bdf8, 0.28, this.mesh.position, this.mesh.rotation, this.headMesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    }
   }
 
   // 尋找瞬移安全目標點 (0-GC，檢測障礙物碰撞與地面高度，絕不穿牆)
@@ -664,6 +661,8 @@ export class Player {
     this.hasShownRainBubble = false;
     this.isInvisible = false;
     this.isDodging = false;
+    this.isBackflipping = false;
+    this.backflipTimer = 0;
     this.isBearShaking = false;
     this.bearBlinkCount = 0;
     this.bearBlinkTimer = 0;
@@ -1004,7 +1003,11 @@ export class Player {
       this.mesh.rotation.z = Math.sin(this.knockTimer * 12) * 0.25;
     } else {
       // 正常地面或水上移動控制
-      if (this.isDodging) {
+      if (this.isBackflipping) {
+        this.backflipTimer -= delta;
+        this.velocity.x = this.backflipDir.x * this.backflipSpeed;
+        this.velocity.z = this.backflipDir.z * this.backflipSpeed;
+      } else if (this.isDodging) {
         this.dodgeTimer -= delta;
         if (this.dodgeTimer <= 0) {
           this.isDodging = false;
@@ -1080,7 +1083,7 @@ export class Player {
     }
 
     // 6. 朝向旋轉 (Facing Direction)
-    if (isMoving && !this.isKnockedFlying) {
+    if (isMoving && !this.isKnockedFlying && !this.isBackflipping) {
       const targetRotation = Math.atan2(_playerMoveDir.x, _playerMoveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
@@ -1095,6 +1098,19 @@ export class Player {
     const isSprinting = isMoving && sprintActive;
     this.isSprinting = isSprinting;
     this.animatePlayer(delta, isMoving, isSprinting, currentSpeed);
+
+    // 後空翻：覆寫翻轉姿勢；時間到且落地後收招站穩
+    if (this.isBackflipping) {
+      if (this.backflipTimer <= 0 && (this.isGrounded || this.backflipTimer < -0.4)) {
+        this.isBackflipping = false;
+        this.mesh.rotation.x = 0;
+        this.mesh.position.copy(this.position);
+        this.velocity.x = 0;
+        this.velocity.z = 0;
+      } else {
+        this.applyBackflipPose(delta);
+      }
+    }
   }
 
   private applyMovementAndCollision(delta: number, colliders: CollidableBox[]) {

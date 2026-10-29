@@ -114,7 +114,7 @@ export class DetentionWorld {
   public keycardBPos: THREE.Vector3 = new THREE.Vector3(66, 0.95, 7.2);  // 黃色門禁卡 B (B 區器材庫工作檯)
   public masterKeycardPos: THREE.Vector3 | null = null;                // 萬能逃脫鑰匙卡 (Boss 擊敗後掉落)
 
-  // C 區發電機混凝土防護柱 (供玩家誘使 Boss 衝撞硬直破盾)
+  // C 區發電機混凝土防護柱 (供玩家誘使 Boss 衝撞硬直)
   public generatorPillars: THREE.Vector3[] = GENERATOR_PILLARS.map((gp) => new THREE.Vector3(gp.x, 0, gp.z));
 
   // 門禁動態模型與碰撞體
@@ -826,7 +826,7 @@ export class DetentionWorld {
     this.group.add(terminalB);
 
     // --- 【C 區：終極哨戒門庭與 Boss 決戰競技場 (Z: 35 ~ 95)】---
-    // 4 座巨型發電機混凝土加固防護柱 (供誘使 Boss 衝撞陷入硬直破盾)
+    // 4 座巨型發電機混凝土加固防護柱 (供誘使 Boss 衝撞陷入硬直)
     for (const gp of this.generatorPillars) {
       // 柱身
       const pilGeo = new THREE.BoxGeometry(GENERATOR_PILLAR_SIZE, 5.5, GENERATOR_PILLAR_SIZE);
