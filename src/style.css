@@ -2269,6 +2269,17 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .fullmap-quest-panel .q-name {
   font-size: 14px;
 }
+/* 大地圖空間充足：任務名稱與說明允許換行，不以省略號截斷 */
+.fullmap-quest-panel .q-name,
+.fullmap-quest-panel .q-desc {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.fullmap-quest-panel .quest-item {
+  align-items: flex-start;
+}
 .fullmap-quest-panel .q-desc,
 .fullmap-quest-panel .q-status,
 .fullmap-quest-panel .quest-category-title,
