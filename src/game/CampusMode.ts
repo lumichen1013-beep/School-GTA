@@ -87,6 +87,7 @@ export class CampusMode {
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
   private readonly onGardenDamage = (amount: number, reason: string) => {
+    if (this.ctx.player.tryAutoDodge()) return;
     const died = this.ctx.player.takeDamage(amount, reason);
     this.ctx.wantedSystem.showBanner(reason, 2500);
     if (died) {

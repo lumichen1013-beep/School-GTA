@@ -169,6 +169,8 @@ class SchoolGTASandbox implements GameContext {
     comboFinisherFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
 
+    this.player.autoDodgeHook = this.progression.tryAutoDodge;
+
     // 墜落傷害與死亡回呼
     this.player.onTakeDamageCallback = (amount: number, reason: string) => {
       if (reason === '墜落摔傷') {

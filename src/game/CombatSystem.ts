@@ -1048,7 +1048,7 @@ export class CombatSystem {
         if (npc.bossIsCharging && !player.isDead && npc.position.distanceTo(targetPosition) <= 2.2) {
           if (player.isDodging) {
             this.showDodgeBanner('💨 閃身步！極限側閃避開總教官衝撞！', '🐻 狗熊哆嗦毛！極限閃避總教官狂暴衝撞！', 1800);
-          } else {
+          } else if (!player.tryAutoDodge()) {
             npc.bossIsCharging = false;
             npc.pauseTimer = 1.0;
             npc.isPaused = true;
@@ -1152,6 +1152,7 @@ export class CombatSystem {
   // 閃身中落空；騎車中只扣血不摔車
   private applySignatureHit(npc: NPC, targetPosition: THREE.Vector3, isGrab: boolean) {
     const { player, wantedSystem } = this.ctx;
+    if (player.tryAutoDodge()) return;
     if (player.isDodging) {
       this.showDodgeBanner(
         isGrab ? '💨 閃身步！掙脫主任教官擒拿摔！' : '💨 閃身步！避開生教組長戒尺！',
@@ -1210,6 +1211,7 @@ export class CombatSystem {
   // NPC 攻擊命中玩家結算 (閃避、騎車或出招中只扣血、擊飛)；isBigMove 為總教官迴旋踢
   private applyNpcHit(npc: NPC, targetPosition: THREE.Vector3, isBigMove: boolean = false) {
     const { player, wantedSystem } = this.ctx;
+    if (player.tryAutoDodge()) return;
     if (player.isDodging) {
       this.showDodgeBanner('💨 閃身步！成功規避攻擊！', '🐻 狗熊哆嗦毛！神速規避攻擊！', 1500);
       return;

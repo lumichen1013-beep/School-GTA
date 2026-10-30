@@ -1138,8 +1138,8 @@ export class HUD {
     const dodgeDone = dodgeLvl >= 1;
     if (this.qDodgeDesc) {
       if (dodgeLvl === 0) this.qDodgeDesc.textContent = '尋訪教學大樓「閃身步老師」學習技能【閃身步】 (0/2)';
-      else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻5s)，可進階狗熊哆嗦毛 (1/2)';
-      else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻2s，完全精通) (2/2)';
+      else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻1s)，可進階狗熊哆嗦毛 (1/2)';
+      else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻1s，完全精通) (2/2)';
     }
     this.setQuestState(this.qDodgeItem, this.qDodgeStatus, dodgeDone, dodgeLvl >= 2 ? '大成 🌟' : '閃身步 ✅', '未習得');
 
@@ -1262,7 +1262,7 @@ export class HUD {
     if (skillLevel === 0) {
       // 學習閃身步 (1000 元)
       this.dodgeDialogTextEl.textContent =
-        '閃身步老師：「同學，看你腳步浮躁，在校園裡橫衝直撞很容易吃虧！老夫傳授你入門絕技『閃身步』，施展時身輕如燕、規避敵人一切攻擊！（冷卻時間 5 秒，學費 NT$ 1000）」';
+        '閃身步老師：「同學，看你腳步浮躁，在校園裡橫衝直撞很容易吃虧！老夫傳授你入門絕技『閃身步』，施展時身輕如燕、規避敵人一切攻擊！（冷卻時間 1 秒，學費 NT$ 1000）」';
       if (cash >= 1000) {
         this.dodgeLearnBtnEl.disabled = false;
         this.dodgeLearnBtnEl.textContent = isMobile ? '🥋 學習【閃身步】($1000) [動]' : '🥋 學習【閃身步】(NT$ 1000) (E)';
@@ -1278,7 +1278,7 @@ export class HUD {
     } else if (skillLevel === 1) {
       // 學習狗熊哆嗦毛 (2000 元，前置條件：已學會閃身步)
       this.dodgeDialogTextEl.textContent =
-        '閃身步老師：「好徒兒！你已精通基礎『閃身步』。老夫這裡還有更精妙的至高真傳——進階版『狗熊哆嗦毛』！施展時如靈熊抖擻毫毛，無影無形，冷卻時間大幅縮短至 2 秒！（學費 NT$ 2000）」';
+        '閃身步老師：「好徒兒！你已精通基礎『閃身步』。老夫這裡還有更精妙的至高真傳——進階版『狗熊哆嗦毛』！施展時如靈熊抖擻毫毛，無影無形，連續瞬移神速規避！（學費 NT$ 2000）」';
       if (cash >= 2000) {
         this.dodgeLearnBtnEl.disabled = false;
         this.dodgeLearnBtnEl.textContent = isMobile ? '🐻 領悟進階【狗熊哆嗦毛】($2000) [動]' : '🐻 領悟進階【狗熊哆嗦毛】(NT$ 2000) (E)';
@@ -1381,11 +1381,11 @@ export class HUD {
     if (skillLevel === 1) {
       this.skillIconEl.textContent = '🥋';
       this.skillNameEl.textContent = '閃身步';
-      this.skillDescEl.textContent = '規避敵人攻擊 (冷卻 5s)';
+      this.skillDescEl.textContent = '規避敵人攻擊 (冷卻 1s)';
     } else {
       this.skillIconEl.textContent = '🐻';
       this.skillNameEl.textContent = '狗熊哆嗦毛';
-      this.skillDescEl.textContent = '極速閃避攻擊 (冷卻 2s)';
+      this.skillDescEl.textContent = '極速閃避攻擊 (冷卻 1s)';
     }
 
     if (cdRemaining > 0) {

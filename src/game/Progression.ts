@@ -10,6 +10,9 @@ const WEAPON_EQUIP_BANNERS: Record<WeaponType, { campus: string; detention: stri
   NORMAL_BAT: { campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' },
   SPECIAL_BAT: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' }
 };
+// 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與閃身步被動自動發動機率 (被敵人攻擊命中瞬間)
+const DODGE_SKILL_COOLDOWN = 1.0;
+const AUTO_DODGE_CHANCE = 0.2;
 
 // 擊敗各角色的獎金與擊倒統計計數 (未列出的角色預設獎金 20)
 interface RoleDefeatReward {
@@ -64,7 +67,7 @@ export class Progression {
   public hasEscapedDog: boolean = false;
   public hasWishedPond: boolean = false;
   public hasTastedHotFood: boolean = false;
-  // 身法技能系統 (閃身步 5s CD / 狗熊哆嗦毛 2s CD)
+  // 身法技能系統 (閃身步 / 狗熊哆嗦毛，冷卻皆 1s)
   public dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
   public dodgeCooldownTimer: number = 0;
 
@@ -224,7 +227,7 @@ export class Progression {
       this.dodgeSkillLevel = 1;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 5 秒，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
+      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 1 秒，且被攻擊時有機率自動施放，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
     } else if (targetLevel === 2) {
       if (this.dodgeSkillLevel < 1) {
         wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
@@ -238,7 +241,7 @@ export class Progression {
       this.dodgeSkillLevel = 2;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！技能如神，冷卻縮短至 2 秒！按 [Q] 鍵神速規避！', 5000);
+      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！連續瞬移神速規避，需手動按 [Q] 鍵施放！', 5000);
     }
   };
 
@@ -265,7 +268,7 @@ export class Progression {
     }
 
     const isAdvanced = this.dodgeSkillLevel === 2;
-    this.dodgeCooldownTimer = isAdvanced ? 2.0 : 5.0;
+    this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
 
     if (isAdvanced) {
       player.performBearShake(this.ctx.activeColliders);
@@ -274,9 +277,23 @@ export class Progression {
     }
 
     wantedSystem.showBanner(
-      isAdvanced ? '🐻 施展【狗熊哆嗦毛】！連續瞬移神速規避攻擊！(CD 2s)' : '💨 施展【閃身步】！左右破空閃身規避！(CD 5s)',
+      isAdvanced ? '🐻 施展【狗熊哆嗦毛】！連續瞬移神速規避攻擊！(CD 1s)' : '💨 施展【閃身步】！左右破空閃身規避！(CD 1s)',
       1600
     );
+  };
+
+  // 被動自動閃身：僅閃身步 (level 1) 且冷卻完畢時，被敵人攻擊命中瞬間有 AUTO_DODGE_CHANCE 機率自動施放
+  // (位移沿用手動閃身步：隨機左右橫閃)；成功回傳 true，呼叫端應視為完全閃掉此次攻擊
+  public readonly tryAutoDodge = (): boolean => {
+    const { player, wantedSystem } = this.ctx;
+    if (this.dodgeSkillLevel !== 1 || this.dodgeCooldownTimer > 0) return false;
+    if (player.isDead || player.isCinematicLocked || player.isDodging || player.hitCooldown > 0) return false;
+    if (this.ctx.currentRidingBike || player.isRidingVehicle || player.isSwimming || player.knockdownTimer > 0) return false;
+    if (Math.random() >= AUTO_DODGE_CHANCE) return false;
+    this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
+    player.performFlashStep();
+    wantedSystem.showBanner('💨 閃身步自動發動！左右破空閃身規避！(CD 1s)', 1600);
+    return true;
   };
 
   // 閃避成功提示 (技能等級決定招式名稱)
@@ -289,7 +306,6 @@ export class Progression {
     if (this.dodgeCooldownTimer > 0) {
       this.dodgeCooldownTimer = Math.max(0, this.dodgeCooldownTimer - delta);
     }
-    const maxSkillCd = this.dodgeSkillLevel === 2 ? 2.0 : 5.0;
-    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd, this.ctx.currentWorldType === 'DETENTION');
+    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, DODGE_SKILL_COOLDOWN, this.ctx.currentWorldType === 'DETENTION');
   }
 }

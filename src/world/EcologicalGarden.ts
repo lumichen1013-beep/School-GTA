@@ -966,7 +966,7 @@ export class EcologicalGarden {
             soundManager.playBossBite();
             // 猛烈咬噬：28 點高額傷害 + 強烈擊退 (0-GC Scratch Vector)
             _ecoPushDir.subVectors(playerPos, this.boss.position).normalize();
-            player.launchFlying(_ecoPushDir, 12.0, 4.0, 15, '被食人花王巨口猛烈撕咬！');
+            if (!player.tryAutoDodge()) player.launchFlying(_ecoPushDir, 12.0, 4.0, 15, '被食人花王巨口猛烈撕咬！');
           }
         }
 

@@ -312,6 +312,8 @@ export class Player {
 
   public onTakeDamageCallback: ((amount: number, reason: string) => void) | null = null;
   public onDeathCallback: (() => void) | null = null;
+  // 被敵人攻擊命中瞬間的被動閃身判定 (由 Progression 注入)；回傳 true 代表已自動閃開
+  public autoDodgeHook: (() => boolean) | null = null;
 
   // Visual parts for animation
   private bodyMesh: THREE.Mesh;
@@ -480,6 +482,11 @@ export class Player {
     for (const node of this.outfitNodes) {
       node.mesh.geometry = swimming ? node.swim : node.land;
     }
+  }
+
+  // 敵人攻擊命中前呼叫一次：成功自動閃身步則呼叫端應完全略過此次傷害與擊飛
+  public tryAutoDodge(): boolean {
+    return !!this.autoDodgeHook && this.autoDodgeHook();
   }
 
   public takeDamage(amount: number, reason: string = '受到傷害'): boolean {
