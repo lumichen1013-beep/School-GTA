@@ -29,7 +29,7 @@ import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
 import { Progression } from './game/Progression';
-import { getWeapon, isWeaponAvailable, resolveVariant } from './weapons/registry';
+import { getWeapon, isWeaponAvailable } from './weapons/registry';
 import type { WeaponId } from './weapons/types';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
@@ -71,7 +71,7 @@ class SchoolGTASandbox implements GameContext {
 
   public currentWorldType: WorldType = 'CAMPUS';
   private lastWeaponCycleAt = 0;
-  // 點擊 / 滾輪循環武器，0.2 秒防連點
+  // 滾輪循環武器，0.2 秒防連點
   private readonly cycleWeaponThrottled = () => {
     const now = performance.now();
     if (now - this.lastWeaponCycleAt < 200) return;
@@ -263,13 +263,7 @@ class SchoolGTASandbox implements GameContext {
     this.setupInputBindings();
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
-      onDodge: this.progression.triggerDodgeSkill,
-      onCycleWeapon: this.cycleWeaponThrottled
-    });
-    // 點擊右上武器標章循環切換武器
-    document.getElementById('weapon-chip')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.cycleWeaponThrottled();
+      onDodge: this.progression.triggerDodgeSkill
     });
     // 滑鼠滾輪循環切換武器 (鏡頭無滾輪縮放，無衝突；僅畫布上觸發，大地圖開啟時略過)
     this.engine.canvas.addEventListener('wheel', (e) => {
@@ -831,8 +825,8 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);
-    // 武器標章：沿用原武器 (羽球賽持拍時數值仍取原武器，標章不變)；特訓院普通棒顯示警棍變體名
-    this.hud.setWeaponChip(this.player.weaponDef.icon, resolveVariant(this.player.currentWeapon, this.currentWorldType).name, this.player.weaponDef.stats.damage);
+    // 學生證武器資訊：沿用原武器 (羽球賽持拍時數值仍取原武器)
+    this.hud.setWeaponInfo(this.player.weaponDef.icon, this.player.weaponDef.stats.damage);
     this.progression.updateSkillCooldown(delta);
 
     let detentionRadarData: DetentionRadarData | undefined;

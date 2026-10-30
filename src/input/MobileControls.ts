@@ -4,7 +4,6 @@ import { JOYSTICK_SNEAK_RADIUS } from '../entities/Player';
 export interface MobileControlHandlers {
   onAttackRelease: () => void;
   onDodge: () => void;
-  onCycleWeapon: () => void;
 }
 
 // 手機虛擬搖桿與觸控按鍵綁定 (觸控/滑鼠雙支援)
@@ -19,7 +18,6 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
   const btnSprint = document.getElementById('m-btn-sprint');
   const btnInteract = document.getElementById('m-btn-interact');
   const skillHudCard = document.getElementById('skill-hud-card');
-  const weaponChip = document.getElementById('weapon-chip');
 
   const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   if (isTouchDevice && container) {
@@ -221,5 +219,4 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
   });
 
   bindButton(skillHudCard, handlers.onDodge);
-  bindButton(weaponChip, handlers.onCycleWeapon);
 }

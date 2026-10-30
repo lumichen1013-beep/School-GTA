@@ -366,37 +366,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   white-space: nowrap;
 }
 
-.weapon-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  box-sizing: border-box;
-  max-width: 220px;
-  background: rgba(13, 19, 33, 0.82);
-  backdrop-filter: blur(8px);
-  padding: 0 12px;
-  border: none;
-  border-radius: 10px;
-  border-right: 3px solid #f1c40f;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  white-space: nowrap;
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-.weapon-chip:hover { background: rgba(30, 41, 66, 0.9); }
-.weapon-chip-icon { font-size: 18px; }
-.weapon-chip-name { overflow: hidden; text-overflow: ellipsis; }
-.weapon-chip-atk {
-  color: #f1c40f;
-  font-family: 'Changa One', monospace;
-  font-size: 15px;
-}
-
 .cash-val {
   color: #2ecc71;
   font-family: 'Changa One', monospace;
@@ -3683,17 +3652,6 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
   .cash-val {
     font-size: 16px !important;
   }
-  .weapon-chip {
-    min-height: 44px !important;
-    min-width: 44px !important;
-    max-width: 150px !important;
-    padding: 0 8px !important;
-    gap: 4px !important;
-    font-size: 11px !important;
-  }
-  .weapon-chip-atk {
-    font-size: 12px !important;
-  }
 
   /* 校規處分卡精簡為單行標籤 (保留即時狀態文字，隱藏五格記過徽章) */
   .demerit-container {
@@ -3815,8 +3773,8 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
   /* 身法技能狀態卡移至右側動作按鍵上方，左下角徹底留給蘑菇頭虛擬搖桿 */
   .skill-hud-card {
     position: absolute !important;
-    bottom: calc(max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px)) + 142px) !important; /* 按鍵扇形高度 130px + 12px 間距 */
-    right: max(10px, calc(env(safe-area-inset-right, 0px) + 8px)) !important;
+    bottom: calc(var(--mc-bottom) + 160px) !important; /* 按鍵扇形高度 150px + 10px 間距 */
+    right: max(14px, calc(env(safe-area-inset-right, 0px) + 12px)) !important;
     left: auto !important;
     margin: 0 !important;
     padding: 5px 10px !important;
@@ -3915,41 +3873,50 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
     display: block !important;
   }
 
-  /* 搖桿與按鍵避開底部 Home 指示條與左右瀏海安全區 */
-  #touch-joystick-zone {
-    bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px)) !important;
-    left: max(12px, calc(env(safe-area-inset-left, 0px) + 8px)) !important;
+  /* 搖桿與按鍵避開底部 Home 指示條與左右瀏海安全區；--mc-bottom 為控制群離底距離 (搖桿、按鍵群、技能卡共用) */
+  :root {
+    --mc-bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 14px));
   }
-  /* 右下扇形按鍵：攻擊 56px、其餘 44px，按鍵外緣間距皆 >= 8px */
+  #touch-joystick-zone {
+    bottom: var(--mc-bottom) !important;
+    left: max(24px, calc(env(safe-area-inset-left, 0px) + 18px)) !important;
+  }
+  /* 右下扇形按鍵：以「打」圓心為軸，「動」(正左)、「跑」(左上 45°)、「跳」(正上) 排在半徑 84px 弧上；
+     攻擊 62px、其餘 48px，按鍵外緣間距皆 >= 15px */
   #mobile-action-buttons {
-    width: 130px !important;
-    height: 130px !important;
-    bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px)) !important;
-    right: max(10px, calc(env(safe-area-inset-right, 0px) + 8px)) !important;
+    width: 150px !important;
+    height: 150px !important;
+    bottom: var(--mc-bottom) !important;
+    right: max(14px, calc(env(safe-area-inset-right, 0px) + 12px)) !important;
   }
   .mobile-btn {
-    width: 44px !important;
-    height: 44px !important;
-    font-size: 20px !important;
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 22px !important;
   }
   #m-btn-attack {
-    width: 56px !important;
-    height: 56px !important;
-    font-size: 22px !important;
-    bottom: 8px !important;
-    right: 8px !important;
+    width: 62px !important;
+    height: 62px !important;
+    font-size: 24px !important;
+    bottom: 10px !important;
+    right: 10px !important;
   }
   #m-btn-jump {
-    bottom: 74px !important;
-    right: 12px !important;
+    bottom: 101px !important;
+    right: 17px !important;
   }
   #m-btn-sprint {
-    bottom: 70px !important;
-    right: 68px !important;
+    bottom: 76px !important;
+    right: 76px !important;
   }
   #m-btn-interact {
-    bottom: 8px !important;
-    right: 74px !important;
+    bottom: 17px !important;
+    right: 101px !important;
+  }
+  /* 觸控模式下技能卡位置由 body.touch-mode-active 規則決定，這裡以 id 提高優先度，疊在按鍵扇形正上方 */
+  body.touch-mode-active #skill-hud-card {
+    bottom: calc(var(--mc-bottom) + 160px) !important;
+    right: max(14px, calc(env(safe-area-inset-right, 0px) + 12px)) !important;
   }
 }
 
@@ -4096,12 +4063,16 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
 
   /* 直屏窄屏優化：左下蘑菇頭尺寸 (按鍵扇形佈局與安全區定位統一於手機通用區塊) */
   #touch-joystick-zone {
-    width: 100px !important;
-    height: 100px !important;
+    width: 110px !important;
+    height: 110px !important;
   }
   #touch-joystick-thumb {
-    width: 40px !important;
-    height: 40px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+  /* 直屏單手握持，控制群再抬高一些，離底部 Home 指示條更遠 */
+  :root {
+    --mc-bottom: max(34px, calc(env(safe-area-inset-bottom, 0px) + 24px));
   }
 }
 
@@ -4188,12 +4159,12 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
     white-space: nowrap !important;
   }
   #touch-joystick-zone {
-    width: 96px !important;
-    height: 96px !important;
+    width: 106px !important;
+    height: 106px !important;
   }
   #touch-joystick-thumb {
-    width: 38px !important;
-    height: 38px !important;
+    width: 42px !important;
+    height: 42px !important;
   }
   .skill-hud-card {
     padding: 3px 8px !important;
