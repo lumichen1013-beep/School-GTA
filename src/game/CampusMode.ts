@@ -15,14 +15,21 @@ const _scratchCamForward = new THREE.Vector3();
 const _scratchEnforcerSpot = new THREE.Vector3();
 const _placedEnforcerSpots: THREE.Vector3[] = [new THREE.Vector3(), new THREE.Vector3()];
 
-// 留校察看 (5 級處分) 執法者傳送追捕
+// 連殺觸發執法者傳送追捕
 const ENFORCER_TELEPORT_MIN = 5.0; // 落點與玩家距離 (m)
 const ENFORCER_TELEPORT_MAX = 9.0;
 const ENFORCER_TELEPORT_ATTEMPTS = 40;
-const ENFORCER_RECHECK_INTERVAL = 20.0; // 維持 5 級期間每 20 秒檢查一次
+// 通緝期間累計擊倒數達門檻後，每次擊倒擲骰 (通緝清除時歸零)
+export const KILL_STREAK_THRESHOLD = 2;
+export const ENFORCER_TRIGGER_CHANCE = 0.8;
 const ENFORCER_ENGAGE_RANGE_SQ = 625.0; // 25m 內有執法者追捕中即視為仍在纏鬥
 const ENFORCER_FLOOR_HEIGHT = 6.0; // 樓層高度 (1F 0 / 2F 6 / 3F 12)
 const CAMPUS_TELEPORT_BOUND = 104.0;
+
+// 連殺擲骰判定 (roll 預設 Math.random，便於驗證)
+export function rollEnforcerTrigger(killStreak: number, roll: number = Math.random()): boolean {
+  return killStreak >= KILL_STREAK_THRESHOLD && roll < ENFORCER_TRIGGER_CHANCE;
+}
 
 // 路邊閒置的被搶單車上限 (超過時回收最舊者，防止單車無限堆積)
 const MAX_LOOSE_STOLEN_BIKES = 3;
@@ -48,10 +55,10 @@ export class CampusMode {
   private wasDogChasing: boolean = false;
   private lastTrackRecord: number | null | undefined = undefined;
   private lastSwimRecord: number | null | undefined = undefined;
-  // 校園執法者 (主任教官 / 生教組長)：多人包夾、留校察看傳送追捕與處分解除後返回崗位
+  // 校園執法者 (主任教官 / 生教組長)：多人包夾、連殺觸發傳送追捕與處分解除後返回崗位
   private enforcerList: NPC[] | null = null;
   private readonly teleportedEnforcers = new Set<NPC>();
-  private enforcerRecheckTimer: number = 0;
+  private killStreak: number = 0; // 本次通緝期間擊倒 NPC 數
   private enforcerTeleportPending: boolean = false;
   private readonly enforcerSurround = new SurroundCoordinator();
   // 圍攻出手權杖：同時最多 2 人出招、執法者輪流出手 (見 AttackTokenCoordinator)
@@ -102,22 +109,29 @@ export class CampusMode {
     this.attackTokens.reset(this.ctx.campusNPCs);
   }
 
-  // ===== 校園執法者：留校察看傳送追捕 =====
+  // ===== 校園執法者：連殺觸發傳送追捕 =====
 
   private get enforcers(): NPC[] {
     if (!this.enforcerList) this.enforcerList = this.ctx.campusNPCs.filter(n => n.isEnforcer);
     return this.enforcerList;
   }
 
-  // 處分升到 5 級 (留校察看)：執法者立即傳送至玩家附近追捕
-  public onMaxWanted() {
+  // 擊倒 NPC (每擊倒一人呼叫一次)：計入連殺，達門檻且附近無執法者追捕、未在等待傳送時擲骰，
+  // 成功則執法者暴怒並傳送至玩家附近追捕 (持續到處分解除)
+  public onNpcDefeated() {
     if (this.ctx.currentWorldType !== 'CAMPUS') return;
+    this.killStreak++;
+    if (this.killStreak < KILL_STREAK_THRESHOLD || this.enforcerTeleportPending) return;
+    if (this.isEnforcerEngaged(this.ctx.player.position)) return;
+    if (!rollEnforcerTrigger(this.killStreak)) return;
+    for (const e of this.enforcers) e.setEnraged(true);
     this.enforcerTeleportPending = true;
   }
 
-  // 處分解除：被傳送離開崗位的執法者 (未倒地者) 返回原本崗位並解除暴怒
+  // 處分解除：連殺歸零，被傳送離開崗位的執法者 (未倒地者) 返回原本崗位並解除暴怒
   public onWantedCleared() {
     for (const e of this.enforcers) e.setEnraged(false);
+    this.killStreak = 0;
     this.enforcerTeleportPending = false;
     this.returnTeleportedEnforcers();
   }
@@ -130,34 +144,18 @@ export class CampusMode {
     }
   }
 
-  // 每幀 (NPC AI 更新之後)：圍攻出手權杖、執法者包夾、留校察看暴怒與傳送追捕
+  // 每幀 (NPC AI 更新之後)：圍攻出手權杖、執法者包夾、連殺觸發的傳送追捕
   public updateEnforcers(delta: number, playerPos: THREE.Vector3) {
     const enforcers = this.enforcers;
     this.enforcerSurround.update(delta, enforcers, playerPos);
     // 玩家騎車時暫停圍攻權杖，沿用原本追車節奏
     if (this.ctx.currentRidingBike) this.attackTokens.reset(this.ctx.campusNPCs);
     else this.attackTokens.update(delta, this.ctx.campusNPCs, playerPos);
-    const isMax = this.ctx.wantedSystem.stars >= 5;
-    for (const e of enforcers) e.setEnraged(isMax);
-    if (!isMax) {
-      this.enforcerTeleportPending = false;
-      if (this.teleportedEnforcers.size > 0) this.returnTeleportedEnforcers();
-      return;
-    }
-
-    if (!this.enforcerTeleportPending) {
-      this.enforcerRecheckTimer -= delta;
-      if (this.enforcerRecheckTimer > 0) return;
-      // 仍有執法者在 25m 內同樓層追捕中：不打擾，稍後再檢查
-      if (this.isEnforcerEngaged(playerPos)) {
-        this.enforcerRecheckTimer = ENFORCER_RECHECK_INTERVAL;
-        return;
-      }
-    }
-    // 玩家處於不適合傳送的狀態 (游泳、電梯、羽球賽、過場、死亡)：下一幀再試
-    if (!this.canTeleportEnforcers()) return;
+    // 處分解除時倒地未返回的執法者：起身後再返回崗位
+    if (this.ctx.wantedSystem.stars === 0 && this.teleportedEnforcers.size > 0) this.returnTeleportedEnforcers();
+    // 連殺觸發的傳送：玩家處於不適合傳送的狀態 (游泳、電梯、羽球賽、過場、死亡) 時下一幀再試
+    if (!this.enforcerTeleportPending || !this.canTeleportEnforcers()) return;
     this.enforcerTeleportPending = false;
-    this.enforcerRecheckTimer = ENFORCER_RECHECK_INTERVAL;
     this.teleportEnforcers(playerPos);
   }
 
@@ -193,7 +191,7 @@ export class CampusMode {
       this.teleportedEnforcers.add(e);
     }
     if (placed > 0) {
-      this.ctx.wantedSystem.showBanner('🚨 留校察看！主任教官火速趕到現場追捕！', 3000);
+      this.ctx.wantedSystem.showBanner('🚨 連續擊倒多人！主任教官火速趕到現場追捕！', 3000);
     }
   }
 

@@ -18,8 +18,6 @@ export class WantedSystem {
   private isSpottedThisFrame: boolean = false;
   private bannerTimeout: number = 0;
   public onWantedCleared?: () => void;
-  // 處分升到最高級 (5 級) 時觸發 (校園：執法者傳送追捕)
-  public onMaxWanted?: () => void;
 
   constructor() {
     this.updateHUDStars();
@@ -64,7 +62,6 @@ export class WantedSystem {
     }
 
     this.updateHUDStars();
-    if (this.stars === 5 && oldStars < 5 && this.onMaxWanted) this.onMaxWanted();
   }
 
   public markSpotted() {
