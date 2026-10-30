@@ -52,6 +52,7 @@ const DETENTION_FRONTAL_DMG_MULT = 0.6;
 const DETENTION_BOSS_DMG_MULT = 0.5;
 const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
 // NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
+const BIKE_RAM_DAMAGE = 50; // 騎車衝撞 NPC 固定傷害
 const NPC_ATTACK_INTERVAL = 0.85;
 const GRAB_THROW_DAMAGE = 20; // 主任教官擒拿摔
 const GRAB_THROW_DOWN_TIME = 0.7; // 擒拿摔落地後倒地秒數
@@ -768,7 +769,7 @@ export class CombatSystem {
     for (const npc of this.ctx.npcs) {
       if (npc.position.distanceTo(targetPosition) < 2.5 && !npc.isKnockedDown && !npc.isKnockedFlying && npc.hitCooldown <= 0) {
         const speed = Math.abs(bike.speed);
-        const dmg = Math.round(speed * 4.5 + 20);
+        const dmg = BIKE_RAM_DAMAGE;
         this.ctx.wantedSystem.reportCrime(2, '火柴人自行車高速衝撞師生');
 
         _scratchBikeForward.set(Math.sin(bikeRotY), 0, Math.cos(bikeRotY)).normalize();
