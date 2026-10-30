@@ -75,6 +75,8 @@ const _npcSurroundTarget = new THREE.Vector3();
 
 // 戰鬥積極度 (第二世界特訓群與校園執法者，roleConfig.aggressiveCombat)
 const W2_COMBAT_MIN_SPEED = 5.5; // 追捕中最低移動速度 (潛行巡邏慢速不帶入戰鬥)
+const PLAYER_LAUNCH_MAX_H = 10; // 玩家終結技擊飛水平速度上限 (其他來源如單車撞飛仍為 16.5)
+const PLAYER_LAUNCH_MAX_V = 7; // 玩家終結技擊飛垂直速度上限 (其他來源仍為 10.5)
 const W2_STAGGER_TIME = 0.3; // 一般受擊踉蹌總時間 (前段後退、後段縮身)
 const W2_STAGGER_PUSH_TIME = 0.15;
 const W2_STAGGER_DIST = 0.4; // 踉蹌後退距離 (m)，仍留在攻擊範圍內
@@ -1201,7 +1203,11 @@ export class NPC {
   // 單車衝撞與武器擊飛效果
   // canLaunch：第二世界特訓群僅連招終結技可擊飛，其餘命中改為短暫踉蹌
   // ignoreCooldown：略過 0.65 秒受擊保護 (連段終結技緊接前一段命中；舉盾/閃避等機率防禦照常判定)
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false): boolean {
+  // fromPlayer：玩家武器攻擊。canLaunch 為 false 時 (連段第 1、2 段 / 非終結技) 僅扣血：
+  //   不擊飛、不位移、不踉蹌、不打斷出招，也不吃/不設 0.65 秒受擊保護 (連段間隔約 0.3 秒，每段都須吃到傷害)；
+  //   擊飛時水平 / 垂直速度上限另行下修 (見 PLAYER_LAUNCH_MAX_H / V)
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false): boolean {
+    const lightHit = fromPlayer && !canLaunch;
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1213,7 +1219,7 @@ export class NPC {
       }
       return false;
     }
-    if (this.hitCooldown > 0 && !ignoreCooldown) return false;
+    if (this.hitCooldown > 0 && !ignoreCooldown && !lightHit) return false;
     // 鐵面總長受擊：撞柱硬直中 30%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.50)) return false;
     // 持盾特訓院守衛：正面受擊 40% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
@@ -1230,7 +1236,7 @@ export class NPC {
         return false;
       }
     }
-    this.hitCooldown = 0.65; // 0.65秒受擊保護
+    if (!lightHit) this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
     if (!this.isKnockedDown && this.hp > 0) {
@@ -1238,6 +1244,7 @@ export class NPC {
     } else {
       this.isChasing = false;
     }
+    if (lightHit) return wasKnockedDown;
 
     // 戰鬥積極角色 (特訓群 / 校園執法者)：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
     if (this.cfg.aggressiveCombat && !this.isKnockedDown &&
@@ -1254,8 +1261,8 @@ export class NPC {
 
     // 計算擊飛拋物線：向上拋射 + 合理水平擊飛 (受物理阻擋，絕不飛越圍牆或穿透建物)
     this.isKnockedFlying = true;
-    const horizontalForce = Math.min(Math.max(force * 1.1, 3.0), 16.5);
-    const verticalForce = Math.min(Math.max(force * 0.6, 2.0), 10.5);
+    const horizontalForce = Math.min(Math.max(force * 1.1, 3.0), fromPlayer ? PLAYER_LAUNCH_MAX_H : 16.5);
+    const verticalForce = Math.min(Math.max(force * 0.6, 2.0), fromPlayer ? PLAYER_LAUNCH_MAX_V : 10.5);
 
     this.knockVelocity.set(
       impactDir.x * horizontalForce,

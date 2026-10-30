@@ -724,8 +724,8 @@ export class CombatSystem {
       // 擊退方向：玩家指向目標 (旋身招式可擊中側後方目標)
       if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
       else _scratchImpactDir.copy(_scratchPlayerForward);
-      // 第二世界特訓群僅連招終結技可擊飛，一般命中為短暫踉蹌 (見 NPC.launchFlying)
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, move.finisher)) {
+      // 僅連招終結技可擊飛；非終結技命中只扣血，不影響 NPC 行為 (見 NPC.launchFlying)
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, move.finisher, false, true)) {
         this.handleNpcDefeated(npc, 'ATTACK');
       } else {
         wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
@@ -909,7 +909,7 @@ export class CombatSystem {
         if (aoe.center === 'FRONT' && along < 0) _scratchImpactDir.addScaledVector(fwd, AOE_BACK_BLEND - along).normalize();
       }
       // 終結技無視受擊保護時間 (緊接前一段命中)，第二世界特訓群可被擊飛
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, true, true)) {
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, true, true, true)) {
         this.handleNpcDefeated(npc, 'ATTACK', false);
         if (!firstKo) firstKo = npc;
       } else {
