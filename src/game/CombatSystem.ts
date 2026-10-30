@@ -54,9 +54,9 @@ const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
 // NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
 const BIKE_RAM_DAMAGE = 50; // 騎車衝撞 NPC 固定傷害
 const NPC_ATTACK_INTERVAL = 0.85;
-const GRAB_THROW_DAMAGE = 20; // 主任教官擒拿摔
+const GRAB_THROW_DAMAGE = 10; // 主任教官擒拿摔
 const GRAB_THROW_DOWN_TIME = 0.7; // 擒拿摔落地後倒地秒數
-const RULER_STRIKE_DAMAGE = 8; // 生教組長戒尺連打 (每下)
+const RULER_STRIKE_DAMAGE = 4; // 生教組長戒尺連打 (每下)
 const BIG_MOVE_INTERRUPT_CHANCE = 0.5; // 玩家出招中被大招 (擒拿摔、戒尺連打、總教官衝撞/迴旋踢) 打斷的機率
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
