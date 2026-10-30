@@ -101,6 +101,7 @@
       <div class="hud-top-right">
         <div class="hud-status-row">
           <div class="cash-badge">💰 <span class="cash-val" id="cash-text">NT$ 250</span></div>
+          <button type="button" id="weapon-chip" class="weapon-chip" title="切換武器 (滾輪 / 點擊)"><span class="weapon-chip-icon" id="weapon-chip-icon">🥊</span><span class="weapon-chip-name" id="weapon-chip-name">徒手拳擊</span><span class="weapon-chip-atk" id="weapon-chip-atk">ATK 25</span></button>
           <div class="hud-action-pills" id="hud-action-pills">
             <!-- ⚙️ 設定選單：收納全螢幕 / 觸控操作 (BGM、天氣、世界切換已移至大地圖) -->
             <button type="button" id="hud-settings-btn" class="hud-pill-btn hud-settings-btn" title="設定選單" aria-expanded="false">⚙️</button>
@@ -252,14 +253,12 @@
         </div>
       </div>
 
-      <!-- 右下角 (Bottom-Right)：人體工學拇指按鈕群 (攻擊、跳躍、衝刺、互動、武器切換、身法閃避) -->
+      <!-- 右下角 (Bottom-Right)：人體工學拇指按鈕群 (攻擊、跳躍、衝刺、互動) -->
       <div id="mobile-action-buttons">
         <button class="mobile-btn btn-attack" id="m-btn-attack" title="攻擊 / 出拳 / 揮棒 (打)">打</button>
         <button class="mobile-btn btn-jump" id="m-btn-jump" title="跳躍 (跳)">跳</button>
         <button class="mobile-btn btn-sprint" id="m-btn-sprint" title="衝刺 (跑)">跑</button>
         <button class="mobile-btn btn-interact" id="m-btn-interact" title="互動 / 騎乘 / 對話 (動)">動</button>
-        <button class="mobile-btn btn-weapon" id="m-btn-weapon" title="切換裝備 (換)">換</button>
-        <button class="mobile-btn btn-dodge" id="m-btn-dodge" title="技能閃避：閃身步 / 狗熊哆嗦毛 (閃)">閃</button>
       </div>
     </div>
   </div>

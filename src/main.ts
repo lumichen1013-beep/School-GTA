@@ -27,6 +27,7 @@ import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
 import { Progression } from './game/Progression';
+import { resolveVariant } from './weapons/registry';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
 import { CampusLife } from './game/CampusLife';
@@ -63,6 +64,14 @@ class SchoolGTASandbox implements GameContext {
   public tennisGame!: TennisGame;
 
   public currentWorldType: WorldType = 'CAMPUS';
+  private lastWeaponCycleAt = 0;
+  // 點擊 / 滾輪循環武器，0.2 秒防連點
+  private readonly cycleWeaponThrottled = () => {
+    const now = performance.now();
+    if (now - this.lastWeaponCycleAt < 200) return;
+    this.lastWeaponCycleAt = now;
+    this.progression.cycleWeapon();
+  };
   // 特訓院配發的防暴棒沿用普通球棒槽位：進入特訓院前記下校園的球棒解鎖狀態，返回校園時還原
   private campusHasNormalBat: boolean = false;
   public bicycles: Bicycle[] = [];
@@ -245,9 +254,20 @@ class SchoolGTASandbox implements GameContext {
     this.setupInputBindings();
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
-      onCycleWeapon: this.progression.cycleWeapon,
-      onDodge: this.progression.triggerDodgeSkill
+      onDodge: this.progression.triggerDodgeSkill,
+      onCycleWeapon: this.cycleWeaponThrottled
     });
+    // 點擊右上武器標章循環切換武器
+    document.getElementById('weapon-chip')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.cycleWeaponThrottled();
+    });
+    // 滑鼠滾輪循環切換武器 (鏡頭無滾輪縮放，無衝突；僅畫布上觸發，大地圖開啟時略過)
+    this.engine.canvas.addEventListener('wheel', (e) => {
+      if (!this.isGameRunning || this.hud.isFullMapOpen || e.deltaY === 0) return;
+      e.preventDefault();
+      this.cycleWeaponThrottled();
+    }, { passive: false });
     // 視窗縮放/翻轉事件統一由 Engine 監聽，這裡只負責同步鏡頭比例 (updateAspect 內含投影矩陣更新)
     this.engine.onResizeCallback = (_w, _h, aspect) => {
       this.cameraCtrl.updateAspect(aspect);
@@ -794,6 +814,8 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);
+    // 武器標章：沿用原武器 (羽球賽持拍時數值仍取原武器，標章不變)；特訓院普通棒顯示警棍變體名
+    this.hud.setWeaponChip(this.player.weaponDef.icon, resolveVariant(this.player.currentWeapon, this.currentWorldType).name, this.player.weaponDef.stats.damage);
     this.progression.updateSkillCooldown(delta);
 
     let detentionRadarData: DetentionRadarData | undefined;

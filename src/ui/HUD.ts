@@ -269,6 +269,9 @@ export class HUD {
     this.bgmToggleBtnEl = document.getElementById('bgm-toggle-btn');
     this.crosshairEl = document.getElementById('crosshair');
     this.cashTextEl = document.getElementById('cash-text');
+    this.weaponChipIconEl = document.getElementById('weapon-chip-icon');
+    this.weaponChipNameEl = document.getElementById('weapon-chip-name');
+    this.weaponChipAtkEl = document.getElementById('weapon-chip-atk');
 
     this.poisonVignetteEl = document.getElementById('poison-vignette');
     this.weatherBadgeEl = document.getElementById('weather-badge');
@@ -671,6 +674,12 @@ export class HUD {
   private lastMinimapTime: number = 0;
   private lastCash: number = -1;
   private lastMissionData: MissionTrackerData | null = null;
+  private weaponChipIconEl: HTMLElement | null = null;
+  private weaponChipNameEl: HTMLElement | null = null;
+  private weaponChipAtkEl: HTMLElement | null = null;
+  private lastWeaponIcon = '';
+  private lastWeaponName = '';
+  private lastWeaponAtk = -1;
   private lastHp: number = -1;
   private lastHpLevel: string = '';
   private lastStamina: number = -1;
@@ -1038,6 +1047,22 @@ export class HUD {
     if (statusEl) {
       statusEl.textContent = done ? doneText : pendingText;
       statusEl.className = done ? 'q-status done' : 'q-status';
+    }
+  }
+
+  // 右上武器標章：圖示 / 名稱 / ATK 任一變動才寫 DOM (換武器或世界切換)
+  public setWeaponChip(icon: string, name: string, atk: number) {
+    if (icon !== this.lastWeaponIcon) {
+      this.lastWeaponIcon = icon;
+      if (this.weaponChipIconEl) this.weaponChipIconEl.textContent = icon;
+    }
+    if (name !== this.lastWeaponName) {
+      this.lastWeaponName = name;
+      if (this.weaponChipNameEl) this.weaponChipNameEl.textContent = name;
+    }
+    if (atk !== this.lastWeaponAtk) {
+      this.lastWeaponAtk = atk;
+      if (this.weaponChipAtkEl) this.weaponChipAtkEl.textContent = `ATK ${atk}`;
     }
   }
 
