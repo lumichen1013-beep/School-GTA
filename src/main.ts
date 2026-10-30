@@ -181,6 +181,7 @@ class SchoolGTASandbox implements GameContext {
     // 階段 3 (65%)：生成主角模型、火柴人自行車與水花特效系統
     progress(65, '正在生成主角模型、火柴人自行車與水花特效系統...');
     this.player = new Player(this.engine.scene);
+    soundManager.setListener(this.player.position); // NPC/場景音效依玩家距離衰減
     swingTrail.init(this.engine.scene);
     comboFinisherFX.init(this.engine.scene);
     slashFX.init(this.engine.scene);

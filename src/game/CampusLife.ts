@@ -717,7 +717,7 @@ export class CampusLife {
         bubble: isTeacher ? '是…對不起…' : '是！馬上紮好！'
       }));
       n.showSpeechBubble(isTeacher ? '站住！走廊不准奔跑！' : '那位同學站住！制服紮好！', true, 2.2);
-      soundManager.playWhistle();
+      soundManager.playWhistle(n.position);
       // 師長走到同學面前訓話
       const ux = n.position.x - sp.x, uz = n.position.z - sp.z;
       const ul = Math.hypot(ux, uz) || 1;
@@ -777,7 +777,7 @@ export class CampusLife {
       if (d2 < 900 && this.pathClear(dog.position.x, dog.position.z, sx, sz, dog.baseFloorY)) {
         this.dogCooldown = 50;
         dog.showSpeechBubble('🐾 汪汪汪！(發現鴿子)', true, 1.6);
-        soundManager.playDogBark();
+        soundManager.playDogBark(dog.position);
         this.assign(dog, this.makeTask(sx, sz, {
           speedMul: 2.4, run: true, arriveDist: 1.5, hold: 'DOG_SNIFF', holdTime: 2.5, bubble: '🐾 嗚…飛走了'
         }));
@@ -914,7 +914,7 @@ export class CampusLife {
         this.pigeonFlying = true;
         this.pigeonFlyTimer = 0;
         this.pigeonSpot = (this.pigeonSpot + 1) % PIGEON_SPOTS.length;
-        soundManager.playDodge(false);
+        soundManager.playDodge(false, { x: sx, y: 0, z: sz });
       }
     } else {
       this.pigeonFlyTimer += delta;
