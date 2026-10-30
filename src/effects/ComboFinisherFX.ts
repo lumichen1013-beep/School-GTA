@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getFxQuality } from './fxQuality';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import type { WeaponFxStyle } from './weaponFxStyle';
 
 // 連段終結技特效：發光裂痕 / 衝擊波環 / 塵土 / 黃金棒雷電，各類以單一 InstancedMesh 繪製 (每類 1 draw call)。
@@ -11,7 +12,7 @@ const RING_REACH = 1.45;       // 環最大半徑 = 群攻半徑 × 此倍率 (�
 const RING2_DELAY = 0.08;     // 第二圈錯開時間
 const RING2_SCALE = 0.72;     // 第二圈相對大小
 const CRACK_SCALE = 3.4;      // 裂痕邊長 = 群攻半徑 × 此倍率 (受品質上限約束)
-const CRACK_LAYERS = 3;       // 每道裂痕疊 3 層實例：焦黑底 / 色光 / 白熱芯
+const CRACK_LAYERS_MAX = 3;   // 每道裂痕最多疊 3 層實例：焦黑底 / 色光 / 白熱芯 (手機只疊前 2 層)
 const DUST_LIFE = 0.7;
 const BOLT_LIFE = 0.4;
 const BOLT_REVEAL = 0.1;      // 雷電由地面向上竄起所需秒數
@@ -22,6 +23,9 @@ const GOLD_BOLT_A = 0xfff27a;
 const GOLD_BOLT_B = 0x8fd3ff;
 const BOLT_CORE = 0xffffff;
 const SCORCH_COLOR = 0x2a1608; // 裂痕焦黑底色 (亮色地面上提供對比)
+const FEATHER_LIFE = 0.9;
+const FEATHER_GRAVITY = 7;
+const FEATHER_COLORS = [0xffffff, 0x2ef2c8, 0xff6fcf] as const; // 白 / 青 / 粉 (雙燕羽刃)
 
 const _matrix = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -31,6 +35,7 @@ const _color = new THREE.Color();
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _yAxis = new THREE.Vector3(0, 1, 0);
+const _euler = new THREE.Euler();
 const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
 // 程序產生放射狀裂紋貼圖 (透明底、白色裂紋，實際顏色由 instanceColor 染色)
@@ -182,12 +187,16 @@ function flushFx(mesh: THREE.InstancedMesh) {
 interface Crack { life: number; max: number; x: number; y: number; z: number; rot: number; size: number; color: number; core: number }
 interface Ring { life: number; delay: number; x: number; y: number; z: number; radius: number; color: number }
 interface Puff { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; size: number }
+interface Feather { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; sx: number; sy: number; sz: number; phase: number; color: number }
 
 class ComboFinisherFXSystem {
   private crackMesh: THREE.InstancedMesh | null = null;
   private ringMesh: THREE.InstancedMesh | null = null;
   private dustMesh: THREE.InstancedMesh | null = null;
   private boltMesh: THREE.InstancedMesh | null = null;
+  private featherMesh: THREE.InstancedMesh | null = null;
+  private feathers: Feather[] = [];
+  private featherActive = 0;
   private cracks: Crack[] = [];
   private rings: Ring[] = [];
   private puffs: Puff[] = [];
@@ -205,6 +214,8 @@ class ComboFinisherFXSystem {
   private strands = 0;
   private segments = 0;
   private maxCrackSize = 4.5;
+  private crackLayers = CRACK_LAYERS_MAX;
+  private ringReach = 1;
   private crackLifeSec = 1.8;
 
   // 初始化並加入場景 (閒置時皆 visible=false，不產生 draw call)
@@ -212,6 +223,8 @@ class ComboFinisherFXSystem {
     if (this.crackMesh) return;
     const q = getFxQuality();
     this.maxCrackSize = q.crackMaxSize;
+    this.crackLayers = Math.min(CRACK_LAYERS_MAX, q.crackLayers);
+    this.ringReach = q.ringReach;
     this.crackLifeSec = q.crackLife;
 
     const crackGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -219,7 +232,7 @@ class ComboFinisherFXSystem {
     crackMat.polygonOffset = true;
     crackMat.polygonOffsetFactor = -2;
     crackMat.polygonOffsetUnits = -2;
-    this.crackMesh = createInstanced(crackGeo, crackMat, q.crackPool * CRACK_LAYERS, 3, true);
+    this.crackMesh = createInstanced(crackGeo, crackMat, q.crackPool * this.crackLayers, 3, true);
     for (let i = 0; i < q.crackPool; i++) this.cracks.push({ life: 0, max: 1, x: 0, y: 0, z: 0, rot: 0, size: 1, color: 0xffffff, core: 0xffffff });
 
     const ringGeo = new THREE.RingGeometry(0.55, 1, 48).rotateX(-Math.PI / 2);
@@ -240,13 +253,26 @@ class ComboFinisherFXSystem {
     this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), this.strands * this.segments, 5, true);
     this.boltPts = new Float32Array(this.strands * (this.segments + 1) * 3);
 
-    scene.add(this.crackMesh, this.ringMesh, this.boltMesh);
+    // 羽毛 (雙燕羽刃終結技)：葉形薄片，白 / 青 / 粉 instanceColor
+    const leaf = new THREE.Shape();
+    leaf.moveTo(0, -0.5);
+    leaf.quadraticCurveTo(0.34, -0.1, 0, 0.5);
+    leaf.quadraticCurveTo(-0.34, -0.1, 0, -0.5);
+    this.featherMesh = createInstanced(new THREE.ShapeGeometry(leaf), fadeMat(null, true), q.featherPool, 6, true);
+    for (let i = 0; i < q.featherPool; i++) {
+      this.feathers.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0, rz: 0, sx: 0, sy: 0, sz: 0, phase: 0, color: FEATHER_COLORS[i % 3] });
+    }
+
+    scene.add(this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh);
     if (this.dustMesh) scene.add(this.dustMesh);
+    // 閒置隱藏時略過矩陣更新
+    updateVisibleMatricesOnly(this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh);
+    if (this.dustMesh) updateVisibleMatricesOnly(this.dustMesh);
   }
 
   // 暫時顯示以便 renderer.compile 預熱 shader
   public prewarm(compile: () => void) {
-    const meshes = [this.crackMesh, this.ringMesh, this.dustMesh, this.boltMesh];
+    const meshes = [this.crackMesh, this.ringMesh, this.dustMesh, this.boltMesh, this.featherMesh];
     for (const m of meshes) if (m) m.visible = true;
     compile();
     for (const m of meshes) if (m) m.visible = false;
@@ -258,9 +284,10 @@ class ComboFinisherFXSystem {
     for (const c of this.cracks) c.life = 0;
     for (const r of this.rings) { r.life = 0; r.delay = 0; }
     for (const p of this.puffs) p.life = 0;
-    this.crackActive = this.ringActive = this.puffActive = 0;
+    for (const f of this.feathers) f.life = 0;
+    this.crackActive = this.ringActive = this.puffActive = this.featherActive = 0;
     this.boltLife = 0;
-    const meshes = [this.crackMesh, this.ringMesh, this.boltMesh];
+    const meshes = [this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh];
     for (const m of meshes) {
       if (!m) continue;
       for (let i = 0; i < m.count; i++) { m.setMatrixAt(i, _zeroMatrix); setFx(m, i, 0xffffff, 0); }
@@ -303,6 +330,26 @@ class ComboFinisherFXSystem {
     if (groundRadius > 0) this.spawnRing(center.x, groundY + 0.06, center.z, groundRadius, style.impact, delay);
   }
 
+  // 羽毛噴發：自 center (胸口高度) 放射向上、重力飄落旋轉；整池一次噴發
+  public featherBurst(center: THREE.Vector3) {
+    const mesh = this.featherMesh;
+    if (!mesh) return;
+    const n = this.feathers.length;
+    for (let i = 0; i < n; i++) {
+      const f = this.feathers[i];
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.6;
+      const sp = 3.2 + Math.random() * 3.2;
+      f.life = FEATHER_LIFE * (0.8 + Math.random() * 0.2);
+      f.x = center.x + Math.cos(a) * 0.3; f.y = center.y; f.z = center.z + Math.sin(a) * 0.3;
+      f.vx = Math.cos(a) * sp; f.vz = Math.sin(a) * sp; f.vy = 2.2 + Math.random() * 3.6;
+      f.rx = Math.random() * 6.28; f.ry = Math.random() * 6.28; f.rz = Math.random() * 6.28;
+      f.sx = (Math.random() - 0.5) * 14; f.sy = (Math.random() - 0.5) * 14; f.sz = (Math.random() - 0.5) * 14;
+      f.phase = Math.random() * 6.28;
+    }
+    this.featherActive = n;
+    mesh.visible = true;
+  }
+
   private spawnRing(x: number, y: number, z: number, radius: number, color: number, delay: number) {
     const r = this.rings[this.nextRing];
     this.nextRing = (this.nextRing + 1) % this.rings.length;
@@ -342,6 +389,33 @@ class ComboFinisherFXSystem {
     if (this.ringActive > 0) this.updateRings(delta);
     if (this.puffActive > 0) this.updateDust(delta, camera);
     if (this.boltLife > 0) this.updateBolt(delta);
+    if (this.featherActive > 0) this.updateFeathers(delta);
+  }
+
+  private updateFeathers(delta: number) {
+    const mesh = this.featherMesh!;
+    let alive = 0;
+    for (let i = 0; i < this.feathers.length; i++) {
+      const f = this.feathers[i];
+      if (f.life <= 0) continue;
+      f.life -= delta;
+      if (f.life <= 0) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, f.color, 0); continue; }
+      alive++;
+      const damp = Math.max(0, 1 - 1.8 * delta);
+      f.vx *= damp; f.vz *= damp;
+      f.vy = f.vy * damp - FEATHER_GRAVITY * delta * 0.6;
+      f.phase += delta * 9;
+      f.x += (f.vx + Math.sin(f.phase) * 0.6) * delta; f.y += f.vy * delta; f.z += (f.vz + Math.cos(f.phase) * 0.6) * delta;
+      f.rx += f.sx * delta; f.ry += f.sy * delta; f.rz += f.sz * delta;
+      const t = 1 - f.life / FEATHER_LIFE;
+      _quat.setFromEuler(_euler.set(f.rx, f.ry, f.rz));
+      _matrix.compose(_pos.set(f.x, f.y, f.z), _quat, _scl.set(0.2, 0.44, 1).multiplyScalar(1 - t * t * 0.5));
+      mesh.setMatrixAt(i, _matrix);
+      setFx(mesh, i, f.color, t > 0.65 ? (1 - t) / 0.35 : 1);
+    }
+    flushFx(mesh);
+    this.featherActive = alive;
+    if (alive === 0) mesh.visible = false;
   }
 
   private updateCracks(delta: number) {
@@ -351,9 +425,9 @@ class ComboFinisherFXSystem {
       const c = this.cracks[i];
       if (c.life <= 0) continue;
       c.life -= delta;
-      const i0 = i * CRACK_LAYERS;
+      const i0 = i * this.crackLayers;
       if (c.life <= 0) {
-        for (let l = 0; l < CRACK_LAYERS; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
+        for (let l = 0; l < this.crackLayers; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
         continue;
       }
       alive++;
@@ -363,7 +437,7 @@ class ComboFinisherFXSystem {
       const t = c.life / c.max;
       const f = t > 1 - CRACK_FADE_START ? 1 : t / (1 - CRACK_FADE_START);
       // 0 焦黑底 (略大) / 1 色光 / 2 白熱芯 (較小、較快淡去)
-      for (let l = 0; l < CRACK_LAYERS; l++) {
+      for (let l = 0; l < this.crackLayers; l++) {
         const sl = s * (l === 0 ? 1.12 : l === 1 ? 1 : 0.6);
         _quat.setFromAxisAngle(_yAxis, c.rot + (l === 2 ? 0.5 : 0));
         _matrix.compose(_pos.set(c.x, c.y + l * 0.004, c.z), _quat, _scl.set(sl, 1, sl));
@@ -394,7 +468,7 @@ class ComboFinisherFXSystem {
       alive++;
       const t = 1 - r.life / RING_LIFE;
       const e = 1 - (1 - t) * (1 - t) * (1 - t); // easeOutCubic
-      const s = r.radius * RING_REACH * (0.2 + 0.8 * e);
+      const s = r.radius * RING_REACH * this.ringReach * (0.2 + 0.8 * e);
       _matrix.compose(_pos.set(r.x, r.y, r.z), _quat.identity(), _scl.set(s, 1, s));
       mesh.setMatrixAt(i, _matrix);
       const f = Math.pow(1 - t, 0.9);

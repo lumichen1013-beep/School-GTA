@@ -24,6 +24,9 @@ export class Engine {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xa0c4e2); // 明亮校園天藍色
     this.scene.fog = new THREE.FogExp2(0xa0c4e2, 0.007);
+    // 場景根節點永不移動：凍結其本地矩陣，否則每幀 updateMatrix 會強制重算全場所有物件的世界矩陣，
+    // 世界群組內已凍結的靜態子樹 (見 sceneUtils.freezeStatic) 便無法略過
+    this.scene.matrixAutoUpdate = false;
 
     // 2. High-quality WebGL Renderer
     this.renderer = new THREE.WebGLRenderer({

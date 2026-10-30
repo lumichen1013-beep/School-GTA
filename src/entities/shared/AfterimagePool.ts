@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateVisibleMatricesOnly } from '../../core/matrixUpdate';
 
 interface AfterimageItem {
   group: THREE.Group;
@@ -11,6 +12,7 @@ interface AfterimageItem {
 export class AfterimagePool {
   private items: AfterimageItem[] = [];
   private index: number = 0;
+  private anyActive = false; // 有殘影存活中 (閒置時 update 直接略過)
 
   constructor(scene: THREE.Scene, count: number = 8) {
     const torsoGeo = new THREE.BoxGeometry(0.65, 0.75, 0.35);
@@ -54,6 +56,7 @@ export class AfterimagePool {
       g.add(rLeg);
 
       g.visible = false;
+      updateVisibleMatricesOnly(g); // 閒置隱藏時略過整組矩陣更新
       scene.add(g);
 
       this.items.push({ group: g, material: mat, life: 0, maxLife: 0.3 });
@@ -92,10 +95,13 @@ export class AfterimagePool {
     if (rightLeg && children[5]) children[5].rotation.copy(rightLeg.rotation);
 
     item.group.visible = true;
+    this.anyActive = true;
   }
 
   // 每幀更新殘影透明度與生命週期
   public update(delta: number) {
+    if (!this.anyActive) return;
+    let alive = false;
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       if (item.life > 0) {
@@ -106,9 +112,11 @@ export class AfterimagePool {
         } else {
           const ratio = item.life / item.maxLife;
           item.material.opacity = 0.75 * Math.sin(ratio * Math.PI * 0.5);
+          alive = true;
         }
       }
     }
+    this.anyActive = alive;
   }
 
   public hideAll() {
@@ -116,6 +124,7 @@ export class AfterimagePool {
       item.life = 0;
       item.group.visible = false;
     }
+    this.anyActive = false;
   }
 
   public dispose(scene?: THREE.Scene) {

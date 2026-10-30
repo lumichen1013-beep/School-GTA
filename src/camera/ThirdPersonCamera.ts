@@ -3,6 +3,14 @@ import { CollidableBox } from '../world/CampusWorld';
 import { IndoorManager } from '../systems/IndoorManager';
 import { queryColliders } from '../physics/aabb';
 import { consumeCameraShake } from '../effects/cameraShake';
+import {
+  PORTRAIT_BLEND_RATE,
+  PORTRAIT_HEIGHT_LIFT,
+  PORTRAIT_LOOK_LIFT,
+  portraitDistanceScale,
+  portraitFactor,
+  portraitFov,
+} from './portraitCamera';
 
 const _cameraSegNear: CollidableBox[] = [];
 
@@ -17,6 +25,9 @@ export class ThirdPersonCamera {
   public pitch: number = 0.25; // Vertical angle (radians)
   public distance: number = 4.2;
   public targetDistance: number = 4.2;
+  // 突進斬衝刺時略微拉遠 (公尺，由呼叫端每幀設定，內部平滑過渡)
+  public dashPull: number = 0;
+  private dashPullBlend: number = 0;
 
   public sensitivityX: number = 0.0022;
   public sensitivityY: number = 0.002;
@@ -33,6 +44,10 @@ export class ThirdPersonCamera {
   private readonly _shotProbe = new THREE.Vector3();
   private readonly _shotFocus = new THREE.Vector3();
   private defaultFov: number = 65;
+  // 直屏補償：目標係數 (由 aspect 決定) 與目前平滑係數，皆 0~1；橫屏恆為 0
+  private portraitTarget: number = 0;
+  private portraitBlend: number = 0;
+  private aspectInitialized: boolean = false;
   private static readonly SHOT_FOV = 50;
   private static readonly SHOT_HEIGHT = 2.6;
   private static readonly SHOT_FALLBACK_HEIGHT = 3.6;
@@ -93,17 +108,38 @@ export class ThirdPersonCamera {
 
   public updateAspect(aspect: number) {
     this.camera.aspect = aspect;
-    // 直向螢幕 (aspect < 1.0) 時適當補償 FOV，避免視野被截斷過窄
-    const baseFov = this.isVehicleMode ? 72 : 65;
-    if (aspect < 1.0) {
-      this.defaultFov = Math.min(80, baseFov + (1.0 - aspect) * 12);
-    } else {
-      this.defaultFov = baseFov;
+    this.portraitTarget = portraitFactor(aspect);
+    // 首次同步直接到位，之後旋轉裝置由 update() 平滑過渡
+    if (!this.aspectInitialized) {
+      this.aspectInitialized = true;
+      this.portraitBlend = this.portraitTarget;
     }
+    this.applyPortraitFov();
+  }
+
+  private baseFov(): number {
+    return this.isVehicleMode ? 72 : 65;
+  }
+
+  // 依目前平滑係數套用垂直 FOV 並更新投影矩陣 (暗殺運鏡期間只更新 defaultFov)
+  private applyPortraitFov() {
+    this.defaultFov = portraitFov(this.baseFov(), this.portraitBlend);
     if (!this.isCinematicExecution) {
       this.camera.fov = this.defaultFov;
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  // 平滑係數逼近目標；僅在尚未收斂時重算 FOV
+  private stepPortraitBlend(delta: number) {
+    const diff = this.portraitTarget - this.portraitBlend;
+    if (diff === 0) return;
+    if (Math.abs(diff) < 1e-3) {
+      this.portraitBlend = this.portraitTarget;
+    } else {
+      this.portraitBlend += diff * Math.min(delta * PORTRAIT_BLEND_RATE, 1.0);
+    }
+    this.applyPortraitFov();
   }
 
   // 開始暗殺側面運鏡：鏡頭置於打擊軸垂直側 (類 2D 格鬥遊戲構圖)。
@@ -181,7 +217,7 @@ export class ThirdPersonCamera {
     const k = t * t * (3 - 2 * t);
     const focus = this._shotFocus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
     const pitch = 0.25;
-    const dist = this.targetDistance;
+    const dist = this.targetDistance * portraitDistanceScale(this.portraitBlend);
     this._shotProbe.set(
       focus.x + Math.sin(yaw) * Math.cos(pitch) * dist,
       focus.y + Math.sin(pitch) * dist,
@@ -267,7 +303,7 @@ export class ThirdPersonCamera {
   public resetBehind(targetPos: THREE.Vector3, playerRotY: number = 0) {
     this.yaw = playerRotY;
     this.pitch = 0.25;
-    this.distance = this.targetDistance;
+    this.distance = this.targetDistance * portraitDistanceScale(this.portraitBlend);
     this.target.copy(targetPos);
     const focusPoint = this._focus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
     this.currentPosition.set(
@@ -284,6 +320,7 @@ export class ThirdPersonCamera {
     // 暗殺運鏡期間由 CombatSystem 逐幀驅動鏡頭
     if (this.isCinematicExecution) return;
 
+    this.stepPortraitBlend(delta);
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)
     const focusPoint = this._focus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
@@ -306,7 +343,7 @@ export class ThirdPersonCamera {
       ? 1.75
       : (inStairwell
         ? 1.85
-        : (isIndoors ? Math.min(this.targetDistance, 2.8) : this.targetDistance));
+        : (isIndoors ? Math.min(this.targetDistance, 2.8) : this.targetDistance * portraitDistanceScale(this.portraitBlend)));
 
     // 羽球比賽轉播視角：鏡頭轉回玩家正後方 (yaw=0 朝 -Z 球網)、抬高俯角並拉遠，覆蓋室內 2.8m 限制
     this.matchBlend = THREE.MathUtils.lerp(this.matchBlend, this.isMatchView ? 1 : 0, Math.min(delta * 3.0, 1.0));
@@ -317,13 +354,19 @@ export class ThirdPersonCamera {
       effectiveTargetDistance = ThirdPersonCamera.MATCH_DISTANCE;
     }
 
-    this.distance = THREE.MathUtils.lerp(this.distance, effectiveTargetDistance, delta * 6.0);
+    this.dashPullBlend = THREE.MathUtils.lerp(this.dashPullBlend, this.dashPull, Math.min(delta * 8.0, 1.0));
+    // 衝刺拉遠不得超過當下場景的距離上限 (電梯 1.75m / 樓梯間 1.85m / 室內 2.8m)
+    const sceneCap = inElevator ? 1.75 : (inStairwell ? 1.85 : (isIndoors ? 2.8 : Infinity));
+    const pulledDistance = Math.min(effectiveTargetDistance + this.dashPullBlend, Math.max(sceneCap, effectiveTargetDistance));
+    this.distance = THREE.MathUtils.lerp(this.distance, pulledDistance, delta * 6.0);
 
     // 3. 計算球面座標之理想鏡頭位置
     const horizontalDistance = this.distance * Math.cos(this.pitch);
+    // 直屏戶外額外抬高機位 (室內不抬高，避免頂到天花板)
+    const heightLift = isIndoors ? 0 : PORTRAIT_HEIGHT_LIFT * this.portraitBlend;
     const idealPosition = this._ideal.set(
       focusPoint.x + horizontalDistance * Math.sin(this.yaw),
-      focusPoint.y + this.distance * Math.sin(this.pitch),
+      focusPoint.y + this.distance * Math.sin(this.pitch) + heightLift,
       focusPoint.z + horizontalDistance * Math.cos(this.yaw)
     );
 
@@ -407,7 +450,7 @@ export class ThirdPersonCamera {
     const lookAhead = ThirdPersonCamera.MATCH_LOOK_AHEAD * this.matchBlend;
     this.matchLookAt.set(
       focusPoint.x - Math.sin(this.yaw) * lookAhead,
-      focusPoint.y,
+      focusPoint.y + PORTRAIT_LOOK_LIFT * this.portraitBlend,
       focusPoint.z - Math.cos(this.yaw) * lookAhead
     );
     this.currentLookAt.lerp(this.matchLookAt, lerpFactor);

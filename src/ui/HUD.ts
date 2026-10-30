@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, GATE_WALLS, GATE_A_Z, GATE_B_Z, DetentionMapKind } from '../world/detentionLayout';
 
+type FullMapTab = 'map' | 'gear' | 'quest';
+
 // 第二世界雷達與大地圖的場景分類配色
 const DETENTION_RADAR_COLORS: Record<DetentionMapKind, string> = {
   building: '#10b981', structure: '#38bdf8', fence: '#34d399', barrier: '#a3e635', container: '#059669', pillar: '#eab308'
@@ -15,7 +17,11 @@ const DETENTION_FULLMAP_STYLES: Record<DetentionMapKind, { fill: string; stroke:
 };
 import { NPC, NPCRole } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
-import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
+import type { FullMapStatus, WeaponEquipEntry } from '../game/Progression';
+import type { WeaponId } from '../weapons/types';
+import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, CAMPUS_POIS, CAMPUS_WALL_HALF, CAMPUS_GATE, CAMPUS_GUARD_HOUSE, getCampusZoneName } from '../world/campusLayout';
+import { FullMapPanels } from './FullMapPanels';
+import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -221,8 +227,9 @@ export class HUD {
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
   private worldModalCloseBtnEl: HTMLElement | null;
-  private modalBtnCampusEl: HTMLElement | null;
-  private modalBtnDetentionEl: HTMLElement | null;
+  private modalCardCampusEl: HTMLElement | null;
+  private modalCardDetentionEl: HTMLElement | null;
+  private worldModalCurrent: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   private modalCurrentCampusEl: HTMLElement | null;
   private modalCurrentDetentionEl: HTMLElement | null;
   public isWorldModalOpen: boolean = false;
@@ -240,13 +247,21 @@ export class HUD {
   private fullmapCtx: CanvasRenderingContext2D | null = null;
   private fullmapCloseBtnEl: HTMLElement | null;
   private fullmapTitleEl: HTMLElement | null;
-  private fullmapCoordsEl: HTMLElement | null;
-  private fullmapWorldBadgeEl: HTMLElement | null;
   private fullmapLegendCampusEl: HTMLElement | null;
   private fullmapLegendDetentionEl: HTMLElement | null;
   private lastFullmapLegendWorld: 'CAMPUS' | 'DETENTION' | null = null;
   private minimapWrapperEl: HTMLElement | null;
   public isFullMapOpen: boolean = false;
+  // 大地圖分頁：每次開啟預設回到【地圖】(任務小介面則直接開【任務】)；地圖畫布僅在【地圖】分頁時繪製
+  private fullmapTab: FullMapTab = 'map';
+  private fullmapTabBtns: HTMLElement[] = [];
+  private fullmapPanes: HTMLElement[] = [];
+  // 大地圖側欄 / 裝備詳情 / 戰績面板 (學生證、下一步目標、武器詳情、成就)
+  private fullmapPanels: FullMapPanels;
+  // 【裝備】分頁資料與裝備回呼、玩家狀態快照 (由 main 接 Progression)
+  public getWeaponEquipEntries?: () => WeaponEquipEntry[];
+  public onEquipWeapon?: (id: WeaponId) => boolean;
+  public getFullMapStatus?: () => FullMapStatus;
 
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
@@ -305,7 +320,7 @@ export class HUD {
     this.worldBadgeEl = document.getElementById('world-badge');
     this.worldTextEl = document.getElementById('world-text');
     if (this.worldBadgeEl) {
-      // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 (與 M 鍵同流程)
+      // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
         this.closeFullMap(false); // 接著開啟世界選擇視窗，維持滑鼠解鎖以便點選
@@ -315,8 +330,8 @@ export class HUD {
 
     this.worldModalEl = document.getElementById('world-modal');
     this.worldModalCloseBtnEl = document.getElementById('world-modal-close-btn');
-    this.modalBtnCampusEl = document.getElementById('modal-btn-campus');
-    this.modalBtnDetentionEl = document.getElementById('modal-btn-detention');
+    this.modalCardCampusEl = document.getElementById('modal-card-campus');
+    this.modalCardDetentionEl = document.getElementById('modal-card-detention');
     this.modalCurrentCampusEl = document.getElementById('modal-current-campus');
     this.modalCurrentDetentionEl = document.getElementById('modal-current-detention');
 
@@ -328,16 +343,29 @@ export class HUD {
     if (this.worldModalCloseBtnEl) {
       this.worldModalCloseBtnEl.addEventListener('click', () => this.closeWorldModal());
     }
-    if (this.modalBtnCampusEl) {
-      this.modalBtnCampusEl.addEventListener('click', () => {
-        if (this.onWorldSwitchCallback) this.onWorldSwitchCallback('CAMPUS');
+    // 整張世界卡片即選擇鍵：觸控 touchend 先擋下以免穿透到底下鏡頭拖曳/攻擊，並避免 click 重複觸發
+    const bindWorldCard = (card: HTMLElement | null, world: 'CAMPUS' | 'DETENTION') => {
+      if (!card) return;
+      const pick = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const cb = this.onWorldSwitchCallback;
+        const same = world === this.worldModalCurrent;
         this.closeWorldModal();
+        if (cb && !same) cb(world);
+      };
+      card.addEventListener('click', pick);
+      card.addEventListener('touchend', pick, { passive: false });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') pick(e);
       });
-    }
-    if (this.modalBtnDetentionEl) {
-      this.modalBtnDetentionEl.addEventListener('click', () => {
-        if (this.onWorldSwitchCallback) this.onWorldSwitchCallback('DETENTION');
-        this.closeWorldModal();
+    };
+    bindWorldCard(this.modalCardCampusEl, 'CAMPUS');
+    bindWorldCard(this.modalCardDetentionEl, 'DETENTION');
+    if (this.worldModalEl) {
+      // 點背景（卡片外）關閉
+      this.worldModalEl.addEventListener('click', (e) => {
+        if (e.target === this.worldModalEl) this.closeWorldModal();
       });
     }
 
@@ -367,8 +395,6 @@ export class HUD {
     }
     this.fullmapCloseBtnEl = document.getElementById('fullmap-close-btn');
     this.fullmapTitleEl = document.getElementById('fullmap-title');
-    this.fullmapCoordsEl = document.getElementById('fullmap-coords');
-    this.fullmapWorldBadgeEl = document.getElementById('fullmap-world-badge');
     this.fullmapLegendCampusEl = document.getElementById('fullmap-legend-campus');
     this.fullmapLegendDetentionEl = document.getElementById('fullmap-legend-detention');
     this.minimapWrapperEl = document.getElementById('minimap-wrapper');
@@ -412,12 +438,18 @@ export class HUD {
     window.addEventListener('app-layout-change', syncMinimapResolution);
     syncMinimapResolution();
 
-    // 快捷鍵指南：點擊面板切換展開 / 收合
-    const controlsPanelEl = document.getElementById('controls-panel');
-    if (controlsPanelEl) {
-      controlsPanelEl.addEventListener('click', (e) => {
+    // 大地圖分頁列 (點擊 / 觸控切換)
+    this.fullmapTabBtns = Array.from(document.querySelectorAll<HTMLElement>('.fm-tab-btn'));
+    this.fullmapPanes = Array.from(document.querySelectorAll<HTMLElement>('.fullmap-pane'));
+    this.fullmapPanels = new FullMapPanels({
+      getEntries: () => this.getWeaponEquipEntries?.() ?? [],
+      equip: (id) => this.onEquipWeapon?.(id) ?? false,
+      getStatus: () => this.getFullMapStatus?.() ?? null
+    });
+    for (const btn of this.fullmapTabBtns) {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.toggleControlsGuide();
+        this.setFullMapTab(btn.dataset.fmTab as FullMapTab);
       });
     }
 
@@ -671,6 +703,8 @@ export class HUD {
   private lastMinimapTime: number = 0;
   private lastCash: number = -1;
   private lastMissionData: MissionTrackerData | null = null;
+  private lastWeaponIcon = '';
+  private lastWeaponAtk = -1;
   private lastHp: number = -1;
   private lastHpLevel: string = '';
   private lastStamina: number = -1;
@@ -828,7 +862,9 @@ export class HUD {
     }
   }
 
+  private lastWeatherBadge = '';
   public updateWeatherHUD(badgeText: string) {
+    this.lastWeatherBadge = badgeText;
     if (this.weatherTextEl && this.weatherTextEl.textContent !== badgeText) {
       this.weatherTextEl.textContent = badgeText;
     }
@@ -904,9 +940,23 @@ export class HUD {
     }, duration);
   }
 
-  // 開啟全螢幕大地圖
-  public openFullMap() {
+  // 切換大地圖分頁；裝備詳情僅在切入時渲染，地圖畫布僅在【地圖】分頁時繪製
+  private setFullMapTab(tab: FullMapTab) {
+    this.fullmapTab = tab;
+    for (const btn of this.fullmapTabBtns) {
+      const active = btn.dataset.fmTab === tab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+    for (const pane of this.fullmapPanes) pane.hidden = pane.dataset.fmPane !== tab;
+    if (tab === 'gear') this.fullmapPanels.renderGear(true);
+    this.lastFullmapRenderAt = 0; // 學生證 / 戰績立即快照
+  }
+
+  // 開啟全螢幕大地圖 (預設【地圖】分頁)
+  public openFullMap(tab: FullMapTab = 'map') {
     this.isFullMapOpen = true;
+    this.setFullMapTab(tab);
     this.lastFullmapRenderAt = 0; // 開啟時立即繪製第一幀
     // 解除滑鼠指標鎖定，使 PC 玩家可點選任務分類與捲動清單 (按 J 開啟時仍處於鎖定)
     if (document.pointerLockElement) {
@@ -978,39 +1028,15 @@ export class HUD {
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
   }
 
-  // 武器 HUD 狀態更新 (依需求已移除右上角武器欄，狀態與進度統一由左側任務看板呈現)
-  // 任務清單已整合進大地圖：開啟 / 關閉 / 切換大地圖任務側欄 (J 鍵與任務小介面共用)
+  // 任務清單已整合進大地圖【任務】分頁：開啟 / 關閉 / 切換 (J 鍵開地圖分頁；任務小介面直達任務分頁)
   public toggleQuestTracker(expand?: boolean) {
     if (expand === undefined) {
       this.toggleFullMap();
     } else if (expand) {
-      this.openFullMap();
+      this.openFullMap('quest');
     } else {
       this.closeFullMap();
     }
-  }
-
-  // 鍵盤快捷鍵指南：進入世界時完整展開，30 秒後自動收合為「⌨️ K 快捷鍵」小標籤
-  private controlsGuideTimer: number = 0;
-  public showControlsGuide(autoCollapseMs: number = 30000) {
-    const panel = document.getElementById('controls-panel');
-    if (!panel) return;
-    panel.classList.remove('collapsed');
-    if (this.controlsGuideTimer) window.clearTimeout(this.controlsGuideTimer);
-    this.controlsGuideTimer = window.setTimeout(() => {
-      panel.classList.add('collapsed');
-      this.controlsGuideTimer = 0;
-    }, autoCollapseMs);
-  }
-
-  public toggleControlsGuide() {
-    const panel = document.getElementById('controls-panel');
-    if (!panel) return;
-    if (this.controlsGuideTimer) {
-      window.clearTimeout(this.controlsGuideTimer);
-      this.controlsGuideTimer = 0;
-    }
-    panel.classList.toggle('collapsed');
   }
 
   // 同步任務小介面與大地圖任務側欄的標題、總進度與進度條
@@ -1022,6 +1048,7 @@ export class HUD {
     if (this.qTotalProgress && this.qTotalProgress.textContent !== progressText) this.qTotalProgress.textContent = progressText;
     if (this.fmQTotalProgress && this.fmQTotalProgress.textContent !== progressText) this.fmQTotalProgress.textContent = progressText;
     if (this.qTotalBar && this.qTotalBar.style.width !== pct) this.qTotalBar.style.width = pct;
+    this.fullmapPanels.setRing(done, total);
     if (this.fmQTotalBar && this.fmQTotalBar.style.width !== pct) this.fmQTotalBar.style.width = pct;
   }
 
@@ -1039,6 +1066,12 @@ export class HUD {
       statusEl.textContent = done ? doneText : pendingText;
       statusEl.className = done ? 'q-status done' : 'q-status';
     }
+  }
+
+  // 記錄目前武器圖示 / ATK，供大地圖學生證狀態卡顯示 (不寫 DOM)
+  public setWeaponInfo(icon: string, atk: number) {
+    this.lastWeaponIcon = icon;
+    this.lastWeaponAtk = atk;
   }
 
   public updateMissionTracker(data: MissionTrackerData) {
@@ -1076,6 +1109,7 @@ export class HUD {
       return;
     }
     this.lastMissionData = { ...data };
+    this.fullmapPanels.setCampusStats(data);
 
     // 1. 普通球棒 / 擊敗普通同學 (5位)
     const batDone = data.hasNormalBat || data.studentDefeated >= 5;
@@ -1138,8 +1172,8 @@ export class HUD {
     const dodgeDone = dodgeLvl >= 1;
     if (this.qDodgeDesc) {
       if (dodgeLvl === 0) this.qDodgeDesc.textContent = '尋訪教學大樓「閃身步老師」學習技能【閃身步】 (0/2)';
-      else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻5s)，可進階狗熊哆嗦毛 (1/2)';
-      else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻2s，完全精通) (2/2)';
+      else if (dodgeLvl === 1) this.qDodgeDesc.textContent = '已習得【閃身步】(冷卻1s)，可進階狗熊哆嗦毛 (1/2)';
+      else this.qDodgeDesc.textContent = '已融會貫通【狗熊哆嗦毛】(冷卻1s，完全精通) (2/2)';
     }
     this.setQuestState(this.qDodgeItem, this.qDodgeStatus, dodgeDone, dodgeLvl >= 2 ? '大成 🌟' : '閃身步 ✅', '未習得');
 
@@ -1262,7 +1296,7 @@ export class HUD {
     if (skillLevel === 0) {
       // 學習閃身步 (1000 元)
       this.dodgeDialogTextEl.textContent =
-        '閃身步老師：「同學，看你腳步浮躁，在校園裡橫衝直撞很容易吃虧！老夫傳授你入門絕技『閃身步』，施展時身輕如燕、規避敵人一切攻擊！（冷卻時間 5 秒，學費 NT$ 1000）」';
+        '閃身步老師：「同學，看你腳步浮躁，在校園裡橫衝直撞很容易吃虧！老夫傳授你入門絕技『閃身步』，施展時身輕如燕、規避敵人一切攻擊！（冷卻時間 1 秒，學費 NT$ 1000）」';
       if (cash >= 1000) {
         this.dodgeLearnBtnEl.disabled = false;
         this.dodgeLearnBtnEl.textContent = isMobile ? '🥋 學習【閃身步】($1000) [動]' : '🥋 學習【閃身步】(NT$ 1000) (E)';
@@ -1278,7 +1312,7 @@ export class HUD {
     } else if (skillLevel === 1) {
       // 學習狗熊哆嗦毛 (2000 元，前置條件：已學會閃身步)
       this.dodgeDialogTextEl.textContent =
-        '閃身步老師：「好徒兒！你已精通基礎『閃身步』。老夫這裡還有更精妙的至高真傳——進階版『狗熊哆嗦毛』！施展時如靈熊抖擻毫毛，無影無形，冷卻時間大幅縮短至 2 秒！（學費 NT$ 2000）」';
+        '閃身步老師：「好徒兒！你已精通基礎『閃身步』。老夫這裡還有更精妙的至高真傳——進階版『狗熊哆嗦毛』！施展時如靈熊抖擻毫毛，無影無形，連續瞬移神速規避！（學費 NT$ 2000）」';
       if (cash >= 2000) {
         this.dodgeLearnBtnEl.disabled = false;
         this.dodgeLearnBtnEl.textContent = isMobile ? '🐻 領悟進階【狗熊哆嗦毛】($2000) [動]' : '🐻 領悟進階【狗熊哆嗦毛】(NT$ 2000) (E)';
@@ -1326,20 +1360,21 @@ export class HUD {
   public openWorldModal(currentWorld: 'CAMPUS' | 'DETENTION', onSwitch: (world: 'CAMPUS' | 'DETENTION') => void) {
     if (!this.worldModalEl) return;
     this.isWorldModalOpen = true;
-    // 解除滑鼠指標鎖定，使 PC 玩家 (含按 M 開啟時) 可點選世界卡片
+    // 解除滑鼠指標鎖定，使 PC 玩家 可點選世界卡片
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
     this.onWorldSwitchCallback = onSwitch;
+    this.worldModalCurrent = currentWorld;
 
     if (this.modalCurrentCampusEl && this.modalCurrentDetentionEl) {
       if (currentWorld === 'CAMPUS') {
         this.modalCurrentCampusEl.textContent = '✅ 當前所在世界';
         this.modalCurrentCampusEl.style.color = '#2ecc71';
-        this.modalCurrentDetentionEl.textContent = '未在此世界 (點擊傳送)';
+        this.modalCurrentDetentionEl.textContent = '未在此世界 (點擊卡片傳送)';
         this.modalCurrentDetentionEl.style.color = '#e74c3c';
       } else {
-        this.modalCurrentCampusEl.textContent = '未在此世界 (點擊傳送)';
+        this.modalCurrentCampusEl.textContent = '未在此世界 (點擊卡片傳送)';
         this.modalCurrentCampusEl.style.color = '#3498db';
         this.modalCurrentDetentionEl.textContent = '✅ 當前所在世界';
         this.modalCurrentDetentionEl.style.color = '#2ecc71';
@@ -1381,11 +1416,11 @@ export class HUD {
     if (skillLevel === 1) {
       this.skillIconEl.textContent = '🥋';
       this.skillNameEl.textContent = '閃身步';
-      this.skillDescEl.textContent = '規避敵人攻擊 (冷卻 5s)';
+      this.skillDescEl.textContent = '規避敵人攻擊 (冷卻 1s)';
     } else {
       this.skillIconEl.textContent = '🐻';
       this.skillNameEl.textContent = '狗熊哆嗦毛';
-      this.skillDescEl.textContent = '極速閃避攻擊 (冷卻 2s)';
+      this.skillDescEl.textContent = '極速閃避攻擊 (冷卻 1s)';
     }
 
     if (cdRemaining > 0) {
@@ -1491,12 +1526,13 @@ export class HUD {
     this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta, currentWorld, detentionData);
 
     // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
-    // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪
+    // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪；畫布僅在【地圖】分頁繪製，學生證 / 戰績同節流且值變才寫 DOM
     if (this.isFullMapOpen) {
       const nowMs = performance.now();
       if (nowMs - this.lastFullmapRenderAt >= 50) {
         this.lastFullmapRenderAt = nowMs;
-        this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
+        this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
+        if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
       }
     }
 
@@ -2178,7 +2214,6 @@ export class HUD {
   // 大地圖靜態底圖離屏快取
   private fullmapStaticCanvas: HTMLCanvasElement | null = null;
   private fullmapStaticKey = '';
-  private lastFullmapCoordsText = '';
   private lastFullmapHeaderWorld: 'CAMPUS' | 'DETENTION' | null = null;
   private lastFullmapRenderAt = 0;
   private fullmapCssSide = 700;
@@ -2268,6 +2303,137 @@ export class HUD {
     ctx.fill();
   }
 
+  // 大地圖標題列 / 圖例 / 學生證 / 下一步目標 / 戰績 (約 20Hz；所有寫入皆為髒檢查)
+  private fullmapGoal: FullMapGoal | null = null;
+  private lastFullmapTitle = '';
+  private refreshFullMapPanels(
+    playerPos: THREE.Vector3,
+    npcs: NPC[],
+    currentWorld: 'CAMPUS' | 'DETENTION',
+    detentionData?: DetentionRadarData
+  ) {
+    const panels = this.fullmapPanels;
+    const isDet = currentWorld === 'DETENTION';
+    panels.setWorld(currentWorld);
+    if (this.lastFullmapHeaderWorld !== currentWorld) {
+      this.lastFullmapHeaderWorld = currentWorld;
+      if (this.fullmapLegendCampusEl) this.fullmapLegendCampusEl.style.display = isDet ? 'none' : 'flex';
+      if (this.fullmapLegendDetentionEl) this.fullmapLegendDetentionEl.style.display = isDet ? 'flex' : 'none';
+    }
+    // 標題列小字：目前區域 (去掉括號補充說明) + 天氣圖示
+    const weatherIcon = this.lastWeatherBadge.split(' ')[0];
+    const title = `🗺️ ${this.lastLocationZone.replace(/\s*[（(].*?[）)]/g, '')}${weatherIcon ? `　${weatherIcon}` : ''}`;
+    if (this.fullmapTitleEl && title !== this.lastFullmapTitle) {
+      this.lastFullmapTitle = title;
+      this.fullmapTitleEl.textContent = title;
+    }
+
+    const st = this.getFullMapStatus?.();
+    if (!st) return;
+    if (this.fullmapTab === 'quest') {
+      if (isDet) panels.updateDetentionStats(st);
+      return;
+    }
+    if (this.fullmapTab !== 'map') return;
+    panels.updateIdCard(st, this.lastWeaponIcon, this.lastWeaponAtk, this.lastLocationZone);
+
+    let goal: FullMapGoal | null = null;
+    if (isDet) {
+      if (detentionData) {
+        let bossPos: { x: number; z: number } | null = null;
+        for (const npc of npcs) {
+          if (npc.role === 'DETENTION_BOSS' && !npc.isPermanentlyKnockedOut && npc.hp > 0) { bossPos = npc.position; break; }
+        }
+        goal = pickDetentionGoal(detentionData, bossPos);
+      }
+    } else if (this.lastMissionData) {
+      goal = pickCampusGoal(this.lastMissionData);
+    } else {
+      return;
+    }
+    this.fullmapGoal = goal;
+    const dist = goal ? `距離約 ${Math.round(Math.hypot(playerPos.x - goal.x, playerPos.z - goal.z))} m` : '';
+    panels.updateGoal(goal, dist);
+  }
+
+  // 繪製指北針 (靜態圖層用)
+  private drawCompass(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.lineTo(5, 0);
+    ctx.lineTo(-5, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.beginPath();
+    ctx.moveTo(0, 14);
+    ctx.lineTo(5, 0);
+    ctx.lineTo(-5, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ef4444';
+    ctx.font = this.fmFont(9);
+    ctx.textAlign = 'center';
+    this.fmText(ctx, 'N', 0, -17);
+    ctx.restore();
+  }
+
+  // 繪製 20m 比例尺 (靜態圖層用)
+  private drawScaleBar(ctx: CanvasRenderingContext2D, scale: number) {
+    const x = 16;
+    const y = HUD.FULLMAP_LOGICAL - 18;
+    const len = 20 * scale;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + len, y);
+    ctx.lineTo(x + len, y - 5);
+    ctx.stroke();
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = this.fmFont(8.5);
+    ctx.textAlign = 'left';
+    this.fmText(ctx, '20 m', x, y - 9);
+  }
+
+  // 玩家座標小字 (動態圖層，緊鄰比例尺)
+  private drawCoords(ctx: CanvasRenderingContext2D, pos: THREE.Vector3, scale: number) {
+    ctx.font = this.fmFont(8.5);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#94a3b8';
+    this.fmText(ctx, `X ${Math.round(pos.x)} · Z ${Math.round(pos.z)}`, 16 + 20 * scale + 12, HUD.FULLMAP_LOGICAL - 14);
+    ctx.textAlign = 'center';
+  }
+
+  // 下一步目標脈衝環 (每幀最多 1 個)
+  private drawGoalPulse(ctx: CanvasRenderingContext2D, x: number, y: number, pulse: number, color: string) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 15 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 22 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   private renderFullMap(
     playerPos: THREE.Vector3,
     playerRotY: number,
@@ -2290,28 +2456,6 @@ export class HUD {
     const cy = h / 2;
     // 縮放比：校園全圖 200m 映射到約 630px；特訓院依院區範圍 (±97m) 自動貼合畫布
     const scale = currentWorld === 'DETENTION' ? (w - 20) / 194 : 3.15;
-
-    // 更新抬頭元資訊
-    const coordsText = `坐標：X: ${playerPos.x.toFixed(1)}, Z: ${playerPos.z.toFixed(1)}`;
-    if (this.fullmapCoordsEl && coordsText !== this.lastFullmapCoordsText) {
-      this.lastFullmapCoordsText = coordsText;
-      this.fullmapCoordsEl.textContent = coordsText;
-    }
-    if (this.lastFullmapHeaderWorld !== currentWorld) {
-      this.lastFullmapHeaderWorld = currentWorld;
-      if (this.fullmapWorldBadgeEl) {
-        this.fullmapWorldBadgeEl.textContent = currentWorld === 'DETENTION' ? '⛓️ 第七少年特訓院' : '🏫 天天國中';
-      }
-      if (this.fullmapTitleEl) {
-        this.fullmapTitleEl.textContent = currentWorld === 'DETENTION' ? '🗺️ 第七少年特訓院 · 戰術全域態勢圖' : '🗺️ 天天國中 · 全校導覽全景地圖';
-      }
-    }
-    // 圖例依當前世界切換 (髒檢查，世界變更時才更新 DOM)
-    if (this.lastFullmapLegendWorld !== currentWorld) {
-      this.lastFullmapLegendWorld = currentWorld;
-      if (this.fullmapLegendCampusEl) this.fullmapLegendCampusEl.style.display = currentWorld === 'CAMPUS' ? 'flex' : 'none';
-      if (this.fullmapLegendDetentionEl) this.fullmapLegendDetentionEl.style.display = currentWorld === 'DETENTION' ? 'flex' : 'none';
-    }
 
     const now = performance.now();
     const pulse = 1.0 + 0.3 * Math.sin(now * 0.008);
@@ -2445,37 +2589,9 @@ export class HUD {
       ctx.fillStyle = southCol;
       ctx.font = this.fmFont(10);
       this.fmText(ctx, detentionData?.isSouthGateOpen ? '南大門 [已升起脫逃通道]' : '南大門 [需要萬能鑰匙卡]', toScreenX(0), toScreenY(95) + 14);
-      // 指北針圖標 (Compass North，靜態元素併入快取圖層，不再每幀重繪)
-      ctx.save();
-      ctx.translate(w - 38, 42);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.moveTo(0, -14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(0, 14);
-      ctx.lineTo(5, 0);
-      ctx.lineTo(-5, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#ef4444';
-      ctx.font = this.fmFont(9);
-      this.fmText(ctx, 'N', 0, -17);
-      ctx.restore();
+      // 指北針與比例尺 (靜態元素併入快取圖層，不再每幀重繪)
+      this.drawCompass(ctx, w - 38, 42);
+      this.drawScaleBar(ctx, scale);
       ctx = outCtx;
       }
       outCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2569,6 +2685,9 @@ export class HUD {
         }
       }
 
+      if (this.fullmapGoal) this.drawGoalPulse(ctx, toScreenX(this.fullmapGoal.x), toScreenY(this.fullmapGoal.z), pulse, '#34d399');
+      this.drawCoords(ctx, playerPos, scale);
+
       // 玩家圖示 (亮黃光芒 + 面向箭頭 + 脈衝雷達圈)
       const px = toScreenX(playerPos.x);
       const py = toScreenY(playerPos.z);
@@ -2609,13 +2728,31 @@ export class HUD {
     const toScreenX = (wx: number) => cx + wx * scale;
     const toScreenY = (wz: number) => cy + wz * scale;
 
-    const campusStaticKey = `CAMPUS|${bw}x${bh}`;
+    const poiDoneMask = campusPoiDoneMask(this.lastMissionData);
+    const campusStaticKey = `CAMPUS|${bw}x${bh}|${poiDoneMask}`;
     if (this.fullmapStaticKey !== campusStaticKey) {
     this.fullmapStaticKey = campusStaticKey;
     ctx = this.getFullmapStaticCtx(bw, bh);
     ctx.setTransform(k, 0, 0, k, 0, 0);
-    ctx.fillStyle = '#0b1320';
+    // 校外街道底色 + 校園地面 (校牆 ±105m)
+    ctx.fillStyle = '#070c14';
     ctx.fillRect(0, 0, w, h);
+    const wallMin = toScreenX(-CAMPUS_WALL_HALF);
+    const wallSize = CAMPUS_WALL_HALF * 2 * scale;
+    ctx.fillStyle = '#0f1b2d';
+    ctx.fillRect(wallMin, toScreenY(-CAMPUS_WALL_HALF), wallSize, wallSize);
+
+    // 戰術網格 (每 20m 一條)
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let g = -100; g <= 100; g += 20) {
+      ctx.moveTo(toScreenX(g), toScreenY(-CAMPUS_WALL_HALF));
+      ctx.lineTo(toScreenX(g), toScreenY(CAMPUS_WALL_HALF));
+      ctx.moveTo(wallMin, toScreenY(g));
+      ctx.lineTo(wallMin + wallSize, toScreenY(g));
+    }
+    ctx.stroke();
 
     const drawBuilding = (bx: number, bz: number, bw: number, bd: number, color: string, label?: string) => {
       const sx = toScreenX(bx - bw / 2);
@@ -2629,7 +2766,9 @@ export class HUD {
         ctx.fillStyle = '#f8fafc';
         ctx.font = this.fmFont(10);
         ctx.textAlign = 'center';
-        this.fmText(ctx, label, toScreenX(bx), toScreenY(bz) + 3);
+        // 建築內含興趣點圖示時，標籤改貼建築下緣避開圖示
+        const hasPoi = CAMPUS_POIS.some((p) => p.icon && Math.abs(p.x - bx) <= bw / 2 && Math.abs(p.z - bz) <= bd / 2);
+        this.fmText(ctx, label, toScreenX(bx), hasPoi ? toScreenY(bz + bd / 2) - 3 : toScreenY(bz) + 3);
       }
     };
 
@@ -2640,6 +2779,63 @@ export class HUD {
     for (const r of CAMPUS_MAP_RECTS) {
       drawBuilding(r.x, r.z, r.w, r.d, r.color, r.label || undefined);
     }
+
+    // 校牆、校門 (兩根門柱 + 金色門扇) 與警衛室
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(wallMin, toScreenY(-CAMPUS_WALL_HALF), wallSize, wallSize);
+    const gateY = toScreenY(CAMPUS_GATE.z);
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(toScreenX(CAMPUS_GATE.x - CAMPUS_GATE.pillarHalfSpan), gateY);
+    ctx.lineTo(toScreenX(CAMPUS_GATE.x + CAMPUS_GATE.pillarHalfSpan), gateY);
+    ctx.stroke();
+    ctx.fillStyle = '#cbd5e1';
+    for (const sign of [-1, 1]) ctx.fillRect(toScreenX(CAMPUS_GATE.x + sign * CAMPUS_GATE.pillarHalfSpan) - 2.5 * scale, gateY - 1.5 * scale, 5 * scale, 3 * scale);
+    drawBuilding(CAMPUS_GUARD_HOUSE.x, CAMPUS_GUARD_HOUSE.z, CAMPUS_GUARD_HOUSE.w, CAMPUS_GUARD_HOUSE.d, '#94a3b8');
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = this.fmFont(8.5);
+    ctx.textAlign = 'center';
+    this.fmText(ctx, '警衛室', toScreenX(CAMPUS_GUARD_HOUSE.x), toScreenY(CAMPUS_GUARD_HOUSE.z) - CAMPUS_GUARD_HOUSE.d / 2 * scale - 4);
+
+    // 中庭標示
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+    ctx.font = this.fmFont(10);
+    this.fmText(ctx, '教學中庭', toScreenX(0), toScreenY(28));
+
+    // 興趣點圖示 (已完成者變灰並加 ✓)
+    const iconFont = `${Math.max(11 * 1.45, 13 * HUD.FULLMAP_LOGICAL / this.fullmapCssSide).toFixed(1)}px sans-serif`;
+    ctx.font = iconFont;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const poi of CAMPUS_POIS) {
+      if (!poi.icon) continue;
+      const done = isCampusPoiDone(poiDoneMask, poi.id);
+      const px0 = toScreenX(poi.x);
+      const py0 = toScreenY(poi.z);
+      ctx.globalAlpha = done ? 0.4 : 1;
+      ctx.fillStyle = 'rgba(2, 6, 11, 0.8)';
+      ctx.beginPath();
+      ctx.arc(px0, py0, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = done ? '#64748b' : '#fbbf24';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(poi.icon, px0, py0 + 1);
+      ctx.globalAlpha = 1;
+      if (done) {
+        ctx.fillStyle = '#22c55e';
+        ctx.font = `bold ${(10 * 1.45).toFixed(1)}px sans-serif`;
+        ctx.fillText('✓', px0 + 9, py0 - 9);
+        ctx.font = iconFont;
+      }
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    this.drawCompass(ctx, w - 38, 42);
+    this.drawScaleBar(ctx, scale);
     ctx = outCtx;
     }
     outCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2666,6 +2862,10 @@ export class HUD {
       ctx.arc(nx, nz, 4, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // 下一步目標脈衝環 + 玩家座標
+    if (this.fullmapGoal) this.drawGoalPulse(ctx, toScreenX(this.fullmapGoal.x), toScreenY(this.fullmapGoal.z), pulse, '#38bdf8');
+    this.drawCoords(ctx, playerPos, scale);
 
     // 玩家
     const px = toScreenX(playerPos.x);

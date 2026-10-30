@@ -1,5 +1,9 @@
 // Procedural Web Audio API sound generator - no external asset dependencies!
 import { getAudioContext, resumeAudioContext } from './audioContext';
+import {
+  SOUND_COOLDOWN, SOUND_RANGE, cooldownReady, distanceBetween, distanceGain,
+  type SpatialSoundId, type Vec3Like
+} from './spatialAudio';
 
 // 參數包絡排程點：[排程方式, 目標值, 絕對時間]
 type EnvPoint = ['set' | 'lin' | 'exp', number, number];
@@ -15,8 +19,37 @@ export class SoundEffects {
   private noiseBuffer: AudioBuffer | null = null;
   private static readonly NOISE_SECONDS = 3.0;
 
+  // 聆聽者 (玩家) 位置參考：持續讀取最新座標；未設定時視為不分距離
+  private listener: Vec3Like | null = null;
+  // 本次播放的距離音量倍率 (gate 設定，同步播放結束後於 microtask 還原)
+  private volScale = 1;
+  private lastPlayed: Partial<Record<SpatialSoundId, number>> = {};
+
   public resume() {
     resumeAudioContext();
+  }
+
+  public setListener(pos: Vec3Like) {
+    this.listener = pos;
+  }
+
+  // 空間音效閘門：超出可聞距離或冷卻中回傳 false (不建立任何 audio node)；
+  // 通過時依距離設定音量倍率。距離超出者不消耗冷卻，避免遠處 NPC 壓掉近處音效。
+  private gate(id: SpatialSoundId, pos?: Vec3Like): boolean {
+    let scale = 1;
+    if (pos && this.listener) {
+      scale = distanceGain(distanceBetween(pos, this.listener), SOUND_RANGE[id]);
+      if (scale <= 0) return false;
+    }
+    const cooldown = SOUND_COOLDOWN[id];
+    if (cooldown) {
+      const now = performance.now() / 1000;
+      if (!cooldownReady(this.lastPlayed[id] ?? -Infinity, now, cooldown)) return false;
+      this.lastPlayed[id] = now;
+    }
+    this.volScale = scale;
+    if (scale !== 1) queueMicrotask(() => { this.volScale = 1; });
+    return true;
   }
 
   private getNoiseBuffer(ctx: AudioContext): AudioBuffer {
@@ -49,7 +82,8 @@ export class SoundEffects {
   private envGain(points: EnvPoint[]): GainNode {
     const ctx = this.audio();
     const gain = ctx.createGain();
-    this.applyEnv(gain.gain, points);
+    const scale = this.volScale;
+    this.applyEnv(gain.gain, scale === 1 ? points : points.map(([k, v, t]): EnvPoint => [k, v * scale, t]));
     gain.connect(ctx.destination);
     return gain;
   }
@@ -104,28 +138,42 @@ export class SoundEffects {
     });
   }
 
-  // 風紀糾察／教官刺耳哨音 (逼逼逼！)
-  public playWhistle() {
+  // 低通濾波音：振盪器 → 低通 → 音量包絡 → 輸出 (削掉刺耳高頻)
+  private softTone(type: OscillatorType, freq: EnvPoint[], gain: EnvPoint[], start: number, stop: number, cutoff: number) {
+    const lp = this.audio().createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = cutoff;
+    lp.connect(this.envGain(gain));
+    this.osc(type, freq, start, stop, lp);
+  }
+
+  // 風紀糾察／教官哨音 (嗶嗶)：兩短聲，三角波 1.35k→1.45k + 低通 2.6k，淡入淡出避免喀聲
+  public playWhistle(pos?: Vec3Like) {
+    if (!this.gate('whistle', pos)) return;
     const now = this.audio().currentTime;
-    for (let i = 0; i < 3; i++) {
-      const t0 = now + i * 0.12;
-      // 顫音頻率
-      this.tone('sawtooth', [['set', 2400, t0], ['exp', 2600, now + i * 0.12 + 0.08]],
-        [['set', 0, t0], ['lin', 0.18, now + i * 0.12 + 0.02], ['lin', 0.01, now + i * 0.12 + 0.09]], t0, now + i * 0.12 + 0.1);
+    for (let i = 0; i < 2; i++) {
+      const t0 = now + i * 0.18;
+      this.softTone('triangle', [['set', 1350, t0], ['lin', 1450, t0 + 0.14]],
+        [['set', 0.0001, t0], ['lin', 0.09, t0 + 0.025], ['lin', 0.0001, t0 + 0.14]], t0, t0 + 0.15, 2600);
     }
   }
 
-  // 腳踏車鈴聲 (叮叮！)
-  public playBicycleBell() {
+  // 腳踏車鈴聲 (叮叮)：1.05k 基音 + 非整數倍泛音 (x2.76) 金屬感，低通 3.2k，衰減 0.35 秒
+  public playBicycleBell(pos?: Vec3Like) {
+    if (!this.gate('bell', pos)) return;
     const now = this.audio().currentTime;
-    for (const delay of [0, 0.1]) {
-      this.tone('sine', [['set', 1800, now + delay]],
-        [['set', 0, now + delay], ['lin', 0.2, now + delay + 0.01], ['exp', 0.001, now + delay + 0.25]], now + delay, now + delay + 0.26);
+    for (const delay of [0, 0.14]) {
+      const t0 = now + delay;
+      this.softTone('sine', [['set', 1050, t0]],
+        [['set', 0.0001, t0], ['lin', 0.11, t0 + 0.012], ['exp', 0.0001, t0 + 0.35]], t0, t0 + 0.36, 3200);
+      this.softTone('sine', [['set', 2900, t0]],
+        [['set', 0.0001, t0], ['lin', 0.03, t0 + 0.01], ['exp', 0.0001, t0 + 0.2]], t0, t0 + 0.21, 3200);
     }
   }
 
   // 揮拳 / 擊打聲
-  public playPunch() {
+  public playPunch(pos?: Vec3Like) {
+    if (!this.gate('punch', pos)) return;
     const now = this.audio().currentTime;
     this.tone('square', [['set', 160, now], ['exp', 40, now + 0.12]], [['set', 0.25, now], ['exp', 0.001, now + 0.15]], now, now + 0.15);
   }
@@ -144,7 +192,8 @@ export class SoundEffects {
   }
 
   // 狗吠叫聲 (汪汪！)
-  public playDogBark() {
+  public playDogBark(pos?: Vec3Like) {
+    if (!this.gate('dogBark', pos)) return;
     const now = this.audio().currentTime;
     for (const delay of [0, 0.16]) {
       this.tone('sawtooth', [['set', 450, now + delay], ['exp', 180, now + delay + 0.12]],
@@ -153,7 +202,8 @@ export class SoundEffects {
   }
 
   // 重墜高處著地撞擊聲
-  public playFallHit() {
+  public playFallHit(pos?: Vec3Like) {
+    if (!this.gate('fallHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 120, now], ['exp', 25, now + 0.28]], [['set', 0.4, now], ['exp', 0.001, now + 0.3]], now, now + 0.3);
   }
@@ -230,13 +280,15 @@ export class SoundEffects {
   }
 
   // 普通棒球棍重擊木擊聲 (Wooden Bat Crack)
-  public playBatHit() {
+  public playBatHit(pos?: Vec3Like) {
+    if (!this.gate('batHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 520, now], ['exp', 140, now + 0.12]], [['set', 0.42, now], ['exp', 0.001, now + 0.16]], now, now + 0.17);
   }
 
   // 特殊黃金神級棒球棍雷霆轟擊聲 (Golden Bat Thunder Whoosh)
-  public playSpecialBatHit() {
+  public playSpecialBatHit(pos?: Vec3Like) {
+    if (!this.gate('batHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sawtooth', [['set', 180, now], ['exp', 45, now + 0.28]], [['set', 0.45, now], ['exp', 0.001, now + 0.32]], now, now + 0.33);
     this.tone('sine', [['set', 1318.5, now], ['exp', 880, now + 0.25]], [['set', 0.25, now], ['exp', 0.001, now + 0.30]], now, now + 0.31);
@@ -252,7 +304,8 @@ export class SoundEffects {
   }
 
   // 食人花 Boss 巨顎咬噬聲 (Monster Chomp)
-  public playBossBite() {
+  public playBossBite(pos?: Vec3Like) {
+    if (!this.gate('bossBite', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sawtooth', [['set', 110, now], ['exp', 35, now + 0.22]], [['set', 0.38, now], ['exp', 0.001, now + 0.25]], now, now + 0.26);
   }
@@ -272,25 +325,29 @@ export class SoundEffects {
   }
 
   // 強盜劈砍揮刀聲 (Bandit Weapon Slash)
-  public playBanditSlash() {
+  public playBanditSlash(pos?: Vec3Like) {
+    if (!this.gate('slash', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sawtooth', [['set', 480, now], ['exp', 120, now + 0.18]], [['set', 0.32, now], ['exp', 0.001, now + 0.2]], now, now + 0.21);
   }
 
   // 羽球殺球清脆爆裂擊球聲 (Badminton Smash Hit)
-  public playBadmintonHit() {
+  public playBadmintonHit(pos?: Vec3Like) {
+    if (!this.gate('badminton', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 1400, now], ['exp', 320, now + 0.08]], [['set', 0.45, now], ['exp', 0.001, now + 0.1]], now, now + 0.11);
   }
 
   // 羽球拍破空橫掃呼嘯聲 (Badminton Racket Swing)
-  public playBadmintonWhoosh() {
+  public playBadmintonWhoosh(pos?: Vec3Like) {
+    if (!this.gate('badminton', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sine', [['set', 650, now], ['exp', 160, now + 0.16]], [['set', 0.35, now], ['exp', 0.001, now + 0.18]], now, now + 0.19);
   }
 
   // 閃身步 / 狗熊哆嗦毛身法疾風破空聲 (Martial Dodge Wind Whoosh)
-  public playDodge(isAdvanced: boolean = false) {
+  public playDodge(isAdvanced: boolean = false, pos?: Vec3Like) {
+    if (!this.gate('dodge', pos)) return;
     const now = this.audio().currentTime;
     this.tone(isAdvanced ? 'triangle' : 'sine', [['set', isAdvanced ? 950 : 720, now], ['exp', 140, now + 0.22]],
       [['set', 0.42, now], ['exp', 0.001, now + 0.25]], now, now + 0.26);
@@ -309,7 +366,8 @@ export class SoundEffects {
   }
 
   // 生態園昆蟲窸窣嘶鳴聲 (Garden Bug Scurry & Click)
-  public playBugChirp() {
+  public playBugChirp(pos?: Vec3Like) {
+    if (!this.gate('bugChirp', pos)) return;
     const now = this.audio().currentTime;
     for (let i = 0; i < 2; i++) {
       const t0 = now + i * 0.05;

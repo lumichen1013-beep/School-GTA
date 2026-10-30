@@ -87,6 +87,7 @@ export class CampusMode {
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
   private readonly onGardenDamage = (amount: number, reason: string) => {
+    if (this.ctx.player.tryAutoDodge()) return;
     const died = this.ctx.player.takeDamage(amount, reason);
     this.ctx.wantedSystem.showBanner(reason, 2500);
     if (died) {
@@ -238,6 +239,8 @@ export class CampusMode {
   public startElevator(toFourthFloor: boolean) {
     const { player, tennisGame, engine, wantedSystem } = this.ctx;
     soundManager.playElevatorDing();
+    // 突進斬中搭電梯：過場期間不更新玩家，出招會凍結於突進中 (持續略過推擠、鏡頭拉遠，並以傳送前的突進起點結算)，先中止
+    if (player.isDashMove) player.cancelAttack();
     player.equipBadmintonRacket(false);
     if (tennisGame.tennisState !== 'IDLE') {
       tennisGame.resetMatch(engine.scene, player);
@@ -538,6 +541,7 @@ export class CampusMode {
     tracker.hasSpecialBat = player.hasSpecialBat;
     tracker.plantBossDefeated = ecologicalGarden.boss.isDead;
     tracker.peBossDefeated = tennisGame.coachDefeated || (peCoach ? peCoach.hp <= 0 : false);
+    if (tracker.peBossDefeated) progression.checkDualRacketUnlock();
     // 紀錄文字僅在最佳成績變動時重新格式化
     if (racingGame.bestTrackTime !== this.lastTrackRecord) {
       this.lastTrackRecord = racingGame.bestTrackTime;

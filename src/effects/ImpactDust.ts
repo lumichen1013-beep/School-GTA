@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 
 // 撞擊碎石煙塵爆散特效 (固定物件池以單一 InstancedMesh 繪製、共用幾何與材質，執行期零配置)
 const POOL_SIZE = 24;
@@ -37,6 +38,7 @@ class ImpactDustSystem {
     if (!this.mesh) {
       this.mesh = new THREE.InstancedMesh(_geo, _mat, POOL_SIZE);
       this.mesh.frustumCulled = false; // 粒子每幀移動，略過整體包圍球剔除
+      updateVisibleMatricesOnly(this.mesh); // 閒置隱藏時略過矩陣更新
       for (let i = 0; i < POOL_SIZE; i++) {
         this.mesh.setMatrixAt(i, _zeroMatrix);
         this.particles.push({ position: new THREE.Vector3(), velocity: new THREE.Vector3(), rotation: new THREE.Euler(), scale: 1, life: 0 });
@@ -44,6 +46,14 @@ class ImpactDustSystem {
     }
     if (this.mesh.parent !== scene) scene.add(this.mesh);
     return this.mesh;
+  }
+
+  // 預建 mesh 並暫時顯示以便 renderer.compile 預熱 shader (粒子全為歸零矩陣，下次 burst 前不顯示)
+  public prewarm(scene: THREE.Object3D, compile: () => void) {
+    const mesh = this.ensure(scene);
+    mesh.visible = true;
+    compile();
+    mesh.visible = this.activeCount > 0;
   }
 
   // 於 point 爆散碎石，沿 normal (撞擊反彈方向) 噴出

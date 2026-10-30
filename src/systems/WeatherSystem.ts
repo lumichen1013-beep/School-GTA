@@ -248,7 +248,7 @@ export class WeatherSystem {
     return WEATHER_PRESETS[this.currentWeather];
   }
 
-  // 手動循環切換下一種天氣 (按 [P] 鍵或點擊 HUD 天氣按鈕)
+  // 手動循環切換下一種天氣 (點擊 HUD 天氣按鈕)
   public cycleWeather() {
     const currentIdx = WEATHER_ORDER.indexOf(this.targetWeather);
     const nextIdx = (currentIdx + 1) % WEATHER_ORDER.length;

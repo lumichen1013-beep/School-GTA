@@ -11,6 +11,9 @@ import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, NPC_CROSS_PARRY, NPC_GRAB
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
+import { applyNpcLodLevel, nextNpcLodLevel, type NpcLodLevel, type NpcLodRig } from './npc/lod';
+import { freezeLocalMatrix, updateVisibleMatricesOnly } from '../core/matrixUpdate';
+import { launchHorizontal, launchVertical } from '../weapons/launch';
 import { impactDust } from '../effects/ImpactDust';
 import { requestCameraShake } from '../effects/cameraShake';
 
@@ -75,6 +78,8 @@ const _npcSurroundTarget = new THREE.Vector3();
 
 // 戰鬥積極度 (第二世界特訓群與校園執法者，roleConfig.aggressiveCombat)
 const W2_COMBAT_MIN_SPEED = 5.5; // 追捕中最低移動速度 (潛行巡邏慢速不帶入戰鬥)
+const PLAYER_LAUNCH_MAX_H = 10; // 玩家終結技擊飛水平速度上限 (其他來源如單車撞飛仍為 16.5)
+const PLAYER_LAUNCH_MAX_V = 7; // 玩家終結技擊飛垂直速度上限 (其他來源仍為 10.5)
 const W2_STAGGER_TIME = 0.3; // 一般受擊踉蹌總時間 (前段後退、後段縮身)
 const W2_STAGGER_PUSH_TIME = 0.15;
 const W2_STAGGER_DIST = 0.4; // 踉蹌後退距離 (m)，仍留在攻擊範圍內
@@ -456,6 +461,10 @@ export class NPC {
   private bikeRearWheel?: THREE.Mesh;
   private bikeModelParts: THREE.Object3D[] = []; // 騎車姿態模型全部零件 (單車 + 坐姿騎士)
 
+  // 遠處繪製分級 (僅切換零件 visible，不影響骨架節點的動畫與遊戲邏輯)
+  private lod?: NpcLodRig;
+  private lodLevel: NpcLodLevel = 0;
+
   private hpBarGroup: THREE.Group;
   private hpBarFrame: THREE.Group;
   private hpBarBgMesh: THREE.Mesh;
@@ -626,6 +635,10 @@ export class NPC {
     this.hpBarGroup.add(this.koBadgeSprite);
 
     this.mesh.add(this.hpBarGroup);
+    // 血條框/底框與告示牌建構後只切換顯示 (血量以 hpBarMesh 縮放呈現、朝向由 hpBarGroup 旋轉)
+    freezeLocalMatrix(this.hpBarFrame, this.hpBarBgMesh, this.koBadgeSprite);
+    // 每幀只更新可見零件的矩陣：遠處分級隱藏的頭/雙臂/腿、收起的傘與手機、告示牌等整枝略過，整個 NPC 隱藏時全部略過
+    updateVisibleMatricesOnly(this.mesh);
 
     scene.add(this.mesh);
     // 閃身步老師 (DODGE_TEACHER) 專屬技能對話氣泡與 0-GC 殘影物件池
@@ -776,7 +789,7 @@ export class NPC {
     this.rotationY = Math.atan2(this.bossChargeDir.x, this.bossChargeDir.z);
     this.mesh.rotation.y = this.rotationY;
     if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = true;
-    soundManager.playWhistle();
+    soundManager.playWhistle(this.position);
   }
 
   // 總教官身體 (腳底 +0.3 ~ +1.9m) 於 (x, z) 是否撞上阻擋物
@@ -918,7 +931,7 @@ export class NPC {
     const move = this.cfg.isCanine ? TAKEDOWN_WOLF_PARRY : this.role === 'DETENTION_GUARD' ? TAKEDOWN_SHIELD_PARRY : TAKEDOWN_PALM_PARRY;
     this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, twistFrom);
     this.showSkillBubble(this.cfg.isCanine ? '💢 閃開反撲！' : '🛡️ 格擋！', false);
-    soundManager.playBanditSlash();
+    soundManager.playBanditSlash(this.position);
     return move;
   }
 
@@ -1003,7 +1016,8 @@ export class NPC {
       bikeFrontWheel: this.bikeFrontWheel,
       bikeRearWheel: this.bikeRearWheel,
       umbrellaMesh: this.umbrellaMesh,
-      bossTelegraphMat: this.bossTelegraphMat
+      bossTelegraphMat: this.bossTelegraphMat,
+      lod: this.lod
     };
   }
 
@@ -1025,14 +1039,41 @@ export class NPC {
     this.bikeRearWheel = rig.bikeRearWheel;
     this.umbrellaMesh = rig.umbrellaMesh;
     this.bossTelegraphMat = rig.bossTelegraphMat;
+    if (this.lod !== rig.lod) {
+      this.lod = rig.lod;
+      this.lodLevel = 0; // 新模型的分級網格預設隱藏、完整零件預設顯示
+    }
   }
 
   // 執行模型建構函式 (實作位於 npc/models.ts) 並套用結果
   private buildModel(build: (rig: NPCModelRig) => void) {
     this.kf.cancel();
     const rig = this.createRig();
+    rig.lod = undefined; // 重建模型：舊分級網格隨舊零件移除，由建構函式重新建立 (無分級的模型維持 undefined)
     build(rig);
     this.readRig(rig);
+  }
+
+  // 戰鬥/追捕/警戒/倒地/對話/撐傘等狀態與 Boss 類角色一律維持完整模型 (姿勢細節與手持物必須清楚)
+  private needsFullModel(): boolean {
+    return this.isChasing || this.alertState !== 'NORMAL' || this.isKnockedDown || this.isKnockedFlying
+      || this.isPermanentlyKnockedOut || this.hitCooldown > 0 || this.attackAnimTimer > 0 || this.kf.active
+      || this.isDodging || this.isConversing || this.isFullModelRole()
+      || (this.umbrellaMesh !== undefined && this.umbrellaMesh.visible);
+  }
+
+  private isFullModelRole(): boolean {
+    return this.role === 'PE_TEACHER_BOSS' || this.role === 'DODGE_TEACHER' || this.role === 'DETENTION_BOSS';
+  }
+
+  // 依鏡頭距離切換遠處分級 (每幀於 AI 更新後呼叫；只在分級改變時切換 visible)
+  public updateLod(viewPos: THREE.Vector3) {
+    const lod = this.lod;
+    if (!lod) return;
+    const next = nextNpcLodLevel(this.lodLevel, this.mesh.position.distanceToSquared(viewPos), this.needsFullModel());
+    if (next === this.lodLevel) return;
+    this.lodLevel = next;
+    applyNpcLodLevel(lod, next);
   }
 
   public getRoleTitle(): string {
@@ -1102,7 +1143,7 @@ export class NPC {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     this.hp = Math.max(0, this.hp - amount);
     this.updateHpBar();
-    soundManager.playPunch();
+    soundManager.playPunch(this.position);
 
     if (this.hp <= 0) {
       this.isKnockedDown = true;
@@ -1125,7 +1166,7 @@ export class NPC {
   public takeDamage(amount: number): boolean {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.isBossInvulnerable) {
-      soundManager.playBanditSlash();
+      soundManager.playBanditSlash(this.position);
       return false; // 金鐘護盾無敵期間免疫一切正面攻擊
     }
     if (this.isPaused) this.cancelPause();
@@ -1141,18 +1182,18 @@ export class NPC {
     } else if (this.role === 'DETENTION_GUARD') {
       // 特訓院守衛：吹哨冷卻拉長至 12 秒且低血量才吹哨 (盾擋判定於 launchFlying)
       if (this.hp < this.maxHp * 0.40 && this.whistleCooldown <= 0) {
-        soundManager.playWhistle();
+        soundManager.playWhistle(this.position);
         this.whistleCooldown = 12.0;
       }
     } else if (this.role === 'DETENTION_BOSS') {
       if (this.hp < this.maxHp * 0.35 && this.whistleCooldown <= 0) {
-        soundManager.playWhistle();
+        soundManager.playWhistle(this.position);
         this.whistleCooldown = 16.0;
       }
     }
 
     this.hp = Math.max(0, this.hp - amount);
-    soundManager.playPunch();
+    soundManager.playPunch(this.position);
 
     // 更新血條比例
     const ratio = Math.max(0.01, this.hp / this.maxHp);
@@ -1201,7 +1242,11 @@ export class NPC {
   // 單車衝撞與武器擊飛效果
   // canLaunch：第二世界特訓群僅連招終結技可擊飛，其餘命中改為短暫踉蹌
   // ignoreCooldown：略過 0.65 秒受擊保護 (連段終結技緊接前一段命中；舉盾/閃避等機率防禦照常判定)
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false): boolean {
+  // fromPlayer：玩家武器攻擊。canLaunch 為 false 時 (連段第 1、2 段 / 非終結技) 僅扣血：
+  //   不擊飛、不位移、不踉蹌、不打斷出招，也不吃/不設 0.65 秒受擊保護 (連段間隔約 0.3 秒，每段都須吃到傷害)；
+  //   擊飛時水平 / 垂直速度上限另行下修 (預設 PLAYER_LAUNCH_MAX_H / V，武器可由 playerCapH / V 覆寫，見 WeaponDefinition.launchCap)
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false, playerCapH: number = PLAYER_LAUNCH_MAX_H, playerCapV: number = PLAYER_LAUNCH_MAX_V): boolean {
+    const lightHit = fromPlayer && !canLaunch;
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1213,7 +1258,7 @@ export class NPC {
       }
       return false;
     }
-    if (this.hitCooldown > 0 && !ignoreCooldown) return false;
+    if (this.hitCooldown > 0 && !ignoreCooldown && !lightHit) return false;
     // 鐵面總長受擊：撞柱硬直中 30%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.50)) return false;
     // 持盾特訓院守衛：正面受擊 40% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
@@ -1230,7 +1275,7 @@ export class NPC {
         return false;
       }
     }
-    this.hitCooldown = 0.65; // 0.65秒受擊保護
+    if (!lightHit) this.hitCooldown = 0.65; // 0.65秒受擊保護
 
     const wasKnockedDown = this.takeDamage(damage);
     if (!this.isKnockedDown && this.hp > 0) {
@@ -1238,6 +1283,7 @@ export class NPC {
     } else {
       this.isChasing = false;
     }
+    if (lightHit) return wasKnockedDown;
 
     // 戰鬥積極角色 (特訓群 / 校園執法者)：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
     if (this.cfg.aggressiveCombat && !this.isKnockedDown &&
@@ -1254,8 +1300,8 @@ export class NPC {
 
     // 計算擊飛拋物線：向上拋射 + 合理水平擊飛 (受物理阻擋，絕不飛越圍牆或穿透建物)
     this.isKnockedFlying = true;
-    const horizontalForce = Math.min(Math.max(force * 1.1, 3.0), 16.5);
-    const verticalForce = Math.min(Math.max(force * 0.6, 2.0), 10.5);
+    const horizontalForce = launchHorizontal(force, fromPlayer ? playerCapH : 16.5);
+    const verticalForce = launchVertical(force, fromPlayer ? playerCapV : 10.5);
 
     this.knockVelocity.set(
       impactDir.x * horizontalForce,
@@ -1308,7 +1354,7 @@ export class NPC {
     this.kf.start(NPC_CROSS_PARRY, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.attackCooldown = ENFORCER_COUNTER_COOLDOWN;
     this.showSkillBubble('🥋 格擋反擊！', false);
-    soundManager.playBanditSlash();
+    soundManager.playBanditSlash(this.position);
     return true;
   }
 
@@ -1333,7 +1379,7 @@ export class NPC {
     this.sigCooldown = kind === 'GRAB' ? 8.2 + Math.random() : 6.2 + Math.random();
     this.attackCooldown = move.dur + 0.1; // 招式期間不接一般攻擊
     this.showSpeechBubble(kind === 'GRAB' ? '🥋 擒拿摔！' : '📏 戒尺連打！', true, 1.4);
-    soundManager.playWhistle();
+    soundManager.playWhistle(this.position);
   }
 
   // 擒拿摔預備期間沿起手方向短距撲抓 (逐軸碰撞檢測不穿牆；貼近玩家即停)
@@ -1397,7 +1443,7 @@ export class NPC {
     this.lastKnownPos.copy(playerPos);
     this.attackCooldown = Math.max(this.attackCooldown, 0.5);
     this.showSpeechBubble('站住！留校察看！', true, 2.5);
-    soundManager.playWhistle();
+    soundManager.playWhistle(this.position);
   }
 
   // 處分解除後返回原本崗位 (保留目前血量，僅重置位置、樓層與仇恨)
@@ -1490,7 +1536,7 @@ export class NPC {
     } else {
       this.attackAnimTimer = 0.35;
       this.whiffTimer = 0.35;
-      if (this.cfg.isCanine) soundManager.playDogBark();
+      if (this.cfg.isCanine) soundManager.playDogBark(this.position);
     }
   }
 
@@ -1553,15 +1599,15 @@ export class NPC {
 
   private playAttackSound() {
     if (this.cfg.isCanine) {
-      soundManager.playDogBark();
+      soundManager.playDogBark(this.position);
     } else if (this.role === 'BIKE_PATROL') {
-      soundManager.playBicycleBell();
+      soundManager.playBicycleBell(this.position);
     } else if (this.role === 'BANDIT' || this.role === 'DETENTION_GUARD') {
-      soundManager.playBanditSlash();
+      soundManager.playBanditSlash(this.position);
     } else if (this.role === 'PE_TEACHER_BOSS') {
-      soundManager.playBadmintonWhoosh();
+      soundManager.playBadmintonWhoosh(this.position);
     } else {
-      soundManager.playPunch();
+      soundManager.playPunch(this.position);
     }
   }
 
@@ -1658,7 +1704,7 @@ export class NPC {
     this.mesh.position.y = this.baseFloorY;
 
     // 播放清脆自行車鈴聲
-    soundManager.playBicycleBell();
+    soundManager.playBicycleBell(this.position);
   }
 
   // 全體 NPC 共用特效的每幀更新 (總教官撞擊碎石)；由主迴圈呼叫一次，與 NPC 是否在場景無關
@@ -1735,7 +1781,7 @@ export class NPC {
     if (distSq < 6.25 || distSq > 484.0) return null; // 2.5m ~ 22.0m
 
     this.shuttlecockCooldown = cooldown; // 發球間隔
-    soundManager.playBadmintonWhoosh();
+    soundManager.playBadmintonWhoosh(this.position);
     this.triggerAttackAnimation(false);
 
     // 建立/復用標準羽球 3D 模型 (共享幾何體與材質，徹底避免反覆創建洩漏 0-GC)
@@ -2622,8 +2668,8 @@ export class NPC {
 
         // 僅在初次發現時吹哨/吠叫 (追捕中持續看見不重複鳴響)
         if (!wasChasing && this.whistleCooldown <= 0) {
-          if (this.role === 'DETENTION_WOLF') soundManager.playDogBark();
-          else if (this.role === 'DETENTION_GUARD' || this.role === 'DETENTION_BOSS') soundManager.playWhistle();
+          if (this.role === 'DETENTION_WOLF') soundManager.playDogBark(this.position);
+          else if (this.role === 'DETENTION_GUARD' || this.role === 'DETENTION_BOSS') soundManager.playWhistle(this.position);
           this.whistleCooldown = 8.0;
         }
         onSpotPlayer();
@@ -2633,7 +2679,7 @@ export class NPC {
       // 2. 聽覺音效判定 (當未看見玩家時，判定腳步噪音)
       if (!this.isChasing) {
         if (isPlayerHiding || isPlayerSneaking) {
-          // 刺客草堆匿蹤掩體中 或 靜音潛行 (右鍵/Ctrl/輕推搖桿)：0 噪音！守衛不會察覺背後接近
+          // 刺客草堆匿蹤掩體中 或 靜音潛行 (右鍵/輕推搖桿)：0 噪音！守衛不會察覺背後接近
         } else if (isPlayerSprinting && distSq < 72.25) { // 疾跑 8.5m 內
           this.setAlertState('CAUTION');
           this.cautionTimer = 3.5;
@@ -2708,13 +2754,15 @@ export class NPC {
     const spotDistSq = this.role === 'DOG' ? 400.0 : 324.0; // 20m vs 18m
     if (wantedLevel > 0 && seesPlayer && distSq < spotDistSq && this.role !== 'STUDENT') {
       if (this.isPaused) this.cancelPause();
+      const wasChasing = this.isChasing;
       this.isChasing = true;
       this.lostSightTimer = 0;
       this.lastKnownPos.copy(playerPos);
-      if (this.whistleCooldown <= 0) {
-        if (this.role === 'DOG') soundManager.playDogBark();
-        else if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell();
-        else soundManager.playWhistle();
+      // 僅在剛進入追捕的那一刻鳴響 (追捕中持續看見不重複)
+      if (!wasChasing && this.whistleCooldown <= 0) {
+        if (this.role === 'DOG') soundManager.playDogBark(this.position);
+        else if (this.role === 'BIKE_PATROL') soundManager.playBicycleBell(this.position);
+        else soundManager.playWhistle(this.position);
         this.whistleCooldown = this.role === 'DOG' ? 4.0 : 5.0;
       }
       onSpotPlayer();
@@ -2843,7 +2891,7 @@ export class NPC {
     this.bikePhaseTimer = BIKE_WARN_TIME;
     this.bikePounceIsProbe = isProbe;
     this.bikeStraightTimer = 0;
-    soundManager.playBicycleBell();
+    soundManager.playBicycleBell(this.position);
     this.showSpeechBubble('🔔 叮叮！', true, 1.0);
   }
 
@@ -2866,7 +2914,7 @@ export class NPC {
     this.kf.start(NPC_SHIELD_BLOCK, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.attackCooldown = W2_COUNTER_COOLDOWN; // 格擋成功立即盾後反擊
     this.showSkillBubble('🛡️ 盾擋！', false);
-    soundManager.playBanditSlash();
+    soundManager.playBanditSlash(this.position);
     return true;
   }
 
@@ -2891,7 +2939,7 @@ export class NPC {
     this.showSkillBubble('💨 閃身步', false);
 
     // 疾風破空音效
-    soundManager.playDodge(false);
+    soundManager.playDodge(false, this.position);
 
     // 初始位置產生第 1 道破空殘影 (青色微光)
     this.spawnAfterimage(0x38bdf8, 0.28);
@@ -2933,7 +2981,7 @@ export class NPC {
     this.rotationY = Math.random() * Math.PI * 2;
     this.mesh.rotation.y = this.rotationY;
 
-    soundManager.playDodge(true);
+    soundManager.playDodge(true, this.position);
     this.bearBlinkCount++;
   }
 
@@ -3224,7 +3272,7 @@ export class NPC {
         if (fallDistance > 3.0) {
           // 高空摔出大樓墜樓重擊傷害與音效
           this.takeDamage(Math.round(fallDistance * 11));
-          soundManager.playFallHit();
+          soundManager.playFallHit(this.position);
         }
 
         if (this.hp <= 0) {
@@ -3462,8 +3510,8 @@ export class NPC {
         if (this.position.distanceToSquared(playerPos) < 625.0) requestCameraShake(0.85);
         // 猛烈撞擊加固水泥柱！陷入 5 秒重度眩暈硬直！
         this.stunBoss(5.0);
-        soundManager.playPunch();
-        soundManager.playBatHit();
+        soundManager.playPunch(this.position);
+        soundManager.playBatHit(this.position);
         if (this.bossTelegraphGroup) this.bossTelegraphGroup.visible = false;
       }
 
@@ -3517,7 +3565,7 @@ export class NPC {
         }
         if (struck && move && move.dmg > 0) {
           // 做樣子揮空：只有破風聲，不通知戰鬥系統結算
-          if (this.whiffTimer > 0) soundManager.playBadmintonWhoosh();
+          if (this.whiffTimer > 0) soundManager.playBadmintonWhoosh(this.position);
           else {
             this.kfStrike = move;
             this.playAttackSound();
@@ -3569,9 +3617,10 @@ export class NPC {
         this.isBurstSprinting = true;
         this.chasePacingTimer = 2.0;
         // 追騎車玩家時由撲咬預告響鈴，不另外隨機按鈴以免混淆
-        if (!isPlayerRidingBike && Math.random() < 0.05 && this.whistleCooldown <= 0) {
-          soundManager.playBicycleBell();
-          this.whistleCooldown = 4.0;
+        // 以每秒機率計算 (非每幀)：平均約 7 秒才偶爾按一次
+        if (!isPlayerRidingBike && Math.random() < 0.15 * delta && this.whistleCooldown <= 0) {
+          soundManager.playBicycleBell(this.position);
+          this.whistleCooldown = 8.0;
         }
       } else if (isPlayerRidingBike) {
         this.isBurstSprinting = true;
@@ -3582,9 +3631,9 @@ export class NPC {
           this.isBurstSprinting = !this.isBurstSprinting;
           if (this.isBurstSprinting) {
             this.chasePacingTimer = this.role === 'DOG' ? (2.0 + Math.random() * 1.5) : (0.5 + Math.random() * 1.0);
-            if (Math.random() < 0.25 && this.whistleCooldown <= 0) {
-              if (this.role === 'DOG') soundManager.playDogBark();
-              else soundManager.playWhistle();
+            // 追捕節奏切換僅犬隻偶爾吠叫；教官哨音只在剛發現玩家時響
+            if (this.role === 'DOG' && Math.random() < 0.25 && this.whistleCooldown <= 0) {
+              soundManager.playDogBark(this.position);
               this.whistleCooldown = 4.0;
             }
           } else {

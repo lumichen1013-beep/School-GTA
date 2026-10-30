@@ -27,13 +27,25 @@ type V3 = readonly [number, number, number];
 interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
 type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
 
-// 揮擊拖尾錨點：W 手持武器、RA 右拳、RL 右腿、LL 左腿
-export type TrailLimb = 'W' | 'RA' | 'RL' | 'LL';
-// 終結技特效類型：SLAM 下劈地裂、SPIN 旋身衝擊環
-export type FinisherFx = 'SLAM' | 'SPIN';
+// 揮擊拖尾錨點：W 手持武器 (右手)、WL 左手武器 (雙持)、RA 右拳、RL 右腿、LL 左腿
+export type TrailLimb = 'W' | 'WL' | 'RA' | 'RL' | 'LL';
+// 終結技特效類型：SLAM 下劈地裂、SPIN 旋身衝擊環、DASH 突進斬 (終點雙圈環 + 羽毛，路徑斬痕由戰鬥系統另出)
+export type FinisherFx = 'SLAM' | 'SPIN' | 'DASH';
+// 命中斬痕特效類型 (由斬痕特效系統實作)：LINE 單道光痕、X 交叉光痕
+export type SlashFx = 'LINE' | 'X';
+
+// 招式突進：出招進度 from → to (占全長比例) 期間沿面向等速前衝 dist 公尺 (位移交由一般碰撞處理，遇牆即停)
+export interface KfLunge {
+  readonly dist: number;
+  readonly from: number;
+  readonly to: number;
+}
 
 // 終結技群攻範圍：offset / radius 為攻擊距離 (getWeaponReach) 倍率
+// shape：未設或 'CIRCLE' 為圓形 (center 決定圓心)；'PATH' 為沿本招突進路徑 (突進起點 → 目前位置) 的矩形 / 膠囊，
+// radius 為半寬 (攻擊距離倍率)、長度取實際突進距離 (撞牆時較短)，center / offset 不使用
 export interface FinisherAoe {
+  readonly shape?: 'CIRCLE' | 'PATH';
   readonly center: 'SELF' | 'FRONT'; // 以玩家為圓心 / 以面前衝擊點為圓心
   readonly offset: number; // FRONT 衝擊點前移距離
   readonly radius: number;
@@ -64,6 +76,16 @@ export interface KfMove {
   // 揮擊拖尾區段 (占全長比例；預設為命中點前後兩個關鍵影格) 與錨點
   readonly trail: readonly [number, number];
   readonly trailLimb: TrailLimb;
+  // 第二條拖尾區段與錨點 (雙持左手等；null 為不出)
+  readonly trail2: readonly [number, number] | null;
+  readonly trailLimb2: TrailLimb;
+  // 額外命中傷害倍率 (與 extraStrikes 依序對應；未設時沿用 dmg)
+  readonly extraDmg: readonly number[];
+  readonly lunge: KfLunge | null;
+  // 蓄力區段 (占全長比例，null 為無)：武器拍尖蓄能發光並出向內收的光環
+  readonly charge: readonly [number, number] | null;
+  readonly hitShake: number; // 一般命中鏡頭震動 (0 不震；終結技主擊另有固定震動)
+  readonly slashFx: SlashFx | null;
   readonly aoe: FinisherAoe | null; // 終結技群攻 (null 為單體判定)
   readonly fx: FinisherFx | null;
   readonly keys: Float32Array;
@@ -73,6 +95,7 @@ export interface KfMove {
 interface MoveOpts {
   dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
   trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
+  trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx;
 }
 
 // 預設拖尾區段：命中點前一個關鍵影格 → 後一個關鍵影格
@@ -117,6 +140,13 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
     extraStrikes: o.extraStrikes ?? [],
     trail: o.trail ?? defaultTrail(o.strike, keys),
     trailLimb: o.trailLimb ?? 'RA',
+    trail2: o.trail2 ?? null,
+    trailLimb2: o.trailLimb2 ?? 'WL',
+    extraDmg: o.extraDmg ?? [],
+    lunge: o.lunge ?? null,
+    charge: o.charge ?? null,
+    hitShake: o.hitShake ?? 0,
+    slashFx: o.slashFx ?? null,
     aoe: o.aoe ?? null,
     fx: o.fx ?? null,
     keys: data,
@@ -172,7 +202,7 @@ const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62,
 // 3 躍起下劈：屈膝起跳、雙手舉棒過頂 → 落地沉身全力下劈 (終結技)
 const BAT_3 = defineMove('躍起下劈', {
   dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.36, 0.56], fx: 'SLAM',
-  aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 8, shakeGold: 0.8, hitStopGold: 0.11 }
+  aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 7, shakeGold: 0.8, hitStopGold: 0.11 }
 }, [
   [0.18, E_SMOOTH, { ln: 0.1, h: -0.15, la: [0.55, 0, -0.1], ra: [0.55, 0, 0.1], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
   [0.36, E_OUT, { tw: 0.15, ln: -0.28, h: 0.45, la: [-2.85, 0, 0.3], ra: [-2.9, 0, -0.1], ll: [-0.85, 0, -0.05], rr: [-0.25, 0, 0.05] }],
@@ -215,11 +245,53 @@ const RACKET = defineMove('揮拍', { dur: 0.38, strike: 0.36, cancel: 1, trailL
   [1, E_SMOOTH, REST]
 ]);
 
+// ───────────── 玩家：雙燕羽刃 (雙羽球拍二刀流，右拍 W / 左拍 WL，每段多擊) ─────────────
+// 1 二刀・快斬：自倒提架勢起手，右拍由下往上斜撩 (0.28)、左拍反向斜劈 (0.55)；小幅轉腰、不弓步
+const DUAL_1 = defineMove('二刀・快斬', {
+  dur: 0.4, strike: 0.28, cancel: 0.68, reach: 1.0, arc: -0.1, dmg: 1.0, knock: 0.4,
+  extraStrikes: [0.55], extraDmg: [1.0], trailLimb: 'W', trail: [0.12, 0.4], trail2: [0.38, 0.66], trailLimb2: 'WL', slashFx: 'LINE'
+}, [
+  [0.12, E_SMOOTH, { tw: 0.3, ln: 0.05, ra: [0.35, 0, 0.5], la: [0.1, 0, -0.5] }],
+  [0.28, E_IN, { tw: -0.35, ln: 0.1, ra: [-2.1, 0, -0.2], la: [0.2, 0, -0.5] }],
+  [0.42, E_SMOOTH, { tw: -0.1, ra: [-2.3, 0, -0.1], la: [-2.4, 0, 0.2] }],
+  [0.55, E_IN, { tw: 0.4, ln: 0.12, ra: [-1.6, 0, 0.5], la: [-0.5, 0, -0.3] }],
+  [0.78, E_OUT, { tw: 0.5, ln: 0.1, ra: [-1.4, 0, 0.6], la: [-0.4, 0, -0.4] }],
+  [1, E_SMOOTH, REST]
+]);
+// 2 二刀・交叉斬：雙拍高舉交叉 → 向兩側外斬拉開 (右拍 0.42、左拍 0.50)，兩道斬痕在面前交成 X
+const DUAL_2 = defineMove('二刀・交叉斬', {
+  dur: 0.44, strike: 0.42, cancel: 0.64, reach: 1.05, arc: 0, dmg: 1.0, knock: 0.4,
+  extraStrikes: [0.5], extraDmg: [1.0], trailLimb: 'W', trail: [0.26, 0.55], trail2: [0.32, 0.62], trailLimb2: 'WL',
+  hitShake: 0.15, slashFx: 'X'
+}, [
+  [0.2, E_SMOOTH, { ln: -0.05, h: 0.04, ra: [-2.5, 0, -0.5], la: [-2.5, 0, 0.5] }],
+  [0.42, E_IN, { tw: -0.15, ln: 0.15, ra: [-1.2, 0, 1.2], la: [-2.4, 0, 0.5] }],
+  [0.5, E_IN, { tw: 0.2, ln: 0.15, ra: [-1.0, 0, 1.5], la: [-1.0, 0, -1.5] }],
+  [1, E_SMOOTH, REST]
+]);
+// 3 鬼斬 (終結技)：雙拍身前交叉成 X、壓低重心蓄勢 (0.2s) → 沿面向高速突進 4.5m 穿過敵群 (0.2 → 0.35)，
+// 衝刺中途兩次小擊只扣血 (0.26 / 0.31) → 停下後雙拍向兩側外斬、背對敵人收刀 (0.42，延遲斬：敵人此刻才爆開並擊飛，唯一擊飛) → 停格收勢 0.3s
+// 命中範圍為沿突進路徑的矩形 (半寬 = radius × 攻擊距離 ≈ 0.9m、長度 = 實際突進距離，撞牆時較短)
+const DUAL_3 = defineMove('鬼斬', {
+  dur: 1.0, strike: 0.42, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.6, knock: 1.5, finisher: true,
+  extraStrikes: [0.26, 0.31], extraDmg: [0.5, 0.5], trailLimb: 'W', trail: [0.2, 0.56], trail2: [0.2, 0.56], trailLimb2: 'WL', fx: 'DASH',
+  lunge: { dist: 4.5, from: 0.2, to: 0.35 }, charge: [0.04, 0.2], slashFx: 'LINE',
+  aoe: { shape: 'PATH', center: 'SELF', offset: 0, radius: 0.35, max: 6, falloff: 0.3, shake: 0.75, hitStop: 0.12, hitStopMulti: 0.14, missShake: 0.3 }
+}, [
+  [0.18, E_SMOOTH, { ln: 0.3, h: -0.25, ra: [-1.3, 0, -0.7], la: [-1.3, 0, 0.7], ll: [-0.6, 0, -0.1], rr: [0.5, 0, 0.1] }],
+  [0.2, E_LINEAR, { ln: 0.3, h: -0.25, ra: [-1.3, 0, -0.7], la: [-1.3, 0, 0.7], ll: [-0.6, 0, -0.1], rr: [0.5, 0, 0.1] }],
+  [0.35, E_LINEAR, { ln: 0.5, h: -0.3, ra: [-1.5, 0, -0.4], la: [-1.5, 0, 0.4], ll: [-0.9, 0, -0.1], rr: [0.8, 0, 0.1] }],
+  [0.42, E_IN, { tw: Math.PI, ln: 0.2, h: -0.2, ra: [-1.5, 0, 1.5], la: [-1.5, 0, -1.5], ll: [-0.5, 0, -0.2], rr: [0.4, 0, 0.2] }],
+  [0.72, E_OUT, { tw: Math.PI, ln: 0.2, h: -0.2, ra: [-1.4, 0, 1.45], la: [-1.4, 0, -1.45], ll: [-0.5, 0, -0.2], rr: [0.4, 0, 0.2] }],
+  [1, E_SMOOTH, { tw: TWO_PI }]
+]);
+
 export const PLAYER_COMBOS = {
   FIST: [FIST_1, FIST_2, FIST_3],
   BAT: [BAT_1, BAT_2, BAT_3],
   BATON: [BATON_1, BATON_2, BATON_3],
-  RACKET: [RACKET]
+  RACKET: [RACKET],
+  DUAL: [DUAL_1, DUAL_2, DUAL_3]
 } as const;
 export type PlayerComboSet = keyof typeof PLAYER_COMBOS;
 
@@ -405,6 +477,78 @@ export function wrapAngle(a: number): number {
   return a - TWO_PI * Math.round(a / TWO_PI);
 }
 
+// ───────────── 多段命中 / 突進 (玩家連段共用的純函式) ─────────────
+// 命中序號 strikeIndex：0 = 主擊 (strike)，1 以後依 extraStrikes 順序 (時間先後不一定與序號相同)
+
+// 第 i 擊命中時間點 (占全長比例)
+export function strikeFrac(move: KfMove, i: number): number {
+  return i === 0 ? move.strike : move.extraStrikes[i - 1];
+}
+
+// 第 i 擊傷害倍率：主擊為 dmg，額外擊取 extraDmg (未設時沿用 dmg)
+export function strikeDmg(move: KfMove, i: number): number {
+  return i === 0 ? move.dmg : move.extraDmg[i - 1] ?? move.dmg;
+}
+
+// 第 i 擊結算方式：主擊沿用招式本身 (群攻 / 單體)；終結技額外擊為只扣血的群攻、其餘額外擊為單體判定
+export type StrikeRoute = 'AOE' | 'AOE_LIGHT' | 'SINGLE';
+export function strikeRoute(move: KfMove, i: number): StrikeRoute {
+  if (i === 0) return move.aoe ? 'AOE' : 'SINGLE';
+  return move.finisher && move.aoe ? 'AOE_LIGHT' : 'SINGLE';
+}
+
+// 第 i 擊可否擊飛：只有終結技主擊
+export function strikeCanLaunch(move: KfMove, i: number): boolean {
+  return move.finisher && i === 0;
+}
+
+// 本幀跨過的額外命中時間點 (位元 i = 第 i 擊)；prevT / nowT 為圖層時間 (秒)，dur 為含節奏縮放的整招秒數
+export function crossedExtraStrikes(move: KfMove, dur: number, prevT: number, nowT: number): number {
+  let mask = 0;
+  const extra = move.extraStrikes;
+  for (let i = 0; i < extra.length; i++) {
+    const at = extra[i] * dur;
+    if (prevT < at && nowT >= at) mask |= 1 << (i + 1);
+  }
+  return mask;
+}
+
+// 待結算命中中時間最早者 (同時間取序號小者)；mask 需非 0
+export function earliestStrike(move: KfMove, mask: number): number {
+  let best = -1;
+  let bestT = Infinity;
+  for (let i = 0; i <= move.extraStrikes.length; i++) {
+    if ((mask & (1 << i)) === 0) continue;
+    const t = strikeFrac(move, i);
+    if (t < bestT) { bestT = t; best = i; }
+  }
+  return best;
+}
+
+// 突進於圖層時間 t0 → t1 (秒) 間的位移 (公尺)：與突進區段重疊的比例 × dist (各幀加總恰為 dist)
+export function lungeStep(move: KfMove, dur: number, t0: number, t1: number): number {
+  const l = move.lunge;
+  if (!l || dur <= 0 || l.to <= l.from) return 0;
+  const a = l.from * dur;
+  const b = l.to * dur;
+  const overlap = Math.min(t1, b) - Math.max(t0, a);
+  return overlap > 0 ? l.dist * overlap / (b - a) : 0;
+}
+
+// 點 (px, pz) 到突進路徑線段 (ox, oz) → (ex, ez) 的水平距離；最近點寫入 out[0] / out[1]，沿路徑比例 (0..1) 寫入 out[2]
+export function probePath(ox: number, oz: number, ex: number, ez: number, px: number, pz: number, out: Float32Array | number[]): number {
+  const dx = ex - ox;
+  const dz = ez - oz;
+  const len2 = dx * dx + dz * dz;
+  const t = len2 > 1e-8 ? Math.min(1, Math.max(0, ((px - ox) * dx + (pz - oz) * dz) / len2)) : 0;
+  const cx = ox + dx * t;
+  const cz = oz + dz * t;
+  out[0] = cx;
+  out[1] = cz;
+  out[2] = t;
+  return Math.hypot(px - cx, pz - cz);
+}
+
 const _top = new THREE.Vector3();
 
 /**
@@ -436,6 +580,8 @@ export class KungFuLayer {
   public get progress(): number { return this.move ? this.time / (this.move.dur * this.scale) : 0; }
   // 出招預備進度：0 = 剛起手、1 = 到達命中時間點 (無招式時為 0)
   public get strikeProgress(): number { return this.move ? this.time / (this.move.strike * this.move.dur * this.scale) : 0; }
+  // 整招秒數 (含時間縮放；無招式時為 0)
+  public get duration(): number { return this.move ? this.move.dur * this.scale : 0; }
 
   // twistFrom：指定起始扭腰 (例如角色朝向瞬間改變時帶入「舊畫面朝向 − 新朝向」，由招式平滑轉回)
   public start(move: KfMove, scale: number, mesh: THREE.Object3D, la?: THREE.Object3D | null, ra?: THREE.Object3D | null, ll?: THREE.Object3D | null, rl?: THREE.Object3D | null, twistFrom?: number) {
@@ -586,5 +732,42 @@ export class KungFuLayer {
     this.mesh = null;
     this.appliedTwist = 0;
     this.appliedRise = 0;
+  }
+}
+
+/**
+ * 多段命中追蹤 (玩家連段)：推進出招圖層並依 prevT / nowT 判定本幀跨過的命中點 (主擊 + extraStrikes)。
+ * 一幀至多送出一擊；同幀跨過多擊 (掉幀) 時依時間先後於後續幀補送，每擊恰好結算一次。
+ */
+export class StrikeTracker {
+  // 待送出命中所屬的招式 (送出時一併取用)
+  public move: KfMove | null = null;
+  private pending = 0;
+
+  // 推進圖層時間；回傳本幀送出的 strikeIndex (-1 = 無)
+  public step(kf: KungFuLayer, delta: number): number {
+    const move = kf.move;
+    const prevT = kf.time;
+    const dur = kf.duration;
+    let crossed = kf.update(delta) ? 1 : 0;
+    if (move && move.extraStrikes.length > 0) {
+      const nowT = kf.move === move ? kf.time : dur;
+      crossed |= crossedExtraStrikes(move, dur, prevT, nowT);
+    }
+    if (crossed && move) {
+      if (this.move !== move) this.pending = 0;
+      this.move = move;
+      this.pending |= crossed;
+    }
+    if (!this.pending || !this.move) return -1;
+    const i = earliestStrike(this.move, this.pending);
+    this.pending &= ~(1 << i);
+    return i;
+  }
+
+  // 中止出招時捨棄尚未送出的命中
+  public reset() {
+    this.move = null;
+    this.pending = 0;
   }
 }

@@ -6,6 +6,9 @@ import { WantedSystem } from './WantedSystem';
 import { soundManager } from '../audio/SoundEffects';
 import { InputManager } from '../core/InputManager';
 
+// 籃球第一次落地後，經過此秒數自動回到發球點
+const BALL_RESET_DELAY_SEC = 1.0;
+
 const _scratchCamDir = new THREE.Vector3();
 const _scratchCamHoriz = new THREE.Vector3();
 const _scratchToHoop = new THREE.Vector3();
@@ -57,6 +60,7 @@ export class BasketballGame {
   public pickup(player: Player, hud: HUD, wantedSystem: WantedSystem): boolean {
     if (this.isHolding || this.isBallInAir) return false;
     this.isHolding = true;
+    this.ballResetTimer = 0; // 撿起即取消回場倒數
     this.isChargingShot = false;
     this.shotChargeRatio = 0;
     player.isInvisible = true;
@@ -122,7 +126,7 @@ export class BasketballGame {
     player.isInvisible = false;
     hud.setBasketballAiming(false);
     this.isBallInAir = true;
-    this.ballResetTimer = 3.8;
+    this.ballResetTimer = 0; // 尚未落地，回場倒數於第一次觸地時才啟動
     this.targetShotQuality = quality;
     this.hasScoredThisShot = false;
 
@@ -190,18 +194,6 @@ export class BasketballGame {
     );
 
     soundManager.playPunch();
-  }
-
-  public resetBall(wantedSystem?: WantedSystem) {
-    this.isHolding = false;
-    this.isBallInAir = false;
-    this.isChargingShot = false;
-    this.shotChargeRatio = 0;
-    this.ballVelocity.set(0, 0, 0);
-    this.basketballMesh.position.copy(this.spawnPos);
-    if (wantedSystem) {
-      wantedSystem.showBanner('🏀 籃球已重新發球回西場頂弧三分點！', 2000);
-    }
   }
 
   public update(
@@ -319,6 +311,8 @@ export class BasketballGame {
       // 地面彈跳檢測
       if (this.basketballMesh.position.y <= 0.24) {
         this.basketballMesh.position.y = 0.24;
+        // 第一次觸地才啟動回場倒數，之後的彈跳不重設
+        if (this.ballResetTimer <= 0) this.ballResetTimer = BALL_RESET_DELAY_SEC;
         const horizSpeed = Math.sqrt(this.ballVelocity.x * this.ballVelocity.x + this.ballVelocity.z * this.ballVelocity.z);
         if (Math.abs(this.ballVelocity.y) > 1.2 || horizSpeed > 0.8) {
           this.ballVelocity.y = Math.abs(this.ballVelocity.y) * 0.52;
@@ -328,12 +322,16 @@ export class BasketballGame {
         } else {
           this.ballVelocity.set(0, 0, 0);
           this.isBallInAir = false;
-          this.ballResetTimer = 3.5;
         }
       }
-    } else if (this.ballResetTimer > 0) {
+    }
+
+    // 回場倒數：球在空中、彈跳或靜止時皆計時；持球時已於 pickup 取消
+    if (!this.isHolding && this.ballResetTimer > 0) {
       this.ballResetTimer -= delta;
       if (this.ballResetTimer <= 0) {
+        this.ballResetTimer = 0;
+        this.isBallInAir = false;
         this.basketballMesh.position.copy(this.spawnPos);
         this.ballVelocity.set(0, 0, 0);
       }

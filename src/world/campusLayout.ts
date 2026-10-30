@@ -27,6 +27,42 @@ export const CAMPUS_MAP_RECTS: CampusMapRect[] = [
 // 操場跑道 (南北向直道 + 兩端半圓彎道)
 export const CAMPUS_TRACK = { x: -55, z: 30, straightHalf: 16, innerR: 18, outerR: 32 };
 
+// 校牆範圍 (±105) 與校門 / 警衛室 (對齊 CampusWorld.buildSchoolMainGate(0, 0, 105))
+export const CAMPUS_WALL_HALF = 105;
+export const CAMPUS_GATE = { x: 0, z: 105, pillarHalfSpan: 9 };
+export const CAMPUS_GUARD_HOUSE = { x: 15, z: 105, w: 7, d: 7 };
+
+// 興趣點 (大地圖圖示 / 任務目標位置，地圖與任務清單共用)
+// 座標與遊戲內實體一致：合作社櫃台 = CampusWorld.commissaryPos、食人花王 = EcologicalGarden.boss.position、
+// 許願池 = EcologicalGarden.pondPos、大如老師 / 閃身步老師 = NPCSpawner 生成點
+// icon 為空字串者只在成為下一目標時以脈衝環標示 (已由建築色塊標出)
+export type CampusPoiId =
+  | 'commissary' | 'badminton' | 'plant' | 'pond' | 'dodgeTeacher' | 'gate'
+  | 'bikeShed' | 'basketball' | 'track' | 'pool';
+export interface CampusPoi {
+  id: CampusPoiId;
+  icon: string;
+  label: string;
+  x: number;
+  z: number;
+}
+export const CAMPUS_POIS: readonly CampusPoi[] = [
+  { id: 'commissary', icon: '🏪', label: '天天合作社', x: -17, z: -50 },
+  { id: 'badminton', icon: '🏸', label: '演藝大樓 4F 羽球場', x: 76, z: 31 },
+  { id: 'plant', icon: '🌸', label: '生態園區 食人花王', x: -70, z: -95 },
+  { id: 'pond', icon: '⛲', label: '生態園區 許願池', x: -55, z: -86 },
+  { id: 'dodgeTeacher', icon: '🥋', label: '敬業樓 A 棟 閃身步老師', x: 32, z: 18 },
+  { id: 'gate', icon: '🚪', label: '校門', x: 0, z: 105 },
+  { id: 'bikeShed', icon: '', label: '自行車棚', x: -55, z: -65 },
+  { id: 'basketball', icon: '', label: '籃球場', x: 30, z: -45 },
+  { id: 'track', icon: '', label: '操場跑道', x: -55, z: 30 },
+  { id: 'pool', icon: '', label: '標準游泳館', x: 75, z: -35 }
+];
+
+export function getCampusPoi(id: CampusPoiId): CampusPoi {
+  return CAMPUS_POIS.find((p) => p.id === id)!;
+}
+
 interface CampusZone {
   minX: number;
   maxX: number;

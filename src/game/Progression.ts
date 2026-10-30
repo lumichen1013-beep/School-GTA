@@ -1,15 +1,16 @@
 import { soundManager } from '../audio/SoundEffects';
-import type { WeaponType } from '../entities/Player';
+import { getWeapon, isWeaponAvailable, resolveVariant, WEAPONS } from '../weapons/registry';
+import type { WeaponDefinition, WeaponId, WeaponWorld } from '../weapons/types';
 import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { getWeaponSummary, type WeaponSummary } from './weaponStats';
 
-// 武器切換提示文字 (第一世界 / 第二世界)
-const WEAPON_EQUIP_BANNERS: Record<WeaponType, { campus: string; detention: string }> = {
-  FIST: { campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' },
-  NORMAL_BAT: { campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' },
-  SPECIAL_BAT: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' }
-};
+// 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與閃身步被動自動發動機率 (被敵人攻擊命中瞬間)
+const DODGE_SKILL_COOLDOWN = 1.0;
+const AUTO_DODGE_CHANCE = 0.2;
+// 學習閃身步 (等級 1) / 狗熊哆嗦毛 (等級 2) 的學費
+const DODGE_SKILL_FEES = [1000, 2000] as const;
 
 // 擊敗各角色的獎金與擊倒統計計數 (未列出的角色預設獎金 20)
 interface RoleDefeatReward {
@@ -50,6 +51,48 @@ function getDetentionBounty(role: NPCRole, isTakedown: boolean): number {
   return isTakedown ? b.full : Math.floor(b.full / 2);
 }
 
+// 大地圖【裝備】分頁的單列資料
+export type WeaponEquipStatus = 'equipped' | 'unlocked' | 'locked' | 'unavailable';
+export interface WeaponUnlockStep {
+  label: string;
+  cur: number;
+  max: number;
+}
+export interface WeaponEquipEntry {
+  id: WeaponId;
+  icon: string;
+  name: string;
+  baseName: string; // 武器本名 (name 為本世界變體名，如特訓院「防暴警棍」)
+  damage: number;
+  reach: number;
+  knockback: number;
+  status: WeaponEquipStatus;
+  hint: string;
+  summary: WeaponSummary; // 本世界連段估算 (秒傷 / 總傷 / 各招)
+  unlockSteps: WeaponUnlockStep[]; // 解鎖進度 (徒手為空)
+}
+
+// 大地圖狀態快照 (學生證 / 受訓人員檔案、戰績、技能卡共用；每次呼叫就地更新同一物件)
+export interface FullMapStatus {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  cash: number;
+  stars: number;
+  wantedTitle: string;
+  dodgeLevel: number;
+  dodgeCooldown: number;
+  dodgeCooldownMax: number;
+  autoDodgeChance: number;
+  dodgeNextFee: number; // 0 = 已精通
+  // 特訓院戰績
+  takedowns: number;
+  frontalKos: number;
+  alerts: number;
+  escapeSeconds: number; // -1 = 已逃脫
+}
+
 /**
  * 玩家成長進度：零用錢、擊倒統計、成就旗標、武器解鎖與身法技能
  */
@@ -64,7 +107,7 @@ export class Progression {
   public hasEscapedDog: boolean = false;
   public hasWishedPond: boolean = false;
   public hasTastedHotFood: boolean = false;
-  // 身法技能系統 (閃身步 5s CD / 狗熊哆嗦毛 2s CD)
+  // 身法技能系統 (閃身步 / 狗熊哆嗦毛，冷卻皆 1s)
   public dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
   public dodgeCooldownTimer: number = 0;
 
@@ -136,7 +179,7 @@ export class Progression {
     if (role === 'STUDENT' && this.studentDefeatedCount >= 5 && !player.hasNormalBat) {
       player.hasNormalBat = true;
       player.setWeapon('NORMAL_BAT');
-      wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(按 2 裝備，ATK 35)', 6000);
+      wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(滾輪或大地圖【裝備】切換，ATK 35)', 6000);
       soundManager.playBatHit();
     }
     return entry;
@@ -148,97 +191,169 @@ export class Progression {
     if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !player.hasSpecialBat) {
       player.hasSpecialBat = true;
       player.setWeapon('SPECIAL_BAT');
-      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 70)', 7000);
+      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或大地圖【裝備】切換，ATK 68)', 7000);
       soundManager.playSpecialBatHit();
     }
   }
 
-  private equipWeapon(weapon: WeaponType) {
+  // 稀有成就【羽壇雙燕】：4F 羽球賽擊敗大如老師解鎖雙燕羽刃 (只限校園，呼叫端確認已擊敗；已解鎖時立即返回)
+  public checkDualRacketUnlock() {
+    const { player, wantedSystem } = this.ctx;
+    if (player.isWeaponUnlocked('DUAL_RACKET')) return;
+    player.setWeaponUnlocked('DUAL_RACKET', true);
+    player.setWeapon('DUAL_RACKET');
+    wantedSystem.showBanner('🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或大地圖【裝備】切換，ATK 25×7 連擊)', 7000);
+    soundManager.playFanfare();
+  }
+
+  // 切換武器並顯示提示文字 (第一世界 / 第二世界，見武器定義 banner)
+  private equipWeapon(weapon: WeaponId) {
     this.ctx.player.setWeapon(weapon);
-    const texts = WEAPON_EQUIP_BANNERS[weapon];
+    const texts = getWeapon(weapon).banner;
     this.ctx.wantedSystem.showBanner(this.ctx.currentWorldType === 'DETENTION' ? texts.detention : texts.campus, 1500);
   }
 
-  // 數字鍵 1/2/3 直接切換武器 (未解鎖時顯示解鎖條件)
-  public selectWeaponSlot(slot: 1 | 2 | 3) {
-    const { player, wantedSystem } = this.ctx;
-    const isDetention = this.ctx.currentWorldType === 'DETENTION';
-    if (slot === 1) {
-      this.equipWeapon('FIST');
-    } else if (slot === 2) {
-      if (player.hasNormalBat) {
-        this.equipWeapon('NORMAL_BAT');
-      } else {
-        wantedSystem.showBanner(
-          isDetention
-            ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
-            : `🔒 普通球棒未解鎖！需擊敗 5 位普通同學 (目前進度: ${this.studentDefeatedCount}/5)`,
-          2500
-        );
-      }
-    } else if (player.hasSpecialBat) {
-      this.equipWeapon('SPECIAL_BAT');
-    } else {
-      wantedSystem.showBanner(
-        isDetention
-          ? '⚠️ 特訓院管制區：重型管制武器已遭沒收封存！'
-          : `🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`,
-        2500
-      );
+  // 已解鎖且本世界可用 (循環切換與大地圖裝備共用)
+  private canEquip(def: WeaponDefinition): boolean {
+    return this.ctx.player.isWeaponUnlocked(def.id) && isWeaponAvailable(def, this.ctx.currentWorldType);
+  }
+
+  // 無法裝備時的提示：已解鎖但本世界不可用 → 該世界專屬文案 (如特訓院「器材已遭沒收」)；未解鎖 → 解鎖條件 (本世界不可用者取校園版)
+  private blockedHint(def: WeaponDefinition, world: WeaponWorld): string {
+    if (!def.unlock) return '🚫 本世界不可使用此武器';
+    return def.unlock.lockedHint(this, this.ctx.player.isWeaponUnlocked(def.id) || isWeaponAvailable(def, world) ? world : 'CAMPUS');
+  }
+
+  // 大地圖【裝備】分頁：依武器槽順序列出武器與狀態 (開啟 / 裝備後才呼叫，非每幀)
+  public getWeaponEquipEntries(): WeaponEquipEntry[] {
+    const world = this.ctx.currentWorldType;
+    return WEAPONS.map((def) => {
+      const status: WeaponEquipStatus = def.id === this.ctx.player.currentWeapon ? 'equipped'
+        : !isWeaponAvailable(def, world) ? 'unavailable'
+        : !this.ctx.player.isWeaponUnlocked(def.id) ? 'locked'
+        : 'unlocked';
+      return {
+        id: def.id,
+        icon: def.icon,
+        name: resolveVariant(def.id, world).name,
+        baseName: def.name,
+        damage: def.stats.damage,
+        reach: def.stats.reach,
+        knockback: def.stats.knockback,
+        status,
+        hint: status === 'locked' || status === 'unavailable' ? this.blockedHint(def, world) : '',
+        summary: getWeaponSummary(def.id, world),
+        unlockSteps: this.getUnlockSteps(def.id)
+      };
+    });
+  }
+
+  // 武器解鎖進度條資料 (已解鎖者視為全滿)
+  private getUnlockSteps(id: WeaponId): WeaponUnlockStep[] {
+    const unlocked = this.ctx.player.isWeaponUnlocked(id);
+    const step = (label: string, cur: number, max: number): WeaponUnlockStep => ({ label, cur: unlocked ? max : Math.min(cur, max), max });
+    switch (id) {
+      case 'NORMAL_BAT': return [step('擊敗普通同學', this.studentDefeatedCount, 5)];
+      case 'SPECIAL_BAT': return [
+        step('擊倒生教 / 老師', this.teacherDefeatedCount, 1),
+        step('擊倒校犬', this.dogDefeatedCount, 1),
+        step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
+      ];
+      case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
+      default: return [];
     }
   }
 
-  // 手機武器鍵：依序循環 徒手 → 普通球棒 → 神兵
+  private readonly fullMapStatus: FullMapStatus = {
+    hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, cash: 0, stars: 0, wantedTitle: '',
+    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, dodgeNextFee: 0,
+    takedowns: 0, frontalKos: 0, alerts: 0, escapeSeconds: 0
+  };
+
+  // 大地圖開啟期間 (約 20Hz) 取得玩家狀態快照
+  public getFullMapStatus(): FullMapStatus {
+    const { player, wantedSystem, detention } = this.ctx;
+    const st = this.fullMapStatus;
+    st.hp = player.hp;
+    st.maxHp = player.maxHp;
+    st.stamina = player.stamina;
+    st.maxStamina = player.maxStamina;
+    st.cash = this.cash;
+    st.stars = wantedSystem.stars;
+    st.wantedTitle = wantedSystem.getDemeritLevelTitle(wantedSystem.stars);
+    st.dodgeLevel = this.dodgeSkillLevel;
+    st.dodgeCooldown = this.dodgeCooldownTimer;
+    st.dodgeNextFee = this.dodgeSkillLevel < DODGE_SKILL_FEES.length ? DODGE_SKILL_FEES[this.dodgeSkillLevel] : 0;
+    st.takedowns = detention.takedownCount;
+    st.frontalKos = detention.frontalKoCount;
+    st.alerts = detention.alertCount;
+    st.escapeSeconds = detention.isEscapeComplete ? -1 : Math.max(0, Math.floor((performance.now() - detention.escapeStartTime) / 1000));
+    return st;
+  }
+
+  // 大地圖點選裝備：檢查同 cycleWeapon，不可用時顯示解鎖條件橫幅
+  public readonly equipById = (id: WeaponId): boolean => {
+    const def = getWeapon(id);
+    const { player, wantedSystem } = this.ctx;
+    if (!this.canEquip(def)) {
+      const world = this.ctx.currentWorldType;
+      wantedSystem.showBanner(this.blockedHint(def, world), 2000);
+      return false;
+    }
+    if (id !== player.currentWeapon) this.equipWeapon(id);
+    return true;
+  };
+
+  // 武器循環 (滾輪)：依武器槽順序循環至下一把已解鎖且本世界可用的武器 (徒手 → 普通球棒 → 神兵 → 徒手)
   public readonly cycleWeapon = () => {
     const { player } = this.ctx;
-    const current = player.currentWeapon;
-    if (current === 'FIST') {
-      if (player.hasNormalBat) {
-        this.equipWeapon('NORMAL_BAT');
-      } else if (player.hasSpecialBat) {
-        this.equipWeapon('SPECIAL_BAT');
-      } else {
-        this.ctx.wantedSystem.showBanner(
-          this.ctx.currentWorldType === 'DETENTION'
-            ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
-            : `🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`,
-          1500
-        );
+    const world = this.ctx.currentWorldType;
+    const from = WEAPONS.findIndex((w) => w.id === player.currentWeapon);
+    for (let i = 1; i <= WEAPONS.length; i++) {
+      const def = WEAPONS[(from + i) % WEAPONS.length];
+      if (!this.canEquip(def)) continue;
+      if (def.id !== player.currentWeapon) {
+        this.equipWeapon(def.id);
+        return;
       }
-    } else if (current === 'NORMAL_BAT' && player.hasSpecialBat) {
-      this.equipWeapon('SPECIAL_BAT');
-    } else {
-      this.equipWeapon('FIST');
+      break;
     }
+    // 沒有其他可切換的武器
+    this.ctx.wantedSystem.showBanner(
+      world === 'DETENTION'
+        ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
+        : `🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`,
+      1500
+    );
   };
 
   // 學習身法絕學 (閃身步 / 狗熊哆嗦毛)
   public readonly learnDodgeSkill = (targetLevel: number) => {
     const { hud, wantedSystem } = this.ctx;
     if (targetLevel === 1) {
-      if (this.cash < 1000) {
-        wantedSystem.showBanner('❌ 錢包餘額不足！學習【閃身步】需要 NT$ 1000！', 2500);
+      if (this.cash < DODGE_SKILL_FEES[0]) {
+        wantedSystem.showBanner(`❌ 錢包餘額不足！學習【閃身步】需要 NT$ ${DODGE_SKILL_FEES[0]}！`, 2500);
         return;
       }
-      this.cash -= 1000;
+      this.cash -= DODGE_SKILL_FEES[0];
       this.dodgeSkillLevel = 1;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 5 秒，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
+      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 1 秒，且被攻擊時有機率自動施放，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
     } else if (targetLevel === 2) {
       if (this.dodgeSkillLevel < 1) {
         wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
         return;
       }
-      if (this.cash < 2000) {
-        wantedSystem.showBanner('❌ 錢包餘額不足！領悟【狗熊哆嗦毛】需要 NT$ 2000！', 2500);
+      if (this.cash < DODGE_SKILL_FEES[1]) {
+        wantedSystem.showBanner(`❌ 錢包餘額不足！領悟【狗熊哆嗦毛】需要 NT$ ${DODGE_SKILL_FEES[1]}！`, 2500);
         return;
       }
-      this.cash -= 2000;
+      this.cash -= DODGE_SKILL_FEES[1];
       this.dodgeSkillLevel = 2;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！技能如神，冷卻縮短至 2 秒！按 [Q] 鍵神速規避！', 5000);
+      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！連續瞬移神速規避，需手動按 [Q] 鍵施放！', 5000);
     }
   };
 
@@ -265,7 +380,7 @@ export class Progression {
     }
 
     const isAdvanced = this.dodgeSkillLevel === 2;
-    this.dodgeCooldownTimer = isAdvanced ? 2.0 : 5.0;
+    this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
 
     if (isAdvanced) {
       player.performBearShake(this.ctx.activeColliders);
@@ -274,9 +389,24 @@ export class Progression {
     }
 
     wantedSystem.showBanner(
-      isAdvanced ? '🐻 施展【狗熊哆嗦毛】！連續瞬移神速規避攻擊！(CD 2s)' : '💨 施展【閃身步】！左右破空閃身規避！(CD 5s)',
+      isAdvanced ? '🐻 施展【狗熊哆嗦毛】！連續瞬移神速規避攻擊！(CD 1s)' : '💨 施展【閃身步】！左右破空閃身規避！(CD 1s)',
       1600
     );
+  };
+
+  // 被動自動閃身：僅閃身步 (level 1) 且冷卻完畢時，被敵人攻擊命中瞬間有 AUTO_DODGE_CHANCE 機率自動施放
+  // (位移沿用手動閃身步：隨機左右橫閃)；成功回傳 true，呼叫端應視為完全閃掉此次攻擊
+  public readonly tryAutoDodge = (): boolean => {
+    const { player, wantedSystem } = this.ctx;
+    if (this.dodgeSkillLevel !== 1 || this.dodgeCooldownTimer > 0) return false;
+    if (player.isDead || player.isCinematicLocked || player.isDodging || player.hitCooldown > 0) return false;
+    if (this.ctx.currentRidingBike || player.isRidingVehicle || player.isSwimming || player.knockdownTimer > 0) return false;
+    if (Math.random() >= AUTO_DODGE_CHANCE) return false;
+    this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
+    // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行閃身步位移，避免中斷招式
+    if (!player.isLunging) player.performFlashStep();
+    wantedSystem.showBanner('💨 閃身步自動發動！左右破空閃身規避！(CD 1s)', 1600);
+    return true;
   };
 
   // 閃避成功提示 (技能等級決定招式名稱)
@@ -289,7 +419,6 @@ export class Progression {
     if (this.dodgeCooldownTimer > 0) {
       this.dodgeCooldownTimer = Math.max(0, this.dodgeCooldownTimer - delta);
     }
-    const maxSkillCd = this.dodgeSkillLevel === 2 ? 2.0 : 5.0;
-    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, maxSkillCd, this.ctx.currentWorldType === 'DETENTION');
+    this.ctx.hud.updateSkillHUD(this.dodgeSkillLevel, this.dodgeCooldownTimer, DODGE_SKILL_COOLDOWN, this.ctx.currentWorldType === 'DETENTION');
   }
 }

@@ -17,6 +17,8 @@ import { EcologicalGarden } from './world/EcologicalGarden';
 import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
 import { comboFinisherFX } from './effects/ComboFinisherFX';
+import { slashFX } from './effects/SlashFX';
+import { impactDust } from './effects/ImpactDust';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
@@ -27,6 +29,8 @@ import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
 import { Progression } from './game/Progression';
+import { getWeapon, isWeaponAvailable } from './weapons/registry';
+import type { WeaponId } from './weapons/types';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
 import { CampusLife } from './game/CampusLife';
@@ -44,6 +48,9 @@ const _campusRespawnPos = new THREE.Vector3(0, 0, 15); // 天天國中保健室�
  * 主程式：建置引擎與兩個世界、組裝各子系統，並調度每幀更新順序。
  * 各玩法細節分別位於 game/ (成長、戰鬥、互動、校園玩法、特訓院玩法)。
  */
+// 突進斬衝刺時鏡頭額外拉遠距離 (公尺)
+const DASH_CAMERA_PULL = 1.4;
+
 class SchoolGTASandbox implements GameContext {
   private lastBikeYaw: number = 0; // 上一幀騎車朝向 (計算轉彎持續時間)
   public engine!: Engine;
@@ -63,8 +70,18 @@ class SchoolGTASandbox implements GameContext {
   public tennisGame!: TennisGame;
 
   public currentWorldType: WorldType = 'CAMPUS';
+  private lastWeaponCycleAt = 0;
+  // 滾輪循環武器，0.2 秒防連點
+  private readonly cycleWeaponThrottled = () => {
+    const now = performance.now();
+    if (now - this.lastWeaponCycleAt < 200) return;
+    this.lastWeaponCycleAt = now;
+    this.progression.cycleWeapon();
+  };
   // 特訓院配發的防暴棒沿用普通球棒槽位：進入特訓院前記下校園的球棒解鎖狀態，返回校園時還原
   private campusHasNormalBat: boolean = false;
+  // 進入特訓院前校園手上的武器：特訓院不可用的武器 (黃金棒、雙拍) 返回校園時還原
+  private campusWeaponId: WeaponId = 'FIST';
   public bicycles: Bicycle[] = [];
   public currentRidingBike: Bicycle | null = null;
   public npcs: NPC[] = [];
@@ -103,6 +120,7 @@ class SchoolGTASandbox implements GameContext {
     onStart: (targetWorld) => {
       this.isGameRunning = true;
       this.switchWorld(targetWorld, targetWorld === 'CAMPUS');
+      this.prewarmFx();
     },
     onSkipCutscene: () => {
       if (this.detentionCutscene.isActive) {
@@ -163,11 +181,14 @@ class SchoolGTASandbox implements GameContext {
     // 階段 3 (65%)：生成主角模型、火柴人自行車與水花特效系統
     progress(65, '正在生成主角模型、火柴人自行車與水花特效系統...');
     this.player = new Player(this.engine.scene);
+    soundManager.setListener(this.player.position); // NPC/場景音效依玩家距離衰減
     swingTrail.init(this.engine.scene);
-    swingTrail.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     comboFinisherFX.init(this.engine.scene);
-    comboFinisherFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
+    slashFX.init(this.engine.scene);
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
+    this.prewarmFx();
+
+    this.player.autoDodgeHook = this.progression.tryAutoDodge;
 
     // 墜落傷害與死亡回呼
     this.player.onTakeDamageCallback = (amount: number, reason: string) => {
@@ -212,11 +233,8 @@ class SchoolGTASandbox implements GameContext {
     this.hud = new HUD();
     this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
-      this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
+      this.hud.openWorldModal(this.currentWorldType, (tw) => { this.switchWorld(tw); this.prewarmFx(); });
     };
-    this.input.onToggleWorld(() => {
-      this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
-    });
     await nextFrame();
 
     // 階段 5 (92%)：初始化三分球、競速賽道、4F羽球館與電影劇院
@@ -231,21 +249,29 @@ class SchoolGTASandbox implements GameContext {
       this.hud.updateWeatherHUD(preset.badgeText);
       if (isManual) {
         const text = this.currentWorldType === 'DETENTION' ? preset.detentionBannerText : preset.bannerText;
-        this.wantedSystem.showBanner(`${text} (按 [P] 鍵切換)`, 2500);
+        this.wantedSystem.showBanner(text, 2500);
       }
     };
     this.hud.onWeatherToggle = () => {
       this.weatherSystem.cycleWeather();
     };
+    this.hud.getWeaponEquipEntries = () => this.progression.getWeaponEquipEntries();
+    this.hud.onEquipWeapon = this.progression.equipById;
+    this.hud.getFullMapStatus = () => this.progression.getFullMapStatus();
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
-      onCycleWeapon: this.progression.cycleWeapon,
       onDodge: this.progression.triggerDodgeSkill
     });
+    // 滑鼠滾輪循環切換武器 (鏡頭無滾輪縮放，無衝突；僅畫布上觸發，大地圖開啟時略過)
+    this.engine.canvas.addEventListener('wheel', (e) => {
+      if (!this.isGameRunning || this.hud.isFullMapOpen || e.deltaY === 0) return;
+      e.preventDefault();
+      this.cycleWeaponThrottled();
+    }, { passive: false });
     // 視窗縮放/翻轉事件統一由 Engine 監聽，這裡只負責同步鏡頭比例 (updateAspect 內含投影矩陣更新)
     this.engine.onResizeCallback = (_w, _h, aspect) => {
       this.cameraCtrl.updateAspect(aspect);
@@ -255,7 +281,6 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定背景音樂 (BGM)
     this.hud.setupBGMClick(() => this.toggleBGM());
-    this.input.onToggleBGM(() => this.toggleBGM());
     bgmManager.onModeChange = (mode, isMuted) => {
       this.hud.updateBGMStatus(mode, isMuted);
     };
@@ -293,6 +318,16 @@ class SchoolGTASandbox implements GameContext {
     for (const npc of this.detentionNPCs) attach(npc.mesh, !isCampus);
   }
 
+  // 預熱所有特效 shader (program 快取鍵含場景光源 / 霧狀態，故初始化時與每次進入世界後各跑一次，首次施放才不會卡頓)
+  private prewarmFx() {
+    const compile = () => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera);
+    swingTrail.prewarm(compile);
+    comboFinisherFX.prewarm(compile);
+    slashFX.prewarm(compile);
+    impactDust.prewarm(this.engine.scene, compile);
+    this.waterSplashVFX.prewarm(compile);
+  }
+
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
     this.forceDismount();
 
@@ -303,8 +338,7 @@ class SchoolGTASandbox implements GameContext {
     this.combat.resetTransientState();
     swingTrail.reset();
     comboFinisherFX.reset();
-    // 進入世界時展開快捷鍵指南，30 秒後自動收合
-    this.hud.showControlsGuide();
+    slashFX.reset();
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
@@ -315,6 +349,7 @@ class SchoolGTASandbox implements GameContext {
     this.hud.setBGMWorld(targetWorld);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
+      this.campusWeaponId = this.player.currentWeapon;
     }
     this.player.equipBadmintonRacket(false);
     if (this.tennisGame.tennisState !== 'IDLE') {
@@ -339,6 +374,10 @@ class SchoolGTASandbox implements GameContext {
         this.player.hasNormalBat = this.campusHasNormalBat;
         if (this.player.currentWeapon === 'NORMAL_BAT' && !this.player.hasNormalBat) {
           this.player.setWeapon('FIST');
+        }
+        const saved = getWeapon(this.campusWeaponId);
+        if (!isWeaponAvailable(saved, 'DETENTION') && isWeaponAvailable(saved, 'CAMPUS')) {
+          this.player.setWeapon(saved.id); // 未解鎖時 setWeapon 回傳 false，維持原狀
         }
       }
 
@@ -446,23 +485,14 @@ class SchoolGTASandbox implements GameContext {
     });
     this.input.onAttackRelease(this.releaseBasketballShot);
 
-    // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、J 大地圖任務、K 快捷鍵指南、P 天氣、ESC/Enter 對話框、R 重置籃球
+    // 鍵盤按鍵監聽：J 大地圖任務、ESC/Enter 對話框
     window.addEventListener('keydown', (e) => {
       if (!this.isGameRunning || e.repeat) return;
       const hud = this.hud;
-      if (e.code === 'Digit1') {
-        this.progression.selectWeaponSlot(1);
-      } else if (e.code === 'Digit2') {
-        this.progression.selectWeaponSlot(2);
-      } else if (e.code === 'Digit3') {
-        this.progression.selectWeaponSlot(3);
-      } else if (e.code === 'KeyJ') {
+      if (e.code === 'KeyJ') {
         hud.toggleQuestTracker();
-      } else if (e.code === 'KeyK') {
-        hud.toggleControlsGuide();
-      } else if (e.code === 'KeyP') {
-        this.weatherSystem.cycleWeather();
       } else if (e.code === 'Escape') {
+        if (hud.isWorldModalOpen) hud.closeWorldModal();
         if (hud.isFullMapOpen) hud.closeFullMap();
         if (hud.isCommissaryOpen) hud.closeCommissary();
         if (hud.isTennisDialogOpen) hud.closeTennisDialog();
@@ -470,11 +500,6 @@ class SchoolGTASandbox implements GameContext {
       } else if (e.code === 'Enter') {
         if (hud.isTennisDialogOpen) this.startTennisMatch();
         if (hud.isDodgeDialogOpen) hud.confirmDodgeLearn();
-      } else if (e.code === 'KeyR') {
-        if (!this.basketballGame.isHolding && !this.basketballGame.isBallInAir &&
-          this.player.position.distanceTo(this.world.basketballSpawnPos) < 40) {
-          this.basketballGame.resetBall(this.wantedSystem);
-        }
       }
     });
 
@@ -516,6 +541,7 @@ class SchoolGTASandbox implements GameContext {
     this.wantedSystem.clearWanted();
     swingTrail.reset();
     comboFinisherFX.reset();
+    slashFX.reset();
     if (!isCampus) {
       this.detention.resetGuards();
     }
@@ -526,6 +552,7 @@ class SchoolGTASandbox implements GameContext {
       this.player.respawn(respawnPos);
       swingTrail.reset();
       comboFinisherFX.reset();
+      slashFX.reset();
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
@@ -575,6 +602,7 @@ class SchoolGTASandbox implements GameContext {
     // 被搶單車數量超過上限 (含玩家下車後閒置者) 時回收最舊的路邊單車
     if (isCampus) this.campus.enforceStolenBikeCap();
     NPC.updateSharedEffects(delta);
+    const viewPos = this.cameraCtrl.camera.position;
 
     for (const npc of this.npcs) {
       if (isCampus) this.campus.updateBikeOwner(npc, targetPosition);
@@ -595,6 +623,8 @@ class SchoolGTASandbox implements GameContext {
         this.player.isHidingInCover,
         this.player.isMoving
       );
+      // 遠處 NPC 繪製分級 (以上一幀鏡頭位置判定，僅切換渲染零件)
+      npc.updateLod(viewPos);
 
       if (!npc.isKnockedDown && !npc.isPermanentlyKnockedOut && npc.isChasing) {
         this.isAnyChasing = true;
@@ -760,6 +790,7 @@ class SchoolGTASandbox implements GameContext {
     this.combat.updatePlayerStrike();
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);
+    slashFX.update(delta, this.cameraCtrl.camera);
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
 
     // 9. 角色推擠排除
@@ -772,11 +803,14 @@ class SchoolGTASandbox implements GameContext {
     // 羽球比賽倒數與進行中切換轉播視角，結束/中止後自動回復一般跟隨
     this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
     this.combat.updateExecution(rawDelta);
+    this.cameraCtrl.dashPull = this.player.isDashMove ? DASH_CAMERA_PULL : 0;
     this.cameraCtrl.update(targetPosition, rawDelta, colliders);
 
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條
     if (isCampus) {
       this.campus.updateGardenAndEffects(delta, targetPosition);
+      // 建築室內渲染剔除 (鏡頭已於本幀更新；狀態改變時才切換群組顯示)
+      this.world.updateInteriorCulling(this.cameraCtrl.camera.position, targetPosition);
     } else {
       const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {
@@ -792,6 +826,8 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);
+    // 學生證武器資訊：沿用原武器 (羽球賽持拍時數值仍取原武器)
+    this.hud.setWeaponInfo(this.player.weaponDef.icon, this.player.weaponDef.stats.damage);
     this.progression.updateSkillCooldown(delta);
 
     let detentionRadarData: DetentionRadarData | undefined;

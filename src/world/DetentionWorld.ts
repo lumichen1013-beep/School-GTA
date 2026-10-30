@@ -9,7 +9,7 @@ import {
 } from './detentionLayout';
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 import { isBlockedXZ } from '../physics/aabb';
-import { sharedLambert } from './sceneUtils';
+import { sharedLambert, freezeStatic } from './sceneUtils';
 
 // 管制閘門 1、2 門板共用材質 (外觀相同，閘門開啟只移動群組不改材質)
 const GATE_PANEL_MAT = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 });
@@ -152,6 +152,15 @@ export class DetentionWorld {
     this.group.add(detentionAmbientFill);
 
     this.buildDetentionFacility();
+
+    // 靜態場景矩陣凍結：排除執行期會移動/旋轉的閘門 (開啟上升、重新挑戰歸位)、懸浮自轉的鑰匙卡、
+    // 探照燈燈頭 (含光錐，lookAt 追蹤) 與地面光斑
+    const dynamicObjects = new Set<THREE.Object3D>([
+      this.gateAMeshGroup, this.gateBMeshGroup, this.southGateMeshGroup,
+      this.keycardAMeshGroup, this.keycardBMeshGroup, this.masterKeycardMeshGroup
+    ]);
+    for (const sl of this.searchlights) { dynamicObjects.add(sl.housing); dynamicObjects.add(sl.groundSpot); }
+    freezeStatic(this.group, dynamicObjects);
   }
 
   // 碰撞體登記 (牆面預設高 5m；地板層板上下各 0.25m；坡道頂部延伸 0.4m)

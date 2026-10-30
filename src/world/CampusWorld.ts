@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { sharedLambert, freezeStaticMatrices, bakeStatic } from './sceneUtils';
+import { sharedLambert, freezeStatic, bakeStatic } from './sceneUtils';
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
+import { computePabInteriorVisibility, isWithinView, STAIR_SIGN_VIEW, type PabInteriorVisibility } from './interiorCulling';
 
 export type { CollidableBox } from './ColliderRegistry';
 
@@ -14,6 +15,12 @@ export interface ShootingHotspot {
   radius: number;
   bonusPoints: number;
   ringMesh: THREE.Mesh;
+}
+
+// 共用外牆磚紋樣式 (見 CampusWorld.brickStyle)
+interface BrickStyle {
+  material: THREE.MeshLambertMaterial;
+  box: (w: number, h: number, d: number) => THREE.BoxGeometry;
 }
 
 export class CampusWorld {
@@ -44,6 +51,16 @@ export class CampusWorld {
   public liftDoorOpenRatio: number = 1.0; // 預設敞開狀態
   // 校舍玻璃窗透明材質：窗面互不重疊，可於同空間格合併繪製
   private readonly windowGlassMats = new Set<THREE.Material>();
+
+  // 室內渲染剔除群組 (僅切換 visible，碰撞體另存於 colliders 不受影響)：
+  // 演藝大樓 1~3F 演藝廳、電梯井道、4F 羽球館場地各自獨立合併繪製，依鏡頭/玩家位置於狀態改變時切換
+  private readonly pabHall = new THREE.Group();
+  private readonly pabShaft = new THREE.Group();
+  private readonly pab4F = new THREE.Group();
+  private readonly pabVis: PabInteriorVisibility = { hall: true, shaft: true, floor4: true, nearEntrance: false };
+  private readonly pabVisNext: PabInteriorVisibility = { hall: true, shaft: true, floor4: true, nearEntrance: false };
+  // 樓梯間入口告示牌 (每張獨立畫布貼圖無法合併)：依距離顯示
+  private readonly stairSigns: { group: THREE.Group; x: number; z: number }[] = [];
 
   public setElevatorDoorsOpen(ratio: number) {
     this.liftDoorOpenRatio = THREE.MathUtils.clamp(ratio, 0, 1);
@@ -90,8 +107,36 @@ export class CampusWorld {
     }
     for (const spot of this.shootingHotspots) dynamicObjects.add(spot.ringMesh);
     // 先合併靜態幾何 (同材質/陰影/空間格合為單一 draw call)，再凍結剩餘物件矩陣
-    bakeStatic(this.group, dynamicObjects, 40, this.windowGlassMats);
-    freezeStaticMatrices(this.group, dynamicObjects);
+    // 室內剔除群組各自獨立合併 (不與外殼併在同一網格，才能整組隱藏)
+    const interiorGroups = [this.pabHall, this.pabShaft, this.pab4F];
+    bakeStatic(this.group, new Set([...dynamicObjects, ...interiorGroups]), 40, this.windowGlassMats);
+    for (const g of interiorGroups) bakeStatic(g, dynamicObjects, 40, this.windowGlassMats);
+    freezeStatic(this.group, dynamicObjects);
+  }
+
+  // 將 this.group 自 start 之後新增的子物件移入室內剔除群組 (群組位於原點，世界座標不變)
+  private captureInterior(target: THREE.Group, start: number) {
+    const moved = this.group.children.slice(start);
+    for (const obj of moved) target.add(obj);
+    this.group.add(target);
+  }
+
+  // 室內渲染剔除 (每幀呼叫，僅純量判定；可見狀態改變時才切換群組 visible)
+  public updateInteriorCulling(camPos: THREE.Vector3, playerPos: THREE.Vector3) {
+    const next = computePabInteriorVisibility(
+      camPos.x, camPos.y, camPos.z, playerPos.x, playerPos.y, playerPos.z, this.pabVis.nearEntrance, this.pabVisNext
+    );
+    const cur = this.pabVis;
+    cur.nearEntrance = next.nearEntrance;
+    if (cur.hall !== next.hall) { cur.hall = next.hall; this.pabHall.visible = next.hall; }
+    if (cur.shaft !== next.shaft) { cur.shaft = next.shaft; this.pabShaft.visible = next.shaft; }
+    if (cur.floor4 !== next.floor4) { cur.floor4 = next.floor4; this.pab4F.visible = next.floor4; }
+    for (const sign of this.stairSigns) {
+      const g = sign.group;
+      const vis = isWithinView(camPos.x, camPos.z, sign.x, sign.z, g.visible, STAIR_SIGN_VIEW)
+        || isWithinView(playerPos.x, playerPos.z, sign.x, sign.z, g.visible, STAIR_SIGN_VIEW);
+      if (g.visible !== vis) g.visible = vis;
+    }
   }
 
   // 碰撞體登記 (牆面預設高 4m；地板層板厚 0.4m 位於樓面下方)
@@ -165,6 +210,35 @@ export class CampusWorld {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(repX, repY);
     return tex;
+  }
+
+  // 共用外牆磚紋：全專案只有一張白底磚紋貼圖 (repeat=1) 與一個材質 (vertexColors)，
+  // 各棟底色改寫入頂點色、重複次數改寫入 UV，因此跨棟外牆可被 bakeStatic 合併為同一批次
+  private static brickWallMat: THREE.MeshLambertMaterial | null = null;
+  private static getBrickWallMat(): THREE.MeshLambertMaterial {
+    if (!CampusWorld.brickWallMat) {
+      const tex = CampusWorld.createWallBrickTexture('#ffffff', '#cccccc', 1, 1);
+      CampusWorld.brickWallMat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
+    }
+    return CampusWorld.brickWallMat;
+  }
+
+  // 外牆磚紋樣式：material 為共用材質，box() 產生 UV 已乘上 repeat 且帶頂點色的方塊幾何
+  private static brickStyle(color: number, repX: number, repY: number): BrickStyle {
+    const r = ((color >> 16) & 255) / 255, g = ((color >> 8) & 255) / 255, b = (color & 255) / 255;
+    return {
+      material: CampusWorld.getBrickWallMat(),
+      box: (w, h, d) => {
+        const geo = new THREE.BoxGeometry(w, h, d);
+        const uv = geo.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * repX, uv.getY(i) * repY);
+        const n = geo.attributes.position.count;
+        const colors = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        return geo;
+      }
+    };
   }
 
   // 建立柏油瀝青路面紋理 (Procedural Asphalt Texture)
@@ -251,9 +325,9 @@ export class CampusWorld {
     const woodColor = 0x8d6e63; // 課桌木色
     const blackboardColor = 0x1b4332; // 深綠粉筆黑板
 
-    const wallTex = CampusWorld.createWallBrickTexture('#faebd7', '#d7ccc8', 10, 4);
+    const brick = CampusWorld.brickStyle(0xfaebd7, 10, 4);
     const floorTex = CampusWorld.createTileTexture('#b0bec5', '#78909c', 10, 16);
-    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const wallMat = brick.material;
     const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
     const railMat = new THREE.MeshLambertMaterial({ color: railColor });
     const innerWallMat = new THREE.MeshLambertMaterial({ color: innerWallColor });
@@ -307,7 +381,7 @@ export class CampusWorld {
     // 2. 頂樓天台 (Rooftop Terrace at Y = 18.0m) 防護女兒牆與校園設施
     const roofY = baseY + numFloors * floorH; // 18.0m
     // 東側女兒牆 (教室外側)
-    const eastParapet = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.3, bL), wallMat);
+    const eastParapet = new THREE.Mesh(brick.box(0.3, 1.3, bL), wallMat);
     eastParapet.position.set(classMaxX, roofY + 0.65, baseZ);
     this.group.add(eastParapet);
     this.addCollider(classMaxX - 0.25, classMaxX + 0.25, zStart, zEnd, roofY, roofY + 1.4);
@@ -315,13 +389,13 @@ export class CampusWorld {
     // 天台端點女兒牆
     if (isBuildingA) {
       // 敬業樓天台南側女兒牆 (對向天橋方向)
-      const southParapet = new THREE.Mesh(new THREE.BoxGeometry(bW, 1.3, 0.3), wallMat);
+      const southParapet = new THREE.Mesh(brick.box(bW, 1.3, 0.3), wallMat);
       southParapet.position.set(baseX, roofY + 0.65, zEnd);
       this.group.add(southParapet);
       this.addCollider(corridorMinX, classMaxX, zEnd - 0.25, zEnd + 0.25, roofY, roofY + 1.4);
     } else {
       // 樂群樓天台北側女兒牆 (對向天橋方向)
-      const northParapet = new THREE.Mesh(new THREE.BoxGeometry(bW, 1.3, 0.3), wallMat);
+      const northParapet = new THREE.Mesh(brick.box(bW, 1.3, 0.3), wallMat);
       northParapet.position.set(baseX, roofY + 0.65, zStart);
       this.group.add(northParapet);
       this.addCollider(corridorMinX, classMaxX, zStart - 0.25, zStart + 0.25, roofY, roofY + 1.4);
@@ -340,7 +414,7 @@ export class CampusWorld {
       const curFloorY = baseY + f * floorH;
 
       // 教室東側後外牆 (Outer Back Wall at classMaxX)
-      const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.3, floorH, bL), wallMat);
+      const backWall = new THREE.Mesh(brick.box(0.3, floorH, bL), wallMat);
       backWall.position.set(classMaxX, curFloorY + floorH / 2, baseZ);
       backWall.castShadow = true;
       this.group.add(backWall);
@@ -350,7 +424,7 @@ export class CampusWorld {
       // 若為敬業樓，樓梯間入口在北側，教室外牆碰撞體向東退讓 0.8m，杜絕入口卡角
       const northClassWallMinX = isBuildingA ? classMinX + 0.8 : classMinX;
       const classW = bW - 4.5;
-      const northClassWall = new THREE.Mesh(new THREE.BoxGeometry(classW, floorH, 0.3), wallMat);
+      const northClassWall = new THREE.Mesh(brick.box(classW, floorH, 0.3), wallMat);
       northClassWall.position.set(classMinX + classW / 2, curFloorY + floorH / 2, zStart);
       northClassWall.castShadow = true;
       this.group.add(northClassWall);
@@ -359,7 +433,7 @@ export class CampusWorld {
       // 教室南側端點外牆 (South End Classroom Wall at zEnd)
       // 若為樂群樓，樓梯間入口在南側，教室外牆碰撞體向東退讓 0.8m，杜絕入口卡角
       const southClassWallMinX = !isBuildingA ? classMinX + 0.8 : classMinX;
-      const southClassWall = new THREE.Mesh(new THREE.BoxGeometry(classW, floorH, 0.3), wallMat);
+      const southClassWall = new THREE.Mesh(brick.box(classW, floorH, 0.3), wallMat);
       southClassWall.position.set(classMinX + classW / 2, curFloorY + floorH / 2, zEnd);
       southClassWall.castShadow = true;
       this.group.add(southClassWall);
@@ -372,12 +446,12 @@ export class CampusWorld {
         // 南側 (zEnd = 35.0) 連接天橋 (2F & 3F) 與中庭地面 (1F)：
         if (f === 0) {
           // 1F 南端：設門框牆，中央留 2.2m 寬門口通往中庭綠地
-          const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(1.15, floorH, 0.3), wallMat);
+          const leftPillar = new THREE.Mesh(brick.box(1.15, floorH, 0.3), wallMat);
           leftPillar.position.set(corridorMinX + 0.575, curFloorY + floorH / 2, zEnd);
           this.group.add(leftPillar);
           this.addCollider(corridorMinX, corridorMinX + 1.15, zEnd - 0.2, zEnd + 0.2, curFloorY, curFloorY + floorH);
 
-          const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(1.15, floorH, 0.3), wallMat);
+          const rightPillar = new THREE.Mesh(brick.box(1.15, floorH, 0.3), wallMat);
           rightPillar.position.set(corridorMaxX - 0.575, curFloorY + floorH / 2, zEnd);
           this.group.add(rightPillar);
           this.addCollider(corridorMaxX - 1.15, corridorMaxX, zEnd - 0.2, zEnd + 0.2, curFloorY, curFloorY + floorH);
@@ -402,12 +476,12 @@ export class CampusWorld {
         // 北側 (zStart = 55.0) 連接天橋 (2F & 3F) 與中庭 (1F)：
         if (f === 0) {
           // 1F 北端：設門框牆，中央留 2.2m 寬門口通往福利社方向
-          const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(1.9, floorH, 0.3), wallMat);
+          const leftPillar = new THREE.Mesh(brick.box(1.9, floorH, 0.3), wallMat);
           leftPillar.position.set(corridorMinX + 0.95, curFloorY + floorH / 2, zStart);
           this.group.add(leftPillar);
           this.addCollider(corridorMinX, corridorMinX + 1.9, zStart - 0.2, zStart + 0.2, curFloorY, curFloorY + floorH);
 
-          const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(1.9, floorH, 0.3), wallMat);
+          const rightPillar = new THREE.Mesh(brick.box(1.9, floorH, 0.3), wallMat);
           rightPillar.position.set(corridorMaxX - 0.95, curFloorY + floorH / 2, zStart);
           this.group.add(rightPillar);
           this.addCollider(corridorMaxX - 1.9, corridorMaxX, zStart - 0.2, zStart + 0.2, curFloorY, curFloorY + floorH);
@@ -598,6 +672,7 @@ export class CampusWorld {
     const railMat = sharedLambert(0x27ae60); // 經典學校綠欄杆
     const glassMat = sharedLambert(0x74b9ff, { transparent: true, opacity: 0.65 });
     this.windowGlassMats.add(glassMat);
+    const signGroup = new THREE.Group(); // 本樓梯間入口告示牌 (依距離剔除)
 
     // 樓梯間 X 向寬度：外擴至 7.4m，提供 3.2m 寬闊跑道與 0.3m 碰撞隔離緩衝，杜絕擠角卡腳
     const stairMinX = corridorMinX - 0.7; // 27.3
@@ -753,7 +828,7 @@ export class CampusWorld {
       const signText = f === 0
         ? '🟢 樓梯間 ➔ 2F ➔ 3F ➔ 天台 (靠右側東坡道上樓 ➔)'
         : `🟢 ${f + 1}F 走廊 ➔ ${f === 1 ? '3F ➔ 天台' : '頂樓露天平台'}`;
-      this.addStairSignboard(dividerX, floorBaseY + 3.1, zAttach - dir * 0.2, signText);
+      this.addStairSignboard(signGroup, dividerX, floorBaseY + 3.1, zAttach - dir * 0.2, signText);
     }
 
     // 6. 頂樓天台出入口梯屋 (Rooftop Penthouse at Y = 18.0m)
@@ -776,11 +851,13 @@ export class CampusWorld {
     doorArch.position.set(dividerX, topFloorY + 3.25, zAttach);
     this.group.add(doorArch);
 
-    this.addStairSignboard(dividerX, topFloorY + 3.1, zAttach - dir * 0.2, '⛅ 頂樓觀景露天平台 (俯瞰天天國中校園)');
+    this.addStairSignboard(signGroup, dividerX, topFloorY + 3.1, zAttach - dir * 0.2, '⛅ 頂樓觀景露天平台 (俯瞰天天國中校園)');
+    this.group.add(signGroup);
+    this.stairSigns.push({ group: signGroup, x: dividerX, z: zAttach });
   }
 
   // 樓梯間入口立體發光導引看板
-  private addStairSignboard(x: number, y: number, z: number, text: string) {
+  private addStairSignboard(parent: THREE.Group, x: number, y: number, z: number, text: string) {
     const signCanvas = document.createElement('canvas');
     signCanvas.width = 512;
     signCanvas.height = 128;
@@ -807,7 +884,7 @@ export class CampusWorld {
       new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
     );
     signMesh.position.set(x, y, z);
-    this.group.add(signMesh);
+    parent.add(signMesh);
   }
 
   // 雙校舍空中聯絡走廊 (Connecting Skybridge at 2F and 3F)
@@ -1658,8 +1735,7 @@ export class CampusWorld {
 
   // 校園外圍圍牆與四面環繞環校馬路 (圍牆在校內邊界 Z: ±105, X: ±105，外側四面皆由環校馬路包圍)
   private buildBoundaryWalls() {
-    const wallTex = CampusWorld.createWallBrickTexture('#bdc3c7', '#7f8c8d', 16, 2);
-    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const wallMat = CampusWorld.brickStyle(0xbdc3c7, 16, 2);
     const wH = 3.2;
     const wT = 0.8;
     const campusSize = 105; // 學校圍牆邊界嚴格位於 ±105
@@ -1922,8 +1998,7 @@ export class CampusWorld {
 
   // 13. 演藝大樓 (1~3F 打通挑高國際演藝大禮堂，4F 為專業室內羽球館)
   public buildPerformingArtsBuilding(baseX: number, baseY: number, baseZ: number) {
-    const wallTex = CampusWorld.createWallBrickTexture('#f5f6fa', '#bdc3c7', 8, 4);
-    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const wallMat = CampusWorld.brickStyle(0xf5f6fa, 8, 4);
     const woodFloorTex = CampusWorld.createTileTexture('#d35400', '#ba4a00', 8, 8);
     const stageFloorMat = new THREE.MeshLambertMaterial({ map: woodFloorTex });
     const redVelvetMat = new THREE.MeshLambertMaterial({ color: 0xc0392b });
@@ -2100,6 +2175,8 @@ export class CampusWorld {
     // =========================================================================
     // 3. 專屬頂級電影劇院 (1~3F Exclusive Cinema Theater)
     // =========================================================================
+    // 室內剔除：本段 (舞台、銀幕、垂簾、鋼琴、講台、座椅、橫樑) 全數收進演藝廳群組
+    const hallStart = this.group.children.length;
     // A. 舞台大平台 (位於東北側 X: 70 ~ 85, Z: 23 ~ 29, 高度 Y = 1.0)
     const stageW = 15;
     const stageL = 6;
@@ -2331,8 +2408,12 @@ export class CampusWorld {
     truss.position.set(baseX + 3.5, 11.2, minZ + 4.5);
     this.group.add(truss);
 
+    this.captureInterior(this.pabHall, hallStart);
+
     // 4. ⚡ 演藝大樓直達景觀電梯塔 (1F ~ 4F 現代化外牆鋼構井道、精緻門廳與電動滑動門)
     // ----------------------------------------------------------------------------------
+    // 室內剔除：井道位於西牆內側，整段收進電梯井道群組
+    const shaftStart = this.group.children.length;
     // 原西北側舊多段樓梯已全數拆除，西側視野通透敞亮，由現代感高科技景觀直達電梯貫穿 1F~4F
     const shaftFrameMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.85, roughness: 0.25 });
     const shaftPanelMat = new THREE.MeshStandardMaterial({ color: 0x2f3640, metalness: 0.75, roughness: 0.35 });
@@ -2714,6 +2795,7 @@ export class CampusWorld {
 
     this.lift4FDoors = { left: door4FL, right: door4FR };
     this.group.add(lift4FGroup);
+    this.captureInterior(this.pabShaft, shaftStart);
 
     // 5. 四樓室內羽球館 (4F Badminton Court: Y = 12.0 ~ 22.0，挑高天花板讓高遠球不穿頂)
     // A. 4F 完整樓地板 (移除舊安全梯天井後，西側與全場地板完整平鋪密封，杜絕墜落)
@@ -2732,6 +2814,8 @@ export class CampusWorld {
     this.buildWall(minX, midY4, baseZ, 0.6, h4, bL, wallMat);
 
     // C. 4F 標準室內羽球場 PVC 地墊 (綠色地墊 + 白線)
+    // 室內剔除：C~E (地墊、白線、球網、裁判椅) 收進 4F 群組；外牆 (B) 與屋頂 (F) 屬外殼
+    const floor4Start = this.group.children.length;
     const matW = 13;
     const matL = 22;
     const courtMat = new THREE.MeshLambertMaterial({ color: 0x16a085 }); // 專業羽球綠地墊
@@ -2791,9 +2875,10 @@ export class CampusWorld {
     refSeat.position.y = 2.05;
     refGroup.add(refSeat);
     this.group.add(refGroup);
+    this.captureInterior(this.pab4F, floor4Start);
 
     // F. 屋頂與高空採光天窗 (Y = 22.0；羽球最高飛行點約 17.5m，保留充足淨高)
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(bW + 1.0, 0.5, bL + 1.0), wallMat);
+    const roof = new THREE.Mesh(wallMat.box(bW + 1.0, 0.5, bL + 1.0), wallMat.material);
     roof.position.set(baseX, 22.0, baseZ);
     this.group.add(roof);
 
@@ -2850,8 +2935,10 @@ export class CampusWorld {
     return (dx * dx + dz * dz) < 7.84;
   }
 
-  private buildWall(x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  private buildWall(x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material | BrickStyle) {
+    const wall = 'box' in mat
+      ? new THREE.Mesh(mat.box(w, h, d), mat.material)
+      : new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     wall.position.set(x, y, z);
     wall.castShadow = true;
     wall.receiveShadow = true;

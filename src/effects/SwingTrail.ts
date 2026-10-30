@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { getFxQuality } from './fxQuality';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import { FINISHER_FX_BOOST, TRAIL_WIDTH, type WeaponFxStyle } from './weaponFxStyle';
 
-// 揮擊拖尾：2 條軌跡共用 1 個 BufferGeometry / Mesh (1 draw call)，預配置緩衝、執行期零配置。
+// 揮擊拖尾：4 條軌跡 (右手 0/1、左手 2/3 輪替) 共用 1 個 BufferGeometry / Mesh (1 draw call)，預配置緩衝、執行期零配置。
 // 歷史點以 Catmull-Rom 平滑；頂點色為預乘 alpha (rgb 超出 alpha 的部分等同加亮)，
 // 以 ONE / ONE_MINUS_SRC_ALPHA 混合：亮色地面上純 Additive 會被洗白，改此法兼具發光與遮蓋。
-const SLOTS = 2;
+const SLOTS = 4;
 const BASE_DIM = 0.4;  // 握把端相對亮度
 const TIP_WHITE = 0.4; // 尖端色往白色混合比例 (亮白核心)
 
@@ -113,6 +114,7 @@ class SwingTrailSystem {
     this.mesh.receiveShadow = false;
     this.mesh.renderOrder = 5;
     this.mesh.visible = false;
+    updateVisibleMatricesOnly(this.mesh); // 閒置隱藏時略過矩陣更新
     scene.add(this.mesh);
   }
 
@@ -187,6 +189,8 @@ class SwingTrailSystem {
 
   public update(delta: number) {
     if (!this.mesh) return;
+    // 閒置 (隱藏且各槽皆無點)：隱藏時緩衝必已清空，略過逐槽清除與頂點上傳
+    if (!this.mesh.visible && this.isIdle()) return;
     let any = false;
     for (let si = 0; si < SLOTS; si++) {
       const s = this.slots[si];
@@ -206,6 +210,11 @@ class SwingTrailSystem {
       this.colAttr.needsUpdate = true;
     }
     this.mesh.visible = any;
+  }
+
+  private isIdle(): boolean {
+    for (let si = 0; si < SLOTS; si++) if (this.slots[si].count > 0) return false;
+    return true;
   }
 
   // 將槽內歷史點展開成條帶頂點；回傳是否有可見內容

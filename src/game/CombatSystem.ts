@@ -3,12 +3,13 @@ import { soundManager } from '../audio/SoundEffects';
 import { queryColliders, isBlockedXZ } from '../physics/aabb';
 import { requestCameraShake } from '../effects/cameraShake';
 import { comboFinisherFX } from '../effects/ComboFinisherFX';
+import { slashFX } from '../effects/SlashFX';
 import { impactDust } from '../effects/ImpactDust';
 import { getFxQuality } from '../effects/fxQuality';
-import { WEAPON_FX_STYLES, resolveWeaponFxId } from '../effects/weaponFxStyle';
+import { WEAPON_FX_STYLES } from '../effects/weaponFxStyle';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
-import { PLAYER_COMBOS, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, wrapAngle, type KfMove } from '../entities/shared/kungfu';
+import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, probePath, strikeCanLaunch, strikeDmg, strikeRoute, wrapAngle, type KfMove } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import type { PlantHitResult } from '../world/EcologicalGarden';
 import { isBehindNpc, isBossStunOpening } from './DetentionMode';
@@ -24,17 +25,35 @@ const _scratchAoeCenter = new THREE.Vector3();
 const _scratchFinisherPoint = new THREE.Vector3();
 const _fxPoint = new THREE.Vector3();
 const _fxNoDir = new THREE.Vector3();
+const _fxFeatherPoint = new THREE.Vector3();
+const FEATHER_HEIGHT = 1.1; // 羽毛噴發高度 (胸口)
 const _fxGroundNear: CollidableBox[] = [];
-const FX_FIST_WAIST_Y = 0.9; // 旋風腿衝擊環高度 (腰高)
+// 旋身終結技腰高衝擊環高度與著地補環半徑改由武器定義 finisherFx 提供 (見 src/weapons/defs)
 const FX_FIST_LAND_DELAY = 0.22; // 旋風腿落地補環延遲 (約招式進度 0.8)
-const FX_FIST_LAND_RADIUS = 1.1;
-const FX_BATON_WAIST_Y = 1.0;
+// 雙燕羽刃斬痕：X 字離地高度、命中閃光胸口高度
+const SLASH_X_HEIGHT = 1.15;
+const HIT_FLASH_HEIGHT = 1.0;
+const PATH_FORWARD_PUSH = 0.6; // 突進斬擊退方向：往兩側外推 + 沿突進方向的分量
+const DASH_BAND_REMAIN = 1.0; // 突進光帶終點 = 目前位置 + 剩餘突進距離 × 此倍率
+const ENEMY_CROSS_HALF_LEN = 0.75; // 突進斬命中者身上的 X 字斬痕單臂半長
+const DASH_RING_RADIUS = 1.5; // 突進斬終點雙圈衝擊環半徑
+const _pathProbe = new Float32Array(3);
+// 顏色往白色混合 (t = 0 原色、1 純白)
+function mixWhiteChannel(c: number, t: number): number {
+  return Math.round(c + (255 - c) * t);
+}
+function mixWhiteHex(hex: number, t: number): number {
+  return (mixWhiteChannel((hex >> 16) & 255, t) << 16) | (mixWhiteChannel((hex >> 8) & 255, t) << 8) | mixWhiteChannel(hex & 255, t);
+}
 const FX_GROUND_TOLERANCE = 0.8; // 衝擊點地面與玩家腳底落差超過此值視為不在地面 (高台邊緣)
 // 終結技群攻候選 (依水平距離由近到遠排序，最多 AOE_CAP 人)
 const AOE_CAP = 8;
 const _aoeHits: (NPC | null)[] = new Array(AOE_CAP).fill(null);
 const _aoeDist = new Float32Array(AOE_CAP);
 const _aoePlantHits: PlantHitResult[] = Array.from({ length: AOE_CAP }, () => ({ name: '', defeated: false, isBoss: false, damage: 0 }));
+// 群攻結算選項：launch = 擊飛 (否則只扣血)、dmgMul = 本擊傷害倍率 (取代招式 dmg)、fx = 觸發終結特效 / 群攻震動與橫幅、index = 命中序號
+interface AoeStrikeOpts { launch: boolean; dmgMul: number; fx: boolean; index: number }
+const _aoeLightOpts: AoeStrikeOpts = { launch: false, dmgMul: 1, fx: false, index: 1 };
 
 // 暗殺動作狀態機 (總教官為電影運鏡，特訓院守衛為跟隨鏡頭的快速版)：
 // 成功：背刺 STAB → 倒地 FALL → (總教官) 後空翻 FLIP → 落地收尾 LAND
@@ -82,6 +101,7 @@ const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
 const HIT_STOP_FINISHER = 0.08; // 連段終結技命中停格
+const HIT_STOP_EXTRA = HIT_STOP * 0.6; // 多段招式額外擊 (小擊) 命中停格
 const HIT_STOP_SCALE = 0.05;
 // 終結技群攻：次目標傷害倍率、判定距離寬容與高低差上限
 const AOE_SECONDARY_DMG = 0.8;
@@ -158,6 +178,11 @@ export class CombatSystem {
   private wasBossWindingUp: boolean = false;
   private wasBossStunned: boolean = false;
   private hitStop: number = 0; // 一般攻擊命中停格剩餘真實秒數
+  // 已通緝 / 已顯示正面防禦提示的出招序號 (同一招多段命中只結算一次)
+  private crimeSerial: number = -1;
+  private frontalSerial: number = -1;
+  private slashFlashes: number = 0; // 本擊已出的命中閃光數
+  private slashCrosses: number = 0; // 本擊已出的敵身 X 字斬痕數
 
   constructor(private readonly ctx: GameContext) {}
 
@@ -632,36 +657,110 @@ export class CombatSystem {
 
   // 每幀於玩家更新後呼叫：招式到達命中時間點時結算傷害 (暗殺運鏡中的出刀僅為動作)
   public updatePlayerStrike() {
-    const move = this.ctx.player.strikeMove;
-    if (!move || this.execPhase !== 'NONE' || this.ctx.player.isDead) return;
-    this.resolvePlayerHit(move);
+    const { player } = this.ctx;
+    const move = player.strikeMove;
+    if (!move || this.execPhase !== 'NONE' || player.isDead) return;
+    this.resolvePlayerHit(move, player.strikeIndex);
   }
 
-  // 命中回饋：短暫停格，終結技加長並震動鏡頭
-  private onPlayerHitLanded(move: KfMove) {
-    this.hitStop = move.finisher ? HIT_STOP_FINISHER : HIT_STOP;
-    if (move.finisher) requestCameraShake(0.3);
+  // 命中回饋：短暫停格 (額外擊縮短)，終結技主擊加長並震動鏡頭、其餘依招式 hitShake 震動
+  private onPlayerHitLanded(move: KfMove, strikeIndex: number) {
+    this.hitStop = strikeIndex > 0 ? HIT_STOP_EXTRA : move.finisher ? HIT_STOP_FINISHER : HIT_STOP;
+    if (move.finisher && strikeIndex === 0) requestCameraShake(0.3);
+    else if (move.hitShake > 0) requestCameraShake(move.hitShake);
   }
 
-  private resolvePlayerHit(move: KfMove) {
-    if (move.aoe) this.resolveFinisherAoe(move, move.aoe);
-    else this.resolveSingleHit(move);
+  // 同一招 (出招序號) 只通緝 / 提示一次：回傳本次是否應結算
+  private takeCrimeSlot(): boolean {
+    const serial = this.ctx.player.moveSerial;
+    if (this.crimeSerial === serial) return false;
+    this.crimeSerial = serial;
+    return true;
+  }
+
+  private takeFrontalSlot(): boolean {
+    const serial = this.ctx.player.moveSerial;
+    if (this.frontalSerial === serial) return false;
+    this.frontalSerial = serial;
+    return true;
+  }
+
+  // 依命中序號分流：主擊沿用招式本身；終結技額外擊只扣血 (不擊飛、不觸發終結特效)；其餘額外擊為單體判定
+  private resolvePlayerHit(move: KfMove, strikeIndex: number) {
+    this.spawnSlashFx(move, strikeIndex);
+    const route = strikeRoute(move, strikeIndex);
+    if (route === 'AOE') this.resolveFinisherAoe(move, move.aoe!);
+    else if (route === 'AOE_LIGHT') {
+      _aoeLightOpts.dmgMul = strikeDmg(move, strikeIndex);
+      _aoeLightOpts.index = strikeIndex;
+      this.resolveFinisherAoe(move, move.aoe!, _aoeLightOpts);
+    } else this.resolveSingleHit(move, strikeIndex);
+  }
+
+  // 斬痕特效 (命中判定前、揮空亦觸發)：招式 slashFx 'X' 於追擊 (左拍) 在面前交成 X 字光痕；
+  // 突進斬 (fx 'DASH')：衝刺末段留下雙色光帶與地面風痕、收刀主擊於路徑中央爆出大型 X 字斬痕
+  private spawnSlashFx(move: KfMove, strikeIndex: number) {
+    this.slashFlashes = 0;
+    this.slashCrosses = 0;
+    if (!move.slashFx) return;
+    const { player } = this.ctx;
+    const weapon = player.activeWeapon;
+    const colorR = WEAPON_FX_STYLES[weapon.fx.R].color;
+    const colorL = WEAPON_FX_STYLES[weapon.fx.L].color;
+    const pos = player.position;
+    if (move.slashFx === 'X' && strikeIndex === 1) {
+      slashFX.crossSlash(pos.x, pos.y + SLASH_X_HEIGHT, pos.z, player.rotationY, colorR, colorL);
+    }
+    if (move.fx !== 'DASH' || !move.lunge) return;
+    const o = player.dashSerial === player.moveSerial ? player.dashOrigin : pos;
+    if (strikeIndex === move.extraStrikes.length) {
+      // 衝刺末段 (最後一次小擊)：光帶自起點掃到預估終點 (目前位置 + 剩餘突進)，兩條拍色光帶 + 一條地面風痕
+      const frac = Math.min(1, Math.max(0, (move.lunge.to - move.extraStrikes[strikeIndex - 1]) / (move.lunge.to - move.lunge.from)));
+      const ex = pos.x + Math.sin(player.rotationY) * move.lunge.dist * frac * DASH_BAND_REMAIN;
+      const ez = pos.z + Math.cos(player.rotationY) * move.lunge.dist * frac * DASH_BAND_REMAIN;
+      slashFX.dashBand(o.x, o.z, ex, ez, pos.y + 1.05, 0.28, colorR);
+      slashFX.dashBand(o.x, o.z, ex, ez, pos.y + 0.55, 0.28, colorL);
+      slashFX.dashBand(o.x, o.z, ex, ez, pos.y + 0.05, 0.75, mixWhiteHex(colorR, 0.55));
+    } else if (strikeIndex === 0) {
+      // 收刀主擊：路徑中央的大型 X 字斬痕 (長度隨實際突進距離)
+      const len = Math.hypot(pos.x - o.x, pos.z - o.z);
+      slashFX.crossAt((pos.x + o.x) / 2, pos.y + 1.1, (pos.z + o.z) / 2, player.rotationY, Math.min(2.2, 0.9 + len * 0.3), colorR, colorL);
+    }
+  }
+
+  // 命中閃光：招式有 slashFx 者於受擊目標胸口出星芒 (每擊數量依品質上限)，右拍青綠、左拍櫻粉
+  private spawnHitFlash(move: KfMove, strikeIndex: number, npc: NPC) {
+    if (!move.slashFx || this.slashFlashes >= getFxQuality().flashPerStrike) return;
+    this.slashFlashes++;
+    const weapon = this.ctx.player.activeWeapon;
+    slashFX.hitFlash(npc.position.x, npc.position.y + HIT_FLASH_HEIGHT, npc.position.z,
+      WEAPON_FX_STYLES[strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R].color);
+  }
+
+  // 突進斬收刀爆點：每個命中者身上爆出 X 字斬痕 (數量依品質上限，與命中閃光共用上限)
+  private spawnEnemyCross(move: KfMove, npc: NPC) {
+    if (move.fx !== 'DASH' || this.slashCrosses >= getFxQuality().flashPerStrike) return;
+    this.slashCrosses++;
+    const weapon = this.ctx.player.activeWeapon;
+    slashFX.crossAt(npc.position.x, npc.position.y + HIT_FLASH_HEIGHT, npc.position.z, this.ctx.player.rotationY, ENEMY_CROSS_HALF_LEN,
+      WEAPON_FX_STYLES[weapon.fx.R].color, WEAPON_FX_STYLES[weapon.fx.L].color);
   }
 
   // 一般招式：只結算第一個命中者
-  private resolveSingleHit(move: KfMove) {
+  private resolveSingleHit(move: KfMove, strikeIndex: number = 0) {
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
     const reach = player.getWeaponReach() * move.reach;
-    const baseDamage = player.getWeaponDamage() * move.dmg;
+    const baseDamage = player.getWeaponDamage() * strikeDmg(move, strikeIndex);
     const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
+    const cap = player.activeWeapon.launchCap; // 武器 (含世界變體) 的擊飛上限，null = NPC 預設
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
 
     // 1. 檢測是否命中生態園植物生物
     const plantHit = ecologicalGarden.tryHitByPlayer(player.position, reach, damage, _scratchPlayerForward);
     if (plantHit.hit) {
-      this.onPlayerHitLanded(move);
+      this.onPlayerHitLanded(move, strikeIndex);
       if (plantHit.isBoss) {
         if (plantHit.defeated) {
           this.ctx.progression.cash += 500;
@@ -715,20 +814,21 @@ export class CombatSystem {
           mult *= DETENTION_FRONTAL_DMG_MULT;
           actualKnockback = knockback * 0.5;
           player.setAttackCooldown(FRONTAL_LOCK);
-          wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！', 1600);
+          if (this.takeFrontalSlot()) wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！', 1600);
         }
         actualDamage = Math.max(1, Math.round(baseDamage * mult));
       }
 
-      this.onPlayerHitLanded(move);
+      this.onPlayerHitLanded(move, strikeIndex);
+      this.spawnHitFlash(move, strikeIndex, npc);
       // 擊退方向：玩家指向目標 (旋身招式可擊中側後方目標)
       if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
       else _scratchImpactDir.copy(_scratchPlayerForward);
-      // 第二世界特訓群僅連招終結技可擊飛，一般命中為短暫踉蹌 (見 NPC.launchFlying)
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, move.finisher)) {
-        this.handleNpcDefeated(npc, 'ATTACK');
+      // 僅連招終結技主擊可擊飛；非終結技 (含多段招式各擊) 命中只扣血，不影響 NPC 行為 (見 NPC.launchFlying)
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, strikeCanLaunch(move, strikeIndex), false, true, cap?.h, cap?.v)) {
+        this.handleNpcDefeated(npc, 'ATTACK', this.takeCrimeSlot());
       } else {
-        wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
+        if (this.takeCrimeSlot()) wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
         npc.isChasing = true;
       }
       return;
@@ -744,7 +844,9 @@ export class CombatSystem {
     const q = getFxQuality();
     const p = _fxPoint.copy(point);
     const radius = move.aoe.radius * player.getWeaponReach();
-    const gold = player.currentWeapon === 'SPECIAL_BAT';
+    // 本招生效的武器套組決定特效樣式 (球棒 / 黃金棒 / 拳 / 警棍)
+    const weapon = player.activeWeapon;
+    const style = WEAPON_FX_STYLES[weapon.fx.R];
     const isCampus = this.ctx.currentWorldType === 'CAMPUS';
     const inPond = isCampus && ecologicalGarden.isInsideWishingPond(p);
     const inPool = isCampus && world.isInsideSwimmingPool(p);
@@ -756,22 +858,21 @@ export class CombatSystem {
         this.ctx.waterSplashVFX.triggerSplashBurst(p, player.rotationY, true, inPond ? player.swimSurfaceY : 0.25);
         return;
       }
-      const style = WEAPON_FX_STYLES[resolveWeaponFxId('BAT', gold)];
       // 取衝擊點腳下實際地面 (樓梯 / 高台)；落差過大視為不在地面，只放環
       const gy = this.sampleGroundY(p.x, p.z, p.y);
       const onGround = grounded && p.y - gy <= FX_GROUND_TOLERANCE;
       if (onGround) p.y = gy;
-      comboFinisherFX.groundSlam(p, radius, style, gold, onGround);
+      comboFinisherFX.groundSlam(p, radius, style, weapon.finisherFx.slamBolt === true, onGround);
       if (onGround) impactDust.burst(this.ctx.engine.scene, p, _fxNoDir.set(0, 0, 0), { count: q.debrisCount, upward: 2.2, spreadY: 0.2, life: 0.7, size: 1.5 });
       return;
     }
 
-    // SPIN：拳腳 (旋風腿) 與警棍 (旋身橫打) 的腰高衝擊環
+    // SPIN：拳腳 (旋風腿) 與警棍 (旋身橫打) 的腰高衝擊環；拳腳著地時補一圈落地環
+    const fx = weapon.finisherFx;
+    if (fx.feathers) comboFinisherFX.featherBurst(_fxFeatherPoint.set(p.x, p.y + FEATHER_HEIGHT, p.z));
     if (inPond || inPool) return;
-    const isFist = PLAYER_COMBOS.FIST.includes(move);
-    const style = WEAPON_FX_STYLES[isFist ? 'FIST' : 'BATON'];
-    comboFinisherFX.spinWave(p, radius, p.y + (isFist ? FX_FIST_WAIST_Y : FX_BATON_WAIST_Y), style,
-      isFist && grounded ? FX_FIST_LAND_RADIUS : 0, p.y, FX_FIST_LAND_DELAY);
+    comboFinisherFX.spinWave(p, move.fx === 'DASH' ? DASH_RING_RADIUS : radius, p.y + (fx.waistY ?? 0), style,
+      grounded ? fx.landRadius ?? 0 : 0, p.y, FX_FIST_LAND_DELAY);
   }
 
   // 取 (x, z) 腳下地面高度：與玩家落腳邏輯一致 (不高於 refY + 容許高度的最高水平面 / 坡道，預設 0)
@@ -793,29 +894,41 @@ export class CombatSystem {
   }
 
   // 連段終結技群攻：範圍內最近的數名目標 (生態園生物優先) 同時受擊；擊退依距圓心遠近衰減、方向自圓心放射
-  private resolveFinisherAoe(move: KfMove, aoe: NonNullable<KfMove['aoe']>) {
+  // opts：終結技額外擊改為只扣血 (不擊飛、不觸發終結特效與群攻震動 / 橫幅，小擊停格)；未傳為主擊
+  private resolveFinisherAoe(move: KfMove, aoe: NonNullable<KfMove['aoe']>, opts?: AoeStrikeOpts) {
+    const launch = opts ? opts.launch : true;
+    const fx = opts ? opts.fx : true;
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
     const isDetention = this.ctx.currentWorldType === 'DETENTION';
-    const gold = player.currentWeapon === 'SPECIAL_BAT';
+    // 黃金棒類武器改讀招式上的黃金群攻欄位 (目標上限 / 停格 / 震動)
+    const gold = player.weaponDef.useGoldAoe === true;
     const weaponReach = player.getWeaponReach();
     const radius = aoe.radius * weaponReach;
     const max = Math.min(AOE_CAP, gold ? aoe.maxGold ?? aoe.max : aoe.max);
-    const baseDamage = player.getWeaponDamage() * move.dmg;
+    const baseDamage = player.getWeaponDamage() * (opts ? opts.dmgMul : move.dmg);
     const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
+    const cap = player.activeWeapon.launchCap; // 武器 (含世界變體) 的擊飛上限，null = NPC 預設
 
     const fwd = _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY));
     const center = _scratchAoeCenter.copy(player.position);
     if (aoe.center === 'FRONT') center.addScaledVector(fwd, aoe.offset * weaponReach);
+    // PATH：命中範圍為突進起點 → 目前位置的矩形 (半寬 = radius)；圓心取路徑中點供生態園圓形判定覆蓋整段
+    const isPath = aoe.shape === 'PATH';
+    const pathO = player.dashSerial === player.moveSerial ? player.dashOrigin : player.position;
+    const pathLen = isPath ? Math.hypot(player.position.x - pathO.x, player.position.z - pathO.z) : 0;
+    if (isPath) center.set((player.position.x + pathO.x) / 2, player.position.y, (player.position.z + pathO.z) / 2);
 
     // 特效衝擊點：下劈取棒尖水平位置 (高度貼齊玩家腳底)，旋身招式取玩家位置
-    const point = _scratchFinisherPoint;
-    if (move.fx === 'SLAM') player.getBatTipWorld(point).setY(player.position.y);
-    else point.copy(player.position);
-    this.onFinisherImpact(move, point, player.isGrounded);
+    if (fx) {
+      const point = _scratchFinisherPoint;
+      if (move.fx === 'SLAM') player.getBatTipWorld(point).setY(player.position.y);
+      else point.copy(player.position);
+      this.onFinisherImpact(move, point, player.isGrounded);
+    }
 
     // 1. 生態園生物 (不中斷，續判 NPC)
-    const plantCount = ecologicalGarden.tryHitAllByPlayer(center, radius, damage, max, _aoePlantHits, AOE_SECONDARY_DMG);
+    const plantCount = ecologicalGarden.tryHitAllByPlayer(center, isPath ? pathLen / 2 + radius : radius, damage, max, _aoePlantHits, AOE_SECONDARY_DMG);
     let bossBanner = false;
     let plantBanner = '';
     let plantBannerMs = 1500;
@@ -847,11 +960,17 @@ export class CombatSystem {
       for (const npc of this.ctx.npcs) {
         if (npc.isKnockedDown || npc.isPermanentlyKnockedOut) continue;
         if (Math.abs(npc.position.y - player.position.y) >= AOE_MAX_DY) continue;
-        const dx = npc.position.x - center.x;
-        const dz = npc.position.z - center.z;
-        const dSq = dx * dx + dz * dz;
-        if (dSq > reachSq) continue;
-        const d = Math.sqrt(dSq);
+        let d: number;
+        if (isPath) {
+          d = probePath(pathO.x, pathO.z, player.position.x, player.position.z, npc.position.x, npc.position.z, _pathProbe);
+          if (d > radius + AOE_REACH_GRACE) continue;
+        } else {
+          const dx = npc.position.x - center.x;
+          const dz = npc.position.z - center.z;
+          const dSq = dx * dx + dz * dz;
+          if (dSq > reachSq) continue;
+          d = Math.sqrt(dSq);
+        }
         if (n === npcMax && d >= _aoeDist[n - 1]) continue;
         let i = n < npcMax ? n++ : npcMax - 1;
         while (i > 0 && _aoeDist[i - 1] > d) {
@@ -897,19 +1016,27 @@ export class CombatSystem {
       }
       const actualDamage = Math.max(1, Math.round(baseDamage * mult));
       hits++;
+      this.spawnHitFlash(move, opts ? opts.index : 0, npc);
+      if (fx) this.spawnEnemyCross(move, npc);
 
       // 擊退方向：自圓心放射；下劈衝擊點後方目標去除向後分量並混入面向 (避免往玩家身後倒飛)；過近沿面向
       const dx = npc.position.x - center.x;
       const dz = npc.position.z - center.z;
-      if (d < AOE_MIN_DIST) {
+      if (isPath) {
+        // 突進路徑：自中心線往兩側外推，再加上沿突進方向的分量；貼近中心線時依序輪流往左右
+        probePath(pathO.x, pathO.z, player.position.x, player.position.z, npc.position.x, npc.position.z, _pathProbe);
+        if (d < AOE_MIN_DIST) _scratchImpactDir.set(fwd.z * (i % 2 === 0 ? 1 : -1), 0, -fwd.x * (i % 2 === 0 ? 1 : -1));
+        else _scratchImpactDir.set((npc.position.x - _pathProbe[0]) / d, 0, (npc.position.z - _pathProbe[1]) / d);
+        _scratchImpactDir.addScaledVector(fwd, PATH_FORWARD_PUSH).normalize();
+      } else if (d < AOE_MIN_DIST) {
         _scratchImpactDir.copy(fwd);
       } else {
         _scratchImpactDir.set(dx / d, 0, dz / d);
         const along = _scratchImpactDir.dot(fwd);
         if (aoe.center === 'FRONT' && along < 0) _scratchImpactDir.addScaledVector(fwd, AOE_BACK_BLEND - along).normalize();
       }
-      // 終結技無視受擊保護時間 (緊接前一段命中)，第二世界特訓群可被擊飛
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, true, true)) {
+      // 終結技無視受擊保護時間 (緊接前一段命中)，第二世界特訓群可被擊飛；額外擊只扣血
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, launch, true, true, cap?.h, cap?.v)) {
         this.handleNpcDefeated(npc, 'ATTACK', false);
         if (!firstKo) firstKo = npc;
       } else {
@@ -919,7 +1046,12 @@ export class CombatSystem {
 
     // 每招一次的結算：命中回饋、打鬥聲響、正面防禦提示、通緝
     const npcHits = hits - plantCount;
-    if (hits > 0) {
+    if (!fx) {
+      if (hits > 0) {
+        this.hitStop = HIT_STOP_EXTRA;
+        if (move.hitShake > 0) requestCameraShake(move.hitShake);
+      }
+    } else if (hits > 0) {
       this.hitStop = gold ? aoe.hitStopGold ?? aoe.hitStop : hits >= 2 ? aoe.hitStopMulti : aoe.hitStop;
       requestCameraShake(gold ? aoe.shakeGold ?? aoe.shake : aoe.shake);
     } else if (aoe.missShake > 0) {
@@ -928,14 +1060,14 @@ export class CombatSystem {
     if (isDetention && n > 0) this.ctx.detention.emitFightNoise(player.position);
     if (frontal) {
       player.setAttackCooldown(FRONTAL_LOCK);
-      wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！', 1600);
+      if (this.takeFrontalSlot()) wantedSystem.showBanner('🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！', 1600);
     }
-    if (npcHits > 0) {
+    if (npcHits > 0 && this.takeCrimeSlot()) {
       wantedSystem.reportCrime(1, firstKo ? `${firstKo.getRoleTitle()}倒地` : isDetention ? '院內襲擊守衛' : '校園打架鬥毆');
     }
-    // 橫幅優先序：生態園 Boss > 多人命中 > 單一植物
+    // 橫幅優先序：生態園 Boss > 多人命中 > 單一植物 (額外擊不顯示多人命中)
     if (bossBanner) return;
-    if (hits >= 2) wantedSystem.showBanner(`💥 ${move.name}！震倒 ${hits} 名目標`, 1200);
+    if (hits >= 2 && fx) wantedSystem.showBanner(`💥 ${move.name}！震倒 ${hits} 名目標`, 1200);
     else if (plantBanner) wantedSystem.showBanner(plantBanner, plantBannerMs);
   }
 
@@ -1048,7 +1180,7 @@ export class CombatSystem {
         if (npc.bossIsCharging && !player.isDead && npc.position.distanceTo(targetPosition) <= 2.2) {
           if (player.isDodging) {
             this.showDodgeBanner('💨 閃身步！極限側閃避開總教官衝撞！', '🐻 狗熊哆嗦毛！極限閃避總教官狂暴衝撞！', 1800);
-          } else {
+          } else if (!player.tryAutoDodge()) {
             npc.bossIsCharging = false;
             npc.pauseTimer = 1.0;
             npc.isPaused = true;
@@ -1152,6 +1284,7 @@ export class CombatSystem {
   // 閃身中落空；騎車中只扣血不摔車
   private applySignatureHit(npc: NPC, targetPosition: THREE.Vector3, isGrab: boolean) {
     const { player, wantedSystem } = this.ctx;
+    if (player.tryAutoDodge()) return;
     if (player.isDodging) {
       this.showDodgeBanner(
         isGrab ? '💨 閃身步！掙脫主任教官擒拿摔！' : '💨 閃身步！避開生教組長戒尺！',
@@ -1210,6 +1343,7 @@ export class CombatSystem {
   // NPC 攻擊命中玩家結算 (閃避、騎車或出招中只扣血、擊飛)；isBigMove 為總教官迴旋踢
   private applyNpcHit(npc: NPC, targetPosition: THREE.Vector3, isBigMove: boolean = false) {
     const { player, wantedSystem } = this.ctx;
+    if (player.tryAutoDodge()) return;
     if (player.isDodging) {
       this.showDodgeBanner('💨 閃身步！成功規避攻擊！', '🐻 狗熊哆嗦毛！神速規避攻擊！', 1500);
       return;
@@ -1254,7 +1388,8 @@ export class CombatSystem {
     const minDistanceSq = minDistance * minDistance;
     const colliders = this.ctx.activeColliders;
 
-    if (!player.isRidingVehicle && !player.isDead) {
+    // 突進斬衝刺期間不推擠玩家 (穿過敵群)，落地後才恢復推擠
+    if (!player.isRidingVehicle && !player.isDead && !player.isLunging) {
       const playerRadius = 0.35;
       const playerHeight = 1.8;
       const stepHeight = 0.65;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 
 interface SplashDroplet {
   position: THREE.Vector3;
@@ -59,6 +60,7 @@ export class WaterSplashVFX {
 
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
+    updateVisibleMatricesOnly(this.group); // 水珠/漣漪閒置隱藏時略過矩陣更新
     scene.add(this.group);
 
     this.dropletMesh = this.initDropletsPool();
@@ -114,6 +116,15 @@ export class WaterSplashVFX {
     }
     this.group.add(mesh);
     return mesh;
+  }
+
+  // 暫時顯示以便 renderer.compile 預熱 shader
+  public prewarm(compile: () => void) {
+    this.dropletMesh.visible = true;
+    this.rippleMesh.visible = true;
+    compile();
+    this.dropletMesh.visible = false;
+    this.rippleMesh.visible = false;
   }
 
   /**

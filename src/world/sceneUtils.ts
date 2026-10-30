@@ -23,17 +23,27 @@ export function sharedLambert(
   return mat;
 }
 
-// 凍結靜態物件的本地矩陣：計算一次後關閉 matrixAutoUpdate，省去每幀數千次矩陣組合運算
-// exclude 內的物件 (及其子孫) 於執行期會移動/縮放，維持自動更新
-export function freezeStaticMatrices(root: THREE.Object3D, exclude: Set<THREE.Object3D>) {
-  const visit = (obj: THREE.Object3D) => {
-    if (exclude.has(obj)) return;
+// 凍結世界靜態物件的矩陣 (世界建立完成時呼叫一次；root 與其父節點 (場景) 皆不會移動)：
+// 1. root 與所有不在 exclude 內的子孫：計算一次本地矩陣後關閉 matrixAutoUpdate (每幀不再重組本地矩陣)
+// 2. 不含任何 exclude 物件的子樹，其最上層節點設 matrixWorldAutoUpdate = false：
+//    配合 Engine 凍結場景根矩陣 (不再每幀強制重算全場世界矩陣)，每幀 updateMatrixWorld 直接略過整個子樹
+// exclude 內的物件 (及其子孫) 於執行期會移動/旋轉/縮放，維持自動更新。
+// root 本身維持 matrixWorldAutoUpdate：執行期仍可直接在 root 下新增會動的子物件 (鴿群、球)。
+// 凍結子樹內的物件若之後需要移動，必須改列入 exclude (只切換 visible / 材質不受影響)。
+export function freezeStatic(root: THREE.Object3D, exclude: ReadonlySet<THREE.Object3D> = new Set()) {
+  const visit = (obj: THREE.Object3D): boolean => {
+    if (exclude.has(obj)) return false;
     obj.updateMatrix();
     obj.matrixAutoUpdate = false;
-    for (const child of obj.children) visit(child);
+    const childStatic = obj.children.map(visit);
+    const allStatic = childStatic.every(Boolean);
+    if (!allStatic || obj === root) {
+      obj.children.forEach((child, i) => { if (childStatic[i]) child.matrixWorldAutoUpdate = false; });
+    }
+    return allStatic;
   };
-  for (const child of root.children) visit(child);
-  root.updateMatrixWorld(true);
+  visit(root);
+  root.updateMatrixWorld(true); // force 會無視 matrixWorldAutoUpdate，一次算好所有世界矩陣
 }
 
 // 材質外觀鍵：外觀完全相同的獨立材質實例可視為同一材質合併繪製

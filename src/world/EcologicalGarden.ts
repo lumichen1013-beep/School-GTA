@@ -3,7 +3,7 @@ import { CollidableBox } from './CampusWorld';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { bakeStatic, freezeStaticMatrices } from './sceneUtils';
+import { bakeStatic, freezeStatic } from './sceneUtils';
 
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
@@ -202,7 +202,7 @@ export class EcologicalGarden {
     this.group.add(this.dynamicGroup);
     const dynamicObjects = new Set<THREE.Object3D>([this.dynamicGroup]);
     bakeStatic(this.group, dynamicObjects);
-    freezeStaticMatrices(this.group, dynamicObjects);
+    freezeStatic(this.group, dynamicObjects);
 
     this.scene.add(this.group);
   }
@@ -930,7 +930,7 @@ export class EcologicalGarden {
         vine.mesh.lookAt(playerPos.x, 0, playerPos.z);
         if (vine.attackCooldown <= 0) {
           vine.attackCooldown = 1.4;
-          soundManager.playBatHit();
+          soundManager.playBatHit(vine.mesh.position);
           onPlayerHit(10, '被食人藤蔓猛烈抽打！');
         }
       }
@@ -963,10 +963,10 @@ export class EcologicalGarden {
         if (bDist < 4.5) {
           if (this.boss.attackCooldown <= 0) {
             this.boss.attackCooldown = 1.6;
-            soundManager.playBossBite();
+            soundManager.playBossBite(this.boss.position);
             // 猛烈咬噬：28 點高額傷害 + 強烈擊退 (0-GC Scratch Vector)
             _ecoPushDir.subVectors(playerPos, this.boss.position).normalize();
-            player.launchFlying(_ecoPushDir, 12.0, 4.0, 15, '被食人花王巨口猛烈撕咬！');
+            if (!player.tryAutoDodge()) player.launchFlying(_ecoPushDir, 12.0, 4.0, 15, '被食人花王巨口猛烈撕咬！');
           }
         }
 
@@ -1093,7 +1093,7 @@ export class EcologicalGarden {
         // 貼身快速啃咬攻擊
         if (dist < 0.75 && bug.attackCooldown <= 0) {
           bug.attackCooldown = 1.0; // 極快攻速
-          soundManager.playBugChirp();
+          soundManager.playBugChirp(bug.position);
           onPlayerHit(bug.attackDamage, '遭生態園毒甲蟲刺螯快速咬傷！');
         }
       } else {
@@ -1142,7 +1142,7 @@ export class EcologicalGarden {
       life: 2.5
     });
 
-    soundManager.playBatHit();
+    soundManager.playBatHit(startPos);
   }
 
   // 5. 玩家打擊判定 (攻擊食人花 Boss 或藤蔓)
