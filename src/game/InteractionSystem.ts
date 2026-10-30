@@ -73,6 +73,21 @@ export class InteractionSystem {
     this.ctx.hud.showPrompt(icon, text);
   }
 
+  // 特訓院健身補給站每局限用一次 (避免反覆使用無限回血)
+  private showGymPrompt(id: string, text: string) {
+    this.showPrompt(this.ctx.detention.usedGymStations.has(id) ? `${text} (本局已使用)` : text);
+  }
+
+  private useGymStation(id: string): boolean {
+    const used = this.ctx.detention.usedGymStations;
+    if (used.has(id)) {
+      this.ctx.wantedSystem.showBanner('⛔ 這座特訓設施本局已使用過，無法再次補給！', 2000);
+      return false;
+    }
+    used.add(id);
+    return true;
+  }
+
   // ===== 第二世界【特訓院】：鑰匙卡、管制閘門、南大門與特訓設施 =====
   private buildDetentionInteractions(): Interaction[] {
     const ctx = this.ctx;
@@ -177,8 +192,9 @@ export class InteractionSystem {
       {
         world: W,
         when: (p) => p.distanceTo(dw().pullupStationPos) < 3.0,
-        prompt: () => this.showPrompt('💪 引體向上特訓 (恢復精力)'),
+        prompt: () => this.showGymPrompt('pullup', '💪 引體向上特訓 (恢復精力)'),
         act: () => {
+          if (!this.useGymStation('pullup')) return;
           const { player } = ctx;
           player.stamina = Math.min(player.maxStamina, player.stamina + 60);
           player.hp = Math.min(player.maxHp, player.hp + 25);
@@ -189,8 +205,9 @@ export class InteractionSystem {
       {
         world: W,
         when: (p) => p.distanceTo(dw().benchpressStationPos) < 3.0,
-        prompt: () => this.showPrompt('🏋️ 鐵血大重量臥推 (恢復體力)'),
+        prompt: () => this.showGymPrompt('bench', '🏋️ 鐵血大重量臥推 (恢復體力)'),
         act: () => {
+          if (!this.useGymStation('bench')) return;
           const { player } = ctx;
           player.hp = Math.min(player.maxHp, player.hp + 50);
           ctx.wantedSystem.showBanner('🏋️【特訓大重量臥推】極限力量爆發！體力強效恢復 +50 HP！', 2500);
@@ -200,8 +217,9 @@ export class InteractionSystem {
       {
         world: W,
         when: (p) => p.distanceTo(dw().tireStationPos) < 3.5,
-        prompt: () => this.showPrompt('🛞 翻滾巨型重裝輪胎 (解鎖狂暴極速衝刺)'),
+        prompt: () => this.showGymPrompt('tire', '🛞 翻滾巨型重裝輪胎 (解鎖狂暴極速衝刺)'),
         act: () => {
+          if (!this.useGymStation('tire')) return;
           const { player } = ctx;
           player.hp = Math.min(player.maxHp, player.hp + 15);
           ctx.wantedSystem.showBanner('🛞【巨型輪胎翻滾特訓】重裝肌耐力翻滾！體力 +15 HP，解鎖 8 秒狂暴極速衝刺！', 3000);
