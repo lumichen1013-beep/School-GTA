@@ -930,7 +930,7 @@ export class EcologicalGarden {
             soundManager.playBossBite();
             // 猛烈咬噬：28 點高額傷害 + 強烈擊退 (0-GC Scratch Vector)
             _ecoPushDir.subVectors(playerPos, this.boss.position).normalize();
-            player.launchFlying(_ecoPushDir, 12.0, 4.0, 28, '被食人花王巨口猛烈撕咬！');
+            player.launchFlying(_ecoPushDir, 12.0, 4.0, 15, '被食人花王巨口猛烈撕咬！');
           }
         }
 
@@ -965,7 +965,7 @@ export class EcologicalGarden {
 
       // 檢查命中玩家
       if (sp.position.distanceTo(playerPos) < 1.3 && !player.isDead) {
-        onPlayerHit(14, '被變異食人花的劇毒孢子命中！');
+        onPlayerHit(5, '被變異食人花的劇毒孢子命中！');
         soundManager.playPunch();
         this.scene.remove(sp.mesh);
         this.spores.splice(i, 1);
