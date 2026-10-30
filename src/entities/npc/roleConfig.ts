@@ -68,7 +68,7 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 特訓資深學長
   DETENTION_SENIOR: { ...DETENTION, maxHp: 200, baseSpeed: 1.50, chaseSpeed: 8.2, attackPower: 16, defaultStyle: 'OFFICER_PATROL' },
   // 重訓霸榜生
-  DETENTION_HEAVY: { ...DETENTION, maxHp: 380, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 21, defaultStyle: 'OFFICER_PATROL' },
+  DETENTION_HEAVY: { ...DETENTION, maxHp: 380, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 16, defaultStyle: 'OFFICER_PATROL' },
   // 特訓狼犬：敏捷
   DETENTION_WOLF: { ...DETENTION, maxHp: 260, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 11, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
   // 總教官 Boss【鐵面總長】
