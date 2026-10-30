@@ -757,8 +757,8 @@ export class Player {
   }
 
   public getWeaponDamage(): number {
-    if (this.currentWeapon === 'SPECIAL_BAT') return 120;
-    if (this.currentWeapon === 'NORMAL_BAT') return 55;
+    if (this.currentWeapon === 'SPECIAL_BAT') return 70;
+    if (this.currentWeapon === 'NORMAL_BAT') return 35;
     return 25;
   }
 
