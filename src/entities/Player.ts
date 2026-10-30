@@ -10,6 +10,8 @@ import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../ph
 import { InputManager } from '../core/InputManager';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
+import { swingTrail } from '../effects/SwingTrail';
+import { WEAPON_FX_STYLES, FINISHER_FX_BOOST, resolveWeaponFxId } from '../effects/weaponFxStyle';
 
 export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 
@@ -17,6 +19,8 @@ export type WeaponType = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
 const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
 const _armTop = new THREE.Vector3();
+const _trailBase = new THREE.Vector3();
+const _trailTip = new THREE.Vector3();
 // 潛行姿勢 A「持棍戒備」：蹲姿時雙臂以肩為軸隨身體下沉並縮短，右手持武器斜擋身前、左臂半舉前伸平衡
 const ARM_X = 0.45;
 const ARM_STAND_Y = 1.05;
@@ -341,6 +345,13 @@ export class Player {
   private worldType: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   // 本幀到達命中時間點的招式 (由戰鬥系統取用並結算傷害)
   public strikeMove: KfMove | null = null;
+  // 揮擊拖尾 / 武器發光狀態
+  private trailMove: KfMove | null = null;
+  private trailSlot = 0;
+  private trailActive = false;
+  private weaponGlowOn = false;
+  private batWoodMat!: THREE.MeshLambertMaterial;
+  private goldMat!: THREE.MeshStandardMaterial;
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
@@ -369,7 +380,8 @@ export class Player {
     // 建立球棒武器 3D 模型並掛載於右手 (Attached to right arm)
     // 1. 普通木質棒球棍 (Normal Wooden Baseball Bat)
     this.normalBatMesh = new THREE.Group();
-    const batWoodMat = new THREE.MeshLambertMaterial({ color: 0xcd853f });
+    const batWoodMat = new THREE.MeshLambertMaterial({ color: 0xcd853f, emissive: 0x000000, emissiveIntensity: 0 });
+    this.batWoodMat = batWoodMat;
     const batGripMat = new THREE.MeshLambertMaterial({ color: 0x2d3436 });
     const grip1 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 8), batGripMat);
     grip1.position.y = 0.14;
@@ -391,6 +403,7 @@ export class Player {
       emissive: 0xf39c12,
       emissiveIntensity: 0.4
     });
+    this.goldMat = goldMat;
     const specialGripMat = new THREE.MeshLambertMaterial({ color: 0x8b0000 });
     const grip2 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8), specialGripMat);
     grip2.position.y = 0.15;
@@ -896,6 +909,90 @@ export class Player {
     if (set === 'RACKET') soundManager.playBadmintonWhoosh();
   }
 
+  // 手持球棒 (第二世界為警棍) 棒尖世界座標，需於出招姿勢套用後呼叫；未持棒時回傳玩家位置
+  public getBatTipWorld(out: THREE.Vector3): THREE.Vector3 {
+    const gold = this.currentWeapon === 'SPECIAL_BAT';
+    const bat = gold ? this.specialBatMesh : this.normalBatMesh;
+    if (!bat || !bat.visible) return out.copy(this.position);
+    bat.updateWorldMatrix(true, false);
+    return bat.localToWorld(out.set(0, gold ? 1.02 : 0.89, 0));
+  }
+
+  // 取樣本招拖尾錨點 (世界座標)：W = 手持武器、RA / RL / LL = 右拳 / 右腳 / 左腳；需於姿勢套用後呼叫
+  public sampleSwingAnchors(move: KfMove, outBase: THREE.Vector3, outTip: THREE.Vector3): boolean {
+    let node: THREE.Object3D | null;
+    let by: number, ty: number, tz = 0;
+    switch (move.trailLimb) {
+      case 'W':
+        if (this.isHoldingRacket) { node = this.racketMesh; by = 0.66; ty = 0.98; }
+        else if (this.currentWeapon === 'SPECIAL_BAT') { node = this.specialBatMesh; by = 0.4; ty = 1.02; }
+        else { node = this.normalBatMesh; by = 0.35; ty = 0.89; }
+        break;
+      case 'RA': node = this.rightArm; by = 0; ty = -0.32; break;
+      case 'RL': node = this.rightLeg; by = 0; ty = -0.33; tz = 0.1; break;
+      default: node = this.leftLeg; by = 0; ty = -0.33; tz = 0.1; break;
+    }
+    if (!node || (move.trailLimb === 'W' && !node.visible)) return false;
+    node.updateWorldMatrix(true, false);
+    node.localToWorld(outBase.set(0, by, 0));
+    node.localToWorld(outTip.set(0, ty, tz));
+    return true;
+  }
+
+  // 結束拖尾與武器發光並還原材質原值
+  private endSwingFx() {
+    if (this.trailActive) swingTrail.end(this.trailSlot);
+    this.trailActive = false;
+    this.trailMove = null;
+    this.setWeaponGlow(0, 0);
+  }
+
+  // 武器 emissive 脈衝：k = 0..1 的相對強度，peak = 峰值 (0 還原為原值)
+  private setWeaponGlow(k: number, peak: number, color: number = 0xffffff) {
+    if (k <= 0) {
+      if (!this.weaponGlowOn) return;
+      this.weaponGlowOn = false;
+      this.goldMat.emissiveIntensity = 0.4;
+      this.batWoodMat.emissiveIntensity = 0;
+      return;
+    }
+    this.weaponGlowOn = true;
+    if (this.currentWeapon === 'SPECIAL_BAT') {
+      this.goldMat.emissiveIntensity = 0.4 + (peak - 0.4) * k;
+    } else {
+      this.batWoodMat.emissive.setHex(color);
+      this.batWoodMat.emissiveIntensity = peak * k;
+    }
+  }
+
+  // 依出招進度推進拖尾與武器發光 (於 kf.apply 之後呼叫)
+  private updateSwingFx() {
+    const move = this.kf.move;
+    // 僅一般連段套組出拖尾 (暗殺等專用招式不出)
+    if (!move || !PLAYER_COMBOS[this.comboSet].includes(move)) { if (this.trailActive || this.weaponGlowOn) this.endSwingFx(); return; }
+    const p = this.kf.progress;
+    const [from, to] = move.trail;
+    if (p < from || p > to) {
+      if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
+      return;
+    }
+    if (!this.trailActive || this.trailMove !== move) {
+      if (this.trailActive) swingTrail.end(this.trailSlot);
+      const id = resolveWeaponFxId(this.comboSet, this.currentWeapon === 'SPECIAL_BAT');
+      this.trailSlot = (this.trailSlot + 1) & 1;
+      swingTrail.begin(this.trailSlot, WEAPON_FX_STYLES[id], move.finisher);
+      this.trailActive = true;
+      this.trailMove = move;
+    }
+    if (this.sampleSwingAnchors(move, _trailBase, _trailTip)) swingTrail.push(this.trailSlot, _trailBase, _trailTip);
+    if (move.trailLimb === 'W' && !this.isHoldingRacket) {
+      const id = resolveWeaponFxId(this.comboSet, this.currentWeapon === 'SPECIAL_BAT');
+      const style = WEAPON_FX_STYLES[id];
+      const k = Math.sin(Math.PI * (p - from) / (to - from));
+      this.setWeaponGlow(k, style.glow * (move.finisher ? FINISHER_FX_BOOST.glow : 1), style.color);
+    }
+  }
+
   // 本幀命中時間點的打擊音效
   private playStrikeSound() {
     if (this.isHoldingRacket) return;
@@ -916,6 +1013,8 @@ export class Player {
     this.strikeMove = null;
     this.comboIndex = 0;
     this.sinceStrike = 99;
+    // 死亡 / 騎車等情況 update 會提前 return 而不再呼叫 updateKungFu，需於此立即收掉拖尾與武器發光
+    if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
   }
 
   // 提前收招並淡出 (切換武器時)
@@ -933,7 +1032,10 @@ export class Player {
     this.strikeMove = null;
     if (this.punchTimer > 0) this.punchTimer -= delta;
     this.sinceStrike += delta;
-    if (!this.kf.engaged) return;
+    if (!this.kf.engaged) {
+      if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
+      return;
+    }
     const move = this.kf.move;
     if (this.kf.update(delta) && move) {
       this.strikeMove = move;
@@ -947,6 +1049,7 @@ export class Player {
     this.kf.setLimbBase(0, -rest.x, rest.y, rest.z);
     this.kf.setLimbBase(1, rest.x, rest.y, rest.z);
     this.kf.apply(this.rotationY, this.isHoldingUmbrella ? 1 : 0, this.armPivot);
+    this.updateSwingFx();
     // 出招淡出結束當幀四肢已還原為基準位置，立即依目前姿勢重設肩軸位置 (避免蹲姿收招閃一幀)
     if (!this.kf.engaged) this.applyArmPivot();
   }
