@@ -196,18 +196,6 @@ export class BasketballGame {
     soundManager.playPunch();
   }
 
-  public resetBall(wantedSystem?: WantedSystem) {
-    this.isHolding = false;
-    this.isBallInAir = false;
-    this.isChargingShot = false;
-    this.shotChargeRatio = 0;
-    this.ballVelocity.set(0, 0, 0);
-    this.basketballMesh.position.copy(this.spawnPos);
-    if (wantedSystem) {
-      wantedSystem.showBanner('🏀 籃球已重新發球回西場頂弧三分點！', 2000);
-    }
-  }
-
   public update(
     delta: number,
     player: Player,

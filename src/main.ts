@@ -225,9 +225,6 @@ class SchoolGTASandbox implements GameContext {
     this.hud.onWorldToggle = () => {
       this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
     };
-    this.input.onToggleWorld(() => {
-      this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
-    });
     await nextFrame();
 
     // 階段 5 (92%)：初始化三分球、競速賽道、4F羽球館與電影劇院
@@ -242,12 +239,14 @@ class SchoolGTASandbox implements GameContext {
       this.hud.updateWeatherHUD(preset.badgeText);
       if (isManual) {
         const text = this.currentWorldType === 'DETENTION' ? preset.detentionBannerText : preset.bannerText;
-        this.wantedSystem.showBanner(`${text} (按 [P] 鍵切換)`, 2500);
+        this.wantedSystem.showBanner(text, 2500);
       }
     };
     this.hud.onWeatherToggle = () => {
       this.weatherSystem.cycleWeather();
     };
+    this.hud.getWeaponEquipEntries = () => this.progression.getWeaponEquipEntries();
+    this.hud.onEquipWeapon = this.progression.equipById;
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
     // 綁定按鍵互動與操作
@@ -277,7 +276,6 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定背景音樂 (BGM)
     this.hud.setupBGMClick(() => this.toggleBGM());
-    this.input.onToggleBGM(() => this.toggleBGM());
     bgmManager.onModeChange = (mode, isMuted) => {
       this.hud.updateBGMStatus(mode, isMuted);
     };
@@ -325,8 +323,6 @@ class SchoolGTASandbox implements GameContext {
     this.combat.resetTransientState();
     swingTrail.reset();
     comboFinisherFX.reset();
-    // 進入世界時展開快捷鍵指南，30 秒後自動收合
-    this.hud.showControlsGuide();
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
@@ -468,22 +464,12 @@ class SchoolGTASandbox implements GameContext {
     });
     this.input.onAttackRelease(this.releaseBasketballShot);
 
-    // 鍵盤按鍵監聽：數字鍵 1/2/3 武器切換、J 大地圖任務、K 快捷鍵指南、P 天氣、ESC/Enter 對話框、R 重置籃球
+    // 鍵盤按鍵監聽：J 大地圖任務、ESC/Enter 對話框
     window.addEventListener('keydown', (e) => {
       if (!this.isGameRunning || e.repeat) return;
       const hud = this.hud;
-      if (e.code === 'Digit1') {
-        this.progression.selectWeaponSlot(1);
-      } else if (e.code === 'Digit2') {
-        this.progression.selectWeaponSlot(2);
-      } else if (e.code === 'Digit3') {
-        this.progression.selectWeaponSlot(3);
-      } else if (e.code === 'KeyJ') {
+      if (e.code === 'KeyJ') {
         hud.toggleQuestTracker();
-      } else if (e.code === 'KeyK') {
-        hud.toggleControlsGuide();
-      } else if (e.code === 'KeyP') {
-        this.weatherSystem.cycleWeather();
       } else if (e.code === 'Escape') {
         if (hud.isFullMapOpen) hud.closeFullMap();
         if (hud.isCommissaryOpen) hud.closeCommissary();
@@ -492,11 +478,6 @@ class SchoolGTASandbox implements GameContext {
       } else if (e.code === 'Enter') {
         if (hud.isTennisDialogOpen) this.startTennisMatch();
         if (hud.isDodgeDialogOpen) hud.confirmDodgeLearn();
-      } else if (e.code === 'KeyR') {
-        if (!this.basketballGame.isHolding && !this.basketballGame.isBallInAir &&
-          this.player.position.distanceTo(this.world.basketballSpawnPos) < 40) {
-          this.basketballGame.resetBall(this.wantedSystem);
-        }
       }
     });
 

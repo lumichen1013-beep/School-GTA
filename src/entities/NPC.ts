@@ -2640,7 +2640,7 @@ export class NPC {
       // 2. 聽覺音效判定 (當未看見玩家時，判定腳步噪音)
       if (!this.isChasing) {
         if (isPlayerHiding || isPlayerSneaking) {
-          // 刺客草堆匿蹤掩體中 或 靜音潛行 (右鍵/Ctrl/輕推搖桿)：0 噪音！守衛不會察覺背後接近
+          // 刺客草堆匿蹤掩體中 或 靜音潛行 (右鍵/輕推搖桿)：0 噪音！守衛不會察覺背後接近
         } else if (isPlayerSprinting && distSq < 72.25) { // 疾跑 8.5m 內
           this.setAlertState('CAUTION');
           this.cautionTimer = 3.5;

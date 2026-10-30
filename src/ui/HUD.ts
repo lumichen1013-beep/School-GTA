@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { DETENTION_MAP_FEATURES, DETENTION_MAP_AREA_LABELS, DETENTION_ROADS, DETENTION_TOWERS, SEARCHLIGHT_TOWER, GATE_WALLS, GATE_A_Z, GATE_B_Z, DetentionMapKind } from '../world/detentionLayout';
 
+type FullMapTab = 'map' | 'gear' | 'quest';
+
 // 第二世界雷達與大地圖的場景分類配色
 const DETENTION_RADAR_COLORS: Record<DetentionMapKind, string> = {
   building: '#10b981', structure: '#38bdf8', fence: '#34d399', barrier: '#a3e635', container: '#059669', pillar: '#eab308'
@@ -15,6 +17,8 @@ const DETENTION_FULLMAP_STYLES: Record<DetentionMapKind, { fill: string; stroke:
 };
 import { NPC, NPCRole } from '../entities/NPC';
 import { Bicycle } from '../vehicles/Bicycle';
+import type { WeaponEquipEntry } from '../game/Progression';
+import type { WeaponId } from '../weapons/types';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, getCampusZoneName } from '../world/campusLayout';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
@@ -247,6 +251,14 @@ export class HUD {
   private lastFullmapLegendWorld: 'CAMPUS' | 'DETENTION' | null = null;
   private minimapWrapperEl: HTMLElement | null;
   public isFullMapOpen: boolean = false;
+  // 大地圖分頁：每次開啟預設回到【地圖】(任務小介面則直接開【任務】)；地圖畫布僅在【地圖】分頁時繪製
+  private fullmapTab: FullMapTab = 'map';
+  private fullmapTabBtns: HTMLElement[] = [];
+  private fullmapPanes: HTMLElement[] = [];
+  private fullmapGearListEl: HTMLElement | null = null;
+  // 【裝備】分頁資料與裝備回呼 (由 main 接 Progression)
+  public getWeaponEquipEntries?: () => WeaponEquipEntry[];
+  public onEquipWeapon?: (id: WeaponId) => boolean;
 
   constructor() {
     this.canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
@@ -308,7 +320,7 @@ export class HUD {
     this.worldBadgeEl = document.getElementById('world-badge');
     this.worldTextEl = document.getElementById('world-text');
     if (this.worldBadgeEl) {
-      // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 (與 M 鍵同流程)
+      // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
         this.closeFullMap(false); // 接著開啟世界選擇視窗，維持滑鼠解鎖以便點選
@@ -415,12 +427,23 @@ export class HUD {
     window.addEventListener('app-layout-change', syncMinimapResolution);
     syncMinimapResolution();
 
-    // 快捷鍵指南：點擊面板切換展開 / 收合
-    const controlsPanelEl = document.getElementById('controls-panel');
-    if (controlsPanelEl) {
-      controlsPanelEl.addEventListener('click', (e) => {
+    // 大地圖分頁列 (點擊 / 觸控切換)
+    this.fullmapTabBtns = Array.from(document.querySelectorAll<HTMLElement>('.fm-tab-btn'));
+    this.fullmapPanes = Array.from(document.querySelectorAll<HTMLElement>('.fullmap-pane'));
+    this.fullmapGearListEl = document.getElementById('fm-gear-list');
+    for (const btn of this.fullmapTabBtns) {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.toggleControlsGuide();
+        this.setFullMapTab(btn.dataset.fmTab as FullMapTab);
+      });
+    }
+    // 裝備卡片：事件委派，點擊已解鎖且本世界可用的武器即裝備，成功後重繪清單
+    if (this.fullmapGearListEl) {
+      this.fullmapGearListEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = (e.target as HTMLElement).closest<HTMLElement>('.gear-card');
+        if (!card || !card.dataset.weaponId) return;
+        if (this.onEquipWeapon && this.onEquipWeapon(card.dataset.weaponId as WeaponId)) this.renderGearPanel();
       });
     }
 
@@ -913,9 +936,51 @@ export class HUD {
     }, duration);
   }
 
-  // 開啟全螢幕大地圖
-  public openFullMap() {
+  // 切換大地圖分頁；裝備清單僅在切入時渲染，地圖畫布僅在【地圖】分頁時繪製
+  private setFullMapTab(tab: FullMapTab) {
+    this.fullmapTab = tab;
+    for (const btn of this.fullmapTabBtns) {
+      const active = btn.dataset.fmTab === tab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+    for (const pane of this.fullmapPanes) pane.hidden = pane.dataset.fmPane !== tab;
+    if (tab === 'map') this.lastFullmapRenderAt = 0; // 切回地圖時立即補繪
+    if (tab === 'gear') this.renderGearPanel();
+  }
+
+  // 【裝備】分頁：依 Progression 提供的武器狀態重建清單 (開啟分頁 / 裝備後才呼叫)
+  private renderGearPanel() {
+    const list = this.fullmapGearListEl;
+    if (!list || !this.getWeaponEquipEntries) return;
+    const labels: Record<WeaponEquipEntry['status'], string> = {
+      equipped: '✅ 已裝備', unlocked: '🟢 已解鎖・點擊裝備', locked: '🔒 未解鎖', unavailable: '🚫 本世界不可用'
+    };
+    const cards = this.getWeaponEquipEntries().map((w) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = `gear-card is-${w.status}`;
+      card.dataset.weaponId = w.id;
+      const add = (cls: string, text: string, tag = 'span') => {
+        const el = document.createElement(tag);
+        el.className = cls;
+        el.textContent = text;
+        card.appendChild(el);
+      };
+      add('gear-icon', w.icon);
+      add('gear-name', w.name);
+      add('gear-stats', `ATK ${w.damage}　射程 ${w.reach}`);
+      add('gear-status', labels[w.status]);
+      if (w.hint) add('gear-hint', w.hint);
+      return card;
+    });
+    list.replaceChildren(...cards);
+  }
+
+  // 開啟全螢幕大地圖 (預設【地圖】分頁)
+  public openFullMap(tab: FullMapTab = 'map') {
     this.isFullMapOpen = true;
+    this.setFullMapTab(tab);
     this.lastFullmapRenderAt = 0; // 開啟時立即繪製第一幀
     // 解除滑鼠指標鎖定，使 PC 玩家可點選任務分類與捲動清單 (按 J 開啟時仍處於鎖定)
     if (document.pointerLockElement) {
@@ -987,39 +1052,15 @@ export class HUD {
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
   }
 
-  // 武器 HUD 狀態更新 (依需求已移除右上角武器欄，狀態與進度統一由左側任務看板呈現)
-  // 任務清單已整合進大地圖：開啟 / 關閉 / 切換大地圖任務側欄 (J 鍵與任務小介面共用)
+  // 任務清單已整合進大地圖【任務】分頁：開啟 / 關閉 / 切換 (J 鍵開地圖分頁；任務小介面直達任務分頁)
   public toggleQuestTracker(expand?: boolean) {
     if (expand === undefined) {
       this.toggleFullMap();
     } else if (expand) {
-      this.openFullMap();
+      this.openFullMap('quest');
     } else {
       this.closeFullMap();
     }
-  }
-
-  // 鍵盤快捷鍵指南：進入世界時完整展開，30 秒後自動收合為「⌨️ K 快捷鍵」小標籤
-  private controlsGuideTimer: number = 0;
-  public showControlsGuide(autoCollapseMs: number = 30000) {
-    const panel = document.getElementById('controls-panel');
-    if (!panel) return;
-    panel.classList.remove('collapsed');
-    if (this.controlsGuideTimer) window.clearTimeout(this.controlsGuideTimer);
-    this.controlsGuideTimer = window.setTimeout(() => {
-      panel.classList.add('collapsed');
-      this.controlsGuideTimer = 0;
-    }, autoCollapseMs);
-  }
-
-  public toggleControlsGuide() {
-    const panel = document.getElementById('controls-panel');
-    if (!panel) return;
-    if (this.controlsGuideTimer) {
-      window.clearTimeout(this.controlsGuideTimer);
-      this.controlsGuideTimer = 0;
-    }
-    panel.classList.toggle('collapsed');
   }
 
   // 同步任務小介面與大地圖任務側欄的標題、總進度與進度條
@@ -1351,7 +1392,7 @@ export class HUD {
   public openWorldModal(currentWorld: 'CAMPUS' | 'DETENTION', onSwitch: (world: 'CAMPUS' | 'DETENTION') => void) {
     if (!this.worldModalEl) return;
     this.isWorldModalOpen = true;
-    // 解除滑鼠指標鎖定，使 PC 玩家 (含按 M 開啟時) 可點選世界卡片
+    // 解除滑鼠指標鎖定，使 PC 玩家 可點選世界卡片
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
@@ -1516,8 +1557,8 @@ export class HUD {
     this.renderMinimap(playerPos, playerRotY, npcs, bicycles, delta, currentWorld, detentionData);
 
     // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
-    // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪
-    if (this.isFullMapOpen) {
+    // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪；切到【裝備】/【任務】分頁時暫停繪製
+    if (this.isFullMapOpen && this.fullmapTab === 'map') {
       const nowMs = performance.now();
       if (nowMs - this.lastFullmapRenderAt >= 50) {
         this.lastFullmapRenderAt = nowMs;

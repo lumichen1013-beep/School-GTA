@@ -543,14 +543,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   color: #bdc3c7;
 }
 
-.bgm-key-hint {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 10px;
-  color: #ffcc00;
-}
-
 @keyframes bgmPulse {
   from { transform: scale(1); filter: brightness(1); }
   to { transform: scale(1.04); filter: brightness(1.2); }
@@ -1458,57 +1450,13 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   to { transform: translateX(-50%) scale(1.02); opacity: 1; }
 }
 
-/* Bottom Section (PC Controls Guide Left, Mobile Left is completely clean for joystick) */
+/* Bottom Section (skill card; mobile left is completely clean for joystick) */
 .hud-bottom {
   display: flex;
   justify-content: flex-start;
   align-items: flex-end;
   width: 100%;
   pointer-events: none;
-}
-
-/* Controls Guide Overlay */
-.controls-panel {
-  background: rgba(13, 19, 33, 0.78);
-  backdrop-filter: blur(8px);
-  padding: 10px 14px;
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 11px;
-  line-height: 1.7;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  pointer-events: auto;
-}
-
-.controls-panel-title {
-  font-weight: 800;
-  color: #ffcc00;
-  margin-bottom: 4px;
-  font-size: 11.5px;
-  letter-spacing: 0.5px;
-}
-.controls-panel-hint {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 11px;
-}
-/* 快捷鍵指南收合：進入世界 30 秒後自動收為小標籤，按 K / 點擊切換 */
-.controls-guide-chip {
-  display: none;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.controls-panel.collapsed {
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.controls-panel.collapsed > div {
-  display: none;
-}
-.controls-panel.collapsed > .controls-guide-chip {
-  display: block;
 }
 
 .key-badge {
@@ -2201,13 +2149,11 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   border-radius: 6px;
   white-space: nowrap;
 }
-/* 大地圖工具列 (標題列右側)：BGM / 天氣 / 世界切換 */
+/* 大地圖工具列 (【地圖】分頁側欄)：BGM / 天氣 / 世界切換 */
 .fullmap-toolbar {
-  margin-left: auto;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
 .fullmap-toolbar .bgm-badge,
@@ -2216,6 +2162,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   box-sizing: border-box;
   white-space: nowrap;
   box-shadow: none;
+  justify-content: space-between;
 }
 .fullmap-toolbar .bgm-badge {
   border: 1px solid rgba(56, 189, 248, 0.35);
@@ -2252,32 +2199,171 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .world-current {
   color: #38bdf8;
 }
-.tool-key-hint {
-  font-size: 10px;
-  padding: 1px 4px;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 3px;
-  color: #ffd32a;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  font-weight: bold;
-}
 .fullmap-coords {
   font-family: monospace;
   font-size: 13px;
   color: #94a3b8;
   white-space: nowrap;
 }
-/* 主體：左欄任務清單 (窄) + 右側地圖 (填滿剩餘寬高) */
-.fullmap-body {
+/* 分頁列：地圖 / 裝備 / 任務 */
+.fullmap-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+.fm-tab-btn {
+  min-height: 38px;
+  padding: 0 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(15, 23, 42, 0.88);
+  color: #94a3b8;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.fm-tab-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #e2e8f0;
+}
+.fm-tab-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+/* 分頁內容：一次只顯示一個 (hidden 屬性切換) */
+.fullmap-pane {
   flex: 1 1 auto;
   min-height: 0;
+}
+.fullmap-pane[hidden] {
+  display: none;
+}
+/* 【地圖】分頁：左側地圖 (填滿剩餘寬高) + 右側側欄 (工具列 / 圖例 / 快捷鍵說明) */
+.fullmap-pane-map {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
 }
-/* 大地圖任務清單側欄 (由主畫面任務小介面整合而來) */
+.fullmap-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.fullmap-side .fullmap-legend-box {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.fullmap-keys {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.fullmap-keys-title {
+  font-weight: 800;
+  color: #ffcc00;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+/* 【裝備】分頁：武器卡片格線 */
+.fullmap-pane-gear {
+  overflow-y: auto;
+}
+.fullmap-gear-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.gear-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  align-content: start;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  text-align: left;
+  font-family: inherit;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.gear-card.is-locked,
+.gear-card.is-unavailable {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.gear-card.is-equipped {
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+  cursor: default;
+}
+.gear-card.is-unlocked:hover {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+.gear-icon {
+  grid-row: 1 / span 3;
+  font-size: 34px;
+  line-height: 1;
+}
+.gear-name {
+  font-size: 15px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.gear-stats {
+  font-size: 13px;
+  font-family: monospace;
+  color: #94a3b8;
+}
+.gear-status {
+  justify-self: start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+.gear-card.is-equipped .gear-status { background: rgba(56, 189, 248, 0.25); color: #38bdf8; }
+.gear-card.is-unlocked .gear-status { background: rgba(34, 197, 94, 0.25); color: #4ade80; }
+.gear-card.is-locked .gear-status { background: rgba(245, 158, 11, 0.22); color: #fbbf24; }
+.gear-card.is-unavailable .gear-status { background: rgba(239, 68, 68, 0.22); color: #f87171; }
+.gear-hint {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+  overflow-wrap: anywhere;
+}
+/* 【任務】分頁：清單佔滿分頁 (大螢幕限寬置中) */
+.fullmap-pane-quest {
+  display: flex;
+  justify-content: center;
+}
+.fullmap-pane-quest .fullmap-quest-panel {
+  width: 100%;
+  max-width: 900px;
+}
+/* 大地圖任務清單 (由主畫面任務小介面整合而來) */
 .fullmap-quest-panel {
-  order: -1;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3121,11 +3207,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     font-size: 11px !important;
   }
 
-  /* 觸控裝置隱藏鍵位提示 */
-  .tool-key-hint, .bgm-key-hint {
-    display: none !important;
-  }
-
   /* ⚙️ 設定按鈕與下拉選單：觸控目標 44px */
   .hud-settings-btn {
     width: 44px !important;
@@ -3184,6 +3265,19 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   .quest-key-badge {
     display: none !important;
   }
+  /* 大地圖分頁列：觸控目標至少 44px，三顆均分寬度 */
+  .fm-tab-btn {
+    flex: 1 1 0;
+    min-height: 44px !important;
+    padding: 0 6px !important;
+    font-size: 14px !important;
+  }
+  .gear-card {
+    min-height: 44px;
+  }
+  .fullmap-keys {
+    font-size: 12px;
+  }
   /* 大地圖任務側欄：手機端維持可讀字級與 36px 以上觸控高度 */
   .fullmap-modal-card {
     padding: 12px 14px !important;
@@ -3202,11 +3296,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .q-name {
     font-size: 12px !important;
-  }
-
-  /* 控制導引在手機端隱藏，完全淨空左下角 */
-  .controls-panel {
-    display: none !important;
   }
 
   /* 底部導引區在觸控模式靠右排列，避免佔用左側搖桿空間 */
@@ -3406,8 +3495,19 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     max-height: calc(100dvh - 16px) !important;
     overflow-y: auto !important;
   }
-  .fullmap-body {
+  .fullmap-pane {
     flex: 0 0 auto !important;
+  }
+  .fullmap-pane-map {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .fullmap-side {
+    overflow-y: visible !important;
+  }
+  .fullmap-pane-gear {
+    overflow-y: visible !important;
+  }
+  .fullmap-gear-list {
     grid-template-columns: minmax(0, 1fr) !important;
   }
   .fullmap-map-area {
@@ -3417,30 +3517,18 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     width: 100cqw !important;
     height: 100cqw !important;
   }
-  .fullmap-quest-panel {
-    order: 0 !important;
-  }
   .fullmap-subtitle, .fullmap-coords {
     display: none !important;
   }
   .fullmap-title {
     font-size: 16px !important;
   }
-  /* 直屏標題列：第一行標題 + 世界徽章與關閉鈕，第二行工具列靠右 */
-  .fullmap-header {
-    flex-wrap: wrap !important;
-    row-gap: 8px !important;
-  }
+  /* 直屏標題列：標題 + 世界徽章與關閉鈕 */
   .fullmap-title-group {
     flex: 1 1 0 !important;
   }
   .fullmap-header-meta {
-    order: 1 !important;
     gap: 8px !important;
-  }
-  .fullmap-toolbar {
-    order: 2 !important;
-    flex: 1 1 100% !important;
   }
 
   /* 直屏窄屏優化：左下蘑菇頭尺寸 (按鍵扇形佈局與安全區定位統一於手機通用區塊) */
@@ -3456,7 +3544,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 
 /* 手機橫屏模式 (高度 <= 520px) 極致緊湊優化 */
 @media (max-height: 520px) {
-  /* 橫屏大地圖：任務清單窄左欄 (220px)，地圖填滿右側全高；標題列單行精簡 */
+  /* 橫屏大地圖：地圖填滿左側全高，右側窄側欄 (230px) 可捲動；標題列單行精簡 */
   .fullmap-modal-card {
     width: calc(100vw - 2 * max(8px, env(safe-area-inset-left, 0px))) !important;
     height: calc(100dvh - 12px) !important;
@@ -3467,20 +3555,24 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     flex-wrap: nowrap !important;
     padding-bottom: 6px !important;
   }
-  .fullmap-body {
-    grid-template-columns: 220px minmax(0, 1fr) !important;
+  .fm-tab-btn {
+    flex: 0 0 auto !important;
+    padding: 0 24px !important;
+  }
+  .fullmap-pane-map {
+    grid-template-columns: minmax(0, 1fr) 230px !important;
     gap: 10px !important;
   }
-  /* 橫屏高度有限：隱藏副標、座標、世界徽章與圖例，讓任務清單與地圖保有空間 */
+  .fullmap-gear-list {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  }
+  /* 橫屏高度有限：隱藏副標、座標、世界徽章與圖例，讓地圖與側欄保有空間 */
   .fullmap-subtitle, .fullmap-coords, .fullmap-badge, .fullmap-legend-box {
     display: none !important;
   }
   .fullmap-title {
     font-size: 14px !important;
     white-space: nowrap !important;
-  }
-  .fullmap-toolbar {
-    flex-wrap: nowrap !important;
   }
   #hud-overlay {
     padding: max(4px, env(safe-area-inset-top, 4px)) max(8px, env(safe-area-inset-right, 8px)) max(4px, env(safe-area-inset-bottom, 4px)) max(8px, env(safe-area-inset-left, 8px)) !important;
@@ -3622,9 +3714,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 /* 手動開啟觸控模式時的電腦端自適應 */
 body.touch-mode-active #mobile-controls-container {
   display: block !important;
-}
-body.touch-mode-active .controls-panel {
-  display: none !important;
 }
 body.touch-mode-active .hud-bottom {
   justify-content: flex-end !important;

@@ -1110,10 +1110,8 @@ export class Player {
     const isDowned = this.knockdownTimer > 0;
     const locked = this.isCinematicLocked || isDowned;
     const hasVirtualJoystick = input.virtualAxisMagnitude > 0.05;
-    const hasKeyboard = !!(input.keys['KeyW'] || input.keys['ArrowUp'] ||
-                          input.keys['KeyS'] || input.keys['ArrowDown'] ||
-                          input.keys['KeyA'] || input.keys['ArrowLeft'] ||
-                          input.keys['KeyD'] || input.keys['ArrowRight']);
+    const hasKeyboard = !!(input.keys['KeyW'] || input.keys['KeyS'] ||
+                          input.keys['KeyA'] || input.keys['KeyD']);
     const wantsSprint = !locked && input.sprint;
     const wantsJump = !locked && input.jump;
 
@@ -1144,13 +1142,10 @@ export class Player {
     this.isMoving = isMoving;
 
     // 潛龍諜影潛行步態 (MGS Sneak Mode)
-    // 電腦版：按住滑鼠右鍵進入靜音蹲伏（亦支援 Ctrl）。
+    // 電腦版：按住滑鼠右鍵進入靜音蹲伏。
     // 手機版 (特訓院)：預設為潛行姿態，搖桿推至半徑 90% 內 (含靜止不動) 皆維持潛行，超過 90% 才改為一般步行，按「跑」則取消潛行改為衝刺。
     // 躲入草堆掩體時一律保持潛行，不受搖桿影響。
-    const isSneakTriggered = !locked && (input.mouseButtons.right || !!(
-      input.keys['ControlLeft'] ||
-      input.keys['ControlRight']
-    ));
+    const isSneakTriggered = !locked && input.mouseButtons.right;
     const isJoystickSneak = !locked && input.isTouchDevice && input.joystickSneakEnabled && !hasKeyboard && !this.isSwimming &&
       input.virtualAxisMagnitude <= JOYSTICK_SNEAK_RADIUS && !(wantsSprint && isMoving);
     this.isSneaking = this.isHidingInCover || isSneakTriggered || isJoystickSneak;

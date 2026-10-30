@@ -43,8 +43,6 @@ export class InputManager {
   private onSkillCallback: (() => void) | null = null;
   private onAttackCallback: (() => void) | null = null;
   private onAttackReleaseCallback: (() => void) | null = null;
-  private onToggleBGMCallback: (() => void) | null = null;
-  private onToggleWorldCallback: (() => void) | null = null;
   private lastMouseX: number | null = null;
   private lastMouseY: number | null = null;
 
@@ -57,10 +55,6 @@ export class InputManager {
 
   private initListeners() {
     window.addEventListener('keydown', (e) => {
-      // 避免瀏覽器 Ctrl+S (存檔)、Ctrl+D (書籤)、Ctrl+A (全選) 等原生快捷鍵在遊戲時干擾
-      if (e.ctrlKey && (e.code === 'KeyS' || e.code === 'KeyD' || e.code === 'KeyA')) {
-        e.preventDefault();
-      }
       this.keys[e.code] = true;
       // 長按自動重複的 keydown 不重複觸發動作 (F 保留長按連續攻擊)
       if (e.repeat && e.code !== 'KeyF') return;
@@ -73,16 +67,6 @@ export class InputManager {
       if (e.code === 'KeyF') {
         // F 鍵與攻擊鍵完全合併：觸發攻擊/暗殺
         if (this.onAttackCallback) this.onAttackCallback();
-      }
-      if (e.code === 'KeyM') {
-        if (this.onToggleWorldCallback) {
-          this.onToggleWorldCallback();
-        } else if (this.onToggleBGMCallback) {
-          this.onToggleBGMCallback();
-        }
-      }
-      if (e.code === 'KeyB') {
-        if (this.onToggleBGMCallback) this.onToggleBGMCallback();
       }
     });
 
@@ -304,14 +288,6 @@ export class InputManager {
     this.onAttackReleaseCallback = callback;
   }
 
-  public onToggleBGM(callback: () => void) {
-    this.onToggleBGMCallback = callback;
-  }
-
-  public onToggleWorld(callback: () => void) {
-    this.onToggleWorldCallback = callback;
-  }
-
   // 每幀消耗累積的旋轉位移
   // 回傳內部重複使用的物件 (每幀呼叫一次，不配置新物件)
   private readonly mouseDeltaOut = { x: 0, y: 0 };
@@ -323,21 +299,21 @@ export class InputManager {
     return this.mouseDeltaOut;
   }
 
-  // 方向鍵與移動狀態判定 (整合鍵盤與手機虛擬搖桿)
+  // 移動狀態判定 (整合鍵盤與手機虛擬搖桿)
   public get forward(): boolean {
-    return !!(this.keys['KeyW'] || this.keys['ArrowUp'] || this.virtualAxisY < -0.25);
+    return !!(this.keys['KeyW'] || this.virtualAxisY < -0.25);
   }
 
   public get backward(): boolean {
-    return !!(this.keys['KeyS'] || this.keys['ArrowDown'] || this.virtualAxisY > 0.25);
+    return !!(this.keys['KeyS'] || this.virtualAxisY > 0.25);
   }
 
   public get left(): boolean {
-    return !!(this.keys['KeyA'] || this.keys['ArrowLeft'] || this.virtualAxisX < -0.25);
+    return !!(this.keys['KeyA'] || this.virtualAxisX < -0.25);
   }
 
   public get right(): boolean {
-    return !!(this.keys['KeyD'] || this.keys['ArrowRight'] || this.virtualAxisX > 0.25);
+    return !!(this.keys['KeyD'] || this.virtualAxisX > 0.25);
   }
 
   public get sprint(): boolean {
