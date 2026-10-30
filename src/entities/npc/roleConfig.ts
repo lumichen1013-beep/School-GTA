@@ -47,28 +47,28 @@ export const ROLE_CONFIG: Record<NPCRole, NPCRoleConfig> = {
   // 閃身步老師 (教學大樓身法宗師)
   DODGE_TEACHER: { ...BASE, maxHp: 9999, baseSpeed: 4.5, jitterScale: 0, chaseSpeed: 9.0, attackPower: 0, attackRange: 2.0, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.50, canCarryUmbrella: true },
   // 大如老師 (4F 羽球教練)：爆炸頭頂約 2.19m，血條抬高避免被頭髮遮擋
-  PE_TEACHER_BOSS: { ...BASE, maxHp: 950, baseSpeed: 4.2, jitterScale: 0, chaseSpeed: 8.5, attackPower: 20, attackRange: 2.4, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.40, hpBarY: 2.4 },
+  PE_TEACHER_BOSS: { ...BASE, maxHp: 665, baseSpeed: 4.2, jitterScale: 0, chaseSpeed: 8.5, attackPower: 9, attackRange: 2.4, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.40, hpBarY: 2.4 },
   // 巡堂老師：威嚴步巡
-  TEACHER: { ...BASE, maxHp: 315, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
+  TEACHER: { ...BASE, maxHp: 220, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 8, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
   // 校園執法者 (生教組長 / 主任教官)：威嚴步巡，戰鬥積極度比照第二世界守衛 (踉蹌、霸體、追捕最低速度、包夾)
-  DISCIPLINE_CHIEF: { ...BASE, maxHp: 500, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 16, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.85 },
-  INSTRUCTOR: { ...BASE, maxHp: 600, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 20, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.8 },
+  DISCIPLINE_CHIEF: { ...BASE, maxHp: 350, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 8, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.85 },
+  INSTRUCTOR: { ...BASE, maxHp: 420, baseSpeed: 4.8, jitterScale: 1, chaseSpeed: 10.0, attackPower: 9, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true, aggressiveCombat: true, attackInterval: 0.8 },
   // 校外強盜：手持砍刀在圍牆外徘徊
-  BANDIT: { ...BASE, maxHp: 180, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 44, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
+  BANDIT: { ...BASE, maxHp: 130, baseSpeed: 8.5, jitterScale: 0.6, chaseSpeed: 16.5, attackPower: 10, attackRange: 1.9, defaultStyle: 'CASUAL_WALK', pauseChance: 0.40 },
   // 校犬柴柴：敏捷四足犬
-  DOG: { ...BASE, maxHp: 630, baseSpeed: 3.8, jitterScale: 0.4, chaseSpeed: 11.5, attackPower: 17, attackRange: 2.0, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.65, isCanine: true, hpBarY: 1.05, viewDist: 22.0, eyeHeight: 0.6, chaseAccelRate: 6.0 },
+  DOG: { ...BASE, maxHp: 440, baseSpeed: 3.8, jitterScale: 0.4, chaseSpeed: 11.5, attackPower: 7, attackRange: 2.0, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.65, isCanine: true, hpBarY: 1.05, viewDist: 22.0, eyeHeight: 0.6, chaseAccelRate: 6.0 },
   // 火柴人自行車騎士：巡邏與追捕速度統一為 14.8 (略低於玩家騎車 15.0：直線上緊咬在後但追不上)
-  BIKE_PATROL: { ...BASE, maxHp: 225, baseSpeed: 14.8, jitterScale: 0, chaseSpeed: 14.8, attackPower: 15, attackRange: 2.4, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.30, viewDist: 16.0, chaseAccelRate: 8.0 },
+  BIKE_PATROL: { ...BASE, maxHp: 160, baseSpeed: 14.8, jitterScale: 0, chaseSpeed: 14.8, attackPower: 6, attackRange: 2.4, defaultStyle: 'CASUAL_WALK', styleFixed: true, pauseChance: 0.30, viewDist: 16.0, chaseAccelRate: 8.0 },
   // 風紀糾察 (步巡)
-  INSPECTOR: { ...BASE, maxHp: 158, baseSpeed: 4.9, jitterScale: 1, chaseSpeed: 10.0, attackPower: 13, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
+  INSPECTOR: { ...BASE, maxHp: 110, baseSpeed: 4.9, jitterScale: 1, chaseSpeed: 10.0, attackPower: 5, attackRange: 1.8, defaultStyle: 'OFFICER_PATROL', pauseChance: 0.55, canCarryUmbrella: true },
   // 平民學生：速度依移動風格決定
-  STUDENT: { ...BASE, maxHp: 112, baseSpeed: 0, jitterScale: 0, chaseSpeed: 0, attackPower: 8, attackRange: 1.6, defaultStyle: null, pauseChance: 0, canCarryUmbrella: true },
+  STUDENT: { ...BASE, maxHp: 80, baseSpeed: 0, jitterScale: 0, chaseSpeed: 0, attackPower: 3, attackRange: 1.6, defaultStyle: null, pauseChance: 0, canCarryUmbrella: true },
   // 特訓教官：防暴盾與指揮棒，慢速巡邏讓玩家潛行可追近背刺
   DETENTION_GUARD: { ...DETENTION, maxHp: 260, baseSpeed: 1.45, chaseSpeed: 7.6, attackPower: 13, defaultStyle: 'OFFICER_PATROL', viewDist: 22.0 },
   // 特訓資深學長
   DETENTION_SENIOR: { ...DETENTION, maxHp: 200, baseSpeed: 1.50, chaseSpeed: 8.2, attackPower: 16, defaultStyle: 'OFFICER_PATROL' },
   // 重訓霸榜生
-  DETENTION_HEAVY: { ...DETENTION, maxHp: 380, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 21, defaultStyle: 'OFFICER_PATROL' },
+  DETENTION_HEAVY: { ...DETENTION, maxHp: 380, baseSpeed: 1.30, chaseSpeed: 6.6, attackPower: 16, defaultStyle: 'OFFICER_PATROL' },
   // 特訓狼犬：敏捷
   DETENTION_WOLF: { ...DETENTION, maxHp: 260, baseSpeed: 1.80, chaseSpeed: 8.6, attackPower: 11, defaultStyle: 'JOGGING', styleFixed: true, isCanine: true, hpBarY: 1.05, viewDist: 22.0 },
   // 總教官 Boss【鐵面總長】

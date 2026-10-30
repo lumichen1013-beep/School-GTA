@@ -7,8 +7,8 @@ import type { GameContext } from './GameContext';
 // 武器切換提示文字 (第一世界 / 第二世界)
 const WEAPON_EQUIP_BANNERS: Record<WeaponType, { campus: string; detention: string }> = {
   FIST: { campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' },
-  NORMAL_BAT: { campus: '🏏 切換武器：普通木質棒球棍 (ATK 55)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 55)' },
-  SPECIAL_BAT: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 120)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 120)' }
+  NORMAL_BAT: { campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' },
+  SPECIAL_BAT: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' }
 };
 
 // 擊敗各角色的獎金與擊倒統計計數 (未列出的角色預設獎金 20)
@@ -136,7 +136,7 @@ export class Progression {
     if (role === 'STUDENT' && this.studentDefeatedCount >= 5 && !player.hasNormalBat) {
       player.hasNormalBat = true;
       player.setWeapon('NORMAL_BAT');
-      wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(按 2 裝備，ATK 55)', 6000);
+      wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(按 2 裝備，ATK 35)', 6000);
       soundManager.playBatHit();
     }
     return entry;
@@ -148,7 +148,7 @@ export class Progression {
     if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !player.hasSpecialBat) {
       player.hasSpecialBat = true;
       player.setWeapon('SPECIAL_BAT');
-      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 120)', 7000);
+      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(按 3 裝備，ATK 70)', 7000);
       soundManager.playSpecialBatHit();
     }
   }

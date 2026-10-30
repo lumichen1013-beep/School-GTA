@@ -36,6 +36,7 @@ export class DetentionMode {
   public escapeStartTime: number = 0;
   public takedownCount: number = 0;
   public frontalKoCount: number = 0; // 以一般攻擊 (非暗殺) 擊倒的人數
+  public readonly usedGymStations = new Set<string>(); // 本局已使用過的健身補給站 (每站限用一次)
   public alertCount: number = 0;
   public alertPhase: AlertPhase = 'NORMAL';
   public alertTimer: number = 0; // EVASION / CAUTION 階段剩餘秒數
@@ -76,6 +77,7 @@ export class DetentionMode {
     this.escapeStartTime = performance.now();
     this.takedownCount = 0;
     this.frontalKoCount = 0;
+    this.usedGymStations.clear();
     this.alertCount = 0;
     this.hasKeycardA = false;
     this.hasKeycardB = false;

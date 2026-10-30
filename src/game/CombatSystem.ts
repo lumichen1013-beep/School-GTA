@@ -52,10 +52,11 @@ const DETENTION_FRONTAL_DMG_MULT = 0.6;
 const DETENTION_BOSS_DMG_MULT = 0.5;
 const BOSS_CHARGE_DAMAGE = 34; // 總教官狂暴衝撞命中傷害
 // NPC 攻擊間隔：一般 0.85 秒；第二世界守衛警戒 (ALERT) 時加快為 0.6 秒
+const BIKE_RAM_DAMAGE = 50; // 騎車衝撞 NPC 固定傷害
 const NPC_ATTACK_INTERVAL = 0.85;
-const GRAB_THROW_DAMAGE = 20; // 主任教官擒拿摔
+const GRAB_THROW_DAMAGE = 10; // 主任教官擒拿摔
 const GRAB_THROW_DOWN_TIME = 0.7; // 擒拿摔落地後倒地秒數
-const RULER_STRIKE_DAMAGE = 8; // 生教組長戒尺連打 (每下)
+const RULER_STRIKE_DAMAGE = 4; // 生教組長戒尺連打 (每下)
 const BIG_MOVE_INTERRUPT_CHANCE = 0.5; // 玩家出招中被大招 (擒拿摔、戒尺連打、總教官衝撞/迴旋踢) 打斷的機率
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
@@ -768,7 +769,7 @@ export class CombatSystem {
     for (const npc of this.ctx.npcs) {
       if (npc.position.distanceTo(targetPosition) < 2.5 && !npc.isKnockedDown && !npc.isKnockedFlying && npc.hitCooldown <= 0) {
         const speed = Math.abs(bike.speed);
-        const dmg = Math.round(speed * 4.5 + 20);
+        const dmg = BIKE_RAM_DAMAGE;
         this.ctx.wantedSystem.reportCrime(2, '火柴人自行車高速衝撞師生');
 
         _scratchBikeForward.set(Math.sin(bikeRotY), 0, Math.cos(bikeRotY)).normalize();
@@ -869,7 +870,7 @@ export class CombatSystem {
       // 校園執法者招牌技 (擒拿摔 3m 內撲抓、戒尺連打貼身)：追捕中冷卻完畢且未在出招時發動
       if (
         npc.isEnforcer && !isSpawnGraceActive && npc.isChasing && !player.isDead && npc.attackCooldown <= 0 &&
-        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0 && !npc.enforcerHoldAttack
+        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0 && !npc.attackHold
       ) {
         const sig = npc.canStartSignature(distToPlayer, targetPosition.y - npc.position.y);
         if (sig) {
@@ -877,8 +878,8 @@ export class CombatSystem {
           continue;
         }
       }
-      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)；執法者輪流出手時非本輪者不出手
-      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning || npc.enforcerHoldAttack) continue;
+      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)；第一世界圍攻未持出手權杖者不出手 (見 AttackTokenCoordinator)
+      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning || npc.attackHold) continue;
 
       npc.attackCooldown = this.getNpcAttackInterval(npc);
       // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算

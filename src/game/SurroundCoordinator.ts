@@ -7,6 +7,24 @@ const TWO_PI = Math.PI * 2;
 const bySurroundBearing = (a: NPC, b: NPC) => a.surroundBearing - b.surroundBearing;
 
 /**
+ * 等角環繞站位：依各自方位角 (surroundBearing) 排序 group (就地)，回傳整體旋轉偏移，
+ * 第 i 人站位 = 偏移 + i * (360/n 度)，使各站位貼近各自目前方位以減少交錯
+ */
+export function fitEvenRing(group: NPC[]): number {
+  const count = group.length;
+  group.sort(bySurroundBearing);
+  const step = TWO_PI / count;
+  let sx = 0;
+  let sz = 0;
+  for (let i = 0; i < count; i++) {
+    const a = group[i].surroundBearing - i * step;
+    sx += Math.sin(a);
+    sz += Math.cos(a);
+  }
+  return Math.atan2(sx, sz);
+}
+
+/**
  * 多人包夾 (低頻)：玩家 6m 內 2 名以上追捕中的戰鬥積極角色 (第二世界特訓群 / 校園執法者)，
  * 依目前方位角排序後分配等角環繞站位 (360/n 度)，以整體旋轉偏移貼近各自方位以減少交錯；
  * 站位被障礙物佔據者改為直接逼近
@@ -32,18 +50,9 @@ export class SurroundCoordinator {
       n.surroundBearing = Math.atan2(dx, dz);
       group.push(n);
     }
-    const count = group.length;
-    if (count < 2) return;
-    group.sort(bySurroundBearing);
-    const step = TWO_PI / count;
-    let sx = 0;
-    let sz = 0;
-    for (let i = 0; i < count; i++) {
-      const a = group[i].surroundBearing - i * step;
-      sx += Math.sin(a);
-      sz += Math.cos(a);
-    }
-    const base = Math.atan2(sx, sz);
-    for (let i = 0; i < count; i++) group[i].assignSurroundSlot(base + i * step, playerPos.x, playerPos.z);
+    if (group.length < 2) return;
+    const base = fitEvenRing(group);
+    const step = TWO_PI / group.length;
+    for (let i = 0; i < group.length; i++) group[i].assignSurroundSlot(base + i * step, playerPos.x, playerPos.z);
   }
 }
