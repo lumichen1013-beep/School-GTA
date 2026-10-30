@@ -17,6 +17,9 @@ export class ThirdPersonCamera {
   public pitch: number = 0.25; // Vertical angle (radians)
   public distance: number = 4.2;
   public targetDistance: number = 4.2;
+  // 突進斬衝刺時略微拉遠 (公尺，由呼叫端每幀設定，內部平滑過渡)
+  public dashPull: number = 0;
+  private dashPullBlend: number = 0;
 
   public sensitivityX: number = 0.0022;
   public sensitivityY: number = 0.002;
@@ -317,7 +320,11 @@ export class ThirdPersonCamera {
       effectiveTargetDistance = ThirdPersonCamera.MATCH_DISTANCE;
     }
 
-    this.distance = THREE.MathUtils.lerp(this.distance, effectiveTargetDistance, delta * 6.0);
+    this.dashPullBlend = THREE.MathUtils.lerp(this.dashPullBlend, this.dashPull, Math.min(delta * 8.0, 1.0));
+    // 衝刺拉遠不得超過當下場景的距離上限 (電梯 1.75m / 樓梯間 1.85m / 室內 2.8m)
+    const sceneCap = inElevator ? 1.75 : (inStairwell ? 1.85 : (isIndoors ? 2.8 : Infinity));
+    const pulledDistance = Math.min(effectiveTargetDistance + this.dashPullBlend, Math.max(sceneCap, effectiveTargetDistance));
+    this.distance = THREE.MathUtils.lerp(this.distance, pulledDistance, delta * 6.0);
 
     // 3. 計算球面座標之理想鏡頭位置
     const horizontalDistance = this.distance * Math.cos(this.pitch);

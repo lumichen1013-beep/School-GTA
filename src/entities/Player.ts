@@ -4,13 +4,14 @@ import { SkillBubble } from './shared/SkillBubble';
 import { AfterimagePool } from './shared/AfterimagePool';
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildUmbrella } from './shared/umbrella';
-import { ARM_HALF, KungFuLayer, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_BLOCKED, wrapAngle, type KfMove } from './shared/kungfu';
+import { ARM_HALF, KungFuLayer, lungeStep, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_BLOCKED, StrikeTracker, wrapAngle, type KfMove, type TrailLimb } from './shared/kungfu';
 import { CollidableBox } from '../world/CampusWorld';
 import { queryColliders, depenetrateXZ, DEPEN_PUSH_X, DEPEN_PUSH_Z } from '../physics/aabb';
 import { InputManager } from '../core/InputManager';
 import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import { swingTrail } from '../effects/SwingTrail';
+import { slashFX } from '../effects/SlashFX';
 import { WEAPON_FX_STYLES, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
 import { WeaponRig } from '../weapons/WeaponRig';
 import { getWeapon, resolveLoadout, resolveVariant } from '../weapons/registry';
@@ -31,6 +32,15 @@ const CROUCH_ARM_SCALE = 0.85;
 const READY_RIGHT_WEAPON = { x: -0.6, y: -0.5, z: -0.35 };
 const READY_RIGHT_FIST = { x: -1.2, y: 0, z: -0.25 };
 const READY_LEFT = { x: -1.0, y: 0.2, z: 0.2 };
+// 雙燕羽刃持拍架勢 (readyPose 'DUAL'，參考索隆公仔)：身體挺直、雙腳與肩同寬，雙臂垂在身側向外張開約 30°，
+// 兩支拍子倒提、朝斜下外側伸出 (右拍略指前方)；待機、行走、跑步皆維持，雙臂不隨步伐擺動 (只做小幅晃動)
+// wrist：持拍腕角 (拍柄掛點 rotation.x，出招用 π/3 上仰；架勢改為拍身順著手臂方向倒提)
+const DUAL_STANCE = {
+  wrist: 2.9,
+  rightArm: { x: -0.4, y: 0.3, z: 0.55 },
+  leftArm: { x: -0.3, y: -0.5, z: -0.6 }
+};
+const RACKET_MOUNT_X = Math.PI / 3;
 // 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.9 視為潛行 (特訓院)
 export const JOYSTICK_SNEAK_RADIUS = 0.9;
 const _safeTeleportResult = new THREE.Vector3();
@@ -345,13 +355,26 @@ export class Player {
   private sinceStrike: number = 99;
   private attackQueued: boolean = false;
   private worldType: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
-  // 本幀到達命中時間點的招式 (由戰鬥系統取用並結算傷害)
+  // 本幀到達命中時間點的招式與命中序號 (0 = 主擊，1 以後 = extraStrikes；由戰鬥系統取用並結算傷害)
   public strikeMove: KfMove | null = null;
-  // 揮擊拖尾 / 武器發光狀態
-  private trailMove: KfMove | null = null;
-  private trailSlot = 0;
-  private trailActive = false;
+  public strikeIndex: number = 0;
+  // 出招序號 (每次連段起手遞增)：戰鬥系統據此將同一招多段命中的通緝 / 提示合併為一次
+  public moveSerial: number = 0;
+  // 突進起點與其所屬出招序號 (dashSerial === moveSerial 表示本招已開始突進)
+  public readonly dashOrigin = new THREE.Vector3();
+  public dashSerial: number = -1;
+  private chargeSerial: number = -1;
+  private readonly strikes = new StrikeTracker();
+  // 揮擊拖尾 / 武器發光狀態：lane 0 = 主拖尾 (trail)、lane 1 = 第二拖尾 (trail2)；
+  // 拖尾槽依錨點持握手輪替 (右手 0/1、左手 2/3)
+  private readonly trailMove: (KfMove | null)[] = [null, null];
+  private readonly trailSlot = [0, 0];
+  private readonly trailActive = [false, false];
+  private readonly trailFlip = [0, 0];
   private weaponGlowOn = false;
+  // 雙持持拍架勢比例 (0 = 一般姿勢、1 = 倒提雙拍架勢)
+  private dualRatio = 0;
+  private dualWrist = 0; // 持拍腕角比例：架勢 1、出招 0 (拍子回到出招用的上仰角)
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
@@ -757,8 +780,8 @@ export class Player {
 
   // 下雨天撐傘與收傘狀態機判定 (支援自行車騎乘、游泳、室內、擊飛與死亡自動收傘)
   public updateUmbrella(isRaining: boolean, isRidingBike: boolean = false, currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS') {
-    // 少年院世界為鐵血特訓營舍，學員一律不持傘
-    if (currentWorld === 'DETENTION') {
+    // 少年院世界為鐵血特訓營舍，學員一律不持傘；雙持武器 (suppressUmbrella) 左手持械亦收傘
+    if (currentWorld === 'DETENTION' || this.weaponDef.suppressUmbrella) {
       if (this.isHoldingUmbrella) {
         this.isHoldingUmbrella = false;
         this.umbrellaMesh.visible = false;
@@ -856,6 +879,7 @@ export class Player {
     // tempo：武器整體節奏縮放 (如黃金雷霆棒較沉重)
     const move = moves[this.comboIndex];
     this.kf.start(move, loadout.tempo, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.moveSerial++;
     this.isAttacking = true;
     loadout.sounds.start?.();
   }
@@ -870,14 +894,16 @@ export class Player {
     return bat.localToWorld(out.set(0, anchor.tip, 0));
   }
 
-  // 取樣本招拖尾錨點 (世界座標)：W = 手持武器、RA / RL / LL = 右拳 / 右腳 / 左腳；需於姿勢套用後呼叫
-  public sampleSwingAnchors(move: KfMove, outBase: THREE.Vector3, outTip: THREE.Vector3): boolean {
+  // 取樣拖尾錨點 (世界座標)：W / WL = 右手 / 左手武器、RA / RL / LL = 右拳 / 右腳 / 左腳；需於姿勢套用後呼叫
+  public sampleSwingAnchors(limb: TrailLimb, outBase: THREE.Vector3, outTip: THREE.Vector3): boolean {
     let node: THREE.Object3D | null;
     let by: number, ty: number, tz = 0;
-    switch (move.trailLimb) {
-      case 'W': {
-        const anchor = this.displayLoadout.anchors.R;
-        node = anchor ? this.weaponRig.part(this.displayWeaponId, 'R') : null;
+    switch (limb) {
+      case 'W':
+      case 'WL': {
+        const hand = limb === 'W' ? 'R' : 'L';
+        const anchor = this.displayLoadout.anchors[hand];
+        node = anchor ? this.weaponRig.part(this.displayWeaponId, hand) : null;
         by = anchor ? anchor.base : 0;
         ty = anchor ? anchor.tip : 0;
         break;
@@ -886,19 +912,48 @@ export class Player {
       case 'RL': node = this.rightLeg; by = 0; ty = -0.33; tz = 0.1; break;
       default: node = this.leftLeg; by = 0; ty = -0.33; tz = 0.1; break;
     }
-    if (!node || (move.trailLimb === 'W' && !node.visible)) return false;
+    if (!node || ((limb === 'W' || limb === 'WL') && !node.visible)) return false;
     node.updateWorldMatrix(true, false);
     node.localToWorld(outBase.set(0, by, 0));
     node.localToWorld(outTip.set(0, ty, tz));
     return true;
   }
 
+  private get swingFxOn(): boolean {
+    return this.trailActive[0] || this.trailActive[1] || this.weaponGlowOn;
+  }
+
   // 結束拖尾與武器發光並還原材質原值
   private endSwingFx() {
-    if (this.trailActive) swingTrail.end(this.trailSlot);
-    this.trailActive = false;
-    this.trailMove = null;
+    this.endTrailLane(0);
+    this.endTrailLane(1);
     this.setWeaponGlow(0, 0);
+  }
+
+  private endTrailLane(lane: number) {
+    if (this.trailActive[lane]) swingTrail.end(this.trailSlot[lane]);
+    this.trailActive[lane] = false;
+    this.trailMove[lane] = null;
+  }
+
+  // 推進單條拖尾：進度 p 位於 range 區段內時開啟 / 延續並取樣錨點，回傳是否位於區段內
+  private updateTrailLane(lane: number, move: KfMove, p: number, range: readonly [number, number], limb: TrailLimb): boolean {
+    if (p < range[0] || p > range[1]) {
+      this.endTrailLane(lane);
+      return false;
+    }
+    if (!this.trailActive[lane] || this.trailMove[lane] !== move) {
+      if (this.trailActive[lane]) swingTrail.end(this.trailSlot[lane]);
+      const left = limb === 'WL';
+      const hand = left ? 1 : 0;
+      this.trailFlip[hand] ^= 1;
+      this.trailSlot[lane] = hand * 2 + this.trailFlip[hand];
+      swingTrail.begin(this.trailSlot[lane], WEAPON_FX_STYLES[left ? this.activeLoadout.fx.L : this.activeLoadout.fx.R], move.finisher);
+      this.trailActive[lane] = true;
+      this.trailMove[lane] = move;
+    }
+    if (this.sampleSwingAnchors(limb, _trailBase, _trailTip)) swingTrail.push(this.trailSlot[lane], _trailBase, _trailTip);
+    return true;
   }
 
   // 武器 emissive 脈衝：k = 0..1 的相對強度，peak = 峰值 (0 還原為原值)
@@ -917,32 +972,68 @@ export class Player {
   private updateSwingFx() {
     const move = this.kf.move;
     // 僅一般連段套組出拖尾 (暗殺等專用招式不出)
-    if (!move || !this.activeLoadout.combo.includes(move)) { if (this.trailActive || this.weaponGlowOn) this.endSwingFx(); return; }
+    if (!move || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
     const p = this.kf.progress;
-    const [from, to] = move.trail;
-    if (p < from || p > to) {
-      if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
+    // 第二條拖尾 (雙持左手等) 區段獨立，不影響主拖尾與武器發光
+    if (move.trail2) this.updateTrailLane(1, move, p, move.trail2, move.trailLimb2);
+    else if (this.trailActive[1]) this.endTrailLane(1);
+    // 蓄力區段：拍尖蓄能發光 (越蓄越亮)，起點出向內收的雙色光環
+    const charge = move.charge;
+    const inCharge = !!charge && p >= charge[0] && p <= charge[1];
+    if (inCharge && charge) {
+      if (this.chargeSerial !== this.moveSerial) {
+        this.chargeSerial = this.moveSerial;
+        const lo = this.activeLoadout.fx;
+        slashFX.chargeRing(this.position.x, this.position.y + 0.9, this.position.z, WEAPON_FX_STYLES[lo.R].color, WEAPON_FX_STYLES[lo.L].color);
+      }
+      const style = WEAPON_FX_STYLES[this.activeLoadout.fx.R];
+      this.setWeaponGlow((p - charge[0]) / (charge[1] - charge[0]), style.glow * FINISHER_FX_BOOST.glow * 1.6, style.color);
+    }
+    if (!this.updateTrailLane(0, move, p, move.trail, move.trailLimb)) {
+      if (this.weaponGlowOn && !inCharge) this.setWeaponGlow(0, 0);
       return;
     }
-    if (!this.trailActive || this.trailMove !== move) {
-      if (this.trailActive) swingTrail.end(this.trailSlot);
-      this.trailSlot = (this.trailSlot + 1) & 1;
-      swingTrail.begin(this.trailSlot, WEAPON_FX_STYLES[this.activeLoadout.fx.R], move.finisher);
-      this.trailActive = true;
-      this.trailMove = move;
-    }
-    if (this.sampleSwingAnchors(move, _trailBase, _trailTip)) swingTrail.push(this.trailSlot, _trailBase, _trailTip);
-    // 手持武器招式：顯示中的武器模型可發光時才做 emissive 脈衝 (羽球拍不發光)
-    if (move.trailLimb === 'W' && this.weaponRig.canGlow(this.displayWeaponId)) {
-      const style = WEAPON_FX_STYLES[this.activeLoadout.fx.R];
-      const k = Math.sin(Math.PI * (p - from) / (to - from));
-      this.setWeaponGlow(k, style.glow * (move.finisher ? FINISHER_FX_BOOST.glow : 1), style.color);
+    const [from, to] = move.trail;
+    // 手持武器招式：顯示中的武器模型可發光時才做 emissive 脈衝 (羽球拍不發光)；有蓄力的招式衝刺時由蓄滿逐漸退光
+    if ((move.trailLimb === 'W' || move.trailLimb === 'WL') && this.weaponRig.canGlow(this.displayWeaponId)) {
+      const style = WEAPON_FX_STYLES[move.trailLimb === 'W' ? this.activeLoadout.fx.R : this.activeLoadout.fx.L];
+      const u = (p - from) / (to - from);
+      const k = move.charge ? 1 - u : Math.sin(Math.PI * u);
+      this.setWeaponGlow(k, style.glow * (move.finisher ? FINISHER_FX_BOOST.glow : 1) * (move.charge ? 1.6 : 1), style.color);
     }
   }
 
-  // 本幀命中時間點的打擊音效
-  private playStrikeSound() {
-    this.displayLoadout.sounds.strike?.(0);
+  // 本幀命中時間點的打擊音效 (strikeIndex 0 = 主擊)
+  private playStrikeSound(strikeIndex: number) {
+    this.displayLoadout.sounds.strike?.(strikeIndex);
+  }
+
+  // 本幀招式突進速度 (m/s)：圖層時間 t → t + delta 與突進區段重疊的位移 ÷ delta (各幀加總恰為 lunge.dist)
+  private lungeSpeed(delta: number): number {
+    const move = this.kf.move;
+    if (!move || !move.lunge || delta <= 0) return 0;
+    const t = this.kf.time;
+    const step = lungeStep(move, this.kf.duration, t, t + delta);
+    // 突進起點 (本招第一個有位移的幀)：突進命中範圍 (aoe.shape 'PATH') 由此點量到目前位置
+    if (step > 0 && this.dashSerial !== this.moveSerial) {
+      this.dashSerial = this.moveSerial;
+      this.dashOrigin.copy(this.position);
+    }
+    return step / delta;
+  }
+
+  // 突進中 (圖層時間位於 lunge 區段內)：戰鬥系統據此略過角色推擠，讓玩家穿過敵群
+  public get isLunging(): boolean {
+    const move = this.kf.move;
+    if (!move || !move.lunge) return false;
+    const p = this.kf.progress;
+    return p >= move.lunge.from && p <= move.lunge.to;
+  }
+
+  // 本招為突進斬 (終結技含突進)：鏡頭據此略微拉遠
+  public get isDashMove(): boolean {
+    const move = this.kf.move;
+    return !!move && move.finisher && !!move.lunge;
   }
 
   // 中止出招 (受擊、騎車、游泳、換世界、死亡等)，四肢位置立即還原
@@ -955,10 +1046,11 @@ export class Player {
     this.isAttacking = false;
     this.attackQueued = false;
     this.strikeMove = null;
+    this.strikes.reset();
     this.comboIndex = 0;
     this.sinceStrike = 99;
     // 死亡 / 騎車等情況 update 會提前 return 而不再呼叫 updateKungFu，需於此立即收掉拖尾與武器發光
-    if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
+    if (this.swingFxOn) this.endSwingFx();
   }
 
   // 提前收招並淡出 (切換武器時)
@@ -967,6 +1059,7 @@ export class Player {
     this.isAttacking = false;
     this.attackQueued = false;
     this.strikeMove = null;
+    this.strikes.reset();
     this.comboIndex = 0;
     this.sinceStrike = 99;
   }
@@ -977,14 +1070,16 @@ export class Player {
     if (this.punchTimer > 0) this.punchTimer -= delta;
     this.sinceStrike += delta;
     if (!this.kf.engaged) {
-      if (this.trailActive || this.weaponGlowOn) this.endSwingFx();
+      if (this.swingFxOn) this.endSwingFx();
       return;
     }
-    const move = this.kf.move;
-    if (this.kf.update(delta) && move) {
-      this.strikeMove = move;
+    // 命中時間點 (主擊 + 多段招式的 extraStrikes)：一幀至多一擊，各擊恰好結算一次
+    const strikeIndex = this.strikes.step(this.kf, delta);
+    if (strikeIndex >= 0) {
+      this.strikeMove = this.strikes.move;
+      this.strikeIndex = strikeIndex;
       this.sinceStrike = 0;
-      this.playStrikeSound();
+      this.playStrikeSound(strikeIndex);
     }
     if (this.attackQueued && this.canAttack) this.startComboMove();
     if (!this.kf.move) this.isAttacking = false;
@@ -992,7 +1087,8 @@ export class Player {
     const rest = this.armRest;
     this.kf.setLimbBase(0, -rest.x, rest.y, rest.z);
     this.kf.setLimbBase(1, rest.x, rest.y, rest.z);
-    this.kf.apply(this.rotationY, this.isHoldingUmbrella ? 1 : 0, this.armPivot);
+    // 撐傘時左臂維持撐傘姿勢；雙持武器 (suppressUmbrella) 不鎖左臂
+    this.kf.apply(this.rotationY, this.isHoldingUmbrella && !this.weaponDef.suppressUmbrella ? 1 : 0, this.armPivot);
     this.updateSwingFx();
     // 出招淡出結束當幀四肢已還原為基準位置，立即依目前姿勢重設肩軸位置 (避免蹲姿收招閃一幀)
     if (!this.kf.engaged) this.applyArmPivot();
@@ -1264,8 +1360,16 @@ export class Player {
           this.setBodyFade(flicker);
         }
       } else {
-        this.velocity.x = _playerMoveDir.x * currentSpeed;
-        this.velocity.z = _playerMoveDir.z * currentSpeed;
+        // 突進中鎖定移動方向 (不接受轉向輸入)，路徑維持直線以符合 PATH 命中判定
+        const lunging = this.isLunging;
+        this.velocity.x = lunging ? 0 : _playerMoveDir.x * currentSpeed;
+        this.velocity.z = lunging ? 0 : _playerMoveDir.z * currentSpeed;
+        // 招式突進：沿面向前衝 (本幀位移換算為速度，交由一般碰撞處理，遇牆即停)
+        const lunge = this.lungeSpeed(delta);
+        if (lunge > 0) {
+          this.velocity.x += Math.sin(this.rotationY) * lunge;
+          this.velocity.z += Math.cos(this.rotationY) * lunge;
+        }
       }
 
       if (this.isSwimming) {
@@ -1316,7 +1420,7 @@ export class Player {
     }
 
     // 6. 朝向旋轉 (Facing Direction)
-    if (isMoving && !this.isKnockedFlying && !this.isBackflipping) {
+    if (isMoving && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
       const targetRotation = Math.atan2(_playerMoveDir.x, _playerMoveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
@@ -1545,7 +1649,7 @@ export class Player {
   private animatePlayer(delta: number, isMoving: boolean, isSprinting: boolean, currentSpeed: number = 5.0) {
     if (this.isSwimming !== this.isSwimOutfit) this.setSwimOutfit(this.isSwimming);
     if (this.isSwimming) {
-      if (this.armRigScale !== 1) this.updateArmRig(0); // 游泳時還原雙臂骨架 (原尺寸、站立肩高)
+      if (this.armRigScale !== 1) this.updateArmRig(0, 0); // 游泳時還原雙臂骨架 (原尺寸、站立肩高)
       // 1. 身體俯仰趴平姿態 (Prone Freestyle vs Treading Water)
       // 自由式划水衝刺/前進時：前傾俯趴約 70~75 度 (1.20 ~ 1.28 rad)
       // 靜止浮水踩水時：約 18~22 度 (0.32 ~ 0.38 rad)，身體立起、頭部浮出水面踏水
@@ -1739,7 +1843,39 @@ export class Player {
       }
     }
 
+    this.applyDualStance(delta);
     this.applyCrouchReadyPose(isMoving);
+  }
+
+  // 雙持架勢 (readyPose 'DUAL')：雙臂固定為倒提雙拍姿勢，不隨步伐擺動 (跑步時只隨步伐小幅晃動)，雙腿照常；蹲姿時淡出
+  private applyDualStance(delta: number) {
+    const wants = this.displayLoadout.readyPose === 'DUAL' && !this.isHoldingUmbrella;
+    const target = wants ? 1 - this.crouchRatio : 0;
+    this.dualRatio = THREE.MathUtils.lerp(this.dualRatio, target, Math.min(delta * 10, 1));
+    if (target === 0 && this.dualRatio < 0.002) this.dualRatio = 0;
+    const d = this.dualRatio;
+    const S = DUAL_STANCE;
+    this.dualWrist = d === 0 ? 0 : THREE.MathUtils.lerp(this.dualWrist, this.kf.engaged ? 0 : 1, Math.min(delta * 12, 1));
+    const wrist = THREE.MathUtils.lerp(RACKET_MOUNT_X, S.wrist, this.dualWrist * d);
+    const racketR = this.weaponRig.part('DUAL_RACKET', 'R');
+    const racketL = this.weaponRig.part('DUAL_RACKET', 'L');
+    if (racketR) racketR.rotation.x = wrist;
+    if (racketL) racketL.rotation.x = wrist;
+    if (d === 0) return;
+    const sway = this.isSprinting ? 0.06 : 0.035;
+    const bob = Math.sin(this.animTimer) * (this.isMoving ? sway : 0.012);
+    const ra = this.rightArm.rotation;
+    const la = this.leftArm.rotation;
+    ra.set(
+      THREE.MathUtils.lerp(ra.x, S.rightArm.x + bob, d),
+      THREE.MathUtils.lerp(ra.y, S.rightArm.y, d),
+      THREE.MathUtils.lerp(ra.z, S.rightArm.z, d)
+    );
+    la.set(
+      THREE.MathUtils.lerp(la.x, S.leftArm.x - bob, d),
+      THREE.MathUtils.lerp(la.y, S.leftArm.y, d),
+      THREE.MathUtils.lerp(la.z, S.leftArm.z, d)
+    );
   }
 
   // 潛行姿勢 A「持棍戒備」：依蹲姿比例混合雙臂姿勢 (右手持武器斜擋身前 / 徒手握拳、左臂半舉前伸平衡，移動時小幅擺動)、
@@ -1766,16 +1902,17 @@ export class Player {
       this.leftLeg.rotation.z = -0.07 * c;
       this.rightLeg.rotation.z = 0.07 * c;
     }
-    this.updateArmRig(c);
+    this.updateArmRig(c, Math.max(c, this.dualRatio));
   }
 
   // 雙臂骨架：縮放、肩部基準位置 (站立維持原本以手臂中心為軸；蹲姿以肩為軸) 並同步給出招圖層
   private armRigScale: number = 1;
   private armPivot: number = 0; // 雙臂以肩為軸的比例 (= 蹲姿比例)
   private readonly armRest = new THREE.Vector3(ARM_X, ARM_STAND_Y, 0);
-  private updateArmRig(crouch: number) {
+  private updateArmRig(crouch: number, pivot: number) {
     const c = crouch < 0.001 ? 0 : crouch;
-    this.armPivot = c;
+    const pv = pivot < 0.001 ? 0 : pivot;
+    this.armPivot = pv;
     const scale = THREE.MathUtils.lerp(1, CROUCH_ARM_SCALE, c);
     if (scale !== this.armRigScale) {
       this.armRigScale = scale;
@@ -1790,8 +1927,8 @@ export class Player {
     const tilt = this.bodyMesh.rotation.x;
     const h = ARM_HALF * scale;
     const shoulderY = this.bodyMesh.position.y + ARM_HALF * Math.cos(tilt);
-    const restY = THREE.MathUtils.lerp(ARM_STAND_Y, shoulderY - h, c);
-    const restZ = ARM_HALF * Math.sin(tilt) * c;
+    const restY = THREE.MathUtils.lerp(ARM_STAND_Y, shoulderY - h, pv);
+    const restZ = ARM_HALF * Math.sin(tilt) * pv;
     this.armRest.set(ARM_X, restY, restZ);
     if (!this.kf.engaged) this.applyArmPivot();
   }

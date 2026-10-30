@@ -17,6 +17,7 @@ import { EcologicalGarden } from './world/EcologicalGarden';
 import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
 import { comboFinisherFX } from './effects/ComboFinisherFX';
+import { slashFX } from './effects/SlashFX';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
@@ -27,7 +28,8 @@ import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
 import { Progression } from './game/Progression';
-import { resolveVariant } from './weapons/registry';
+import { getWeapon, isWeaponAvailable, resolveVariant } from './weapons/registry';
+import type { WeaponId } from './weapons/types';
 import { DetentionMode } from './game/DetentionMode';
 import { CampusMode } from './game/CampusMode';
 import { CampusLife } from './game/CampusLife';
@@ -45,6 +47,9 @@ const _campusRespawnPos = new THREE.Vector3(0, 0, 15); // 天天國中保健室�
  * 主程式：建置引擎與兩個世界、組裝各子系統，並調度每幀更新順序。
  * 各玩法細節分別位於 game/ (成長、戰鬥、互動、校園玩法、特訓院玩法)。
  */
+// 突進斬衝刺時鏡頭額外拉遠距離 (公尺)
+const DASH_CAMERA_PULL = 1.4;
+
 class SchoolGTASandbox implements GameContext {
   private lastBikeYaw: number = 0; // 上一幀騎車朝向 (計算轉彎持續時間)
   public engine!: Engine;
@@ -74,6 +79,8 @@ class SchoolGTASandbox implements GameContext {
   };
   // 特訓院配發的防暴棒沿用普通球棒槽位：進入特訓院前記下校園的球棒解鎖狀態，返回校園時還原
   private campusHasNormalBat: boolean = false;
+  // 進入特訓院前校園手上的武器：特訓院不可用的武器 (黃金棒、雙拍) 返回校園時還原
+  private campusWeaponId: WeaponId = 'FIST';
   public bicycles: Bicycle[] = [];
   public currentRidingBike: Bicycle | null = null;
   public npcs: NPC[] = [];
@@ -176,6 +183,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     comboFinisherFX.init(this.engine.scene);
     comboFinisherFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
+    slashFX.init(this.engine.scene);
+    slashFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
 
     this.player.autoDodgeHook = this.progression.tryAutoDodge;
@@ -323,6 +332,7 @@ class SchoolGTASandbox implements GameContext {
     this.combat.resetTransientState();
     swingTrail.reset();
     comboFinisherFX.reset();
+    slashFX.reset();
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
@@ -333,6 +343,7 @@ class SchoolGTASandbox implements GameContext {
     this.hud.setBGMWorld(targetWorld);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
+      this.campusWeaponId = this.player.currentWeapon;
     }
     this.player.equipBadmintonRacket(false);
     if (this.tennisGame.tennisState !== 'IDLE') {
@@ -357,6 +368,10 @@ class SchoolGTASandbox implements GameContext {
         this.player.hasNormalBat = this.campusHasNormalBat;
         if (this.player.currentWeapon === 'NORMAL_BAT' && !this.player.hasNormalBat) {
           this.player.setWeapon('FIST');
+        }
+        const saved = getWeapon(this.campusWeaponId);
+        if (!isWeaponAvailable(saved, 'DETENTION') && isWeaponAvailable(saved, 'CAMPUS')) {
+          this.player.setWeapon(saved.id); // 未解鎖時 setWeapon 回傳 false，維持原狀
         }
       }
 
@@ -519,6 +534,7 @@ class SchoolGTASandbox implements GameContext {
     this.wantedSystem.clearWanted();
     swingTrail.reset();
     comboFinisherFX.reset();
+    slashFX.reset();
     if (!isCampus) {
       this.detention.resetGuards();
     }
@@ -529,6 +545,7 @@ class SchoolGTASandbox implements GameContext {
       this.player.respawn(respawnPos);
       swingTrail.reset();
       comboFinisherFX.reset();
+      slashFX.reset();
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
@@ -763,6 +780,7 @@ class SchoolGTASandbox implements GameContext {
     this.combat.updatePlayerStrike();
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);
+    slashFX.update(delta, this.cameraCtrl.camera);
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
 
     // 9. 角色推擠排除
@@ -775,6 +793,7 @@ class SchoolGTASandbox implements GameContext {
     // 羽球比賽倒數與進行中切換轉播視角，結束/中止後自動回復一般跟隨
     this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
     this.combat.updateExecution(rawDelta);
+    this.cameraCtrl.dashPull = this.player.isDashMove ? DASH_CAMERA_PULL : 0;
     this.cameraCtrl.update(targetPosition, rawDelta, colliders);
 
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條

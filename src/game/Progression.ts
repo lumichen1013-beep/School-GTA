@@ -1,6 +1,6 @@
 import { soundManager } from '../audio/SoundEffects';
 import { getWeapon, isWeaponAvailable, resolveVariant, WEAPONS } from '../weapons/registry';
-import type { WeaponDefinition, WeaponId } from '../weapons/types';
+import type { WeaponDefinition, WeaponId, WeaponWorld } from '../weapons/types';
 import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
@@ -163,6 +163,16 @@ export class Progression {
     }
   }
 
+  // 稀有成就【羽壇雙燕】：4F 羽球賽擊敗大如老師解鎖雙燕羽刃 (只限校園，呼叫端確認已擊敗；已解鎖時立即返回)
+  public checkDualRacketUnlock() {
+    const { player, wantedSystem } = this.ctx;
+    if (player.isWeaponUnlocked('DUAL_RACKET')) return;
+    player.setWeaponUnlocked('DUAL_RACKET', true);
+    player.setWeapon('DUAL_RACKET');
+    wantedSystem.showBanner('🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或點右上武器標章切換，ATK 16×7 連擊)', 7000);
+    soundManager.playFanfare();
+  }
+
   // 切換武器並顯示提示文字 (第一世界 / 第二世界，見武器定義 banner)
   private equipWeapon(weapon: WeaponId) {
     this.ctx.player.setWeapon(weapon);
@@ -173,6 +183,12 @@ export class Progression {
   // 已解鎖且本世界可用 (循環切換與大地圖裝備共用)
   private canEquip(def: WeaponDefinition): boolean {
     return this.ctx.player.isWeaponUnlocked(def.id) && isWeaponAvailable(def, this.ctx.currentWorldType);
+  }
+
+  // 無法裝備時的提示：已解鎖但本世界不可用 → 該世界專屬文案 (如特訓院「器材已遭沒收」)；未解鎖 → 解鎖條件 (本世界不可用者取校園版)
+  private blockedHint(def: WeaponDefinition, world: WeaponWorld): string {
+    if (!def.unlock) return '🚫 本世界不可使用此武器';
+    return def.unlock.lockedHint(this, this.ctx.player.isWeaponUnlocked(def.id) || isWeaponAvailable(def, world) ? world : 'CAMPUS');
   }
 
   // 大地圖【裝備】分頁：依武器槽順序列出武器與狀態 (開啟 / 裝備後才呼叫，非每幀)
@@ -190,7 +206,7 @@ export class Progression {
         damage: def.stats.damage,
         reach: def.stats.reach,
         status,
-        hint: status === 'locked' && def.unlock ? def.unlock.lockedHint(this, world) : ''
+        hint: status === 'locked' || status === 'unavailable' ? this.blockedHint(def, world) : ''
       };
     });
   }
@@ -201,7 +217,7 @@ export class Progression {
     const { player, wantedSystem } = this.ctx;
     if (!this.canEquip(def)) {
       const world = this.ctx.currentWorldType;
-      wantedSystem.showBanner(!isWeaponAvailable(def, world) ? '🚫 本世界不可使用此武器' : (def.unlock?.lockedHint(this, world) ?? ''), 2000);
+      wantedSystem.showBanner(this.blockedHint(def, world), 2000);
       return false;
     }
     if (id !== player.currentWeapon) this.equipWeapon(id);
@@ -307,7 +323,8 @@ export class Progression {
     if (this.ctx.currentRidingBike || player.isRidingVehicle || player.isSwimming || player.knockdownTimer > 0) return false;
     if (Math.random() >= AUTO_DODGE_CHANCE) return false;
     this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
-    player.performFlashStep();
+    // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行閃身步位移，避免中斷招式
+    if (!player.isLunging) player.performFlashStep();
     wantedSystem.showBanner('💨 閃身步自動發動！左右破空閃身規避！(CD 1s)', 1600);
     return true;
   };

@@ -5,14 +5,15 @@ const sfx = vi.hoisted(() => ({
   playPunch: vi.fn(),
   playBatHit: vi.fn(),
   playSpecialBatHit: vi.fn(),
-  playBadmintonWhoosh: vi.fn()
+  playBadmintonWhoosh: vi.fn(),
+  playBadmintonHit: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
 
 import { PLAYER_COMBOS } from '../src/entities/shared/kungfu';
 import { getWeapon, getWeaponBySlot, resolveLoadout, WEAPONS } from '../src/weapons/registry';
 import { buildNormalBat, buildGoldBat } from '../src/weapons/models/batModels';
-import { buildRacket } from '../src/weapons/models/racketModel';
+import { buildRacket, buildDualRackets } from '../src/weapons/models/racketModel';
 import type { WeaponId, WeaponOverrideId, WeaponWorld } from '../src/weapons/types';
 import type * as THREE from 'three';
 
@@ -39,7 +40,7 @@ interface Snapshot {
   anchors: { base: number; tip: number } | null;
   strike: SfxName | null;
   start: SfxName | null;
-  readyPose: 'FIST' | 'WEAPON';
+  readyPose: 'FIST' | 'WEAPON' | 'DUAL';
   slamBolt: boolean;
   spinWaistY: number | null;
   spinLandRadius: number;
@@ -49,13 +50,15 @@ interface Snapshot {
 const STATS = {
   FIST: { damage: 25, reach: 2.2, knock: 7.5 },
   NORMAL_BAT: { damage: 35, reach: 3.2, knock: 14.0 },
-  SPECIAL_BAT: { damage: 70, reach: 3.8, knock: 22.0 }
+  SPECIAL_BAT: { damage: 70, reach: 3.8, knock: 22.0 },
+  DUAL_RACKET: { damage: 16, reach: 2.6, knock: 9.0 }
 } as const;
 
 const FIST_COMBO = { combo: PLAYER_COMBOS.FIST, comboNames: ['弓步衝拳', '轉身鞭腿', '騰空旋風腿'] };
 const BAT_COMBO = { combo: PLAYER_COMBOS.BAT, comboNames: ['橫掃千軍', '回身反掃', '躍起下劈'] };
 const BATON_COMBO = { combo: PLAYER_COMBOS.BATON, comboNames: ['上步斜劈', '轉腕回挑', '旋身橫打'] };
 const RACKET_COMBO = { combo: PLAYER_COMBOS.RACKET, comboNames: ['揮拍'] };
+const DUAL_COMBO = { combo: PLAYER_COMBOS.DUAL, comboNames: ['二刀・快斬', '二刀・交叉斬', '鬼斬'] };
 
 const BASELINE = {
   FIST: {
@@ -73,6 +76,11 @@ const BASELINE = {
   SPECIAL_BAT: {
     ...STATS.SPECIAL_BAT, ...BAT_COMBO, tempo: 1.14, fxId: 'GOLD', anchors: { base: 0.4, tip: 1.02 }, strike: 'playSpecialBatHit', start: null,
     readyPose: 'WEAPON', slamBolt: true, spinWaistY: null, spinLandRadius: 0, goldAoe: true
+  },
+  // 雙燕羽刃 (右拍主錨點；左拍錨點 / 雙色樣式另於專屬測試斷言)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  DUAL_RACKET: {
+    ...STATS.DUAL_RACKET, ...DUAL_COMBO, tempo: 1, fxId: 'DUAL_R', anchors: { base: 0.5, tip: 1.0 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
+    readyPose: 'DUAL', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   }
 } satisfies Record<string, Snapshot>;
 
@@ -143,20 +151,26 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expectSame(snapshot('SPECIAL_BAT', null, 'DETENTION'), BASELINE.SPECIAL_BAT);
   });
 
+  it('DUAL_RACKET (兩個世界套組相同)', () => {
+    expectSame(snapshot('DUAL_RACKET', null, 'CAMPUS'), BASELINE.DUAL_RACKET);
+    expectSame(snapshot('DUAL_RACKET', null, 'DETENTION'), BASELINE.DUAL_RACKET);
+  });
+
   it('RACKET 覆寫 (持任一武器、任一世界)', () => {
-    for (const current of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT'] as const) {
+    for (const current of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET'] as const) {
       for (const world of ['CAMPUS', 'DETENTION'] as const) {
         expectSame(snapshot(current, 'RACKET', world), racketBaseline(current));
       }
     }
   });
 
-  it('武器槽順序與切換提示 (數字鍵 1/2/3)', () => {
-    expect(WEAPONS.map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT']);
+  it('武器槽順序與切換提示', () => {
+    expect(WEAPONS.map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
     expect(getWeaponBySlot(1)?.id).toBe('FIST');
     expect(getWeaponBySlot(2)?.id).toBe('NORMAL_BAT');
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');
-    expect(getWeaponBySlot(4)).toBeUndefined();
+    expect(getWeaponBySlot(4)?.id).toBe('DUAL_RACKET');
+    expect(getWeaponBySlot(5)).toBeUndefined();
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
     expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' });
@@ -166,6 +180,10 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(getWeapon('NORMAL_BAT').unlock?.lockedHint(p, 'DETENTION')).toBe('🔒 防暴警棍未配發！完成特訓即可獲取裝備！');
     expect(getWeapon('SPECIAL_BAT').unlock?.lockedHint(p, 'CAMPUS')).toBe('🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教1/1 犬0/1 車2/5)');
     expect(getWeapon('SPECIAL_BAT').unlock?.lockedHint(p, 'DETENTION')).toBe('⚠️ 特訓院管制區：重型管制武器已遭沒收封存！');
+    expect(getWeapon('DUAL_RACKET').icon).toBe('🏸🏸');
+    expect(getWeapon('DUAL_RACKET').banner.campus).toBe('🏸🏸 切換神兵：雙燕羽刃 (ATK 16×7 連擊)');
+    expect(getWeapon('DUAL_RACKET').unlock?.lockedHint(p, 'CAMPUS')).toBe('🔒 雙燕羽刃未解鎖！需在 4F 羽球賽擊敗羽球大如老師');
+    expect(getWeapon('DUAL_RACKET').unlock?.lockedHint(p, 'DETENTION')).toBe('⚠️ 特訓院管制區：器材已遭沒收！');
   });
 
   it('查表結果為預建物件 (執行期不配置)', () => {
@@ -207,5 +225,26 @@ describe('武器模型 (mesh 數不變 → draw call 不變；發光基準值還
     const h = buildRacket();
     expect(meshCount(h.parts.R!)).toBe(4);
     expect(h.glow).toBeNull();
+  });
+
+  it('雙燕羽刃：每支 拍身(握把+中桿+拍框烘焙頂點色) + 拍面 共 2 mesh，掛點同其他武器，各以自己的拍框色發光', () => {
+    const h = buildDualRackets();
+    const { R, L } = h.parts;
+    expect(R && L).toBeTruthy();
+    expect(meshCount(R!)).toBe(2);
+    expect(meshCount(L!)).toBe(2);
+    for (const root of [R!, L!]) {
+      expect(root.visible).toBe(false);
+      expect(root.position.toArray()).toEqual([0, -0.28, 0.12]);
+      expect(root.rotation.x).toBeCloseTo(Math.PI / 3);
+    }
+    expect(firstMat(R!, 0).emissive.getHex()).toBe(0x2ef2c8);
+    expect(firstMat(L!, 0).emissive.getHex()).toBe(0xff6fcf);
+    h.glow!(0.5, 1.0, 0xffffff);
+    expect(firstMat(R!, 0).emissiveIntensity).toBeCloseTo(0.25);
+    expect(firstMat(L!, 0).emissiveIntensity).toBeCloseTo(0.25);
+    h.resetGlow();
+    expect(firstMat(R!, 0).emissiveIntensity).toBe(0);
+    expect(firstMat(L!, 0).emissiveIntensity).toBe(0);
   });
 });

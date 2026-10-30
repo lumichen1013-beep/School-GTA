@@ -1,16 +1,17 @@
 import { FIST } from './defs/fist';
 import { NORMAL_BAT } from './defs/normalBat';
 import { SPECIAL_BAT } from './defs/goldBat';
+import { DUAL_RACKET } from './defs/dualRacket';
 import { OVERRIDE_RACKET } from './defs/racket';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
 } from './types';
 
 // 武器槽順序 (循環切換依此順序)
-export const WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT];
+export const WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET];
 export const WEAPON_OVERRIDES: Readonly<Record<WeaponOverrideId, WeaponOverrideDefinition>> = { RACKET: OVERRIDE_RACKET };
 
-const BY_ID = { FIST, NORMAL_BAT, SPECIAL_BAT } as const satisfies Record<WeaponId, WeaponDefinition>;
+const BY_ID = { FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET } as const satisfies Record<WeaponId, WeaponDefinition>;
 
 export function getWeapon(id: WeaponId): WeaponDefinition {
   return BY_ID[id];

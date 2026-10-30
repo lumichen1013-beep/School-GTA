@@ -1,5 +1,5 @@
 // 武器連段特效樣式表 (拖尾與武器發光共用；地裂特效可沿用 color)；各武器 / 世界變體使用哪一組見 src/weapons/defs
-export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET';
+export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET' | 'DUAL_R' | 'DUAL_L';
 
 export interface WeaponFxStyle {
   color: number;     // 拖尾握把端 / 主色
@@ -16,6 +16,9 @@ export const WEAPON_FX_STYLES: Record<WeaponFxId, WeaponFxStyle> = {
   GOLD:   { color: 0xffc94a, tipColor: 0xfff3b0, intensity: 1.4,  life: 0.21, glow: 1.6, impact: 0xffc94a },
   BATON:  { color: 0x4da3ff, tipColor: 0x4da3ff, intensity: 1.15, life: 0.18, glow: 0.6, impact: 0x4da3ff },
   RACKET: { color: 0x6dffb0, tipColor: 0x6dffb0, intensity: 0.8,  life: 0.13, glow: 0, impact: 0x6dffb0 },
+  // 雙燕羽刃：右拍青綠、左拍櫻粉
+  DUAL_R: { color: 0x2ef2c8, tipColor: 0xeafffb, intensity: 1.3,  life: 0.22, glow: 0.9, impact: 0x2ef2c8 },
+  DUAL_L: { color: 0xff6fcf, tipColor: 0xfff0fa, intensity: 1.3,  life: 0.22, glow: 0.9, impact: 0xff6fcf },
 };
 
 // 拖尾條帶寬度倍率 (以握把 → 尖端線段長為基準，兩端外擴)：一般招式 / 第三段 (終結技)

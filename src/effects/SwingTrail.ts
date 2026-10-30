@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { getFxQuality } from './fxQuality';
 import { FINISHER_FX_BOOST, TRAIL_WIDTH, type WeaponFxStyle } from './weaponFxStyle';
 
-// 揮擊拖尾：2 條軌跡共用 1 個 BufferGeometry / Mesh (1 draw call)，預配置緩衝、執行期零配置。
+// 揮擊拖尾：4 條軌跡 (右手 0/1、左手 2/3 輪替) 共用 1 個 BufferGeometry / Mesh (1 draw call)，預配置緩衝、執行期零配置。
 // 歷史點以 Catmull-Rom 平滑；頂點色為預乘 alpha (rgb 超出 alpha 的部分等同加亮)，
 // 以 ONE / ONE_MINUS_SRC_ALPHA 混合：亮色地面上純 Additive 會被洗白，改此法兼具發光與遮蓋。
-const SLOTS = 2;
+const SLOTS = 4;
 const BASE_DIM = 0.4;  // 握把端相對亮度
 const TIP_WHITE = 0.4; // 尖端色往白色混合比例 (亮白核心)
 

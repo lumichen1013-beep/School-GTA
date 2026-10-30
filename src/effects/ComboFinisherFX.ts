@@ -22,6 +22,9 @@ const GOLD_BOLT_A = 0xfff27a;
 const GOLD_BOLT_B = 0x8fd3ff;
 const BOLT_CORE = 0xffffff;
 const SCORCH_COLOR = 0x2a1608; // 裂痕焦黑底色 (亮色地面上提供對比)
+const FEATHER_LIFE = 0.9;
+const FEATHER_GRAVITY = 7;
+const FEATHER_COLORS = [0xffffff, 0x2ef2c8, 0xff6fcf] as const; // 白 / 青 / 粉 (雙燕羽刃)
 
 const _matrix = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -31,6 +34,7 @@ const _color = new THREE.Color();
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _yAxis = new THREE.Vector3(0, 1, 0);
+const _euler = new THREE.Euler();
 const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
 // 程序產生放射狀裂紋貼圖 (透明底、白色裂紋，實際顏色由 instanceColor 染色)
@@ -182,12 +186,16 @@ function flushFx(mesh: THREE.InstancedMesh) {
 interface Crack { life: number; max: number; x: number; y: number; z: number; rot: number; size: number; color: number; core: number }
 interface Ring { life: number; delay: number; x: number; y: number; z: number; radius: number; color: number }
 interface Puff { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; size: number }
+interface Feather { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; sx: number; sy: number; sz: number; phase: number; color: number }
 
 class ComboFinisherFXSystem {
   private crackMesh: THREE.InstancedMesh | null = null;
   private ringMesh: THREE.InstancedMesh | null = null;
   private dustMesh: THREE.InstancedMesh | null = null;
   private boltMesh: THREE.InstancedMesh | null = null;
+  private featherMesh: THREE.InstancedMesh | null = null;
+  private feathers: Feather[] = [];
+  private featherActive = 0;
   private cracks: Crack[] = [];
   private rings: Ring[] = [];
   private puffs: Puff[] = [];
@@ -240,13 +248,23 @@ class ComboFinisherFXSystem {
     this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), this.strands * this.segments, 5, true);
     this.boltPts = new Float32Array(this.strands * (this.segments + 1) * 3);
 
-    scene.add(this.crackMesh, this.ringMesh, this.boltMesh);
+    // 羽毛 (雙燕羽刃終結技)：葉形薄片，白 / 青 / 粉 instanceColor
+    const leaf = new THREE.Shape();
+    leaf.moveTo(0, -0.5);
+    leaf.quadraticCurveTo(0.34, -0.1, 0, 0.5);
+    leaf.quadraticCurveTo(-0.34, -0.1, 0, -0.5);
+    this.featherMesh = createInstanced(new THREE.ShapeGeometry(leaf), fadeMat(null, true), q.featherPool, 6, true);
+    for (let i = 0; i < q.featherPool; i++) {
+      this.feathers.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0, rz: 0, sx: 0, sy: 0, sz: 0, phase: 0, color: FEATHER_COLORS[i % 3] });
+    }
+
+    scene.add(this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh);
     if (this.dustMesh) scene.add(this.dustMesh);
   }
 
   // 暫時顯示以便 renderer.compile 預熱 shader
   public prewarm(compile: () => void) {
-    const meshes = [this.crackMesh, this.ringMesh, this.dustMesh, this.boltMesh];
+    const meshes = [this.crackMesh, this.ringMesh, this.dustMesh, this.boltMesh, this.featherMesh];
     for (const m of meshes) if (m) m.visible = true;
     compile();
     for (const m of meshes) if (m) m.visible = false;
@@ -258,9 +276,10 @@ class ComboFinisherFXSystem {
     for (const c of this.cracks) c.life = 0;
     for (const r of this.rings) { r.life = 0; r.delay = 0; }
     for (const p of this.puffs) p.life = 0;
-    this.crackActive = this.ringActive = this.puffActive = 0;
+    for (const f of this.feathers) f.life = 0;
+    this.crackActive = this.ringActive = this.puffActive = this.featherActive = 0;
     this.boltLife = 0;
-    const meshes = [this.crackMesh, this.ringMesh, this.boltMesh];
+    const meshes = [this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh];
     for (const m of meshes) {
       if (!m) continue;
       for (let i = 0; i < m.count; i++) { m.setMatrixAt(i, _zeroMatrix); setFx(m, i, 0xffffff, 0); }
@@ -303,6 +322,26 @@ class ComboFinisherFXSystem {
     if (groundRadius > 0) this.spawnRing(center.x, groundY + 0.06, center.z, groundRadius, style.impact, delay);
   }
 
+  // 羽毛噴發：自 center (胸口高度) 放射向上、重力飄落旋轉；整池一次噴發
+  public featherBurst(center: THREE.Vector3) {
+    const mesh = this.featherMesh;
+    if (!mesh) return;
+    const n = this.feathers.length;
+    for (let i = 0; i < n; i++) {
+      const f = this.feathers[i];
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.6;
+      const sp = 3.2 + Math.random() * 3.2;
+      f.life = FEATHER_LIFE * (0.8 + Math.random() * 0.2);
+      f.x = center.x + Math.cos(a) * 0.3; f.y = center.y; f.z = center.z + Math.sin(a) * 0.3;
+      f.vx = Math.cos(a) * sp; f.vz = Math.sin(a) * sp; f.vy = 2.2 + Math.random() * 3.6;
+      f.rx = Math.random() * 6.28; f.ry = Math.random() * 6.28; f.rz = Math.random() * 6.28;
+      f.sx = (Math.random() - 0.5) * 14; f.sy = (Math.random() - 0.5) * 14; f.sz = (Math.random() - 0.5) * 14;
+      f.phase = Math.random() * 6.28;
+    }
+    this.featherActive = n;
+    mesh.visible = true;
+  }
+
   private spawnRing(x: number, y: number, z: number, radius: number, color: number, delay: number) {
     const r = this.rings[this.nextRing];
     this.nextRing = (this.nextRing + 1) % this.rings.length;
@@ -342,6 +381,33 @@ class ComboFinisherFXSystem {
     if (this.ringActive > 0) this.updateRings(delta);
     if (this.puffActive > 0) this.updateDust(delta, camera);
     if (this.boltLife > 0) this.updateBolt(delta);
+    if (this.featherActive > 0) this.updateFeathers(delta);
+  }
+
+  private updateFeathers(delta: number) {
+    const mesh = this.featherMesh!;
+    let alive = 0;
+    for (let i = 0; i < this.feathers.length; i++) {
+      const f = this.feathers[i];
+      if (f.life <= 0) continue;
+      f.life -= delta;
+      if (f.life <= 0) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, f.color, 0); continue; }
+      alive++;
+      const damp = Math.max(0, 1 - 1.8 * delta);
+      f.vx *= damp; f.vz *= damp;
+      f.vy = f.vy * damp - FEATHER_GRAVITY * delta * 0.6;
+      f.phase += delta * 9;
+      f.x += (f.vx + Math.sin(f.phase) * 0.6) * delta; f.y += f.vy * delta; f.z += (f.vz + Math.cos(f.phase) * 0.6) * delta;
+      f.rx += f.sx * delta; f.ry += f.sy * delta; f.rz += f.sz * delta;
+      const t = 1 - f.life / FEATHER_LIFE;
+      _quat.setFromEuler(_euler.set(f.rx, f.ry, f.rz));
+      _matrix.compose(_pos.set(f.x, f.y, f.z), _quat, _scl.set(0.2, 0.44, 1).multiplyScalar(1 - t * t * 0.5));
+      mesh.setMatrixAt(i, _matrix);
+      setFx(mesh, i, f.color, t > 0.65 ? (1 - t) / 0.35 : 1);
+    }
+    flushFx(mesh);
+    this.featherActive = alive;
+    if (alive === 0) mesh.visible = false;
   }
 
   private updateCracks(delta: number) {

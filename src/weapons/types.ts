@@ -3,7 +3,7 @@ import type { KfMove } from '../entities/shared/kungfu';
 import type { WeaponFxId } from '../effects/weaponFxStyle';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT';
+export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
 export type WeaponWorld = 'CAMPUS' | 'DETENTION';
@@ -22,8 +22,10 @@ export interface WeaponStats {
   readonly knockback: number;
 }
 
-// 連段終結技特效參數：slamBolt = 下劈地裂附帶雷電、waistY = 旋身衝擊環高度、landRadius = 著地補環半徑 (0 / 未設 = 不補)
+// 連段終結技特效參數：slamBolt = 下劈地裂附帶雷電、waistY = 旋身衝擊環高度、landRadius = 著地補環半徑 (0 / 未設 = 不補)、
+// feathers = 主擊噴發羽毛
 export interface WeaponFinisherFx {
+  readonly feathers?: boolean;
   readonly slamBolt?: boolean;
   readonly waistY?: number;
   readonly landRadius?: number;
@@ -92,6 +94,8 @@ export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly stats: WeaponStats;
   // 終結技群攻改讀招式上的 maxGold / shakeGold / hitStopGold (未設時回退一般欄位)
   readonly useGoldAoe?: boolean;
+  // 左手持械 (雙持)：持有時不撐傘 (比照特訓院收傘)，出招也不鎖左臂
+  readonly suppressUmbrella?: boolean;
   // null = 一開始即持有
   readonly unlock: { lockedHint(p: WeaponUnlockProgress, world: WeaponWorld): string } | null;
   // true = 沿用定義本身；false = 該世界不可用；物件 = 該世界變體
