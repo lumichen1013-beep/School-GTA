@@ -91,9 +91,14 @@ const ENFORCER_FLASH_CHANCE = 0.2; // 生教組長閃身步
 const ENFORCER_COUNTER_COOLDOWN = 0.4; // 格擋 / 閃身成功後的反擊延遲 (秒)
 const ENFORCER_RAGE_SPEED_MULT = 1.15;
 const ENFORCER_SIG_FIRST_DELAY = 3.0; // 進入追捕後首次招牌技的最短等待 (秒)
-const ENFORCER_ORBIT_RADIUS = 2.75; // 輪流出手：等待方環繞玩家的半徑 (m)
-const ENFORCER_ORBIT_STEP = 0.5; // 每次朝前方繞行的角度 (rad)
-const ENFORCER_ORBIT_SPEED = 3.2; // 環繞側移速度 (m/s)
+// 第一世界圍攻 (出手權杖，見 AttackTokenCoordinator)：未持權杖的圍攻者於外圈環繞等待
+const RING_WAIT_RADIUS = 2.75; // 外圈半徑 (m)
+const RING_WAIT_MAX_TURN = 0.5; // 每次朝站位繞行的最大角度 (rad)
+const RING_WAIT_SPEED = 3.2; // 外圈附近環繞側移速度上限 (m/s)
+const RING_WAIT_CAP_DIST_SQ = 14.0; // 距玩家約 3.75m 內才限速 (外側趕來時維持追捕速度)
+const RING_WHIFF_SETTLE = 0.5; // 與站位方位差小於此值 (rad) 且距離接近外圈才可做樣子揮空
+const RING_TAUNTS: readonly string[] = ['來啊！', '換我了吧？', '別想跑！', '圍住他！', '看招！'];
+const RING_TAUNTS_CANINE: readonly string[] = ['🐾 嗚嚕嚕…', '🐾 汪汪！'];
 const GRAB_LUNGE_DIST = 1.2; // 擒拿摔預備期間向前撲抓距離 (m)
 const GRAB_LUNGE_START = 0.12; // 撲抓開始時間點 (占全長比例)
 const GRAB_LUNGE_STOP_DIST = 0.9; // 與玩家相距此距離內停止撲抓 (不推擠玩家)
@@ -372,9 +377,14 @@ export class NPC {
   public freezeTimer: number = 0;   // 全校廣播定格發呆時間
   // 校園執法者招牌技 (擒拿摔 / 戒尺連打) 冷卻與撲抓方向；留校察看 (5 級處分) 暴怒
   public sigCooldown: number = ENFORCER_SIG_FIRST_DELAY;
-  public enforcerHoldAttack: boolean = false; // 輪流出手：非本輪出手方暫不出招
-  public enforcerOrbit: boolean = false; // 輪流出手：等待方環繞玩家
-  private orbitDir: number = 1;
+  // 第一世界圍攻出手權杖 (由 AttackTokenCoordinator 低頻指派)：未持權杖者不出招、於外圈環繞等待
+  public attackHold: boolean = false;
+  public ringWait: boolean = false;
+  public ringAngle: number = 0; // 外圈站位方位角
+  public tokenWaitTime: number = 0; // 本次等待權杖的累計秒數 (換手時等最久者優先)
+  public whiffCooldown: number = 0; // 距下次可做樣子揮空的秒數
+  private whiffTimer: number = 0; // 做樣子揮空 (不造成傷害) 剩餘時間
+  private ringTauntTimer: number = 0;
   private readonly grabLungeDir: THREE.Vector3 = new THREE.Vector3();
   public isEnraged: boolean = false;
 
@@ -1312,6 +1322,7 @@ export class NPC {
   // 發動招牌技 (預備動作可被閃避；出招預備過半即霸體)
   public startSignature(kind: EnforcerSignature, playerPos: THREE.Vector3) {
     const move = kind === 'GRAB' ? NPC_GRAB_THROW : NPC_RULER_FLURRY;
+    this.whiffTimer = 0;
     if (this.isPaused) this.cancelPause();
     this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
     this.mesh.rotation.y = this.rotationY;
@@ -1433,21 +1444,69 @@ export class NPC {
     depenetrateXZ(colliders, this.position, radius, 0.3, 1.6, 0.02, 1, 'npc');
   }
 
-  // 校園執法者正在出招 (一般攻擊或招牌技，不含格擋動作)
-  public get isEnforcerAttacking(): boolean {
+  // 正在實際出招 (功夫招式含招牌技、犬類/即時攻擊動作；不含格擋與做樣子揮空)
+  public get isMeleeAttacking(): boolean {
+    if (this.whiffTimer > 0) return false;
     const m = this.kf.move;
-    return m !== null && m.dmg > 0;
+    return (m !== null && m.dmg > 0) || this.attackAnimTimer > 0;
   }
 
-  // 輪流出手等待方：沿目前方位朝固定方向繞行，維持約 2.75m 半徑 (共用包夾 scratch 向量)
-  public setEnforcerOrbit(on: boolean) {
-    if (on && !this.enforcerOrbit) this.orbitDir = Math.random() < 0.5 ? 1 : -1;
-    this.enforcerOrbit = on;
+  public get isWhiffing(): boolean {
+    return this.whiffTimer > 0;
   }
 
-  private computeEnforcerOrbitTarget(playerPos: THREE.Vector3): THREE.Vector3 {
-    const a = Math.atan2(this.position.x - playerPos.x, this.position.z - playerPos.z) + this.orbitDir * ENFORCER_ORBIT_STEP;
-    return _npcSurroundTarget.set(playerPos.x + Math.sin(a) * ENFORCER_ORBIT_RADIUS, this.position.y, playerPos.z + Math.cos(a) * ENFORCER_ORBIT_RADIUS);
+  // 外圈等待：進入時中止發呆/待機動作，並排定第一次嗆聲時間
+  public setRingWait(on: boolean, angle: number = 0) {
+    if (on && !this.ringWait) {
+      if (this.isPaused) this.cancelPause();
+      this.ringTauntTimer = 4.0 + Math.random() * 5.0;
+    }
+    this.ringWait = on;
+    if (on) this.ringAngle = angle;
+  }
+
+  // 已在外圈站位附近 (未在趕路或大幅繞行)，可做樣子揮空
+  public isSettledOnRing(playerPos: THREE.Vector3): boolean {
+    if (!this.ringWait || this.kf.move || this.staggerTimer > 0 || this.attackAnimTimer > 0) return false;
+    const dx = this.position.x - playerPos.x;
+    const dz = this.position.z - playerPos.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < 2.4 * 2.4 || d2 > 3.3 * 3.3) return false;
+    return Math.abs(wrapAngle(this.ringAngle - Math.atan2(dx, dz))) < RING_WHIFF_SETTLE;
+  }
+
+  // 做樣子揮空：面向玩家於外圈原地出一招 (距離不及，不造成傷害、不佔出手權杖)；犬類為吠叫撲咬動作
+  public startWhiff(playerPos: THREE.Vector3) {
+    if (this.isPaused) this.cancelPause();
+    this.rotationY = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+    this.mesh.rotation.y = this.rotationY;
+    const set = this.rightArm ? getNpcMoveset(this.role) : null;
+    if (set) {
+      const move = set[this.kfSeq % set.length];
+      this.kfSeq++;
+      this.kf.start(move, 1, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+      this.whiffTimer = move.dur;
+    } else {
+      this.attackAnimTimer = 0.35;
+      this.whiffTimer = 0.35;
+      if (this.cfg.isCanine) soundManager.playDogBark();
+    }
+  }
+
+  // 外圈等待站位：朝指派方位沿圓弧繞行 (每次最多偏轉 RING_WAIT_MAX_TURN)，偶爾嗆聲 (共用包夾 scratch 向量)
+  private computeRingWaitTarget(playerPos: THREE.Vector3, delta: number): THREE.Vector3 {
+    this.ringTauntTimer -= delta;
+    if (this.ringTauntTimer <= 0) {
+      this.ringTauntTimer = 6.0 + Math.random() * 6.0;
+      if (Math.random() < 0.4) {
+        const lines = this.cfg.isCanine ? RING_TAUNTS_CANINE : RING_TAUNTS;
+        this.showSpeechBubble(lines[Math.floor(Math.random() * lines.length)], false, 1.4);
+      }
+    }
+    const bearing = Math.atan2(this.position.x - playerPos.x, this.position.z - playerPos.z);
+    const off = wrapAngle(this.ringAngle - bearing);
+    const a = bearing + THREE.MathUtils.clamp(off, -RING_WAIT_MAX_TURN, RING_WAIT_MAX_TURN);
+    return _npcSurroundTarget.set(playerPos.x + Math.sin(a) * RING_WAIT_RADIUS, this.position.y, playerPos.z + Math.cos(a) * RING_WAIT_RADIUS);
   }
 
   // 包夾繞行中 (尚未抵達站位方位且未逾時) 暫不出手，先散開再圍攻
@@ -1478,6 +1537,7 @@ export class NPC {
   // 觸發攻擊動作：人型角色依角色招式組輪替出招，傷害於命中時間點結算 (回傳 true)；
   // 犬類、單車糾察、羽球賽中的大如老師維持原本即時動作 (回傳 false，由呼叫端立即結算)
   public triggerAttackAnimation(allowKungFu: boolean = true): boolean {
+    this.whiffTimer = 0;
     const set = allowKungFu && this.rightArm && !this.isInBadmintonMatch ? getNpcMoveset(this.role) : null;
     if (set) {
       const move = set[this.kfSeq % set.length];
@@ -3421,6 +3481,7 @@ export class NPC {
 
     if (this.whistleCooldown > 0) this.whistleCooldown -= delta;
     if (this.attackAnimTimer > 0) this.attackAnimTimer -= delta;
+    if (this.whiffTimer > 0) this.whiffTimer -= delta;
     if (this.attackCooldown > 0) this.attackCooldown -= delta;
     if (this.shuttlecockCooldown > 0) this.shuttlecockCooldown -= delta;
     // 招牌技冷卻：追捕中倒數，脫離追捕後重置為首次等待時間
@@ -3454,8 +3515,12 @@ export class NPC {
           }
         }
         if (struck && move && move.dmg > 0) {
-          this.kfStrike = move;
-          this.playAttackSound();
+          // 做樣子揮空：只有破風聲，不通知戰鬥系統結算
+          if (this.whiffTimer > 0) soundManager.playBadmintonWhoosh();
+          else {
+            this.kfStrike = move;
+            this.playAttackSound();
+          }
         }
         this.updateGrabLunge(delta, colliders, playerPos);
         // 格擋招式期間頭部平滑回正 (總教官硬直搖晃的頭部)
@@ -3493,9 +3558,9 @@ export class NPC {
       if (this.hasSurroundSlot && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
         targetPos = this.computeSurroundTarget(playerPos, delta);
       }
-      // 校園執法者輪流出手：等待方於玩家周圍約 2.75m 環繞側移
-      if (this.enforcerOrbit && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
-        targetPos = this.computeEnforcerOrbitTarget(playerPos);
+      // 第一世界圍攻：未持出手權杖者於玩家周圍約 2.75m 外圈等角站位環繞側移
+      if (this.ringWait && this.lostSightTimer <= 0 && !this.isInvestigatingNoise) {
+        targetPos = this.computeRingWaitTarget(playerPos, delta);
       }
 
       // 追捕動態節奏計時 (忽快忽慢：爆發衝刺 vs 喘氣慢跑)
@@ -3535,7 +3600,7 @@ export class NPC {
       const accelRate = this.cfg.chaseAccelRate;
       this.dynamicSpeed += (targetChaseSpeed - this.dynamicSpeed) * Math.min(delta * accelRate, 1.0);
       currentSpeed = this.dynamicSpeed;
-      if (targetPos === _npcSurroundTarget && this.enforcerOrbit) currentSpeed = Math.min(currentSpeed, ENFORCER_ORBIT_SPEED);
+      if (targetPos === _npcSurroundTarget && this.ringWait && distToPlayerSq < RING_WAIT_CAP_DIST_SQ) currentSpeed = Math.min(currentSpeed, RING_WAIT_SPEED);
     } else if (this.isReclaimingBike && this.ownedBike && !this.ownedBike.isMounted) {
       // 走回被搶的愛車旁牽車 (玩家正在騎乘時改為一般巡邏，待玩家下車後再前往)
       this.isBurstSprinting = false;
@@ -3731,7 +3796,7 @@ export class NPC {
       if (usingSurroundSlot) {
         const pdx = playerPos.x - this.position.x;
         const pdz = playerPos.z - this.position.z;
-        if (isTooCloseToPlayer || this.enforcerOrbit || pdx * pdx + pdz * pdz < 4.0) {
+        if (isTooCloseToPlayer || this.ringWait || pdx * pdx + pdz * pdz < 4.0) {
           faceX = pdx;
           faceZ = pdz;
         }
@@ -3751,7 +3816,7 @@ export class NPC {
       // 追捕姿態視覺回饋：衝刺時前傾壓低、調息時微喘
       if (!isCanine && this.role !== 'BIKE_PATROL') {
         if (this.isChasing) {
-          const targetTilt = this.isBurstSprinting ? 0.14 : (0.05 + Math.sin(this.animTimer * 2.5) * 0.03);
+          const targetTilt = this.ringWait ? 0.08 : (this.isBurstSprinting ? 0.14 : (0.05 + Math.sin(this.animTimer * 2.5) * 0.03));
           this.mesh.rotation.x += (targetTilt - this.mesh.rotation.x) * Math.min(delta * 6.0, 1.0);
         } else {
           this.mesh.rotation.x += (0 - this.mesh.rotation.x) * Math.min(delta * 6.0, 1.0);
@@ -3763,7 +3828,7 @@ export class NPC {
       const animRate = isCanine
         ? (this.isChasing ? 12.0 : Math.max(3.2, currentSpeed * 2.4))
         : (this.isChasing
-          ? (this.isBurstSprinting ? 16.0 : 9.5)
+          ? (this.ringWait ? 7.0 : (this.isBurstSprinting ? 16.0 : 9.5))
           : (isDetention
             ? Math.max(2.6, currentSpeed * 2.6)
             : ((this.movementStyle === 'JOGGING' || this.isLifeRunning) ? 12.0 : (this.movementStyle === 'HURRIED_WALK' ? 9.5 : 7.5))));
@@ -3796,7 +3861,14 @@ export class NPC {
         if (this.bikeRearWheel) this.bikeRearWheel.rotation.x += spin;
       } else {
         // 人型 NPC 動作 (追捕揮拳 vs 各類步行風格)
-        if (this.isChasing) {
+        if (this.ringWait && this.attackAnimTimer <= 0) {
+          // 外圈等待：雙拳護於胸前的備戰架式，小碎步側移
+          const step = isTooCloseToPlayer ? 0 : Math.sin(this.animTimer) * 0.22;
+          if (this.leftArm) this.leftArm.rotation.set(-1.25, 0, 0.3);
+          if (this.rightArm) this.rightArm.rotation.set(-1.0, 0, -0.3);
+          if (this.leftLeg) this.leftLeg.rotation.set(step, 0, 0);
+          if (this.rightLeg) this.rightLeg.rotation.set(-step, 0, 0);
+        } else if (this.isChasing) {
           const swingMag = this.isBurstSprinting ? 0.70 : 0.38;
           const swing = Math.sin(this.animTimer) * swingMag;
           if (this.leftArm) this.leftArm.rotation.set(-swing, 0, 0);

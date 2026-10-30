@@ -870,7 +870,7 @@ export class CombatSystem {
       // 校園執法者招牌技 (擒拿摔 3m 內撲抓、戒尺連打貼身)：追捕中冷卻完畢且未在出招時發動
       if (
         npc.isEnforcer && !isSpawnGraceActive && npc.isChasing && !player.isDead && npc.attackCooldown <= 0 &&
-        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0 && !npc.enforcerHoldAttack
+        !npc.isSurroundRepositioning && npc.lostSightTimer <= 0 && !npc.attackHold
       ) {
         const sig = npc.canStartSignature(distToPlayer, targetPosition.y - npc.position.y);
         if (sig) {
@@ -878,8 +878,8 @@ export class CombatSystem {
           continue;
         }
       }
-      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)；執法者輪流出手時非本輪者不出手
-      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning || npc.enforcerHoldAttack) continue;
+      // 多人包夾：繞行前往站位途中先不出手 (見 NPC.isSurroundRepositioning)；第一世界圍攻未持出手權杖者不出手 (見 AttackTokenCoordinator)
+      if (!shouldAttack || player.isDead || npc.attackCooldown > 0 || npc.isSurroundRepositioning || npc.attackHold) continue;
 
       npc.attackCooldown = this.getNpcAttackInterval(npc);
       // 人型角色先播預備動作，傷害延後至命中時間點；犬類與單車糾察立即結算
