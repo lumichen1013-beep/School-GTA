@@ -1,15 +1,10 @@
 import { soundManager } from '../audio/SoundEffects';
-import type { WeaponType } from '../entities/Player';
+import { getWeapon, isWeaponAvailable, resolveVariant, WEAPONS } from '../weapons/registry';
+import type { WeaponDefinition, WeaponId } from '../weapons/types';
 import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 
-// 武器切換提示文字 (第一世界 / 第二世界)
-const WEAPON_EQUIP_BANNERS: Record<WeaponType, { campus: string; detention: string }> = {
-  FIST: { campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' },
-  NORMAL_BAT: { campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' },
-  SPECIAL_BAT: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' }
-};
 // 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與閃身步被動自動發動機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
 const AUTO_DODGE_CHANCE = 0.2;
@@ -51,6 +46,18 @@ function getDetentionBounty(role: NPCRole, isTakedown: boolean): number {
   const b = DETENTION_BOUNTIES[role];
   if (!b) return 0;
   return isTakedown ? b.full : Math.floor(b.full / 2);
+}
+
+// 大地圖【裝備】分頁的單列資料
+export type WeaponEquipStatus = 'equipped' | 'unlocked' | 'locked' | 'unavailable';
+export interface WeaponEquipEntry {
+  id: WeaponId;
+  icon: string;
+  name: string;
+  damage: number;
+  reach: number;
+  status: WeaponEquipStatus;
+  hint: string;
 }
 
 /**
@@ -156,63 +163,72 @@ export class Progression {
     }
   }
 
-  private equipWeapon(weapon: WeaponType) {
+  // 切換武器並顯示提示文字 (第一世界 / 第二世界，見武器定義 banner)
+  private equipWeapon(weapon: WeaponId) {
     this.ctx.player.setWeapon(weapon);
-    const texts = WEAPON_EQUIP_BANNERS[weapon];
+    const texts = getWeapon(weapon).banner;
     this.ctx.wantedSystem.showBanner(this.ctx.currentWorldType === 'DETENTION' ? texts.detention : texts.campus, 1500);
   }
 
-  // 數字鍵 1/2/3 直接切換武器 (未解鎖時顯示解鎖條件)
-  public selectWeaponSlot(slot: 1 | 2 | 3) {
-    const { player, wantedSystem } = this.ctx;
-    const isDetention = this.ctx.currentWorldType === 'DETENTION';
-    if (slot === 1) {
-      this.equipWeapon('FIST');
-    } else if (slot === 2) {
-      if (player.hasNormalBat) {
-        this.equipWeapon('NORMAL_BAT');
-      } else {
-        wantedSystem.showBanner(
-          isDetention
-            ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
-            : `🔒 普通球棒未解鎖！需擊敗 5 位普通同學 (目前進度: ${this.studentDefeatedCount}/5)`,
-          2500
-        );
-      }
-    } else if (player.hasSpecialBat) {
-      this.equipWeapon('SPECIAL_BAT');
-    } else {
-      wantedSystem.showBanner(
-        isDetention
-          ? '⚠️ 特訓院管制區：重型管制武器已遭沒收封存！'
-          : `🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教${this.teacherDefeatedCount}/1 犬${this.dogDefeatedCount}/1 車${this.bikePatrolDefeatedCount}/5)`,
-        2500
-      );
-    }
+  // 已解鎖且本世界可用 (循環切換與大地圖裝備共用)
+  private canEquip(def: WeaponDefinition): boolean {
+    return this.ctx.player.isWeaponUnlocked(def.id) && isWeaponAvailable(def, this.ctx.currentWorldType);
   }
 
-  // 手機武器鍵：依序循環 徒手 → 普通球棒 → 神兵
+  // 大地圖【裝備】分頁：依武器槽順序列出武器與狀態 (開啟 / 裝備後才呼叫，非每幀)
+  public getWeaponEquipEntries(): WeaponEquipEntry[] {
+    const world = this.ctx.currentWorldType;
+    return WEAPONS.map((def) => {
+      const status: WeaponEquipStatus = def.id === this.ctx.player.currentWeapon ? 'equipped'
+        : !isWeaponAvailable(def, world) ? 'unavailable'
+        : !this.ctx.player.isWeaponUnlocked(def.id) ? 'locked'
+        : 'unlocked';
+      return {
+        id: def.id,
+        icon: def.icon,
+        name: resolveVariant(def.id, world).name,
+        damage: def.stats.damage,
+        reach: def.stats.reach,
+        status,
+        hint: status === 'locked' && def.unlock ? def.unlock.lockedHint(this, world) : ''
+      };
+    });
+  }
+
+  // 大地圖點選裝備：檢查同 cycleWeapon，不可用時顯示解鎖條件橫幅
+  public readonly equipById = (id: WeaponId): boolean => {
+    const def = getWeapon(id);
+    const { player, wantedSystem } = this.ctx;
+    if (!this.canEquip(def)) {
+      const world = this.ctx.currentWorldType;
+      wantedSystem.showBanner(!isWeaponAvailable(def, world) ? '🚫 本世界不可使用此武器' : (def.unlock?.lockedHint(this, world) ?? ''), 2000);
+      return false;
+    }
+    if (id !== player.currentWeapon) this.equipWeapon(id);
+    return true;
+  };
+
+  // 武器循環 (滾輪 / 武器標章 / 手機武器鍵)：依武器槽順序循環至下一把已解鎖且本世界可用的武器 (徒手 → 普通球棒 → 神兵 → 徒手)
   public readonly cycleWeapon = () => {
     const { player } = this.ctx;
-    const current = player.currentWeapon;
-    if (current === 'FIST') {
-      if (player.hasNormalBat) {
-        this.equipWeapon('NORMAL_BAT');
-      } else if (player.hasSpecialBat) {
-        this.equipWeapon('SPECIAL_BAT');
-      } else {
-        this.ctx.wantedSystem.showBanner(
-          this.ctx.currentWorldType === 'DETENTION'
-            ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
-            : `🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`,
-          1500
-        );
+    const world = this.ctx.currentWorldType;
+    const from = WEAPONS.findIndex((w) => w.id === player.currentWeapon);
+    for (let i = 1; i <= WEAPONS.length; i++) {
+      const def = WEAPONS[(from + i) % WEAPONS.length];
+      if (!this.canEquip(def)) continue;
+      if (def.id !== player.currentWeapon) {
+        this.equipWeapon(def.id);
+        return;
       }
-    } else if (current === 'NORMAL_BAT' && player.hasSpecialBat) {
-      this.equipWeapon('SPECIAL_BAT');
-    } else {
-      this.equipWeapon('FIST');
+      break;
     }
+    // 沒有其他可切換的武器
+    this.ctx.wantedSystem.showBanner(
+      world === 'DETENTION'
+        ? '🔒 防暴警棍未配發！完成特訓即可獲取裝備！'
+        : `🥊 目前僅有徒手！擊敗同學解鎖球棒 (${this.studentDefeatedCount}/5)`,
+      1500
+    );
   };
 
   // 學習身法絕學 (閃身步 / 狗熊哆嗦毛)

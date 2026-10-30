@@ -1,4 +1,4 @@
-// 武器連段特效樣式表 (拖尾與武器發光共用；地裂特效可沿用 color)
+// 武器連段特效樣式表 (拖尾與武器發光共用；地裂特效可沿用 color)；各武器 / 世界變體使用哪一組見 src/weapons/defs
 export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET';
 
 export interface WeaponFxStyle {
@@ -22,9 +22,3 @@ export const WEAPON_FX_STYLES: Record<WeaponFxId, WeaponFxStyle> = {
 export const TRAIL_WIDTH = 1.6;
 // 第三段 (終結技) 加強倍率
 export const FINISHER_FX_BOOST = { width: 2.0, life: 1.9, brightness: 1.5, glow: 2 } as const;
-
-// 由連段套組與武器判定樣式：警棍 = 第二世界 (DETENTION) 持普通棒，Player 以 BATON 套組表示
-export function resolveWeaponFxId(comboSet: 'FIST' | 'BAT' | 'BATON' | 'RACKET', gold: boolean): WeaponFxId {
-  if (comboSet === 'BAT') return gold ? 'GOLD' : 'BAT';
-  return comboSet;
-}

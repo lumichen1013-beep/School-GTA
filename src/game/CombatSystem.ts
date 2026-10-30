@@ -5,10 +5,10 @@ import { requestCameraShake } from '../effects/cameraShake';
 import { comboFinisherFX } from '../effects/ComboFinisherFX';
 import { impactDust } from '../effects/ImpactDust';
 import { getFxQuality } from '../effects/fxQuality';
-import { WEAPON_FX_STYLES, resolveWeaponFxId } from '../effects/weaponFxStyle';
+import { WEAPON_FX_STYLES } from '../effects/weaponFxStyle';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
-import { PLAYER_COMBOS, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, wrapAngle, type KfMove } from '../entities/shared/kungfu';
+import { PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, wrapAngle, type KfMove } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import type { PlantHitResult } from '../world/EcologicalGarden';
 import { isBehindNpc, isBossStunOpening } from './DetentionMode';
@@ -25,10 +25,8 @@ const _scratchFinisherPoint = new THREE.Vector3();
 const _fxPoint = new THREE.Vector3();
 const _fxNoDir = new THREE.Vector3();
 const _fxGroundNear: CollidableBox[] = [];
-const FX_FIST_WAIST_Y = 0.9; // 旋風腿衝擊環高度 (腰高)
+// 旋身終結技腰高衝擊環高度與著地補環半徑改由武器定義 finisherFx 提供 (見 src/weapons/defs)
 const FX_FIST_LAND_DELAY = 0.22; // 旋風腿落地補環延遲 (約招式進度 0.8)
-const FX_FIST_LAND_RADIUS = 1.1;
-const FX_BATON_WAIST_Y = 1.0;
 const FX_GROUND_TOLERANCE = 0.8; // 衝擊點地面與玩家腳底落差超過此值視為不在地面 (高台邊緣)
 // 終結技群攻候選 (依水平距離由近到遠排序，最多 AOE_CAP 人)
 const AOE_CAP = 8;
@@ -744,7 +742,9 @@ export class CombatSystem {
     const q = getFxQuality();
     const p = _fxPoint.copy(point);
     const radius = move.aoe.radius * player.getWeaponReach();
-    const gold = player.currentWeapon === 'SPECIAL_BAT';
+    // 本招生效的武器套組決定特效樣式 (球棒 / 黃金棒 / 拳 / 警棍)
+    const weapon = player.activeWeapon;
+    const style = WEAPON_FX_STYLES[weapon.fx.R];
     const isCampus = this.ctx.currentWorldType === 'CAMPUS';
     const inPond = isCampus && ecologicalGarden.isInsideWishingPond(p);
     const inPool = isCampus && world.isInsideSwimmingPool(p);
@@ -756,22 +756,20 @@ export class CombatSystem {
         this.ctx.waterSplashVFX.triggerSplashBurst(p, player.rotationY, true, inPond ? player.swimSurfaceY : 0.25);
         return;
       }
-      const style = WEAPON_FX_STYLES[resolveWeaponFxId('BAT', gold)];
       // 取衝擊點腳下實際地面 (樓梯 / 高台)；落差過大視為不在地面，只放環
       const gy = this.sampleGroundY(p.x, p.z, p.y);
       const onGround = grounded && p.y - gy <= FX_GROUND_TOLERANCE;
       if (onGround) p.y = gy;
-      comboFinisherFX.groundSlam(p, radius, style, gold, onGround);
+      comboFinisherFX.groundSlam(p, radius, style, weapon.finisherFx.slamBolt === true, onGround);
       if (onGround) impactDust.burst(this.ctx.engine.scene, p, _fxNoDir.set(0, 0, 0), { count: q.debrisCount, upward: 2.2, spreadY: 0.2, life: 0.7, size: 1.5 });
       return;
     }
 
-    // SPIN：拳腳 (旋風腿) 與警棍 (旋身橫打) 的腰高衝擊環
+    // SPIN：拳腳 (旋風腿) 與警棍 (旋身橫打) 的腰高衝擊環；拳腳著地時補一圈落地環
     if (inPond || inPool) return;
-    const isFist = PLAYER_COMBOS.FIST.includes(move);
-    const style = WEAPON_FX_STYLES[isFist ? 'FIST' : 'BATON'];
-    comboFinisherFX.spinWave(p, radius, p.y + (isFist ? FX_FIST_WAIST_Y : FX_BATON_WAIST_Y), style,
-      isFist && grounded ? FX_FIST_LAND_RADIUS : 0, p.y, FX_FIST_LAND_DELAY);
+    const fx = weapon.finisherFx;
+    comboFinisherFX.spinWave(p, radius, p.y + (fx.waistY ?? 0), style,
+      grounded ? fx.landRadius ?? 0 : 0, p.y, FX_FIST_LAND_DELAY);
   }
 
   // 取 (x, z) 腳下地面高度：與玩家落腳邏輯一致 (不高於 refY + 容許高度的最高水平面 / 坡道，預設 0)
@@ -796,7 +794,8 @@ export class CombatSystem {
   private resolveFinisherAoe(move: KfMove, aoe: NonNullable<KfMove['aoe']>) {
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
     const isDetention = this.ctx.currentWorldType === 'DETENTION';
-    const gold = player.currentWeapon === 'SPECIAL_BAT';
+    // 黃金棒類武器改讀招式上的黃金群攻欄位 (目標上限 / 停格 / 震動)
+    const gold = player.weaponDef.useGoldAoe === true;
     const weaponReach = player.getWeaponReach();
     const radius = aoe.radius * weaponReach;
     const max = Math.min(AOE_CAP, gold ? aoe.maxGold ?? aoe.max : aoe.max);
