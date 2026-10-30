@@ -212,6 +212,7 @@ export class CampusMode {
 
   private isEnforcerEngaged(playerPos: THREE.Vector3): boolean {
     for (const e of this.enforcers) {
+      if (e.role !== 'INSTRUCTOR') continue;
       if (e.isKnockedDown || e.isPermanentlyKnockedOut || !e.isChasing) continue;
       if (Math.abs(e.position.y - playerPos.y) > 2.0) continue;
       if (e.position.distanceToSquared(playerPos) < ENFORCER_ENGAGE_RANGE_SQ) return true;
@@ -227,11 +228,12 @@ export class CampusMode {
     return tennisGame.tennisState === 'IDLE';
   }
 
-  // 將存活的執法者傳送至玩家所在樓層 5~9m 內、與玩家之間無牆阻隔的安全落點，並吹哨追捕
+  // 將存活的主任教官傳送至玩家所在樓層 5~9m 內、與玩家之間無牆阻隔的安全落點，並吹哨追捕 (生教組長不傳送)
   private teleportEnforcers(playerPos: THREE.Vector3) {
     const floorY = Math.max(0, Math.round(playerPos.y / ENFORCER_FLOOR_HEIGHT) * ENFORCER_FLOOR_HEIGHT);
     let placed = 0;
     for (const e of this.enforcers) {
+      if (e.role !== 'INSTRUCTOR') continue;
       if (e.isKnockedDown || e.isPermanentlyKnockedOut || e.isKnockedFlying) continue;
       if (!this.findEnforcerSpot(playerPos, floorY, placed, _scratchEnforcerSpot)) continue;
       _placedEnforcerSpots[Math.min(placed, _placedEnforcerSpots.length - 1)].copy(_scratchEnforcerSpot);
@@ -240,7 +242,7 @@ export class CampusMode {
       this.teleportedEnforcers.add(e);
     }
     if (placed > 0) {
-      this.ctx.wantedSystem.showBanner('🚨 留校察看！主任教官與生教組長火速趕到現場追捕！', 3000);
+      this.ctx.wantedSystem.showBanner('🚨 留校察看！主任教官火速趕到現場追捕！', 3000);
     }
   }
 
