@@ -3,7 +3,7 @@ import { CollidableBox } from './CampusWorld';
 import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { bakeStatic, freezeStaticMatrices } from './sceneUtils';
+import { bakeStatic, freezeStatic } from './sceneUtils';
 
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
@@ -202,7 +202,7 @@ export class EcologicalGarden {
     this.group.add(this.dynamicGroup);
     const dynamicObjects = new Set<THREE.Object3D>([this.dynamicGroup]);
     bakeStatic(this.group, dynamicObjects);
-    freezeStaticMatrices(this.group, dynamicObjects);
+    freezeStatic(this.group, dynamicObjects);
 
     this.scene.add(this.group);
   }

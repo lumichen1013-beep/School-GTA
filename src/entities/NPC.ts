@@ -11,6 +11,7 @@ import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, NPC_CROSS_PARRY, NPC_GRAB
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
+import { applyNpcLodLevel, nextNpcLodLevel, type NpcLodLevel, type NpcLodRig } from './npc/lod';
 import { impactDust } from '../effects/ImpactDust';
 import { requestCameraShake } from '../effects/cameraShake';
 
@@ -457,6 +458,10 @@ export class NPC {
   private bikeFrontWheel?: THREE.Mesh;
   private bikeRearWheel?: THREE.Mesh;
   private bikeModelParts: THREE.Object3D[] = []; // 騎車姿態模型全部零件 (單車 + 坐姿騎士)
+
+  // 遠處繪製分級 (僅切換零件 visible，不影響骨架節點的動畫與遊戲邏輯)
+  private lod?: NpcLodRig;
+  private lodLevel: NpcLodLevel = 0;
 
   private hpBarGroup: THREE.Group;
   private hpBarFrame: THREE.Group;
@@ -1005,7 +1010,8 @@ export class NPC {
       bikeFrontWheel: this.bikeFrontWheel,
       bikeRearWheel: this.bikeRearWheel,
       umbrellaMesh: this.umbrellaMesh,
-      bossTelegraphMat: this.bossTelegraphMat
+      bossTelegraphMat: this.bossTelegraphMat,
+      lod: this.lod
     };
   }
 
@@ -1027,14 +1033,41 @@ export class NPC {
     this.bikeRearWheel = rig.bikeRearWheel;
     this.umbrellaMesh = rig.umbrellaMesh;
     this.bossTelegraphMat = rig.bossTelegraphMat;
+    if (this.lod !== rig.lod) {
+      this.lod = rig.lod;
+      this.lodLevel = 0; // 新模型的分級網格預設隱藏、完整零件預設顯示
+    }
   }
 
   // 執行模型建構函式 (實作位於 npc/models.ts) 並套用結果
   private buildModel(build: (rig: NPCModelRig) => void) {
     this.kf.cancel();
     const rig = this.createRig();
+    rig.lod = undefined; // 重建模型：舊分級網格隨舊零件移除，由建構函式重新建立 (無分級的模型維持 undefined)
     build(rig);
     this.readRig(rig);
+  }
+
+  // 戰鬥/追捕/警戒/倒地/對話/撐傘等狀態與 Boss 類角色一律維持完整模型 (姿勢細節與手持物必須清楚)
+  private needsFullModel(): boolean {
+    return this.isChasing || this.alertState !== 'NORMAL' || this.isKnockedDown || this.isKnockedFlying
+      || this.isPermanentlyKnockedOut || this.hitCooldown > 0 || this.attackAnimTimer > 0 || this.kf.active
+      || this.isDodging || this.isConversing || this.isFullModelRole()
+      || (this.umbrellaMesh !== undefined && this.umbrellaMesh.visible);
+  }
+
+  private isFullModelRole(): boolean {
+    return this.role === 'PE_TEACHER_BOSS' || this.role === 'DODGE_TEACHER' || this.role === 'DETENTION_BOSS';
+  }
+
+  // 依鏡頭距離切換遠處分級 (每幀於 AI 更新後呼叫；只在分級改變時切換 visible)
+  public updateLod(viewPos: THREE.Vector3) {
+    const lod = this.lod;
+    if (!lod) return;
+    const next = nextNpcLodLevel(this.lodLevel, this.mesh.position.distanceToSquared(viewPos), this.needsFullModel());
+    if (next === this.lodLevel) return;
+    this.lodLevel = next;
+    applyNpcLodLevel(lod, next);
   }
 
   public getRoleTitle(): string {

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { NPCRole, NPCLook } from '../NPC';
-import { bakeNode, bakeStaticParts } from './modelCache';
+import { bakeNode, bakeStaticParts, buildHumanoidLod } from './modelCache';
+import type { NpcLodRig } from './lod';
 import { buildUmbrella } from '../shared/umbrella';
 
 // NPC 3D 模型建構 (自 NPC.ts 抽出)：各建構函式讀寫 NPCModelRig，由 NPC 於建構與角色切換時套用結果
@@ -35,6 +36,7 @@ export interface NPCModelRig {
   bikeRearWheel?: THREE.Mesh;
   umbrellaMesh?: THREE.Group;
   bossTelegraphMat?: THREE.MeshBasicMaterial;
+  lod?: NpcLodRig; // 遠處分級網格 (僅人形與強盜；其餘模型為 undefined)
 }
 
 // 1. 建造校犬柴柴 / 特訓狼犬 3D 模型
@@ -698,7 +700,9 @@ export function buildHumanoidModel(rig: NPCModelRig) {
   bakeNode(rig.rightLeg, `${lookKey}|leg`, undefined, false);
   const animated: THREE.Object3D[] = [head, rig.leftArm, rig.rightArm, rig.leftLeg, rig.rightLeg];
   const body = bakeStaticParts(rig.mesh, rig.humanoidParts.filter(p => !animated.includes(p)), `${lookKey}|body`);
-  rig.humanoidParts = [body, ...animated];
+  // 遠處分級網格 (雨傘不併入；分級網格列入 humanoidParts，換模型時一併移除)
+  rig.lod = buildHumanoidLod(rig.mesh, lookKey, body, head, [rig.leftArm, rig.rightArm], [rig.leftLeg, rig.rightLeg], umbrella ? new Set([umbrella]) : undefined);
+  rig.humanoidParts = [body, ...animated, ...(rig.lod ? [rig.lod.mid, rig.lod.far] : [])];
 }
 
 // 建造大如老師專屬 3D 經典蓬鬆喜感爆炸頭 (Afro) 與運動吸汗頭帶
@@ -1041,5 +1045,6 @@ export function buildBanditModel(rig: NPCModelRig) {
   bakeNode(rig.leftLeg, 'BANDIT|leg', undefined, false);
   bakeNode(rig.rightLeg, 'BANDIT|leg', undefined, false);
   const animated: THREE.Object3D[] = [head, rig.leftArm, rig.rightArm, rig.leftLeg, rig.rightLeg];
-  bakeStaticParts(rig.mesh, rig.mesh.children.filter(c => !animated.includes(c)), 'BANDIT|body');
+  const banditBody = bakeStaticParts(rig.mesh, rig.mesh.children.filter(c => !animated.includes(c)), 'BANDIT|body');
+  rig.lod = buildHumanoidLod(rig.mesh, 'BANDIT', banditBody, head, [rig.leftArm, rig.rightArm], [rig.leftLeg, rig.rightLeg]);
 }

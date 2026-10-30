@@ -122,11 +122,16 @@ class SlashFXSystem {
   private colAttr!: THREE.InstancedBufferAttribute;
   private slots: Slot[] = [];
   private active = 0;
+  private lenScale = 1;
+  private widthScale = 1;
 
   // 初始化並加入場景 (閒置時 visible=false，不產生 draw call)
   public init(scene: THREE.Object3D) {
     if (this.mesh) return;
-    const n = getFxQuality().slashPool;
+    const fq = getFxQuality();
+    const n = fq.slashPool;
+    this.lenScale = fq.slashLenScale;
+    this.widthScale = fq.slashWidthScale;
     const geo = new THREE.PlaneGeometry(2, 2);
     this.fxAttr = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.colAttr = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
@@ -189,6 +194,7 @@ class SlashFXSystem {
   private spawn(kind: number, life: number, x: number, y: number, z: number, yaw: number, roll: number, size: number, dir: number, color: number, force: boolean, hw: number = STREAK_HALF_WIDTH, flat: boolean = false) {
     const s = this.alloc(force);
     if (!s) return;
+    if (kind === KIND_STREAK) { size *= this.lenScale; hw *= this.widthScale; } // 手機縮短 / 變細長條斬痕
     s.kind = kind; s.life = s.max = life;
     s.x = x; s.y = y; s.z = z; s.yaw = yaw; s.roll = roll; s.size = size; s.dir = dir; s.color = color; s.hw = hw; s.flat = flat;
     this.mesh!.visible = true;

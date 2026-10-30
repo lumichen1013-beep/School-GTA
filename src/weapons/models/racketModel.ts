@@ -40,16 +40,27 @@ export function buildRacket(colors: RacketColors = RACKET_COLORS): WeaponModelHa
   return { parts: { R: root }, glow: null, resetGlow: () => {} };
 }
 
-// 雙燕羽刃單支球拍：握把 + 中桿 + 拍框烘焙頂點色為 1 個 mesh，加半透明拍面 1 個 mesh (每支 2 draw call)
+// 雙燕羽刃單支球拍：握把 + 中桿 + 拍框 + 網線烘焙頂點色為 1 個 mesh (每支 1 draw call，持雙拍共 2)。
+// 原半透明拍面圓片無法與不透明框身合批 (透明需獨立 draw call)，改為細長不透明網線格 (5 橫 5 直、淡拍框色)，
+// 保留可透視的網面質感。
+const STRING_STEP = 0.045;
+const STRING_RADIUS = 0.15;
+const STRING_WIDTH = 0.006;
 function buildBakedRacket(colors: RacketColors): { root: THREE.Group; bodyMat: THREE.MeshLambertMaterial } {
-  const parts: [THREE.BufferGeometry, number, number][] = [
-    [new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8), 0.12, colors.grip],
-    [new THREE.CylinderGeometry(0.012, 0.012, 0.42, 8), 0.45, SHAFT_COLOR],
-    [new THREE.TorusGeometry(0.16, 0.016, 8, 16), 0.82, colors.frame]
+  const stringColor = new THREE.Color(colors.frame).lerp(new THREE.Color(0xffffff), 0.7).getHex();
+  const parts: [THREE.BufferGeometry, number][] = [
+    [new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8).translate(0, 0.12, 0), colors.grip],
+    [new THREE.CylinderGeometry(0.012, 0.012, 0.42, 8).translate(0, 0.45, 0), SHAFT_COLOR],
+    [new THREE.TorusGeometry(0.16, 0.016, 8, 16).translate(0, 0.82, 0), colors.frame]
   ];
+  for (let k = -2; k <= 2; k++) {
+    const d = k * STRING_STEP;
+    const chord = 2 * Math.sqrt(STRING_RADIUS * STRING_RADIUS - d * d);
+    parts.push([new THREE.BoxGeometry(chord, STRING_WIDTH, STRING_WIDTH).translate(0, 0.82 + d, 0), stringColor]);
+    parts.push([new THREE.BoxGeometry(STRING_WIDTH, chord, STRING_WIDTH).translate(d, 0.82, 0), stringColor]);
+  }
   const c = new THREE.Color();
-  for (const [geo, y, hex] of parts) {
-    geo.translate(0, y, 0);
+  for (const [geo, hex] of parts) {
     c.setHex(hex);
     const n = geo.getAttribute('position').count;
     const col = new Float32Array(n * 3);
@@ -60,12 +71,6 @@ function buildBakedRacket(colors: RacketColors): { root: THREE.Group; bodyMat: T
   const root = new THREE.Group();
   root.add(new THREE.Mesh(mergeGeometries(parts.map((p) => p[0]), false), bodyMat));
   for (const [geo] of parts) geo.dispose();
-
-  // 拍面微染拍框色，與白握把區隔
-  const faceMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(colors.frame).lerp(new THREE.Color(0xffffff), 0.7), transparent: true, opacity: 0.4 });
-  const face = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), faceMat);
-  face.position.y = 0.82;
-  root.add(face);
   mountOnHand(root);
   return { root, bodyMat };
 }

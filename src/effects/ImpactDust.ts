@@ -46,6 +46,14 @@ class ImpactDustSystem {
     return this.mesh;
   }
 
+  // 預建 mesh 並暫時顯示以便 renderer.compile 預熱 shader (粒子全為歸零矩陣，下次 burst 前不顯示)
+  public prewarm(scene: THREE.Object3D, compile: () => void) {
+    const mesh = this.ensure(scene);
+    mesh.visible = true;
+    compile();
+    mesh.visible = this.activeCount > 0;
+  }
+
   // 於 point 爆散碎石，沿 normal (撞擊反彈方向) 噴出
   // opts：count 碎石數 (預設全部)、upward 上拋速度倍率 (預設 1)、spreadY 起點垂直散布範圍 (預設 1.2)、life 壽命秒數 (預設 LIFE)、size 碎石尺寸倍率 (預設 1)
   public burst(scene: THREE.Object3D, point: THREE.Vector3, normal: THREE.Vector3, opts?: ImpactDustOptions) {

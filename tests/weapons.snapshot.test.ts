@@ -227,12 +227,12 @@ describe('武器模型 (mesh 數不變 → draw call 不變；發光基準值還
     expect(h.glow).toBeNull();
   });
 
-  it('雙燕羽刃：每支 拍身(握把+中桿+拍框烘焙頂點色) + 拍面 共 2 mesh，掛點同其他武器，各以自己的拍框色發光', () => {
+  it('雙燕羽刃：每支 握把+中桿+拍框+網線烘焙頂點色 共 1 mesh，掛點同其他武器，各以自己的拍框色發光', () => {
     const h = buildDualRackets();
     const { R, L } = h.parts;
     expect(R && L).toBeTruthy();
-    expect(meshCount(R!)).toBe(2);
-    expect(meshCount(L!)).toBe(2);
+    expect(meshCount(R!)).toBe(1);
+    expect(meshCount(L!)).toBe(1);
     for (const root of [R!, L!]) {
       expect(root.visible).toBe(false);
       expect(root.position.toArray()).toEqual([0, -0.28, 0.12]);

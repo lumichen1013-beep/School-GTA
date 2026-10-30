@@ -116,6 +116,15 @@ export class WaterSplashVFX {
     return mesh;
   }
 
+  // 暫時顯示以便 renderer.compile 預熱 shader
+  public prewarm(compile: () => void) {
+    this.dropletMesh.visible = true;
+    this.rippleMesh.visible = true;
+    compile();
+    this.dropletMesh.visible = false;
+    this.rippleMesh.visible = false;
+  }
+
   /**
    * 生成單個水珠微粒 (從物件池取出)
    */

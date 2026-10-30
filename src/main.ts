@@ -18,6 +18,7 @@ import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
 import { comboFinisherFX } from './effects/ComboFinisherFX';
 import { slashFX } from './effects/SlashFX';
+import { impactDust } from './effects/ImpactDust';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
@@ -119,6 +120,7 @@ class SchoolGTASandbox implements GameContext {
     onStart: (targetWorld) => {
       this.isGameRunning = true;
       this.switchWorld(targetWorld, targetWorld === 'CAMPUS');
+      this.prewarmFx();
     },
     onSkipCutscene: () => {
       if (this.detentionCutscene.isActive) {
@@ -180,12 +182,10 @@ class SchoolGTASandbox implements GameContext {
     progress(65, '正在生成主角模型、火柴人自行車與水花特效系統...');
     this.player = new Player(this.engine.scene);
     swingTrail.init(this.engine.scene);
-    swingTrail.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     comboFinisherFX.init(this.engine.scene);
-    comboFinisherFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     slashFX.init(this.engine.scene);
-    slashFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
+    this.prewarmFx();
 
     this.player.autoDodgeHook = this.progression.tryAutoDodge;
 
@@ -232,7 +232,7 @@ class SchoolGTASandbox implements GameContext {
     this.hud = new HUD();
     this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
-      this.hud.openWorldModal(this.currentWorldType, (tw) => this.switchWorld(tw));
+      this.hud.openWorldModal(this.currentWorldType, (tw) => { this.switchWorld(tw); this.prewarmFx(); });
     };
     await nextFrame();
 
@@ -320,6 +320,16 @@ class SchoolGTASandbox implements GameContext {
     attach(this.detentionWorld.group, !isCampus);
     for (const npc of this.campusNPCs) attach(npc.mesh, isCampus);
     for (const npc of this.detentionNPCs) attach(npc.mesh, !isCampus);
+  }
+
+  // 預熱所有特效 shader (program 快取鍵含場景光源 / 霧狀態，故初始化時與每次進入世界後各跑一次，首次施放才不會卡頓)
+  private prewarmFx() {
+    const compile = () => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera);
+    swingTrail.prewarm(compile);
+    comboFinisherFX.prewarm(compile);
+    slashFX.prewarm(compile);
+    impactDust.prewarm(this.engine.scene, compile);
+    this.waterSplashVFX.prewarm(compile);
   }
 
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
@@ -595,6 +605,7 @@ class SchoolGTASandbox implements GameContext {
     // 被搶單車數量超過上限 (含玩家下車後閒置者) 時回收最舊的路邊單車
     if (isCampus) this.campus.enforceStolenBikeCap();
     NPC.updateSharedEffects(delta);
+    const viewPos = this.cameraCtrl.camera.position;
 
     for (const npc of this.npcs) {
       if (isCampus) this.campus.updateBikeOwner(npc, targetPosition);
@@ -615,6 +626,8 @@ class SchoolGTASandbox implements GameContext {
         this.player.isHidingInCover,
         this.player.isMoving
       );
+      // 遠處 NPC 繪製分級 (以上一幀鏡頭位置判定，僅切換渲染零件)
+      npc.updateLod(viewPos);
 
       if (!npc.isKnockedDown && !npc.isPermanentlyKnockedOut && npc.isChasing) {
         this.isAnyChasing = true;
@@ -799,6 +812,8 @@ class SchoolGTASandbox implements GameContext {
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條
     if (isCampus) {
       this.campus.updateGardenAndEffects(delta, targetPosition);
+      // 建築室內渲染剔除 (鏡頭已於本幀更新；狀態改變時才切換群組顯示)
+      this.world.updateInteriorCulling(this.cameraCtrl.camera.position, targetPosition);
     } else {
       const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {

@@ -11,7 +11,7 @@ const RING_REACH = 1.45;       // 環最大半徑 = 群攻半徑 × 此倍率 (�
 const RING2_DELAY = 0.08;     // 第二圈錯開時間
 const RING2_SCALE = 0.72;     // 第二圈相對大小
 const CRACK_SCALE = 3.4;      // 裂痕邊長 = 群攻半徑 × 此倍率 (受品質上限約束)
-const CRACK_LAYERS = 3;       // 每道裂痕疊 3 層實例：焦黑底 / 色光 / 白熱芯
+const CRACK_LAYERS_MAX = 3;   // 每道裂痕最多疊 3 層實例：焦黑底 / 色光 / 白熱芯 (手機只疊前 2 層)
 const DUST_LIFE = 0.7;
 const BOLT_LIFE = 0.4;
 const BOLT_REVEAL = 0.1;      // 雷電由地面向上竄起所需秒數
@@ -213,6 +213,8 @@ class ComboFinisherFXSystem {
   private strands = 0;
   private segments = 0;
   private maxCrackSize = 4.5;
+  private crackLayers = CRACK_LAYERS_MAX;
+  private ringReach = 1;
   private crackLifeSec = 1.8;
 
   // 初始化並加入場景 (閒置時皆 visible=false，不產生 draw call)
@@ -220,6 +222,8 @@ class ComboFinisherFXSystem {
     if (this.crackMesh) return;
     const q = getFxQuality();
     this.maxCrackSize = q.crackMaxSize;
+    this.crackLayers = Math.min(CRACK_LAYERS_MAX, q.crackLayers);
+    this.ringReach = q.ringReach;
     this.crackLifeSec = q.crackLife;
 
     const crackGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -227,7 +231,7 @@ class ComboFinisherFXSystem {
     crackMat.polygonOffset = true;
     crackMat.polygonOffsetFactor = -2;
     crackMat.polygonOffsetUnits = -2;
-    this.crackMesh = createInstanced(crackGeo, crackMat, q.crackPool * CRACK_LAYERS, 3, true);
+    this.crackMesh = createInstanced(crackGeo, crackMat, q.crackPool * this.crackLayers, 3, true);
     for (let i = 0; i < q.crackPool; i++) this.cracks.push({ life: 0, max: 1, x: 0, y: 0, z: 0, rot: 0, size: 1, color: 0xffffff, core: 0xffffff });
 
     const ringGeo = new THREE.RingGeometry(0.55, 1, 48).rotateX(-Math.PI / 2);
@@ -417,9 +421,9 @@ class ComboFinisherFXSystem {
       const c = this.cracks[i];
       if (c.life <= 0) continue;
       c.life -= delta;
-      const i0 = i * CRACK_LAYERS;
+      const i0 = i * this.crackLayers;
       if (c.life <= 0) {
-        for (let l = 0; l < CRACK_LAYERS; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
+        for (let l = 0; l < this.crackLayers; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
         continue;
       }
       alive++;
@@ -429,7 +433,7 @@ class ComboFinisherFXSystem {
       const t = c.life / c.max;
       const f = t > 1 - CRACK_FADE_START ? 1 : t / (1 - CRACK_FADE_START);
       // 0 焦黑底 (略大) / 1 色光 / 2 白熱芯 (較小、較快淡去)
-      for (let l = 0; l < CRACK_LAYERS; l++) {
+      for (let l = 0; l < this.crackLayers; l++) {
         const sl = s * (l === 0 ? 1.12 : l === 1 ? 1 : 0.6);
         _quat.setFromAxisAngle(_yAxis, c.rot + (l === 2 ? 0.5 : 0));
         _matrix.compose(_pos.set(c.x, c.y + l * 0.004, c.z), _quat, _scl.set(sl, 1, sl));
@@ -460,7 +464,7 @@ class ComboFinisherFXSystem {
       alive++;
       const t = 1 - r.life / RING_LIFE;
       const e = 1 - (1 - t) * (1 - t) * (1 - t); // easeOutCubic
-      const s = r.radius * RING_REACH * (0.2 + 0.8 * e);
+      const s = r.radius * RING_REACH * this.ringReach * (0.2 + 0.8 * e);
       _matrix.compose(_pos.set(r.x, r.y, r.z), _quat.identity(), _scl.set(s, 1, s));
       mesh.setMatrixAt(i, _matrix);
       const f = Math.pow(1 - t, 0.9);
