@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getFxQuality } from './fxQuality';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 
 // 斬痕特效 (雙燕羽刃)：命中閃光 / 交叉 X 光痕 / 蓄力收束光環 / 突進光帶與風痕，全部共用 1 個 InstancedMesh (1 draw call)。
 // 形狀由 fragment shader 依實例種類程序繪製 (免貼圖)，輸出預乘 alpha (ONE / ONE_MINUS_SRC_ALPHA)，
@@ -153,6 +154,7 @@ class SlashFXSystem {
     this.mesh.receiveShadow = false;
     this.mesh.renderOrder = 6;
     this.mesh.visible = false;
+    updateVisibleMatricesOnly(this.mesh); // 閒置隱藏時略過矩陣更新
     scene.add(this.mesh);
   }
 

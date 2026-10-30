@@ -303,91 +303,171 @@
   <div id="fullmap-modal" class="modal-backdrop" style="display: none;">
     <div class="fullmap-modal-card">
       <div class="fullmap-header">
+        <!-- 目前區域 + 天氣圖示 (小字，由 HUD 更新；手機直向改顯示於學生證) -->
         <div class="fullmap-title-group">
-          <div class="fullmap-title" id="fullmap-title">🗺️ 全域態勢戰術大地圖</div>
-          <div class="fullmap-subtitle">⌨️ [J] / [ESC] 或點擊右上角關閉，返回遊戲</div>
+          <div class="fullmap-title" id="fullmap-title">🗺️</div>
         </div>
         <div class="fullmap-header-meta">
-          <div class="fullmap-badge" id="fullmap-world-badge">第七少年特訓院</div>
-          <div class="fullmap-coords" id="fullmap-coords">坐標：X: 0.0, Z: 0.0</div>
+          <!-- 分頁列：與關閉鈕同列，點擊 / 觸控切換 -->
+          <div class="fullmap-tabs" id="fullmap-tabs" role="tablist">
+            <button type="button" class="fm-tab-btn active" role="tab" aria-selected="true" aria-label="地圖" data-fm-tab="map"><span class="fm-tab-icon">🗺️</span><span class="fm-tab-label">地圖</span></button>
+            <button type="button" class="fm-tab-btn" role="tab" aria-selected="false" aria-label="裝備" data-fm-tab="gear"><span class="fm-tab-icon">🎒</span><span class="fm-tab-label">裝備</span></button>
+            <button type="button" class="fm-tab-btn" role="tab" aria-selected="false" aria-label="任務" data-fm-tab="quest"><span class="fm-tab-icon">📜</span><span class="fm-tab-label">任務</span></button>
+          </div>
           <button class="commissary-close" id="fullmap-close-btn" title="關閉大地圖 (ESC)">&times;</button>
         </div>
       </div>
-      <!-- 分頁列：點擊 / 觸控切換 -->
-      <div class="fullmap-tabs" id="fullmap-tabs" role="tablist">
-        <button type="button" class="fm-tab-btn active" role="tab" aria-selected="true" data-fm-tab="map">🗺️ 地圖</button>
-        <button type="button" class="fm-tab-btn" role="tab" aria-selected="false" data-fm-tab="gear">🎒 裝備</button>
-        <button type="button" class="fm-tab-btn" role="tab" aria-selected="false" data-fm-tab="quest">📜 任務</button>
-      </div>
 
-      <!-- 【地圖】分頁：地圖主區 + 側欄 (工具列：音樂 / 天氣 / 世界、圖例、快捷鍵說明) -->
+      <!-- 【地圖】分頁：學生證狀態卡 + 下一步目標 + 地圖主區 + 側欄 (工具列：音樂 / 天氣 / 世界、圖例、操作說明) -->
       <div class="fullmap-pane fullmap-pane-map" id="fm-pane-map" data-fm-pane="map">
+        <!-- 學生證 (校園) / 受訓人員檔案 (特訓院)：開啟分頁時快照，變動值以髒檢查更新 -->
+        <section class="fm-idcard fm-block fm-tape" id="fm-idcard">
+          <div class="fm-idc-head">
+            <span class="fm-idc-school" id="idc-school">天天國中　學生證</span>
+            <span class="fm-idc-weapon"><span id="idc-weapon-icon">🥊</span><b id="idc-weapon-atk">ATK 25</b></span>
+          </div>
+          <div class="fm-idc-body">
+            <div class="fm-idc-photo" id="idc-photo" aria-hidden="true">🧑‍🎓</div>
+            <div class="fm-idc-bars">
+              <div class="fm-bar fm-bar-hp"><i id="idc-hp-fill"></i><span><em>HP</em><b id="idc-hp-text">100/100</b></span></div>
+              <div class="fm-bar fm-bar-sp"><i id="idc-sp-fill"></i><span><em>精力</em><b id="idc-sp-text">150/150</b></span></div>
+            </div>
+          </div>
+          <div class="fm-idc-rows">
+            <div class="fm-idc-chip fm-idc-cash"><span id="idc-cash-label">零用錢</span><b id="idc-cash">NT$ 100</b></div>
+            <div class="fm-idc-chip fm-idc-skill"><span>🥋</span><b id="idc-skill">未習得</b></div>
+            <div class="fm-idc-chip fm-idc-wanted"><span id="idc-stars" class="fm-stars">☆☆☆☆☆</span><b id="idc-wanted-title">操行優良</b></div>
+            <div class="fm-idc-chip fm-idc-zone"><span id="idc-world">🏫</span><b id="idc-zone">教學中庭廣場</b></div>
+          </div>
+        </section>
+
+        <!-- 下一步目標：桌機寬螢幕置於地圖左側空白，窄螢幕堆疊於右欄，手機位於地圖下方 -->
+        <aside class="fm-goal fm-block fm-tape" id="fm-goal">
+          <div class="fm-block-title">📍 下一步目標</div>
+          <div class="fm-goal-main">
+            <span class="fm-goal-icon" id="fm-goal-icon">🎯</span>
+            <div class="fm-goal-text">
+              <div class="fm-goal-title" id="fm-goal-title">-</div>
+              <div class="fm-goal-desc" id="fm-goal-desc"></div>
+              <div class="fm-goal-dist" id="fm-goal-dist"></div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="fullmap-toolbar">
+          <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關">
+            <span id="bgm-icon">🎵</span>
+            <span id="bgm-text">BGM: 校園漫步</span>
+            <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+          </div>
+          <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣">
+            <span id="weather-text">☀️ 晴朗</span>
+          </button>
+          <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界">
+            <span>🔁 切換世界</span>
+            <span class="world-current" id="world-text">🏫 天天國中</span>
+          </button>
+        </div>
+
         <div class="fullmap-map-area">
           <div class="fullmap-canvas-wrap">
             <canvas id="fullmap-canvas" width="700" height="700"></canvas>
           </div>
         </div>
-        <aside class="fullmap-side">
-          <div class="fullmap-toolbar">
-            <div class="bgm-badge" id="bgm-badge" role="button" title="點擊切換音樂開關">
-              <span id="bgm-icon">🎵</span>
-              <span id="bgm-text">BGM: 校園漫步</span>
-              <span class="bgm-btn-pill" id="bgm-toggle-btn">[開]</span>
+        <aside class="fullmap-side fm-block">
+          <!-- 圖例：桌機常駐，手機可折疊；依世界切換 -->
+          <div class="fullmap-legend-box fm-collapsible">
+            <button type="button" class="fm-collapse-btn fm-collapse-mobile" aria-expanded="false">🧭 圖例</button>
+            <div class="fm-collapse-body">
+              <div class="fullmap-legend" id="fullmap-legend-campus">
+                <div class="fullmap-legend-group">人物</div>
+                <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+                <span class="legend-item"><span class="legend-dot student"></span> 同學</span>
+                <span class="legend-item"><span class="legend-dot teacher"></span> 生教 / 老師</span>
+                <span class="legend-item"><span class="legend-dot instructor"></span> 教官</span>
+                <span class="legend-item"><span class="legend-dot dog"></span> 校犬</span>
+                <span class="legend-item"><span class="legend-dot patrol"></span> 單車糾察</span>
+                <span class="legend-item"><span class="legend-dot bike"></span> 自行車</span>
+                <div class="fullmap-legend-group">地點</div>
+                <span class="legend-item">🏪 合作社</span>
+                <span class="legend-item">🏸 羽球場</span>
+                <span class="legend-item">🌸 食人花</span>
+                <span class="legend-item">⛲ 許願池</span>
+                <span class="legend-item">🥋 閃身步老師</span>
+                <span class="legend-item">🚪 校門</span>
+                <span class="legend-item"><span class="legend-ring"></span> 下一步目標</span>
+                <span class="legend-item"><span class="legend-done">✓</span> 已完成 (變灰)</span>
+              </div>
+              <div class="fullmap-legend" id="fullmap-legend-detention" style="display:none;">
+                <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
+                <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
+                <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
+                <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
+                <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
+                <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
+                <span class="legend-item"><span class="legend-ring"></span> 下一步目標</span>
+              </div>
             </div>
-            <button type="button" class="fullmap-tool-btn weather-badge" id="weather-badge" title="點擊切換天氣">
-              <span id="weather-text">☀️ 晴朗</span>
-            </button>
-            <button type="button" class="fullmap-tool-btn world-badge" id="world-badge" title="切換世界">
-              <span>🔁 切換世界</span>
-              <span class="world-current" id="world-text">🏫 天天國中</span>
-            </button>
           </div>
-          <div class="fullmap-legend-box">
-            <!-- 圖例依世界切換：天天國中顯示校園人物與載具，特訓院顯示潛入戰術要素 -->
-            <div class="fullmap-legend" id="fullmap-legend-campus">
-              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
-              <span class="legend-item"><span class="legend-dot student"></span> 同學</span>
-              <span class="legend-item"><span class="legend-dot teacher"></span> 生教 / 老師</span>
-              <span class="legend-item"><span class="legend-dot instructor"></span> 教官</span>
-              <span class="legend-item"><span class="legend-dot dog"></span> 校犬</span>
-              <span class="legend-item"><span class="legend-dot patrol"></span> 單車糾察</span>
-              <span class="legend-item"><span class="legend-dot bike"></span> 自行車</span>
+          <!-- 操作說明：預設收合；觸控裝置隱藏 -->
+          <div class="fullmap-keys fm-collapsible">
+            <button type="button" class="fm-collapse-btn" aria-expanded="false">❓ 操作說明</button>
+            <div class="fm-collapse-body">
+              <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
+              <div><span class="key-badge">滑鼠右鍵</span> 按住潛行 (手機搖桿推桿 90% 內)</div>
+              <div><span class="key-badge">左鍵</span><span class="key-badge">F</span> 揮擊武器 / 背後暗殺 (合併按鍵)</div>
+              <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
+              <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
+              <div><span class="key-badge">滾輪</span> 切換武器 (拳/球棒/警棍；點右上武器標章循環)</div>
+              <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
+              <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
+              <div><span class="key-badge">J</span> 開啟 / 關閉大地圖 (分頁：地圖 / 裝備 / 任務)</div>
+              <div><span class="key-badge">H</span> 騎車按鈴</div>
             </div>
-            <div class="fullmap-legend" id="fullmap-legend-detention" style="display:none;">
-              <span class="legend-item"><span class="legend-dot player"></span> 主角當前位置</span>
-              <span class="legend-item"><span class="legend-dot checkpoint"></span> 當前重生存檔點</span>
-              <span class="legend-item"><span class="legend-dot keycard"></span> 門禁卡</span>
-              <span class="legend-item"><span class="legend-dot gate"></span> 管制閘門</span>
-              <span class="legend-item"><span class="legend-dot enemy"></span> 巡邏哨兵 / 教官</span>
-              <span class="legend-item"><span class="legend-dot hiding"></span> 乾草掩體</span>
-            </div>
-          </div>
-          <div class="fullmap-keys">
-            <div class="fullmap-keys-title">🎮 鍵盤快捷鍵指南</div>
-            <div><span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 / 走動</div>
-            <div><span class="key-badge">滑鼠右鍵</span> 按住潛行 (手機搖桿推桿 90% 內)</div>
-            <div><span class="key-badge">左鍵</span><span class="key-badge">F</span> 揮擊武器 / 背後暗殺 (合併按鍵)</div>
-            <div><span class="key-badge">SHIFT</span> 衝刺 (消耗精力)</div>
-            <div><span class="key-badge">SPACE</span> 跳躍 / 翻越階梯矮牆</div>
-            <div><span class="key-badge">滾輪</span> 切換武器 (拳/球棒/警棍；點右上武器標章循環)</div>
-            <div><span class="key-badge">Q</span> 技能：閃身步 / 狗熊哆嗦毛 (閃避)</div>
-            <div><span class="key-badge">E</span> 互動 / 開啟管制門 / 騎車</div>
-            <div><span class="key-badge">J</span> 開啟 / 關閉大地圖 (分頁：地圖 / 裝備 / 任務)</div>
-            <div><span class="key-badge">H</span> 騎車按鈴</div>
           </div>
         </aside>
       </div>
 
-      <!-- 【裝備】分頁：武器清單 (內容由 HUD 於開啟分頁 / 裝備後渲染) -->
+      <!-- 【裝備】分頁：左側武器清單 + 右側詳情 + 技能卡 (內容由 HUD 於開啟分頁 / 選取 / 裝備後渲染) -->
       <div class="fullmap-pane fullmap-pane-gear" id="fm-pane-gear" data-fm-pane="gear" hidden>
         <div class="fullmap-gear-list" id="fm-gear-list"></div>
+        <div class="fm-gear-detail fm-block" id="fm-gear-detail"></div>
+        <div class="fm-gear-skill fm-block" id="fm-gear-skill"></div>
       </div>
 
       <!-- 【任務】分頁 -->
       <div class="fullmap-pane fullmap-pane-quest" id="fm-pane-quest" data-fm-pane="quest" hidden>
+        <!-- 戰績：校園為擊倒統計與成就徽章，特訓院為暗殺 / 警戒 / 越獄計時 -->
+        <aside class="fm-stats fm-block fm-tape" id="fm-stats">
+          <div class="fm-block-title" id="fm-stats-title">🏅 校園戰績</div>
+          <div class="fm-stats-top">
+            <div class="fm-ring" id="fm-ring"><span id="fm-ring-text">0/13</span></div>
+            <div class="fm-ring-caption" id="fm-ring-caption">歷練總進度</div>
+          </div>
+          <div class="fm-stat-grid" id="fm-stats-campus">
+            <div class="fm-stat"><em>同學</em><b id="fm-st-student">0</b></div>
+            <div class="fm-stat"><em>老師</em><b id="fm-st-teacher">0</b></div>
+            <div class="fm-stat"><em>校犬</em><b id="fm-st-dog">0</b></div>
+            <div class="fm-stat"><em>單車糾察</em><b id="fm-st-bike">0</b></div>
+            <div class="fm-stat"><em>教官 / 糾察</em><b id="fm-st-inspector">0</b></div>
+          </div>
+          <div class="fm-badges" id="fm-badges-campus">
+            <span class="fm-medal" id="fm-bd-bike">🚲<em>騎車</em></span>
+            <span class="fm-medal" id="fm-bd-dog">🐕<em>甩掉校犬</em></span>
+            <span class="fm-medal" id="fm-bd-pond">🪙<em>許願</em></span>
+            <span class="fm-medal" id="fm-bd-food">🍱<em>吃熱食</em></span>
+          </div>
+          <div class="fm-stat-grid" id="fm-stats-detention" style="display:none;">
+            <div class="fm-stat"><em>暗殺</em><b id="fm-st-takedown">0</b></div>
+            <div class="fm-stat"><em>正面擊倒</em><b id="fm-st-frontal">0</b></div>
+            <div class="fm-stat"><em>警戒次數</em><b id="fm-st-alert">0</b></div>
+            <div class="fm-stat"><em>越獄計時</em><b id="fm-st-timer">00:00</b></div>
+          </div>
+        </aside>
         <aside class="fullmap-quest-panel">
           <div class="fullmap-quest-header">
             <span class="quest-title-text" id="fm-quest-title">📜 校園歷練</span>
+            <span class="fm-bulletin-tag">公告欄</span>
             <span class="quest-progress-badge">進度 <span id="fm-q-total-progress">0/13</span></span>
           </div>
           <div class="quest-total-bar-wrap">
@@ -613,7 +693,7 @@
       <div class="world-modal-desc">可隨時自由穿梭於【天天國中】與【第七少年特訓院】雙世界！</div>
       <div class="world-select-grid">
         <!-- 世界 1：天天國中 -->
-        <div class="world-card">
+        <div class="world-card" id="modal-card-campus" role="button" tabindex="0" aria-label="傳送至天天國中">
           <div class="world-card-badge normal">普通難度 ★★★☆☆</div>
           <div class="world-card-icon">🏫</div>
           <div class="world-card-name">天天國中</div>
@@ -624,11 +704,10 @@
             <div>🏊 50m 泳池競速與生態探索區</div>
             <div>🏸 4F 羽球館大如老師搶分賽</div>
           </div>
-          <button class="world-card-btn campus-btn" id="modal-btn-campus">傳送至天天國中</button>
         </div>
 
         <!-- 世界 2：少年院 -->
-        <div class="world-card hardcore">
+        <div class="world-card hardcore" id="modal-card-detention" role="button" tabindex="0" aria-label="傳送至第七少年特訓院">
           <div class="world-card-badge hardcore">極限特訓 ★★★★★</div>
           <div class="world-card-icon">⛓️</div>
           <div class="world-card-name">第七少年特訓院</div>
@@ -639,7 +718,6 @@
             <div>🛡️ 防暴海綿盾特訓教官與凶暴狼犬</div>
             <div>🥋 總教官【鐵面總長】閃身步・誘敵撞柱 Boss</div>
           </div>
-          <button class="world-card-btn detention-btn" id="modal-btn-detention">傳送至特訓院 (含劇情)</button>
         </div>
       </div>
     </div>
@@ -705,7 +783,7 @@
       <div class="world-select-prompt">請選擇啟動世界：</div>
       <div class="world-select-grid">
         <!-- 世界 1：天天國中 -->
-        <div class="world-card" id="card-world-campus">
+        <div class="world-card" id="card-world-campus" role="button" tabindex="0" aria-label="進入天天國中">
           <div class="world-card-badge normal">普通難度 ★★★☆☆</div>
           <div class="world-card-icon">🏫</div>
           <div class="world-card-name">天天國中</div>
@@ -716,11 +794,10 @@
             <div>🏊 50m 泳池競速與生態探索區</div>
             <div>🏸 4F 羽球館大如老師搶分賽</div>
           </div>
-          <button class="world-card-btn campus-btn" id="btn-start-campus">🏫 進入天天國中 (開始遊玩)</button>
         </div>
 
         <!-- 世界 2：少年院 -->
-        <div class="world-card hardcore" id="card-world-detention">
+        <div class="world-card hardcore" id="card-world-detention" role="button" tabindex="0" aria-label="進入第七少年特訓院">
           <div class="world-card-badge hardcore">極限特訓 ★★★★★</div>
           <div class="world-card-icon">⛓️</div>
           <div class="world-card-name">第七少年特訓院</div>
@@ -731,7 +808,6 @@
             <div>🛡️ 防暴海綿盾特訓教官與凶暴狼犬</div>
             <div>🥋 總教官【鐵面總長】閃身步・誘敵撞柱 Boss</div>
           </div>
-          <button class="world-card-btn detention-btn" id="btn-start-detention">⛓️ 進入特訓 (開場劇情)</button>
         </div>
       </div>
     </div>

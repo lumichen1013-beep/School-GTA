@@ -37,6 +37,7 @@ function buildResolved(def: WeaponDefinition | WeaponOverrideDefinition, variant
     tempo: variant?.tempo ?? def.tempo,
     fx: normalizeFx(variant ? variant.fxStyle : def.fxStyle),
     finisherFx: variant?.finisherFx ?? def.finisherFx ?? {},
+    launchCap: variant?.launchCap ?? def.launchCap ?? null,
     anchors: def.anchors,
     sounds: def.sounds,
     readyPose: def.readyPose

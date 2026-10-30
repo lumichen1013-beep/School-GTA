@@ -12,6 +12,8 @@ import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
 import { applyNpcLodLevel, nextNpcLodLevel, type NpcLodLevel, type NpcLodRig } from './npc/lod';
+import { freezeLocalMatrix, updateVisibleMatricesOnly } from '../core/matrixUpdate';
+import { launchHorizontal, launchVertical } from '../weapons/launch';
 import { impactDust } from '../effects/ImpactDust';
 import { requestCameraShake } from '../effects/cameraShake';
 
@@ -633,6 +635,10 @@ export class NPC {
     this.hpBarGroup.add(this.koBadgeSprite);
 
     this.mesh.add(this.hpBarGroup);
+    // 血條框/底框與告示牌建構後只切換顯示 (血量以 hpBarMesh 縮放呈現、朝向由 hpBarGroup 旋轉)
+    freezeLocalMatrix(this.hpBarFrame, this.hpBarBgMesh, this.koBadgeSprite);
+    // 每幀只更新可見零件的矩陣：遠處分級隱藏的頭/雙臂/腿、收起的傘與手機、告示牌等整枝略過，整個 NPC 隱藏時全部略過
+    updateVisibleMatricesOnly(this.mesh);
 
     scene.add(this.mesh);
     // 閃身步老師 (DODGE_TEACHER) 專屬技能對話氣泡與 0-GC 殘影物件池
@@ -1238,8 +1244,8 @@ export class NPC {
   // ignoreCooldown：略過 0.65 秒受擊保護 (連段終結技緊接前一段命中；舉盾/閃避等機率防禦照常判定)
   // fromPlayer：玩家武器攻擊。canLaunch 為 false 時 (連段第 1、2 段 / 非終結技) 僅扣血：
   //   不擊飛、不位移、不踉蹌、不打斷出招，也不吃/不設 0.65 秒受擊保護 (連段間隔約 0.3 秒，每段都須吃到傷害)；
-  //   擊飛時水平 / 垂直速度上限另行下修 (見 PLAYER_LAUNCH_MAX_H / V)
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false): boolean {
+  //   擊飛時水平 / 垂直速度上限另行下修 (預設 PLAYER_LAUNCH_MAX_H / V，武器可由 playerCapH / V 覆寫，見 WeaponDefinition.launchCap)
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false, playerCapH: number = PLAYER_LAUNCH_MAX_H, playerCapV: number = PLAYER_LAUNCH_MAX_V): boolean {
     const lightHit = fromPlayer && !canLaunch;
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
@@ -1294,8 +1300,8 @@ export class NPC {
 
     // 計算擊飛拋物線：向上拋射 + 合理水平擊飛 (受物理阻擋，絕不飛越圍牆或穿透建物)
     this.isKnockedFlying = true;
-    const horizontalForce = Math.min(Math.max(force * 1.1, 3.0), fromPlayer ? PLAYER_LAUNCH_MAX_H : 16.5);
-    const verticalForce = Math.min(Math.max(force * 0.6, 2.0), fromPlayer ? PLAYER_LAUNCH_MAX_V : 10.5);
+    const horizontalForce = launchHorizontal(force, fromPlayer ? playerCapH : 16.5);
+    const verticalForce = launchVertical(force, fromPlayer ? playerCapV : 10.5);
 
     this.knockVelocity.set(
       impactDir.x * horizontalForce,

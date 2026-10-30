@@ -4,10 +4,13 @@ import type { WeaponDefinition, WeaponId, WeaponWorld } from '../weapons/types';
 import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { getWeaponSummary, type WeaponSummary } from './weaponStats';
 
 // 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與閃身步被動自動發動機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
 const AUTO_DODGE_CHANCE = 0.2;
+// 學習閃身步 (等級 1) / 狗熊哆嗦毛 (等級 2) 的學費
+const DODGE_SKILL_FEES = [1000, 2000] as const;
 
 // 擊敗各角色的獎金與擊倒統計計數 (未列出的角色預設獎金 20)
 interface RoleDefeatReward {
@@ -50,14 +53,44 @@ function getDetentionBounty(role: NPCRole, isTakedown: boolean): number {
 
 // 大地圖【裝備】分頁的單列資料
 export type WeaponEquipStatus = 'equipped' | 'unlocked' | 'locked' | 'unavailable';
+export interface WeaponUnlockStep {
+  label: string;
+  cur: number;
+  max: number;
+}
 export interface WeaponEquipEntry {
   id: WeaponId;
   icon: string;
   name: string;
+  baseName: string; // 武器本名 (name 為本世界變體名，如特訓院「防暴警棍」)
   damage: number;
   reach: number;
+  knockback: number;
   status: WeaponEquipStatus;
   hint: string;
+  summary: WeaponSummary; // 本世界連段估算 (秒傷 / 總傷 / 各招)
+  unlockSteps: WeaponUnlockStep[]; // 解鎖進度 (徒手為空)
+}
+
+// 大地圖狀態快照 (學生證 / 受訓人員檔案、戰績、技能卡共用；每次呼叫就地更新同一物件)
+export interface FullMapStatus {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  cash: number;
+  stars: number;
+  wantedTitle: string;
+  dodgeLevel: number;
+  dodgeCooldown: number;
+  dodgeCooldownMax: number;
+  autoDodgeChance: number;
+  dodgeNextFee: number; // 0 = 已精通
+  // 特訓院戰績
+  takedowns: number;
+  frontalKos: number;
+  alerts: number;
+  escapeSeconds: number; // -1 = 已逃脫
 }
 
 /**
@@ -158,7 +191,7 @@ export class Progression {
     if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !player.hasSpecialBat) {
       player.hasSpecialBat = true;
       player.setWeapon('SPECIAL_BAT');
-      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或點右上武器標章切換，ATK 70)', 7000);
+      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或點右上武器標章切換，ATK 68)', 7000);
       soundManager.playSpecialBatHit();
     }
   }
@@ -169,7 +202,7 @@ export class Progression {
     if (player.isWeaponUnlocked('DUAL_RACKET')) return;
     player.setWeaponUnlocked('DUAL_RACKET', true);
     player.setWeapon('DUAL_RACKET');
-    wantedSystem.showBanner('🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或點右上武器標章切換，ATK 16×7 連擊)', 7000);
+    wantedSystem.showBanner('🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或點右上武器標章切換，ATK 25×7 連擊)', 7000);
     soundManager.playFanfare();
   }
 
@@ -203,12 +236,59 @@ export class Progression {
         id: def.id,
         icon: def.icon,
         name: resolveVariant(def.id, world).name,
+        baseName: def.name,
         damage: def.stats.damage,
         reach: def.stats.reach,
+        knockback: def.stats.knockback,
         status,
-        hint: status === 'locked' || status === 'unavailable' ? this.blockedHint(def, world) : ''
+        hint: status === 'locked' || status === 'unavailable' ? this.blockedHint(def, world) : '',
+        summary: getWeaponSummary(def.id, world),
+        unlockSteps: this.getUnlockSteps(def.id)
       };
     });
+  }
+
+  // 武器解鎖進度條資料 (已解鎖者視為全滿)
+  private getUnlockSteps(id: WeaponId): WeaponUnlockStep[] {
+    const unlocked = this.ctx.player.isWeaponUnlocked(id);
+    const step = (label: string, cur: number, max: number): WeaponUnlockStep => ({ label, cur: unlocked ? max : Math.min(cur, max), max });
+    switch (id) {
+      case 'NORMAL_BAT': return [step('擊敗普通同學', this.studentDefeatedCount, 5)];
+      case 'SPECIAL_BAT': return [
+        step('擊倒生教 / 老師', this.teacherDefeatedCount, 1),
+        step('擊倒校犬', this.dogDefeatedCount, 1),
+        step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
+      ];
+      case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
+      default: return [];
+    }
+  }
+
+  private readonly fullMapStatus: FullMapStatus = {
+    hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, cash: 0, stars: 0, wantedTitle: '',
+    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, dodgeNextFee: 0,
+    takedowns: 0, frontalKos: 0, alerts: 0, escapeSeconds: 0
+  };
+
+  // 大地圖開啟期間 (約 20Hz) 取得玩家狀態快照
+  public getFullMapStatus(): FullMapStatus {
+    const { player, wantedSystem, detention } = this.ctx;
+    const st = this.fullMapStatus;
+    st.hp = player.hp;
+    st.maxHp = player.maxHp;
+    st.stamina = player.stamina;
+    st.maxStamina = player.maxStamina;
+    st.cash = this.cash;
+    st.stars = wantedSystem.stars;
+    st.wantedTitle = wantedSystem.getDemeritLevelTitle(wantedSystem.stars);
+    st.dodgeLevel = this.dodgeSkillLevel;
+    st.dodgeCooldown = this.dodgeCooldownTimer;
+    st.dodgeNextFee = this.dodgeSkillLevel < DODGE_SKILL_FEES.length ? DODGE_SKILL_FEES[this.dodgeSkillLevel] : 0;
+    st.takedowns = detention.takedownCount;
+    st.frontalKos = detention.frontalKoCount;
+    st.alerts = detention.alertCount;
+    st.escapeSeconds = detention.isEscapeComplete ? -1 : Math.max(0, Math.floor((performance.now() - detention.escapeStartTime) / 1000));
+    return st;
   }
 
   // 大地圖點選裝備：檢查同 cycleWeapon，不可用時顯示解鎖條件橫幅
@@ -251,11 +331,11 @@ export class Progression {
   public readonly learnDodgeSkill = (targetLevel: number) => {
     const { hud, wantedSystem } = this.ctx;
     if (targetLevel === 1) {
-      if (this.cash < 1000) {
-        wantedSystem.showBanner('❌ 錢包餘額不足！學習【閃身步】需要 NT$ 1000！', 2500);
+      if (this.cash < DODGE_SKILL_FEES[0]) {
+        wantedSystem.showBanner(`❌ 錢包餘額不足！學習【閃身步】需要 NT$ ${DODGE_SKILL_FEES[0]}！`, 2500);
         return;
       }
-      this.cash -= 1000;
+      this.cash -= DODGE_SKILL_FEES[0];
       this.dodgeSkillLevel = 1;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
@@ -265,11 +345,11 @@ export class Progression {
         wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
         return;
       }
-      if (this.cash < 2000) {
-        wantedSystem.showBanner('❌ 錢包餘額不足！領悟【狗熊哆嗦毛】需要 NT$ 2000！', 2500);
+      if (this.cash < DODGE_SKILL_FEES[1]) {
+        wantedSystem.showBanner(`❌ 錢包餘額不足！領悟【狗熊哆嗦毛】需要 NT$ ${DODGE_SKILL_FEES[1]}！`, 2500);
         return;
       }
-      this.cash -= 2000;
+      this.cash -= DODGE_SKILL_FEES[1];
       this.dodgeSkillLevel = 2;
       hud.setCash(this.cash);
       soundManager.playCashRegister();

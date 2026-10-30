@@ -1860,6 +1860,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   transform: translateY(-4px);
   border-color: rgba(52, 152, 219, 0.85);
   box-shadow: 0 16px 42px rgba(52, 152, 219, 0.3);
+  background: rgba(30, 58, 95, 0.92);
 }
 
 .world-card.hardcore {
@@ -1869,6 +1870,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .world-card.hardcore:hover {
   border-color: rgba(231, 76, 60, 0.95);
   box-shadow: 0 16px 45px rgba(231, 76, 60, 0.4);
+  background: rgba(70, 24, 24, 0.92);
 }
 
 .world-card-badge {
@@ -1918,36 +1920,19 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   line-height: 1.75;
   text-align: left;
   width: 100%;
-  margin-bottom: 18px;
+  margin-bottom: 4px;
   flex-grow: 1;
   padding: 0 6px;
 }
 
-.world-card-btn {
-  width: 100%;
-  padding: 12px 0;
-  border: none;
-  border-radius: 10px;
-  font-size: 15.5px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.15s ease, filter 0.15s ease;
-  color: #fff;
+.world-card:active {
+  transform: scale(0.98);
+  filter: brightness(1.15);
 }
 
-.world-card-btn:hover {
-  filter: brightness(1.12);
-  transform: scale(1.02);
-}
-
-.world-card-btn.campus-btn {
-  background: linear-gradient(135deg, #2980b9, #3498db);
-  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
-}
-
-.world-card-btn.detention-btn {
-  background: linear-gradient(135deg, #b71540, #eb2f06);
-  box-shadow: 0 4px 15px rgba(235, 47, 6, 0.4);
+.world-card:focus-visible {
+  outline: 3px solid #f1c40f;
+  outline-offset: 3px;
 }
 
 .world-card-current {
@@ -2109,45 +2094,35 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   gap: 10px;
   animation: modalSlide 0.25s ease;
   position: relative;
+  --fm-accent: #38bdf8;
 }
 .fullmap-header {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px 14px;
   border-bottom: 1px solid rgba(56, 189, 248, 0.25);
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
 .fullmap-title-group {
+  flex: 1 1 0;
   min-width: 0;
 }
 .fullmap-title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 900;
   color: #38bdf8;
   letter-spacing: 1px;
-}
-.fullmap-subtitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  letter-spacing: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fullmap-header-meta {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.fullmap-badge {
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid #38bdf8;
-  color: #38bdf8;
-  font-size: 13px;
-  font-weight: bold;
-  padding: 3px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
 }
 /* 大地圖工具列 (【地圖】分頁側欄)：BGM / 天氣 / 世界切換 */
 .fullmap-toolbar {
@@ -2199,12 +2174,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .world-current {
   color: #38bdf8;
 }
-.fullmap-coords {
-  font-family: monospace;
-  font-size: 13px;
-  color: #94a3b8;
-  white-space: nowrap;
-}
 /* 分頁列：地圖 / 裝備 / 任務 */
 .fullmap-tabs {
   flex: 0 0 auto;
@@ -2212,6 +2181,10 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   gap: 8px;
 }
 .fm-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 38px;
   padding: 0 20px;
   border-radius: 8px;
@@ -2247,7 +2220,24 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .fullmap-pane-map {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 14px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas: "map card" "map goal" "map tools" "map side";
+  gap: 10px 14px;
+}
+.fm-idcard { grid-area: card; }
+.fm-goal { grid-area: goal; }
+.fullmap-toolbar { grid-area: tools; }
+.fullmap-map-area { grid-area: map; }
+.fullmap-side { grid-area: side; }
+/* 寬螢幕：下一步目標移到地圖左側空白，右欄只留學生證與工具 */
+@media (min-width: 1280px) and (min-aspect-ratio: 3/2) {
+  .fullmap-pane-map {
+    grid-template-columns: 210px minmax(0, 1fr) 320px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "goal map card" "tools map card" ". map side";
+    align-content: start;
+  }
+  .fm-goal, .fullmap-toolbar { align-self: start; }
 }
 .fullmap-side {
   display: flex;
@@ -2255,10 +2245,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   gap: 10px;
   min-height: 0;
   overflow-y: auto;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
 }
 .fullmap-side .fullmap-legend-box {
   margin-top: 0;
@@ -2272,30 +2258,33 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   font-size: 12px;
   line-height: 1.8;
 }
-.fullmap-keys-title {
-  font-weight: 800;
-  color: #ffcc00;
-  font-size: 13px;
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-/* 【裝備】分頁：武器卡片格線 */
+/* 【裝備】分頁：左側武器清單 + 右側詳情 / 技能卡 */
 .fullmap-pane-gear {
   overflow-y: auto;
-}
-.fullmap-gear-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "list detail" "skill detail";
+  gap: 12px 14px;
   align-content: start;
 }
+.fullmap-gear-list {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: start;
+}
+.fm-gear-detail { grid-area: detail; }
+.fm-gear-skill { grid-area: skill; align-self: start; }
 .gear-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   align-content: start;
-  gap: 4px 12px;
-  padding: 12px 14px;
+  gap: 2px 10px;
+  min-height: 44px;
+  padding: 10px 12px;
   text-align: left;
   font-family: inherit;
   color: #e2e8f0;
@@ -2306,32 +2295,28 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 }
 .gear-card.is-locked,
 .gear-card.is-unavailable {
-  cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 .gear-card.is-equipped {
   border-color: #38bdf8;
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
-  cursor: default;
 }
-.gear-card.is-unlocked:hover {
+.gear-card.is-selected {
+  border-color: var(--fm-accent);
+  background: rgba(56, 189, 248, 0.14);
+}
+.gear-card:hover {
   border-color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
 }
 .gear-icon {
-  grid-row: 1 / span 3;
-  font-size: 34px;
+  grid-row: 1 / span 2;
+  font-size: 28px;
   line-height: 1;
 }
 .gear-name {
   font-size: 15px;
   font-weight: 800;
   overflow-wrap: anywhere;
-}
-.gear-stats {
-  font-size: 13px;
-  font-family: monospace;
-  color: #94a3b8;
 }
 .gear-status {
   justify-self: start;
@@ -2355,20 +2340,24 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 }
 /* 【任務】分頁：清單佔滿分頁 (大螢幕限寬置中) */
 .fullmap-pane-quest {
-  display: flex;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1200px);
   justify-content: center;
+  gap: 14px;
 }
 .fullmap-pane-quest .fullmap-quest-panel {
   width: 100%;
-  max-width: 900px;
+  min-width: 0;
 }
 /* 大地圖任務清單 (由主畫面任務小介面整合而來) */
 .fullmap-quest-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: rgba(15, 23, 42, 0.88);
+  background: rgba(13, 19, 33, 0.82);
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: 3px solid var(--fm-accent);
   border-radius: 12px;
   padding: 10px 12px;
 }
@@ -2411,6 +2400,9 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 12px;
+  /* 地圖兩側空白以淡斜紋填充 (純背景，不佔 DOM) */
+  background: repeating-linear-gradient(135deg, rgba(56, 189, 248, 0.04) 0 12px, transparent 12px 24px);
 }
 .fullmap-canvas-wrap {
   width: min(100cqw, 100cqh);
@@ -2439,7 +2431,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #e2e8f0;
 }
@@ -2466,6 +2458,524 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .legend-dot.dog { background: #f59e0b; }
 .legend-dot.patrol { background: #8b5cf6; }
 .legend-dot.bike { background: #38bdf8; }
+
+/* ===== 大地圖方案 B：學生證 / 下一步目標 / 裝備詳情 / 戰績 ===== */
+/* 面板統一風格：沿用 HUD 的半透明深色底 + 右側 3px 色條 */
+.fm-block {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  background: rgba(13, 19, 33, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: 3px solid var(--fm-accent);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.fm-block-title {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--fm-accent);
+  margin-bottom: 6px;
+}
+/* 學生手冊點綴：卡片上方紙膠帶 */
+.fm-tape::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 18px;
+  width: 54px;
+  height: 12px;
+  background: rgba(251, 191, 36, 0.6);
+  transform: rotate(-3deg);
+  border-radius: 2px;
+  pointer-events: none;
+}
+/* 可折疊區塊 (圖例 / 操作說明) */
+.fm-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.fm-collapse-btn::after {
+  content: '▾';
+  transition: transform 0.2s ease;
+}
+.fm-collapsible.fm-open > .fm-collapse-btn::after {
+  transform: rotate(180deg);
+}
+.fm-collapse-body {
+  display: none;
+  margin-top: 8px;
+}
+.fm-collapsible.fm-open > .fm-collapse-body {
+  display: block;
+}
+/* 圖例：桌機常駐展開 (折疊鈕僅手機顯示) */
+.fullmap-legend-box .fm-collapse-mobile {
+  display: none;
+}
+.fullmap-legend-box .fm-collapse-body {
+  display: block;
+  margin-top: 0;
+}
+.fullmap-legend-group {
+  flex: 0 0 100%;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--fm-accent);
+}
+.legend-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  display: inline-block;
+  box-sizing: border-box;
+}
+.legend-done {
+  color: #22c55e;
+  font-weight: 900;
+}
+/* 學生證 */
+.fm-idcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fm-idc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.22);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.fm-idc-school {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm-idc-weapon {
+  flex: 0 0 auto;
+  color: #f1c40f;
+  white-space: nowrap;
+}
+.fm-idc-weapon b {
+  margin-left: 4px;
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 14px;
+}
+.fm-idc-body {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+.fm-idc-photo {
+  width: 52px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  background: linear-gradient(#1e3a5f, #0f172a);
+}
+.fm-idc-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fm-bar {
+  position: relative;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.fm-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: linear-gradient(90deg, #16a34a, #4ade80);
+  transition: width 0.2s ease;
+}
+.fm-bar-sp i { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+.fm-bar.is-low i { background: linear-gradient(90deg, #b91c1c, #ff4d4d); }
+.fm-bar span {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-shadow: 0 1px 2px #000;
+}
+.fm-bar em { font-style: normal; }
+.fm-bar b {
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 14px;
+}
+.fm-idc-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+.fm-idc-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+.fm-idc-chip span {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.fm-idc-chip b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+.fm-idc-cash b {
+  color: #2ecc71;
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 15px;
+}
+.fm-idc-wanted, .fm-idc-zone { grid-column: 1 / -1; }
+.fm-stars { color: #f1c40f !important; letter-spacing: 1px; }
+.fm-idc-wanted.is-wanted b { color: #ff4d4d; }
+/* 下一步目標 */
+.fm-goal { border-right-color: #f1c40f; }
+.fm-goal-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fm-goal-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+.fm-goal-text { min-width: 0; }
+.fm-goal-title {
+  font-size: 15px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.fm-goal-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+  overflow-wrap: anywhere;
+}
+.fm-goal-dist {
+  margin-top: 2px;
+  font-family: 'Changa One', monospace;
+  font-size: 14px;
+  color: var(--fm-accent);
+}
+/* 裝備詳情 */
+.fm-gear-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gear-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.gear-detail-icon { font-size: 48px; line-height: 1; }
+.gear-detail-title { flex: 1 1 140px; min-width: 0; }
+.gear-detail-name {
+  font-size: 22px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.gear-detail-sub { font-size: 12px; color: #94a3b8; }
+.gear-status-equipped { background: rgba(56, 189, 248, 0.25) !important; color: #38bdf8 !important; }
+.gear-status-unlocked { background: rgba(34, 197, 94, 0.25) !important; color: #4ade80 !important; }
+.gear-status-locked { background: rgba(245, 158, 11, 0.22) !important; color: #fbbf24 !important; }
+.gear-status-unavailable { background: rgba(239, 68, 68, 0.22) !important; color: #f87171 !important; }
+.gear-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.gear-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.gear-stat em { font-style: normal; font-size: 11px; color: #94a3b8; }
+.gear-stat b {
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 20px;
+  color: #f1c40f;
+}
+.gear-stat small { font-size: 11px; color: #94a3b8; }
+.gear-combo-title {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--fm-accent);
+}
+.gear-combo-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 45%) 40px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.gear-combo-row:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
+.gear-combo-row.is-finisher { color: #f1c40f; background: rgba(241, 196, 15, 0.1); }
+.gc-idx { font-family: monospace; color: #64748b; }
+.gc-name { font-weight: 700; overflow-wrap: anywhere; }
+.gc-mult {
+  font-family: monospace;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.gc-dmg {
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 15px;
+  text-align: right;
+}
+.gear-unlock-row {
+  display: grid;
+  grid-template-columns: minmax(0, 40%) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.gu-label { overflow-wrap: anywhere; color: #cbd5e1; }
+.gear-unlock-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.gear-unlock-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+.gu-count { font-family: 'Changa One', monospace; font-weight: 400; font-size: 14px; }
+.gear-equip-btn {
+  min-height: 44px;
+  border: 1px solid var(--fm-accent);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.gear-equip-btn:hover:not([disabled]) { background: rgba(56, 189, 248, 0.4); }
+.gear-equip-btn[disabled] {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  cursor: default;
+}
+.gear-skill-name {
+  font-size: 16px;
+  font-weight: 900;
+  color: #f1c40f;
+}
+.gear-skill-line {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
+}
+/* 大螢幕：裝備詳情放大字級，填滿多出的高度 */
+@media (min-height: 900px) {
+  .gear-detail-name { font-size: 28px; }
+  .gear-detail-icon { font-size: 60px; }
+  .gear-stat { padding: 12px 14px; }
+  .gear-stat b { font-size: 28px; }
+  .gear-combo-row { padding: 12px 10px; font-size: 16px; }
+  .gc-dmg { font-size: 18px; }
+  .gear-unlock-row { padding: 8px 0; font-size: 14px; }
+  .gear-equip-btn { min-height: 56px; font-size: 17px; }
+  .gear-combo { flex: 1 1 auto; display: flex; flex-direction: column; }
+  .gear-combo-row { flex: 1 1 0; max-height: 130px; }
+  .gear-equip-btn { margin-top: auto; }
+  .gear-card { padding: 14px; }
+  .gear-card .gear-name { font-size: 17px; }
+  .gear-skill-name { font-size: 18px; }
+  .gear-skill-line { font-size: 14px; }
+}
+/* 任務分頁：戰績 */
+.fm-stats.fm-tape::before { top: 2px; }
+.fm-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.fm-stats-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.fm-ring {
+  position: relative;
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--fm-accent) var(--pct, 0%), rgba(255, 255, 255, 0.1) 0);
+}
+.fm-ring::before {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: #0d1321;
+}
+.fm-ring span {
+  position: relative;
+  font-family: 'Changa One', monospace;
+  font-size: 20px;
+}
+.fm-ring-caption { font-size: 13px; font-weight: 800; color: #cbd5e1; }
+.fm-stat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.fm-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.fm-stat em { font-style: normal; font-size: 12px; color: #94a3b8; overflow-wrap: anywhere; }
+.fm-stat b {
+  font-family: 'Changa One', monospace;
+  font-weight: 400;
+  font-size: 22px;
+  color: #f1c40f;
+}
+.fm-badges {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.fm-medal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 4px 2px;
+  border-radius: 10px;
+  font-size: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+.fm-medal em { font-style: normal; font-size: 11px; font-weight: 700; text-align: center; }
+.fm-medal.is-done {
+  filter: none;
+  opacity: 1;
+  background: rgba(241, 196, 15, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(241, 196, 15, 0.5);
+}
+.fm-bulletin-tag {
+  display: inline-block;
+  margin: 0 auto 0 10px;
+  padding: 1px 8px;
+  transform: rotate(-3deg);
+  border-radius: 3px;
+  background: #fbbf24;
+  color: #451a03;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+/* 特訓院主題：軍規綠 */
+.fullmap-modal-card.is-detention {
+  --fm-accent: #34d399;
+  background: #02100b;
+  border-color: #34d399;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(52, 211, 153, 0.3);
+}
+.is-detention .fullmap-header { border-bottom-color: rgba(52, 211, 153, 0.3); }
+.is-detention .fullmap-title { color: #34d399; }
+.is-detention .fm-tab-btn { border-color: rgba(52, 211, 153, 0.3); background: rgba(2, 22, 15, 0.88); }
+.is-detention .fm-tab-btn.active { background: rgba(52, 211, 153, 0.2); border-color: #34d399; color: #34d399; }
+.is-detention .fullmap-canvas-wrap { border-color: rgba(52, 211, 153, 0.4); }
+.is-detention .fullmap-map-area { background: repeating-linear-gradient(135deg, rgba(52, 211, 153, 0.05) 0 12px, transparent 12px 24px); }
+.is-detention .fm-block,
+.is-detention .fullmap-quest-panel { background: rgba(2, 22, 15, 0.85); }
+.is-detention .fm-tape::before { display: none; }
+.is-detention .fm-idc-photo { background: linear-gradient(#064e3b, #02100b); border-color: #34d399; }
+.is-detention .fm-ring::before { background: #02100b; }
+.is-detention .gear-card { background: rgba(2, 22, 15, 0.88); }
+.is-detention .gear-card.is-selected { background: rgba(52, 211, 153, 0.14); }
+.is-detention .gear-equip-btn { background: rgba(52, 211, 153, 0.2); }
+.is-detention .fm-goal { border-right-color: #34d399; }
+/* 觸控裝置不顯示鍵盤快捷鍵說明 */
+@media (hover: none) and (pointer: coarse), (pointer: coarse) {
+  .fullmap-keys { display: none !important; }
+}
+body.touch-mode-active .fullmap-keys { display: none !important; }
 
 /* 遊戲內空間傳送 Modal */
 .world-modal-card {
@@ -3214,9 +3724,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     font-size: 20px !important;
     border-radius: 12px !important;
   }
-  .fullmap-badge {
-    white-space: nowrap !important;
-  }
   /* 大地圖工具列 (BGM / 天氣 / 世界)：觸控目標至少 44px */
   .fullmap-toolbar .bgm-badge,
   .fullmap-tool-btn {
@@ -3265,11 +3772,12 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   .quest-key-badge {
     display: none !important;
   }
-  /* 大地圖分頁列：觸控目標至少 44px，三顆均分寬度 */
+  /* 大地圖分頁列 (位於標題列、關閉鈕左側)：觸控目標至少 44px */
   .fm-tab-btn {
-    flex: 1 1 0;
+    flex: 0 0 auto;
+    min-width: 44px;
     min-height: 44px !important;
-    padding: 0 6px !important;
+    padding: 0 10px !important;
     font-size: 14px !important;
   }
   .gear-card {
@@ -3288,7 +3796,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .fullmap-quest-panel .quest-tab-btn {
     font-size: 11px !important;
-    min-height: 36px !important;
+    min-height: 44px !important;
   }
   /* 手機字級下限 11px：任務說明、狀態與分類標題 */
   .q-desc, .q-status, .quest-category-title, .shot-meter-hint {
@@ -3378,6 +3886,9 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   #start-screen .world-card:hover {
     transform: none;
   }
+  #start-screen .world-card:active {
+    transform: scale(0.97);
+  }
   #start-screen .world-card-badge {
     font-size: 11px;
     padding: 2px 8px;
@@ -3399,16 +3910,7 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   #start-screen .world-card-features {
     display: none;
   }
-  #start-screen .world-card-btn {
-    margin-top: auto;
-    min-height: 52px;
-    padding: 8px 6px;
-    font-size: 13px;
-    line-height: 1.3;
-    border-radius: 12px;
-  }
-
-  /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
+  #start-screen   /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
   #mobile-controls-container {
     display: block !important;
   }
@@ -3500,16 +4002,69 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .fullmap-pane-map {
     grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: none !important;
+    grid-template-areas: "card" "map" "goal" "tools" "side" !important;
+    gap: 8px !important;
   }
   .fullmap-side {
     overflow-y: visible !important;
   }
+  /* 學生證精簡成狀態條：血條 + 零用錢 / 閃身步 / 通緝星 */
+  .fm-idc-head, .fm-idc-photo, .fm-bar-sp, .fm-idc-zone { display: none !important; }
+  .fm-idc-body { grid-template-columns: minmax(0, 1fr) !important; }
+  .fm-idcard { gap: 6px !important; }
+  .fm-idc-rows { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .fm-idc-wanted { grid-column: 1 / -1 !important; }
+  /* 三顆工具鈕並排 */
+  .fullmap-toolbar {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  .fullmap-toolbar .bgm-badge, .fullmap-tool-btn {
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    white-space: normal !important;
+    text-align: center !important;
+    font-size: 12px !important;
+    padding: 4px 4px !important;
+  }
+  .fullmap-legend-box .fm-collapse-mobile { display: flex; min-height: 44px; }
+  .fullmap-legend-box .fm-collapse-body { display: none; margin-top: 8px; }
+  .fullmap-legend-box.fm-open > .fm-collapse-body { display: block; }
   .fullmap-pane-gear {
     overflow-y: visible !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: "list" "detail" "skill" !important;
   }
   .fullmap-gear-list {
+    flex-direction: row !important;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .fullmap-gear-list .gear-card {
+    flex: 0 0 auto;
+    min-width: 150px;
+  }
+  .fullmap-pane-quest {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+  .fm-stats {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 10px !important;
+    overflow-y: visible !important;
+  }
+  .fm-stats .fm-block-title { grid-column: 1 / -1; margin: 0; }
+  .fm-ring { width: 64px; height: 64px; }
+  .fm-ring::before { inset: 7px; }
+  .fm-ring span { font-size: 15px; }
+  .fm-ring-caption { display: none; }
+  .fm-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 4px !important; }
+  .fm-stat { padding: 4px 6px !important; }
+  .fm-stat b { font-size: 18px !important; }
+  .fm-badges { grid-column: 1 / -1; }
   .fullmap-map-area {
     container-type: inline-size !important;
   }
@@ -3517,18 +4072,26 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
     width: 100cqw !important;
     height: 100cqw !important;
   }
-  .fullmap-subtitle, .fullmap-coords {
-    display: none !important;
-  }
+  /* 直屏標題列：左側區域名小字 (最多兩行換行) + 右側純圖示頁籤與關閉鈕 */
   .fullmap-title {
-    font-size: 16px !important;
-  }
-  /* 直屏標題列：標題 + 世界徽章與關閉鈕 */
-  .fullmap-title-group {
-    flex: 1 1 0 !important;
+    font-size: 13px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
   }
   .fullmap-header-meta {
-    gap: 8px !important;
+    gap: 6px !important;
+  }
+  .fullmap-tabs {
+    gap: 4px !important;
+  }
+  .fm-tab-label {
+    display: none;
+  }
+  .fm-tab-btn {
+    padding: 0 !important;
+    width: 44px;
+    font-size: 20px !important;
   }
 
   /* 直屏窄屏優化：左下蘑菇頭尺寸 (按鍵扇形佈局與安全區定位統一於手機通用區塊) */
@@ -3557,17 +4120,40 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   }
   .fm-tab-btn {
     flex: 0 0 auto !important;
-    padding: 0 24px !important;
+    padding: 0 14px !important;
+    min-height: 44px !important;
   }
+  .fullmap-title {
+    font-size: 13px !important;
+  }
+  .fullmap-header { padding-bottom: 4px !important; gap: 8px !important; }
   .fullmap-pane-map {
     grid-template-columns: minmax(0, 1fr) 230px !important;
-    gap: 10px !important;
+    grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+    grid-template-areas: "map card" "map goal" "map tools" "map side" !important;
+    gap: 6px 10px !important;
   }
-  .fullmap-gear-list {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  /* 橫屏側欄精簡：學生證只留血條與零用錢 / 通緝星，目標卡只留標題與距離 */
+  .fm-idc-head, .fm-idc-photo, .fm-bar-sp, .fm-idc-zone, .fm-idc-skill, .fm-idc-wanted b, .fm-goal-desc, .fm-goal .fm-block-title { display: none !important; }
+  .fm-idc-body { grid-template-columns: minmax(0, 1fr) !important; }
+  .fm-idcard, .fm-goal { padding: 6px 8px !important; gap: 4px !important; }
+  .fm-idc-rows { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .fm-idc-wanted { grid-column: auto !important; }
+  .fm-goal-icon { font-size: 22px !important; }
+  .fm-goal-title { font-size: 13px !important; }
+  .fullmap-pane-gear {
+    grid-template-columns: 200px minmax(0, 1fr) !important;
   }
-  /* 橫屏高度有限：隱藏副標、座標、世界徽章與圖例，讓地圖與側欄保有空間 */
-  .fullmap-subtitle, .fullmap-coords, .fullmap-badge, .fullmap-legend-box {
+  .fm-stats { overflow-y: auto; }
+  .fullmap-pane-quest {
+    grid-template-columns: 200px minmax(0, 1fr) !important;
+  }
+  .fm-ring { width: 64px; height: 64px; }
+  .fm-ring::before { inset: 7px; }
+  .fm-ring-caption { display: none; }
+  .fm-badges { gap: 4px; }
+  /* 橫屏高度有限：隱藏副標、世界徽章與圖例，讓地圖與側欄保有空間 */
+  .fullmap-side {
     display: none !important;
   }
   .fullmap-title {
@@ -3706,9 +4292,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   #start-screen .world-card-tagline {
     margin-bottom: 6px;
   }
-  #start-screen .world-card-btn {
-    min-height: 48px;
-  }
 }
 
 /* 手動開啟觸控模式時的電腦端自適應 */
@@ -3739,4 +4322,40 @@ body.touch-controls-hidden #mobile-controls-container {
 /* 身法技能尚未習得時隱藏技能卡，習得後才顯示 (避免遮擋動作按鍵) */
 #skill-hud-card.locked {
   display: none !important;
+}
+
+/* 世界選擇視窗：手機完整放進畫面，內容可捲動；橫向左右並排 */
+.world-modal-card {
+  max-height: calc(100dvh - 16px);
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+@media (max-width: 900px), (pointer: coarse) {
+  .world-modal-card {
+    max-width: calc(100vw - 16px);
+    padding: 14px 14px;
+    gap: 10px;
+  }
+  .world-modal-title { font-size: 16px; }
+  .world-modal-desc { font-size: 12px; margin-bottom: 0; }
+  .commissary-close { min-width: 44px; min-height: 44px; }
+  .world-modal-card .world-select-grid { gap: 10px; }
+  .world-modal-card .world-card {
+    flex: 1 1 100%;
+    max-width: none;
+    padding: 12px 12px;
+  }
+  .world-modal-card .world-card:hover { transform: none; }
+  .world-modal-card .world-card:active { transform: scale(0.98); }
+  .world-modal-card .world-card-icon { font-size: 32px; margin-bottom: 2px; }
+  .world-modal-card .world-card-name { font-size: 18px; }
+  .world-modal-card .world-card-features { font-size: 11.5px; line-height: 1.55; margin-bottom: 10px; }
+  .world-modal-card .world-card-current { margin-bottom: 6px; font-size: 12px; }
+}
+@media (max-height: 520px) {
+  .world-modal-card .world-select-grid { flex-wrap: nowrap; }
+  .world-modal-card .world-card { flex: 1 1 0; min-width: 0; }
+  .world-modal-card .world-card-features,
+  .world-modal-card .world-card-badge { display: none; }
+  .world-modal-card .world-card-icon { font-size: 26px; }
 }

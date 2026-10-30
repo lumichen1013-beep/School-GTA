@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 
 interface SplashDroplet {
   position: THREE.Vector3;
@@ -59,6 +60,7 @@ export class WaterSplashVFX {
 
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
+    updateVisibleMatricesOnly(this.group); // 水珠/漣漪閒置隱藏時略過矩陣更新
     scene.add(this.group);
 
     this.dropletMesh = this.initDropletsPool();

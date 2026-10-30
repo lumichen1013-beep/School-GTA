@@ -38,12 +38,12 @@ describe('雙燕羽刃：三段七擊時序', () => {
     expect([M1, M2, M3].map((m) => m.dur)).toEqual([0.4, 0.44, 1.0]);
     expect([M1.strike, M2.strike, M3.strike]).toEqual([0.28, 0.42, 0.42]);
     expect([M1.extraStrikes, M2.extraStrikes, M3.extraStrikes]).toEqual([[0.55], [0.5], [0.26, 0.31]]);
-    expect([M1.cancel, M2.cancel, M3.cancel]).toEqual([0.68, 0.64, 0.9]);
+    expect([M1.cancel, M2.cancel, M3.cancel]).toEqual([0.68, 0.64, 0.7]);
     expect(M1.extraStrikes.length + M2.extraStrikes.length + M3.extraStrikes.length + 3).toBe(7);
-    // 整套接續節奏 (各段接續點秒數加總) 約 1.45s
+    // 整套接續節奏 (各段接續點秒數加總) 約 1.25s
     const chain = [M1, M2, M3].reduce((s, m) => s + m.cancel * m.dur, 0);
-    expect(chain).toBeGreaterThan(1.35);
-    expect(chain).toBeLessThan(1.55);
+    expect(chain).toBeGreaterThan(1.15);
+    expect(chain).toBeLessThan(1.35);
   });
 
   it('StrikeTracker 實跑：每段各擊恰好送出一次，依時間先後，時間點與設計一致', () => {
@@ -110,18 +110,18 @@ describe('雙燕羽刃：三段七擊時序', () => {
 });
 
 describe('雙燕羽刃：傷害 / 結算分流 / 擊飛', () => {
-  it('武器數值 16 / 2.6 / 9', () => {
-    expect(DEF.stats).toEqual({ damage: 16, reach: 2.6, knockback: 9.0 });
+  it('武器數值 25 / 2.6 / 10', () => {
+    expect(DEF.stats).toEqual({ damage: 25, reach: 2.6, knockback: 10.0 });
   });
 
-  it('各擊傷害：第 1、2 段 16×2、第 3 段 8 + 8 + 26，整套 106', () => {
-    expect([0, 1].map((i) => strikeDamage(M1, i))).toEqual([16, 16]);
-    expect([0, 1].map((i) => strikeDamage(M2, i))).toEqual([16, 16]);
+  it('各擊傷害：第 1、2 段 25×2、第 3 段 13 + 13 + 40，整套 166', () => {
+    expect([0, 1].map((i) => strikeDamage(M1, i))).toEqual([25, 25]);
+    expect([0, 1].map((i) => strikeDamage(M2, i))).toEqual([25, 25]);
     // 第 3 段：主擊 (序號 0) 1.6 倍、額外擊各 0.5 倍 (extraDmg 與 dmg 皆為直接倍率，不相乘)
-    expect([0, 1, 2].map((i) => strikeDamage(M3, i))).toEqual([26, 8, 8]);
+    expect([0, 1, 2].map((i) => strikeDamage(M3, i))).toEqual([40, 13, 13]);
     let total = 0;
     for (const m of [M1, M2, M3]) for (let i = 0; i <= m.extraStrikes.length; i++) total += strikeDamage(m, i);
-    expect(total).toBe(106);
+    expect(total).toBe(166);
   });
 
   it('結算分流：第 1、2 段單體；第 3 段主擊群攻、額外擊只扣血的群攻', () => {

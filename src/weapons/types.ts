@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { KfMove } from '../entities/shared/kungfu';
 import type { WeaponFxId } from '../effects/weaponFxStyle';
+import type { LaunchCap } from './launch';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
 export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET';
@@ -63,6 +64,7 @@ export interface WeaponVariant {
   readonly fxStyle: WeaponFxSpec;
   readonly tempo?: number;
   readonly finisherFx?: WeaponFinisherFx;
+  readonly launchCap?: LaunchCap;
 }
 
 // 進度查詢介面 (由 Progression 提供，提示文字取解鎖進度)
@@ -80,6 +82,8 @@ interface WeaponLoadoutFields {
   readonly tempo: number; // 出招時間縮放 (> 1 較慢)
   readonly fxStyle: WeaponFxSpec;
   readonly finisherFx?: WeaponFinisherFx;
+  // 玩家終結技擊飛初速度上限 (未設 = NPC.ts 預設 10 / 7)；飛行距離 = h × 2v / 26
+  readonly launchCap?: LaunchCap;
   readonly model?: WeaponModelSpec;
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
@@ -114,6 +118,7 @@ export interface ResolvedWeapon {
   readonly tempo: number;
   readonly fx: { readonly R: WeaponFxId; readonly L: WeaponFxId };
   readonly finisherFx: WeaponFinisherFx;
+  readonly launchCap: LaunchCap | null;
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
   readonly readyPose: WeaponReadyPose;

@@ -202,7 +202,7 @@ const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62,
 // 3 躍起下劈：屈膝起跳、雙手舉棒過頂 → 落地沉身全力下劈 (終結技)
 const BAT_3 = defineMove('躍起下劈', {
   dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.36, 0.56], fx: 'SLAM',
-  aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 8, shakeGold: 0.8, hitStopGold: 0.11 }
+  aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 7, shakeGold: 0.8, hitStopGold: 0.11 }
 }, [
   [0.18, E_SMOOTH, { ln: 0.1, h: -0.15, la: [0.55, 0, -0.1], ra: [0.55, 0, 0.1], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
   [0.36, E_OUT, { tw: 0.15, ln: -0.28, h: 0.45, la: [-2.85, 0, 0.3], ra: [-2.9, 0, -0.1], ll: [-0.85, 0, -0.05], rr: [-0.25, 0, 0.05] }],
@@ -273,7 +273,7 @@ const DUAL_2 = defineMove('二刀・交叉斬', {
 // 衝刺中途兩次小擊只扣血 (0.26 / 0.31) → 停下後雙拍向兩側外斬、背對敵人收刀 (0.42，延遲斬：敵人此刻才爆開並擊飛，唯一擊飛) → 停格收勢 0.3s
 // 命中範圍為沿突進路徑的矩形 (半寬 = radius × 攻擊距離 ≈ 0.9m、長度 = 實際突進距離，撞牆時較短)
 const DUAL_3 = defineMove('鬼斬', {
-  dur: 1.0, strike: 0.42, cancel: 0.9, reach: 1.0, arc: -1, dmg: 1.6, knock: 1.5, finisher: true,
+  dur: 1.0, strike: 0.42, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.6, knock: 1.5, finisher: true,
   extraStrikes: [0.26, 0.31], extraDmg: [0.5, 0.5], trailLimb: 'W', trail: [0.2, 0.56], trail2: [0.2, 0.56], trailLimb2: 'WL', fx: 'DASH',
   lunge: { dist: 4.5, from: 0.2, to: 0.35 }, charge: [0.04, 0.2], slashFx: 'LINE',
   aoe: { shape: 'PATH', center: 'SELF', offset: 0, radius: 0.35, max: 6, falloff: 0.3, shake: 0.75, hitStop: 0.12, hitStopMulti: 0.14, missShake: 0.3 }

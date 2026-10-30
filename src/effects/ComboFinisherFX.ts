@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getFxQuality } from './fxQuality';
+import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import type { WeaponFxStyle } from './weaponFxStyle';
 
 // 連段終結技特效：發光裂痕 / 衝擊波環 / 塵土 / 黃金棒雷電，各類以單一 InstancedMesh 繪製 (每類 1 draw call)。
@@ -264,6 +265,9 @@ class ComboFinisherFXSystem {
 
     scene.add(this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh);
     if (this.dustMesh) scene.add(this.dustMesh);
+    // 閒置隱藏時略過矩陣更新
+    updateVisibleMatricesOnly(this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh);
+    if (this.dustMesh) updateVisibleMatricesOnly(this.dustMesh);
   }
 
   // 暫時顯示以便 renderer.compile 預熱 shader

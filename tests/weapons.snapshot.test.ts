@@ -50,8 +50,8 @@ interface Snapshot {
 const STATS = {
   FIST: { damage: 25, reach: 2.2, knock: 7.5 },
   NORMAL_BAT: { damage: 35, reach: 3.2, knock: 14.0 },
-  SPECIAL_BAT: { damage: 70, reach: 3.8, knock: 22.0 },
-  DUAL_RACKET: { damage: 16, reach: 2.6, knock: 9.0 }
+  SPECIAL_BAT: { damage: 68, reach: 3.8, knock: 22.0 },
+  DUAL_RACKET: { damage: 25, reach: 2.6, knock: 10.0 }
 } as const;
 
 const FIST_COMBO = { combo: PLAYER_COMBOS.FIST, comboNames: ['弓步衝拳', '轉身鞭腿', '騰空旋風腿'] };
@@ -173,7 +173,7 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(getWeaponBySlot(5)).toBeUndefined();
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
-    expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' });
+    expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' });
     const p = { studentDefeatedCount: 3, teacherDefeatedCount: 1, dogDefeatedCount: 0, bikePatrolDefeatedCount: 2 };
     expect(getWeapon('FIST').unlock).toBeNull();
     expect(getWeapon('NORMAL_BAT').unlock?.lockedHint(p, 'CAMPUS')).toBe('🔒 普通球棒未解鎖！需擊敗 5 位普通同學 (目前進度: 3/5)');
@@ -181,7 +181,7 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(getWeapon('SPECIAL_BAT').unlock?.lockedHint(p, 'CAMPUS')).toBe('🔒 特殊棒球棍未解鎖！需擊敗生教(1)、校犬(1)、火柴人自行車騎士(5) (目前: 教1/1 犬0/1 車2/5)');
     expect(getWeapon('SPECIAL_BAT').unlock?.lockedHint(p, 'DETENTION')).toBe('⚠️ 特訓院管制區：重型管制武器已遭沒收封存！');
     expect(getWeapon('DUAL_RACKET').icon).toBe('🏸🏸');
-    expect(getWeapon('DUAL_RACKET').banner.campus).toBe('🏸🏸 切換神兵：雙燕羽刃 (ATK 16×7 連擊)');
+    expect(getWeapon('DUAL_RACKET').banner.campus).toBe('🏸🏸 切換神兵：雙燕羽刃 (ATK 25×7 連擊)');
     expect(getWeapon('DUAL_RACKET').unlock?.lockedHint(p, 'CAMPUS')).toBe('🔒 雙燕羽刃未解鎖！需在 4F 羽球賽擊敗羽球大如老師');
     expect(getWeapon('DUAL_RACKET').unlock?.lockedHint(p, 'DETENTION')).toBe('⚠️ 特訓院管制區：器材已遭沒收！');
   });

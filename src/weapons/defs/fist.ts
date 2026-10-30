@@ -10,6 +10,7 @@ export const FIST: WeaponDefinition = {
   name: '徒手拳擊',
   banner: { campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' },
   stats: { damage: 25, reach: 2.2, knockback: 7.5 },
+  launchCap: { h: 9.8, v: 5.3 }, // 終結技主目標約飛 4.0m
   combo: PLAYER_COMBOS.FIST,
   tempo: 1,
   fxStyle: 'FIST',

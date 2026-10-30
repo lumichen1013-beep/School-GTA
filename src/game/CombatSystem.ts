@@ -753,6 +753,7 @@ export class CombatSystem {
     const baseDamage = player.getWeaponDamage() * strikeDmg(move, strikeIndex);
     const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
+    const cap = player.activeWeapon.launchCap; // 武器 (含世界變體) 的擊飛上限，null = NPC 預設
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
 
@@ -824,7 +825,7 @@ export class CombatSystem {
       if (dist > 0.3) _scratchImpactDir.set(dx / dist, 0, dz / dist);
       else _scratchImpactDir.copy(_scratchPlayerForward);
       // 僅連招終結技主擊可擊飛；非終結技 (含多段招式各擊) 命中只扣血，不影響 NPC 行為 (見 NPC.launchFlying)
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, strikeCanLaunch(move, strikeIndex), false, true)) {
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, strikeCanLaunch(move, strikeIndex), false, true, cap?.h, cap?.v)) {
         this.handleNpcDefeated(npc, 'ATTACK', this.takeCrimeSlot());
       } else {
         if (this.takeCrimeSlot()) wantedSystem.reportCrime(1, this.ctx.currentWorldType === 'DETENTION' ? '院內襲擊守衛' : '校園打架鬥毆');
@@ -907,6 +908,7 @@ export class CombatSystem {
     const baseDamage = player.getWeaponDamage() * (opts ? opts.dmgMul : move.dmg);
     const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
+    const cap = player.activeWeapon.launchCap; // 武器 (含世界變體) 的擊飛上限，null = NPC 預設
 
     const fwd = _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY));
     const center = _scratchAoeCenter.copy(player.position);
@@ -1034,7 +1036,7 @@ export class CombatSystem {
         if (aoe.center === 'FRONT' && along < 0) _scratchImpactDir.addScaledVector(fwd, AOE_BACK_BLEND - along).normalize();
       }
       // 終結技無視受擊保護時間 (緊接前一段命中)，第二世界特訓群可被擊飛；額外擊只扣血
-      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, launch, true, true)) {
+      if (npc.launchFlying(_scratchImpactDir, actualKnockback, actualDamage, launch, true, true, cap?.h, cap?.v)) {
         this.handleNpcDefeated(npc, 'ATTACK', false);
         if (!firstKo) firstKo = npc;
       } else {

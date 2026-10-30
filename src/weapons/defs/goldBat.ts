@@ -10,8 +10,9 @@ export const SPECIAL_BAT: WeaponDefinition = {
   slot: 3,
   icon: '⚡',
   name: '黃金雷霆棒球棍',
-  banner: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 70)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 70)' },
-  stats: { damage: 70, reach: 3.8, knockback: 22.0 },
+  banner: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' },
+  stats: { damage: 68, reach: 3.8, knockback: 22.0 },
+  launchCap: { h: 13, v: 6.5 }, // 終結技主目標約飛 6.5m
   combo: PLAYER_COMBOS.BAT,
   tempo: 1.14,
   fxStyle: 'GOLD',

@@ -14,8 +14,6 @@ export class StartScreen {
 
   constructor(handlers: StartScreenHandlers) {
     const startScreen = document.getElementById('start-screen');
-    const btnStartCampus = document.getElementById('btn-start-campus');
-    const btnStartDetention = document.getElementById('btn-start-detention');
     const cardCampus = document.getElementById('card-world-campus');
     const cardDetention = document.getElementById('card-world-detention');
     const cutsceneSkipBtn = document.getElementById('cutscene-skip-btn');
@@ -52,21 +50,16 @@ export class StartScreen {
       }, 400);
     };
 
-    if (btnStartCampus) {
-      btnStartCampus.addEventListener('click', (e) => handleStartWithWorld('CAMPUS', e));
-      btnStartCampus.addEventListener('touchend', (e) => handleStartWithWorld('CAMPUS', e), { passive: false });
-    }
-    if (cardCampus) {
-      cardCampus.addEventListener('click', (e) => handleStartWithWorld('CAMPUS', e));
-    }
-
-    if (btnStartDetention) {
-      btnStartDetention.addEventListener('click', (e) => handleStartWithWorld('DETENTION', e));
-      btnStartDetention.addEventListener('touchend', (e) => handleStartWithWorld('DETENTION', e), { passive: false });
-    }
-    if (cardDetention) {
-      cardDetention.addEventListener('click', (e) => handleStartWithWorld('DETENTION', e));
-    }
+    const bindCard = (card: HTMLElement | null, world: StartWorld) => {
+      if (!card) return;
+      card.addEventListener('click', (e) => handleStartWithWorld(world, e));
+      card.addEventListener('touchend', (e) => handleStartWithWorld(world, e), { passive: false });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') handleStartWithWorld(world, e);
+      });
+    };
+    bindCard(cardCampus, 'CAMPUS');
+    bindCard(cardDetention, 'DETENTION');
 
   }
 

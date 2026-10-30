@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { NpcLodRig } from './lod';
+import { freezeLocalMatrix } from '../../core/matrixUpdate';
 
 // NPC 模型烘焙快取：將同一骨架節點 (軀幹、頭、單臂、單腿…) 底下的所有靜態零件
 // 依材質類別烘焙為頂點色並合併成少數幾個 Mesh，同外觀 NPC 共用同一份幾何體與材質，
@@ -216,6 +217,7 @@ export function bakeNode(
     first = false;
     const mesh = new THREE.Mesh(bucket.geometry, mat);
     mesh.castShadow = castShadow && bucket.castShadow;
+    freezeLocalMatrix(mesh); // 分桶網格固定於骨架節點原點，隨節點動畫移動但自身不動
     root.add(mesh);
   }
   // 骨架節點為 Mesh 但完全沒有零件時 (理論上不會發生) 隱藏避免錯誤繪製
@@ -235,6 +237,7 @@ export function bakeStaticParts(container: THREE.Object3D, parts: THREE.Object3D
   }
   container.add(group);
   bakeNode(group, cacheKey);
+  freezeLocalMatrix(group); // 靜態零件群組建立後不再移動 (僅隨根節點移動)
   return group;
 }
 
@@ -304,6 +307,7 @@ export function buildHumanoidLod(
   const far = new THREE.Mesh(farGeo, mat);
   far.visible = false;
   far.name = 'npc_lod_far';
+  freezeLocalMatrix(mid, far); // 分級網格固定於根節點原點，執行期僅切換 visible
   root.add(mid, far);
   // 軀幹群組僅隱藏不透明分桶 (透明光錐等維持顯示)；頭與雙臂整個節點隱藏
   const bodyOpaque = (body as THREE.Mesh).isMesh

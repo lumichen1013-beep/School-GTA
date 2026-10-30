@@ -256,6 +256,7 @@ class SchoolGTASandbox implements GameContext {
     };
     this.hud.getWeaponEquipEntries = () => this.progression.getWeaponEquipEntries();
     this.hud.onEquipWeapon = this.progression.equipById;
+    this.hud.getFullMapStatus = () => this.progression.getFullMapStatus();
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
 
     // 綁定按鍵互動與操作
@@ -496,6 +497,7 @@ class SchoolGTASandbox implements GameContext {
       if (e.code === 'KeyJ') {
         hud.toggleQuestTracker();
       } else if (e.code === 'Escape') {
+        if (hud.isWorldModalOpen) hud.closeWorldModal();
         if (hud.isFullMapOpen) hud.closeFullMap();
         if (hud.isCommissaryOpen) hud.closeCommissary();
         if (hud.isTennisDialogOpen) hud.closeTennisDialog();
