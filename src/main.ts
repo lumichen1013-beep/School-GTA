@@ -15,6 +15,8 @@ import { soundManager } from './audio/SoundEffects';
 import { bgmManager } from './audio/BGMManager';
 import { EcologicalGarden } from './world/EcologicalGarden';
 import { WaterSplashVFX } from './effects/WaterSplashVFX';
+import { swingTrail } from './effects/SwingTrail';
+import { comboFinisherFX } from './effects/ComboFinisherFX';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
 import { TennisGame } from './systems/TennisGame';
@@ -161,6 +163,10 @@ class SchoolGTASandbox implements GameContext {
     // 階段 3 (65%)：生成主角模型、火柴人自行車與水花特效系統
     progress(65, '正在生成主角模型、火柴人自行車與水花特效系統...');
     this.player = new Player(this.engine.scene);
+    swingTrail.init(this.engine.scene);
+    swingTrail.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
+    comboFinisherFX.init(this.engine.scene);
+    comboFinisherFX.prewarm(() => this.engine.renderer.compile(this.engine.scene, this.cameraCtrl.camera));
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
 
     // 墜落傷害與死亡回呼
@@ -203,7 +209,6 @@ class SchoolGTASandbox implements GameContext {
       }
       this.campus.onWantedCleared();
     };
-    this.wantedSystem.onMaxWanted = () => this.campus.onMaxWanted();
     this.hud = new HUD();
     this.hud.onRequestPointerLock = () => this.input.requestPointerLock();
     this.hud.onWorldToggle = () => {
@@ -296,6 +301,8 @@ class SchoolGTASandbox implements GameContext {
     this.campusLife.reset();
     this.sportsCrew.reset();
     this.combat.resetTransientState();
+    swingTrail.reset();
+    comboFinisherFX.reset();
     // 進入世界時展開快捷鍵指南，30 秒後自動收合
     this.hud.showControlsGuide();
 
@@ -507,6 +514,8 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.duckVolume(3.2);
 
     this.wantedSystem.clearWanted();
+    swingTrail.reset();
+    comboFinisherFX.reset();
     if (!isCampus) {
       this.detention.resetGuards();
     }
@@ -515,6 +524,8 @@ class SchoolGTASandbox implements GameContext {
       // 復活點於復活當下依所在世界計算 (死亡 3 秒內切換世界時避免在另一世界的座標重生)
       const respawnPos = this.currentWorldType === 'CAMPUS' ? _campusRespawnPos : this.detentionWorld.spawnPos;
       this.player.respawn(respawnPos);
+      swingTrail.reset();
+      comboFinisherFX.reset();
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
@@ -734,7 +745,7 @@ class SchoolGTASandbox implements GameContext {
       this.detention.updateSurround(delta, targetPosition);
     }
 
-    // 8.2 校園執法者包夾、留校察看暴怒與傳送追捕
+    // 8.2 校園執法者包夾、連殺觸發暴怒與傳送追捕
     if (isCampus) this.campus.updateEnforcers(delta, targetPosition);
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
@@ -747,6 +758,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 玩家招式命中結算與 NPC 攻擊玩家判定
     this.combat.updatePlayerStrike();
+    swingTrail.update(delta);
+    comboFinisherFX.update(delta, this.cameraCtrl.camera);
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
 
     // 9. 角色推擠排除

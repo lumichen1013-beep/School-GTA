@@ -27,6 +27,28 @@ type V3 = readonly [number, number, number];
 interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
 type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
 
+// 揮擊拖尾錨點：W 手持武器、RA 右拳、RL 右腿、LL 左腿
+export type TrailLimb = 'W' | 'RA' | 'RL' | 'LL';
+// 終結技特效類型：SLAM 下劈地裂、SPIN 旋身衝擊環
+export type FinisherFx = 'SLAM' | 'SPIN';
+
+// 終結技群攻範圍：offset / radius 為攻擊距離 (getWeaponReach) 倍率
+export interface FinisherAoe {
+  readonly center: 'SELF' | 'FRONT'; // 以玩家為圓心 / 以面前衝擊點為圓心
+  readonly offset: number; // FRONT 衝擊點前移距離
+  readonly radius: number;
+  readonly max: number; // 最多命中人數 (上限 8)
+  readonly falloff: number; // 擊退距離衰減：× (1 − falloff · d / radius)
+  readonly shake: number; // 命中鏡頭震動
+  readonly hitStop: number; // 命中停格 (真實秒)
+  readonly hitStopMulti: number; // 命中 ≥2 人停格
+  readonly missShake: number; // 揮空鏡頭震動 (0 不震、不停格)
+  // 黃金雷霆棒覆寫值
+  readonly maxGold?: number;
+  readonly shakeGold?: number;
+  readonly hitStopGold?: number;
+}
+
 export interface KfMove {
   readonly name: string;
   readonly dur: number; // 秒
@@ -39,11 +61,30 @@ export interface KfMove {
   readonly finisher: boolean;
   // 額外命中時間點 (占全長比例，多段招式如戒尺連打；第一段為 strike)
   readonly extraStrikes: readonly number[];
+  // 揮擊拖尾區段 (占全長比例；預設為命中點前後兩個關鍵影格) 與錨點
+  readonly trail: readonly [number, number];
+  readonly trailLimb: TrailLimb;
+  readonly aoe: FinisherAoe | null; // 終結技群攻 (null 為單體判定)
+  readonly fx: FinisherFx | null;
   readonly keys: Float32Array;
   readonly count: number;
 }
 
-interface MoveOpts { dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[] }
+interface MoveOpts {
+  dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
+  trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
+}
+
+// 預設拖尾區段：命中點前一個關鍵影格 → 後一個關鍵影格
+function defaultTrail(strike: number, keys: readonly KeySpec[]): [number, number] {
+  let from = 0;
+  let to = 1;
+  for (const [t] of keys) {
+    if (t < strike) from = t;
+    else if (t > strike) { to = t; break; }
+  }
+  return [from, to];
+}
 
 function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
   const data = new Float32Array(keys.length * STRIDE);
@@ -74,6 +115,10 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
     knock: o.knock ?? 1,
     finisher: o.finisher ?? false,
     extraStrikes: o.extraStrikes ?? [],
+    trail: o.trail ?? defaultTrail(o.strike, keys),
+    trailLimb: o.trailLimb ?? 'RA',
+    aoe: o.aoe ?? null,
+    fx: o.fx ?? null,
     keys: data,
     count: keys.length
   };
@@ -83,21 +128,24 @@ const REST: PoseSpec = {};
 
 // ───────────── 玩家：徒手 ─────────────
 // 1 弓步衝拳：沉身扭腰蓄勢 → 擰腰送肩直拳、另一拳收抱腰間
-const FIST_1 = defineMove('弓步衝拳', { dur: 0.4, strike: 0.4, cancel: 0.62 }, [
+const FIST_1 = defineMove('弓步衝拳', { dur: 0.4, strike: 0.4, cancel: 0.62, trailLimb: 'RA', trail: [0.25, 0.68] }, [
   [0.25, E_SMOOTH, { tw: 0.55, ln: -0.04, h: -0.07, la: [-1.15, 0, 0.1], ra: [0.7, 0, 0.12], ll: [-0.5, 0, -0.06], rr: [0.42, 0, 0.06] }],
   [0.4, E_IN, { tw: -0.42, ln: 0.16, h: -0.12, la: [0.75, 0, -0.12], ra: [-1.58, 0, -0.14], ll: [-0.68, 0, -0.08], rr: [0.58, 0, 0.08] }],
   [0.68, E_OUT, { tw: -0.36, ln: 0.13, h: -0.11, la: [0.7, 0, -0.12], ra: [-1.5, 0, -0.12], ll: [-0.64, 0, -0.08], rr: [0.55, 0, 0.08] }],
   [1, E_SMOOTH, { ln: 0.02, la: [-0.2, 0, 0], ra: [-0.25, 0, 0] }]
 ]);
 // 2 轉身鞭腿：扭身蓄力 → 後腿掄圓橫掃，雙臂展開平衡
-const FIST_2 = defineMove('轉身鞭腿', { dur: 0.48, strike: 0.42, cancel: 0.62, reach: 1.15, arc: -0.2 }, [
+const FIST_2 = defineMove('轉身鞭腿', { dur: 0.48, strike: 0.42, cancel: 0.62, reach: 1.15, arc: -0.2, trailLimb: 'RL', trail: [0.26, 0.66] }, [
   [0.26, E_SMOOTH, { tw: -1.05, ln: 0.02, h: -0.07, la: [-1.0, 0, -0.2], ra: [-0.5, 0, 0.35], ll: [-0.2, 0, -0.05], rr: [0.45, 0, 0.05] }],
   [0.42, E_IN, { tw: 0.2, ln: -0.3, rl: 0.3, h: 0.04, la: [-0.2, 0, -1.2], ra: [0.3, 0, 1.0], ll: [0.15, 0, -0.06], rr: [-1.95, 0, 0.35] }],
   [0.66, E_OUT, { tw: 0.85, ln: -0.22, rl: 0.22, h: 0.02, la: [-0.15, 0, -1.05], ra: [0.25, 0, 0.9], ll: [0.12, 0, -0.05], rr: [-1.5, 0, 0.25] }],
   [1, E_SMOOTH, { la: [-0.25, 0, 0], ra: [-0.2, 0, 0] }]
 ]);
 // 3 騰空旋風腿：下沉蓄勢 → 騰空 360° 旋身甩腿 → 落地馬步亮相 (終結技)
-const FIST_3 = defineMove('騰空旋風腿', { dur: 0.72, strike: 0.46, cancel: 0.74, reach: 1.2, arc: -1, dmg: 1.25, knock: 1.6, finisher: true }, [
+const FIST_3 = defineMove('騰空旋風腿', {
+  dur: 0.72, strike: 0.46, cancel: 0.74, reach: 1.2, arc: -1, dmg: 1.25, knock: 1.6, finisher: true, trailLimb: 'RL', trail: [0.3, 0.62], fx: 'SPIN',
+  aoe: { center: 'SELF', offset: 0, radius: 1.3, max: 5, falloff: 0.35, shake: 0.4, hitStop: 0.08, hitStopMulti: 0.08, missShake: 0 }
+}, [
   [0.16, E_SMOOTH, { tw: -0.55, ln: 0.14, h: -0.17, la: [0.75, 0, -0.15], ra: [0.75, 0, 0.15], ll: [-0.35, 0, -0.08], rr: [0.3, 0, 0.08] }],
   [0.3, E_OUT, { tw: 1.4, ln: -0.06, h: 0.38, la: [-2.6, 0, -0.3], ra: [-2.6, 0, 0.3], ll: [-1.0, 0, -0.05], rr: [0.25, 0, 0.05] }],
   [0.46, E_LINEAR, { tw: 4.71, ln: -0.08, rl: 0.32, h: 0.62, la: [-0.2, 0, -1.35], ra: [-0.2, 0, 1.35], ll: [-0.95, 0, -0.1], rr: [-0.25, 0, 1.35] }],
@@ -108,21 +156,24 @@ const FIST_3 = defineMove('騰空旋風腿', { dur: 0.72, strike: 0.46, cancel: 
 
 // ───────────── 玩家：球棒 ─────────────
 // 1 橫掃千軍：腰身右轉蓄勢 → 帶動球棒自右向左大幅橫掃
-const BAT_1 = defineMove('橫掃千軍', { dur: 0.48, strike: 0.42, cancel: 0.62, arc: -0.3 }, [
+const BAT_1 = defineMove('橫掃千軍', { dur: 0.48, strike: 0.42, cancel: 0.62, arc: -0.3, trailLimb: 'W', trail: [0.28, 0.68] }, [
   [0.28, E_SMOOTH, { tw: 1.3, ln: -0.06, rl: -0.08, h: -0.08, la: [-1.3, 0, 0.3], ra: [-0.15, 0, 1.45], ll: [-0.45, 0, -0.15], rr: [0.35, 0, 0.15] }],
   [0.42, E_IN, { tw: -0.5, ln: 0.12, rl: 0.1, h: -0.12, la: [0.5, 0, -0.6], ra: [-0.15, -0.25, 1.5], ll: [-0.55, 0, -0.2], rr: [0.45, 0, 0.2] }],
   [0.68, E_OUT, { tw: -1.3, ln: 0.1, rl: 0.14, h: -0.1, la: [0.6, 0, -0.8], ra: [-0.3, -0.45, 1.25], ll: [-0.5, 0, -0.2], rr: [0.45, 0, 0.2] }],
   [1, E_SMOOTH, { tw: -0.15, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.15] }]
 ]);
 // 2 回身反掃：轉身背對收棒 → 反手自左向右回掃
-const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62, arc: -0.3 }, [
+const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62, arc: -0.3, trailLimb: 'W', trail: [0.26, 0.66] }, [
   [0.26, E_SMOOTH, { tw: -2.0, ln: 0.05, rl: 0.08, h: -0.08, la: [0.4, 0, -0.7], ra: [-1.25, 0.8, -0.55], ll: [0.35, 0, -0.2], rr: [-0.45, 0, 0.15] }],
   [0.42, E_IN, { tw: 0.35, ln: 0.1, rl: -0.12, h: -0.12, la: [0.5, 0, -1.0], ra: [-0.35, 0.2, 1.45], ll: [0.45, 0, -0.25], rr: [-0.5, 0, 0.2] }],
   [0.66, E_OUT, { tw: 1.2, ln: 0.08, rl: -0.14, h: -0.1, la: [0.45, 0, -0.9], ra: [-0.4, 0, 1.3], ll: [0.4, 0, -0.25], rr: [-0.45, 0, 0.2] }],
   [1, E_SMOOTH, { tw: 0.1, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.15] }]
 ]);
 // 3 躍起下劈：屈膝起跳、雙手舉棒過頂 → 落地沉身全力下劈 (終結技)
-const BAT_3 = defineMove('躍起下劈', { dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true }, [
+const BAT_3 = defineMove('躍起下劈', {
+  dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.36, 0.56], fx: 'SLAM',
+  aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 8, shakeGold: 0.8, hitStopGold: 0.11 }
+}, [
   [0.18, E_SMOOTH, { ln: 0.1, h: -0.15, la: [0.55, 0, -0.1], ra: [0.55, 0, 0.1], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
   [0.36, E_OUT, { tw: 0.15, ln: -0.28, h: 0.45, la: [-2.85, 0, 0.3], ra: [-2.9, 0, -0.1], ll: [-0.85, 0, -0.05], rr: [-0.25, 0, 0.05] }],
   [0.5, E_IN, { tw: -0.05, ln: 0.42, h: -0.06, la: [-1.0, 0, 0.35], ra: [-0.15, 0, -0.05], ll: [-0.6, 0, -0.08], rr: [0.6, 0, 0.08] }],
@@ -132,21 +183,24 @@ const BAT_3 = defineMove('躍起下劈', { dur: 0.66, strike: 0.5, cancel: 0.95,
 
 // ───────────── 玩家：特訓院防暴警棍 ─────────────
 // 1 上步斜劈：持棍高舉 → 上步沉身自右上向左下斜劈
-const BATON_1 = defineMove('上步斜劈', { dur: 0.46, strike: 0.42, cancel: 0.62 }, [
+const BATON_1 = defineMove('上步斜劈', { dur: 0.46, strike: 0.42, cancel: 0.62, trailLimb: 'W', trail: [0.26, 0.66] }, [
   [0.26, E_SMOOTH, { tw: 0.6, ln: -0.1, h: -0.04, la: [-0.9, 0, -0.3], ra: [-2.6, 0, 0.55], ll: [0.3, 0, -0.05], rr: [-0.2, 0, 0.05] }],
   [0.42, E_IN, { tw: -0.4, ln: 0.22, h: -0.12, la: [0.55, 0, -0.35], ra: [0.1, 0, -0.35], ll: [0.45, 0, -0.08], rr: [-0.6, 0, 0.08] }],
   [0.66, E_OUT, { tw: -0.5, ln: 0.18, h: -0.11, la: [0.6, 0, -0.4], ra: [0.35, 0, -0.45], ll: [0.42, 0, -0.08], rr: [-0.55, 0, 0.08] }],
   [1, E_SMOOTH, { la: [-0.1, 0, 0], ra: [-0.2, 0, 0.1] }]
 ]);
 // 2 轉腕回挑：棍收左下 → 翻腕自下而上挑擊
-const BATON_2 = defineMove('轉腕回挑', { dur: 0.42, strike: 0.42, cancel: 0.62 }, [
+const BATON_2 = defineMove('轉腕回挑', { dur: 0.42, strike: 0.42, cancel: 0.62, trailLimb: 'W', trail: [0.26, 0.68] }, [
   [0.26, E_SMOOTH, { tw: -0.55, ln: 0.12, h: -0.1, la: [-0.6, 0, -0.3], ra: [0.35, 0.6, -0.5], ll: [-0.35, 0, -0.08], rr: [0.35, 0, 0.08] }],
   [0.42, E_IN, { tw: 0.35, ln: -0.1, h: 0.03, la: [0.5, 0, -0.5], ra: [-2.1, -0.3, 0.45], ll: [-0.2, 0, -0.05], rr: [0.25, 0, 0.05] }],
   [0.68, E_OUT, { tw: 0.45, ln: -0.12, h: 0.02, la: [0.55, 0, -0.55], ra: [-2.4, -0.4, 0.5], ll: [-0.2, 0, -0.05], rr: [0.25, 0, 0.05] }],
   [1, E_SMOOTH, { la: [-0.1, 0, 0], ra: [-0.2, 0, 0.1] }]
 ]);
 // 3 旋身橫打：蓄勢後旋身一圈，警棍平舉橫打 (終結技)
-const BATON_3 = defineMove('旋身橫打', { dur: 0.66, strike: 0.5, cancel: 1, reach: 1.1, arc: -1, dmg: 1.1, knock: 1.5, finisher: true }, [
+const BATON_3 = defineMove('旋身橫打', {
+  dur: 0.66, strike: 0.5, cancel: 1, reach: 1.1, arc: -1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.2, 0.72], fx: 'SPIN',
+  aoe: { center: 'SELF', offset: 0, radius: 1.12, max: 6, falloff: 0.35, shake: 0.45, hitStop: 0.09, hitStopMulti: 0.09, missShake: 0 }
+}, [
   [0.2, E_SMOOTH, { tw: 0.8, ln: -0.04, h: -0.1, la: [-1.1, 0, 0.2], ra: [-0.2, 0, 1.2], ll: [-0.35, 0, -0.15], rr: [0.3, 0, 0.15] }],
   [0.5, E_IN, { tw: -TWO_PI - 0.35, ln: 0.1, rl: 0.12, h: -0.12, la: [0.3, 0, -1.2], ra: [-0.2, -0.3, 1.5], ll: [-0.45, 0, -0.25], rr: [0.4, 0, 0.25] }],
   [0.72, E_OUT, { tw: -TWO_PI - 1.0, ln: 0.08, rl: 0.14, h: -0.12, la: [0.35, 0, -1.1], ra: [-0.3, -0.4, 1.3], ll: [-0.45, 0, -0.25], rr: [0.4, 0, 0.25] }],
@@ -154,7 +208,7 @@ const BATON_3 = defineMove('旋身橫打', { dur: 0.66, strike: 0.5, cancel: 1, 
 ]);
 
 // 羽球拍：側身引拍 → 轉腰揮拍 (4F 羽球賽，不連段)
-const RACKET = defineMove('揮拍', { dur: 0.38, strike: 0.36, cancel: 1 }, [
+const RACKET = defineMove('揮拍', { dur: 0.38, strike: 0.36, cancel: 1, trailLimb: 'W', trail: [0.22, 0.65] }, [
   [0.22, E_SMOOTH, { tw: 0.6, ln: -0.05, la: [-0.9, 0, -0.2], ra: [-1.6, 0, 0.9], ll: [-0.25, 0, 0], rr: [0.2, 0, 0] }],
   [0.36, E_IN, { tw: -0.35, ln: 0.12, la: [0.3, 0, -0.3], ra: [-1.3, 0, -0.2], ll: [-0.3, 0, 0], rr: [0.25, 0, 0] }],
   [0.65, E_OUT, { tw: -0.45, ln: 0.1, la: [0.35, 0, -0.3], ra: [-0.6, 0, -0.3], ll: [-0.3, 0, 0], rr: [0.25, 0, 0] }],
@@ -378,6 +432,8 @@ export class KungFuLayer {
   public get canChain(): boolean { return !this.move || this.time >= this.move.cancel * this.move.dur * this.scale; }
   public get beforeStrike(): boolean { return !!this.move && this.time < this.move.strike * this.move.dur * this.scale; }
   public get rise(): number { return this.appliedRise; }
+  // 整招進度：0 = 剛起手、1 = 收招 (含黃金雷霆棒等時間縮放；無招式時為 0)
+  public get progress(): number { return this.move ? this.time / (this.move.dur * this.scale) : 0; }
   // 出招預備進度：0 = 剛起手、1 = 到達命中時間點 (無招式時為 0)
   public get strikeProgress(): number { return this.move ? this.time / (this.move.strike * this.move.dur * this.scale) : 0; }
 

@@ -26,8 +26,44 @@ function mergeParts(parts: THREE.Mesh[]): THREE.Mesh {
   });
   return new THREE.Mesh(mergeGeometries(geos), parts[0].material);
 }
+// 玩家打擊判定半徑補正 (目標體型)
+const BOSS_HIT_PAD = 2.4;
+const VINE_HIT_PAD = 0.8;
+const BUG_HIT_PAD = 0.6;
+// 終結技群攻候選暫存 (依距離排序；kind 0 Boss、1 藤蔓、2 甲蟲)
+const AOE_PLANT_CAP = 8;
+const _plantDist = new Float32Array(AOE_PLANT_CAP);
+const _plantKind = new Int8Array(AOE_PLANT_CAP);
+const _plantIdx = new Int32Array(AOE_PLANT_CAP);
+let _plantN = 0;
+// 依「水平距離扣除體型補正」保留最近 cap 個候選 (插入排序)
+function considerPlant(kind: number, idx: number, pos: THREE.Vector3, pad: number, origin: THREE.Vector3, radius: number, cap: number) {
+  const dx = pos.x - origin.x;
+  const dz = pos.z - origin.z;
+  const d = Math.sqrt(dx * dx + dz * dz) - pad;
+  if (d >= radius) return;
+  if (_plantN === cap && d >= _plantDist[cap - 1]) return;
+  let i = _plantN < cap ? _plantN++ : cap - 1;
+  while (i > 0 && _plantDist[i - 1] > d) {
+    _plantDist[i] = _plantDist[i - 1];
+    _plantKind[i] = _plantKind[i - 1];
+    _plantIdx[i] = _plantIdx[i - 1];
+    i--;
+  }
+  _plantDist[i] = d;
+  _plantKind[i] = kind;
+  _plantIdx[i] = idx;
+}
 // 玩家距園區圍欄外緣超過此距離時隱藏園內動態生物 (僅影響繪製，AI 與互動邏輯照常運作)
 const DYNAMIC_VISIBLE_DIST_SQ = 70 * 70;
+
+// 終結技群攻單一命中結果 (呼叫端預配置重複使用)
+export interface PlantHitResult {
+  name: string;
+  defeated: boolean;
+  isBoss: boolean;
+  damage: number;
+}
 
 export interface HostileVine {
   id: number;
@@ -1119,18 +1155,8 @@ export class EcologicalGarden {
     // 優先判定 Boss
     if (!this.boss.isDead) {
       const dist = hitOrigin.distanceTo(this.boss.position);
-      if (dist < hitRadius + 2.4) {
-        this.boss.hp = Math.max(0, this.boss.hp - damage);
-        this.boss.hitFlashTimer = 0.22;
-        (this.boss.upperJaw.material as THREE.MeshLambertMaterial).color.setHex(0xff3838);
-        (this.boss.lowerJaw.material as THREE.MeshLambertMaterial).color.setHex(0xff3838);
-
-        if (this.boss.hp <= 0) {
-          this.boss.isDead = true;
-          this.playBossDeathAnimation();
-          return { hit: true, name: '變異食人花王', defeated: true, isBoss: true };
-        }
-        return { hit: true, name: '變異食人花王', defeated: false, isBoss: true };
+      if (dist < hitRadius + BOSS_HIT_PAD) {
+        return { hit: true, name: '變異食人花王', defeated: this.hitBoss(damage), isBoss: true };
       }
     }
 
@@ -1138,21 +1164,8 @@ export class EcologicalGarden {
     for (const vine of this.hostileVines) {
       if (vine.isDead) continue;
       const vDist = hitOrigin.distanceTo(vine.position);
-      if (vDist < hitRadius + 0.8) {
-        vine.hp -= damage;
-        (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0xe74c3c);
-        setTimeout(() => {
-          if (!vine.isDead) {
-            (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0x8e44ad);
-          }
-        }, 180);
-
-        if (vine.hp <= 0) {
-          vine.isDead = true;
-          this.dynamicGroup.remove(vine.mesh);
-          return { hit: true, name: '食人藤蔓', defeated: true, isBoss: false };
-        }
-        return { hit: true, name: '食人藤蔓', defeated: false, isBoss: false };
+      if (vDist < hitRadius + VINE_HIT_PAD) {
+        return { hit: true, name: '食人藤蔓', defeated: this.hitVine(vine, damage), isBoss: false };
       }
     }
 
@@ -1160,20 +1173,84 @@ export class EcologicalGarden {
     for (const bug of this.bugs) {
       if (bug.isDead) continue;
       const bDist = hitOrigin.distanceTo(bug.position);
-      if (bDist < hitRadius + 0.6) {
-        bug.hp -= damage;
-        soundManager.playPunch();
-        if (bug.hp <= 0) {
-          bug.isDead = true;
-          bug.mesh.visible = false;
-          bug.respawnTimer = 8 + Math.random() * 12; // 擊破後 8～20 秒隨機重生
-          return { hit: true, name: '生態園毒甲蟲', defeated: true, isBoss: false };
-        }
-        return { hit: true, name: '生態園毒甲蟲', defeated: false, isBoss: false };
+      if (bDist < hitRadius + BUG_HIT_PAD) {
+        return { hit: true, name: '生態園毒甲蟲', defeated: this.hitBug(bug, damage), isBoss: false };
       }
     }
 
     return { hit: false, name: '', defeated: false, isBoss: false };
+  }
+
+  // 連段終結技群攻：以 origin 為圓心 (水平距離) 命中範圍內最近的 max 個目標 (Boss / 藤蔓 / 甲蟲)，
+  // 最近者承受全額傷害、其餘 × secondaryMult；結果依距離由近到遠寫入 out (呼叫端預配置，長度 ≥ max)，回傳命中數
+  public tryHitAllByPlayer(origin: THREE.Vector3, radius: number, damage: number, max: number, out: PlantHitResult[], secondaryMult: number = 1): number {
+    const cap = Math.min(max, out.length, AOE_PLANT_CAP);
+    if (cap <= 0) return 0;
+    _plantN = 0;
+    if (!this.boss.isDead) considerPlant(0, 0, this.boss.position, BOSS_HIT_PAD, origin, radius, cap);
+    for (let i = 0; i < this.hostileVines.length; i++) {
+      if (!this.hostileVines[i].isDead) considerPlant(1, i, this.hostileVines[i].position, VINE_HIT_PAD, origin, radius, cap);
+    }
+    for (let i = 0; i < this.bugs.length; i++) {
+      if (!this.bugs[i].isDead) considerPlant(2, i, this.bugs[i].position, BUG_HIT_PAD, origin, radius, cap);
+    }
+    const n = _plantN;
+    for (let i = 0; i < n; i++) {
+      const dmg = i === 0 ? damage : Math.max(1, Math.round(damage * secondaryMult));
+      const r = out[i];
+      r.damage = dmg;
+      const kind = _plantKind[i];
+      if (kind === 0) {
+        r.name = '變異食人花王';
+        r.isBoss = true;
+        r.defeated = this.hitBoss(dmg);
+      } else if (kind === 1) {
+        r.name = '食人藤蔓';
+        r.isBoss = false;
+        r.defeated = this.hitVine(this.hostileVines[_plantIdx[i]], dmg);
+      } else {
+        r.name = '生態園毒甲蟲';
+        r.isBoss = false;
+        r.defeated = this.hitBug(this.bugs[_plantIdx[i]], dmg);
+      }
+    }
+    return n;
+  }
+
+  // 各目標受擊結算：回傳是否擊破
+  private hitBoss(damage: number): boolean {
+    this.boss.hp = Math.max(0, this.boss.hp - damage);
+    this.boss.hitFlashTimer = 0.22;
+    (this.boss.upperJaw.material as THREE.MeshLambertMaterial).color.setHex(0xff3838);
+    (this.boss.lowerJaw.material as THREE.MeshLambertMaterial).color.setHex(0xff3838);
+    if (this.boss.hp > 0) return false;
+    this.boss.isDead = true;
+    this.playBossDeathAnimation();
+    return true;
+  }
+
+  private hitVine(vine: HostileVine, damage: number): boolean {
+    vine.hp -= damage;
+    (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0xe74c3c);
+    setTimeout(() => {
+      if (!vine.isDead) {
+        (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0x8e44ad);
+      }
+    }, 180);
+    if (vine.hp > 0) return false;
+    vine.isDead = true;
+    this.dynamicGroup.remove(vine.mesh);
+    return true;
+  }
+
+  private hitBug(bug: GardenBug, damage: number): boolean {
+    bug.hp -= damage;
+    soundManager.playPunch();
+    if (bug.hp > 0) return false;
+    bug.isDead = true;
+    bug.mesh.visible = false;
+    bug.respawnTimer = 8 + Math.random() * 12; // 擊破後 8～20 秒隨機重生
+    return true;
   }
 
   // 檢查玩家是否在生態池許願石碑附近

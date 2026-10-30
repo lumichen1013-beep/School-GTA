@@ -85,7 +85,7 @@ const W2_SURROUND_MAX_TURN = 0.9; // 每次朝站位繞行的最大角度 (rad)�
 const W2_SURROUND_SETTLE_ANGLE = 0.6; // 與站位方位差小於約 34 度即視為就位
 const W2_SURROUND_TRAVEL_TIMEOUT = 1.5;
 
-// 校園執法者 (主任教官 / 生教組長)：受擊防衛、招牌技與留校察看暴怒
+// 校園執法者 (主任教官 / 生教組長)：受擊防衛、招牌技與連殺觸發暴怒
 const ENFORCER_PARRY_CHANCE = 0.25; // 主任教官格擋反擊
 const ENFORCER_FLASH_CHANCE = 0.2; // 生教組長閃身步
 const ENFORCER_COUNTER_COOLDOWN = 0.4; // 格擋 / 閃身成功後的反擊延遲 (秒)
@@ -375,7 +375,7 @@ export class NPC {
   private surroundSettled: boolean = true;
   private surroundTravelTimer: number = 0; // 繞行前往站位的累計時間 (逾時即就地出手，避免受阻永不攻擊)
   public freezeTimer: number = 0;   // 全校廣播定格發呆時間
-  // 校園執法者招牌技 (擒拿摔 / 戒尺連打) 冷卻與撲抓方向；留校察看 (5 級處分) 暴怒
+  // 校園執法者招牌技 (擒拿摔 / 戒尺連打) 冷卻與撲抓方向；連殺觸發追捕暴怒
   public sigCooldown: number = ENFORCER_SIG_FIRST_DELAY;
   // 第一世界圍攻出手權杖 (由 AttackTokenCoordinator 低頻指派)：未持權杖者不出招、於外圈環繞等待
   public attackHold: boolean = false;
@@ -1200,7 +1200,8 @@ export class NPC {
 
   // 單車衝撞與武器擊飛效果
   // canLaunch：第二世界特訓群僅連招終結技可擊飛，其餘命中改為短暫踉蹌
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true): boolean {
+  // ignoreCooldown：略過 0.65 秒受擊保護 (連段終結技緊接前一段命中；舉盾/閃避等機率防禦照常判定)
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false): boolean {
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1212,7 +1213,7 @@ export class NPC {
       }
       return false;
     }
-    if (this.hitCooldown > 0) return false;
+    if (this.hitCooldown > 0 && !ignoreCooldown) return false;
     // 鐵面總長受擊：撞柱硬直中 30%、其餘 50% 機率施展「閃身步」避開攻擊 (閃開則不受傷也不被擊飛)
     if (this.role === 'DETENTION_BOSS' && this.tryBossFlashStep(this.isBossStunned ? 0.30 : 0.50)) return false;
     // 持盾特訓院守衛：正面受擊 40% 機率舉盾格擋 (不受傷也不被擊飛，背後攻擊無法格擋)
@@ -1356,7 +1357,7 @@ export class NPC {
     depenetrateXZ(colliders, this.position, 0.45, 0.3, 1.6, 0.02, 1, 'npc');
   }
 
-  // 留校察看 (5 級處分) 暴怒：追捕移動速度 +15%，頭頂顯示 💢
+  // 連殺觸發執法者追捕暴怒 (至處分解除)：追捕移動速度 +15%，頭頂顯示 💢
   public setEnraged(on: boolean) {
     if (this.isEnraged === on) return;
     this.isEnraged = on;
@@ -1370,7 +1371,7 @@ export class NPC {
     this.koBadgeSprite.visible = true;
   }
 
-  // 傳送至指定落點 (留校察看追捕)：設定所屬樓層並立即面向玩家追捕
+  // 傳送至指定落點 (連殺觸發追捕)：設定所屬樓層並立即面向玩家追捕
   public teleportTo(pos: THREE.Vector3, floorY: number, playerPos: THREE.Vector3) {
     if (this.isPaused) this.cancelPause();
     this.clearLifeTask();

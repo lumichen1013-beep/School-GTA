@@ -20,6 +20,14 @@ const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
+export interface ImpactDustOptions {
+  count?: number;
+  upward?: number;
+  spreadY?: number;
+  life?: number;
+  size?: number;
+}
+
 class ImpactDustSystem {
   private particles: DustParticle[] = [];
   private mesh: THREE.InstancedMesh | null = null;
@@ -39,25 +47,36 @@ class ImpactDustSystem {
   }
 
   // 於 point 爆散碎石，沿 normal (撞擊反彈方向) 噴出
-  public burst(scene: THREE.Object3D, point: THREE.Vector3, normal: THREE.Vector3) {
+  // opts：count 碎石數 (預設全部)、upward 上拋速度倍率 (預設 1)、spreadY 起點垂直散布範圍 (預設 1.2)、life 壽命秒數 (預設 LIFE)、size 碎石尺寸倍率 (預設 1)
+  public burst(scene: THREE.Object3D, point: THREE.Vector3, normal: THREE.Vector3, opts?: ImpactDustOptions) {
     const mesh = this.ensure(scene);
+    const count = Math.min(this.particles.length, opts?.count ?? this.particles.length);
+    const upward = opts?.upward ?? 1;
+    const spreadY = opts?.spreadY ?? 1.2;
+    const life = opts?.life ?? LIFE;
+    const size = opts?.size ?? 1;
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i];
-      p.life = LIFE * (0.7 + Math.random() * 0.3);
+      if (i >= count) {
+        p.life = 0;
+        mesh.setMatrixAt(i, _zeroMatrix);
+        continue;
+      }
+      p.life = life * (0.7 + Math.random() * 0.3);
       p.position.set(
         point.x + (Math.random() - 0.5) * 0.6,
-        point.y + (Math.random() - 0.5) * 1.2,
+        point.y + (Math.random() - 0.5) * spreadY,
         point.z + (Math.random() - 0.5) * 0.6
       );
-      p.scale = 0.6 + Math.random() * 0.9;
+      p.scale = (0.6 + Math.random() * 0.9) * size;
       p.rotation.set(0, 0, 0);
       p.velocity.set(
         normal.x * (2.0 + Math.random() * 3.0) + (Math.random() - 0.5) * 3.0,
-        1.5 + Math.random() * 3.5,
+        (1.5 + Math.random() * 3.5) * upward,
         normal.z * (2.0 + Math.random() * 3.0) + (Math.random() - 0.5) * 3.0
       );
     }
-    this.activeCount = this.particles.length;
+    this.activeCount = count;
     mesh.visible = true;
   }
 
