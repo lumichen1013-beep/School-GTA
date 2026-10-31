@@ -71,7 +71,7 @@ const DUAL_COMBO = { combo: PLAYER_COMBOS.DUAL, comboNames: ['二刀・快斬', 
 
 const BOOK_WHIP_COMBO = { combo: PLAYER_COMBOS.WHIP, comboNames: ['甩書橫掃', '回手抽擊', '旋鞭橫掃'] };
 
-const BASKETBALL_COMBO = { combo: PLAYER_COMBOS.BALL, comboNames: ['胸前推傳', '地板彈傳', '高拋灌籃'] };
+const BASKETBALL_COMBO = { combo: PLAYER_COMBOS.BALL, comboNames: ['氣勁推傳', '迴旋快傳', '灌籃氣功砲'] };
 
 // 彈弓放手招式「放弦」(單發，招式組在武器定義內，非 PLAYER_COMBOS)
 const SLINGSHOT_COMBO = { combo: getWeapon('SLINGSHOT').combo, comboNames: ['放弦'] };
@@ -103,9 +103,9 @@ const BASELINE = {
     damage: 30, reach: 4.2, knock: 7.5, ...BOOK_WHIP_COMBO, tempo: 1, fxId: 'BOOK', anchors: null, strike: 'playWhipCrack', start: 'playThrowWhoosh',
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
-  // 籃球 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 籃球氣功彈 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BASKETBALL: {
-    damage: 45, reach: 18, knock: 9.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
+    damage: 45, reach: 18, knock: 11.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   },
   // 彈弓 (開發中遠程狙擊武器；放弦招式無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
@@ -209,9 +209,9 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     const def = getWeapon('BASKETBALL');
     expect(def.release).toBe('dev');
     expect(def.slot).toBe(6);
-    expect(def.launchCap).toEqual({ h: 9, v: 5 });
+    expect(def.launchCap).toEqual({ h: 11.5, v: 6.2 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
-    expect(def.banner.campus).toBe('🏀 切換武器：籃球 (ATK 45 遠程三連投，開發中)');
+    expect(def.banner.campus).toBe('🏀 切換武器：籃球氣功彈 (ATK 45 遠程光束三連投，開發中)');
     expect(resolveLoadout('BASKETBALL', null, 'CAMPUS').chainWindow).toBe(0.8);
     // 既有武器連段接續窗維持 0.6
     for (const id of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'BOOK_WHIP', 'SLINGSHOT'] as const) {

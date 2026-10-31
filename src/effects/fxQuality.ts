@@ -23,6 +23,7 @@ export interface FxQuality {
   featherPool: number;      // 羽毛粒子池
   tracerPool: number;       // 投射物光痕槽數 (TracerFX；0 = 關閉)
   tracerLife: number;       // 光痕長度對應的秒數 (光痕長 = 彈速 × 此值)
+  kiBeamLife: number;       // 籃球氣功彈光束殘影長度對應的秒數 (TracerFX 彗星樣式；低檔仍保留短光束)
 }
 
 export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
@@ -31,21 +32,21 @@ export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
     crackPool: 3, crackLife: 1.8, crackMaxSize: 9, crackLayers: 3, ringReach: 1, slashLenScale: 1, slashWidthScale: 1, ringPool: 8, debrisCount: 24, dustPool: 8,
     lightningStrands: 5, lightningSegments: 6,
     slashPool: 20, flashPerStrike: 3, featherPool: 24,
-    tracerPool: 8, tracerLife: 0.12,
+    tracerPool: 8, tracerLife: 0.12, kiBeamLife: 0.11,
   },
   medium: {
     chargeRingDouble: true, trailPoints: 14, trailSubdiv: 1,
     crackPool: 3, crackLife: 1.5, crackMaxSize: 6, crackLayers: 3, ringReach: 0.88, slashLenScale: 0.9, slashWidthScale: 0.8, ringPool: 6, debrisCount: 18, dustPool: 4,
     lightningStrands: 4, lightningSegments: 6,
     slashPool: 14, flashPerStrike: 2, featherPool: 16,
-    tracerPool: 8, tracerLife: 0.06,
+    tracerPool: 8, tracerLife: 0.06, kiBeamLife: 0.075,
   },
   low: {
     chargeRingDouble: false, trailPoints: 14, trailSubdiv: 0,
     crackPool: 2, crackLife: 1.2, crackMaxSize: 3.6, crackLayers: 2, ringReach: 0.75, slashLenScale: 0.8, slashWidthScale: 0.6, ringPool: 4, debrisCount: 14, dustPool: 0,
     lightningStrands: 3, lightningSegments: 6,
     slashPool: 10, flashPerStrike: 1, featherPool: 10,
-    tracerPool: 0, tracerLife: 0,
+    tracerPool: 0, tracerLife: 0, kiBeamLife: 0.045,
   },
 };
 

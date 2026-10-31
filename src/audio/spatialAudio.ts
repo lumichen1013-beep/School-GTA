@@ -12,6 +12,8 @@ export type SpatialSoundId =
   | 'eatFood' | 'execution' | 'splash' | 'poisonTick' | 'coinToss' | 'thunder'
   // 投射物 (共用投射物系統)：出手破風、球 / 石子命中點、接球
   | 'throwWhoosh' | 'ballHit' | 'stoneHit' | 'ballCatch'
+  // 籃球氣功彈：出手「啾」、命中衝擊波
+  | 'kiShot' | 'kiImpact'
   // 綁帶捆書：甩鞭脆響、書堆悶響
   | 'whipCrack' | 'bookThud'
   // 彈弓：拉弦吱嘎、放弦彈響、爆頭叮聲
@@ -49,6 +51,8 @@ export const SOUND_RANGE: Record<SpatialSoundId, number> = {
   ballHit: 15,
   stoneHit: 15,
   ballCatch: 8,
+  kiShot: 12,
+  kiImpact: 18,
   whipCrack: 20,
   bookThud: 15,
   slingDraw: 8,

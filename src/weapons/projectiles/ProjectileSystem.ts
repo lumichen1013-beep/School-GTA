@@ -6,7 +6,7 @@ import type { LaunchCap } from '../launch';
 import { getSupportFloorY, queryColliders } from '../../physics/aabb';
 import { updateVisibleMatricesOnly } from '../../core/matrixUpdate';
 import { getFxQuality } from '../../effects/fxQuality';
-import { tracerFX } from '../../effects/TracerFX';
+import { TRACER_KI, TRACER_LINE, tracerFX } from '../../effects/TracerFX';
 import { buildBallGeometry } from './ballGeometry';
 import { createPlayerHitSpec, HIT_STOP_EXTRA, type PlayerHitSpec } from '../../game/CombatSystem';
 import {
@@ -40,7 +40,8 @@ export const PSTATE_RETURN = 3;
 export const PFLAG_BOUNCE_FLOOR = 1; // 落地反彈 (否則落地即結束)
 export const PFLAG_BOUNCE_WALL = 2;  // 撞牆沿法線反射 (否則撞牆即結束)
 export const PFLAG_RETURN = 4;       // 結束時改為回收 (RETURN) 到 returnTarget；命中目標後先反彈 reboundDelay 秒
-export const PFLAG_TRACER = 8;       // 飛行中顯示光痕 (中 / 高檔)
+export const PFLAG_TRACER = 8;       // 飛行中顯示光痕 (中 / 高檔；氣功彈樣式各檔皆有)
+export const PFLAG_TRACER_RETURN = 16; // 回收途中也顯示光痕 (細光痕樣式，自回收起點量長度)
 
 export const BALL_RESTITUTION = 0.55; // 彈地恢復係數 (垂直速度保留比例)
 export const BALL_FRICTION = 0.75;    // 彈地水平速度保留比例
@@ -53,7 +54,7 @@ const NPC_BROAD_PAD = 1.0;            // NPC XZ 粗篩額外半徑 (含膠囊半
 const GARDEN_SAMPLE_STEP = 0.5;       // 生態園點判定沿線段取樣間距 (m)
 const MAX_SPIN_STEP = 0.5;            // 每幀自轉角上限 (rad，避免高速彈體頻閃)
 
-export type ProjectileSoundId = 'throwWhoosh' | 'ballHit' | 'stoneHit' | 'ballCatch' | 'dribble' | 'slingTwang';
+export type ProjectileSoundId = 'throwWhoosh' | 'ballHit' | 'stoneHit' | 'ballCatch' | 'dribble' | 'slingTwang' | 'kiShot' | 'kiImpact';
 export type ProjectileEventType = 'NPC' | 'GARDEN' | 'WALL' | 'FLOOR' | 'CATCH' | 'EXPIRE';
 
 // 可被投射物命中的角色 (NPC 結構子集，便於測試)
@@ -138,6 +139,8 @@ export interface ProjectileSpawnOpts {
   catchSound: ProjectileSoundId | null;
   tracerColor: number;
   tracerHalfWidth: number;
+  tracerStyle: number;   // TRACER_LINE 細光痕 (tracerLife) / TRACER_KI 氣功彈彗星 (kiBeamLife)
+  tracerLenMul: number;  // 光痕長度倍率 (乘在 速度 × 檔位秒數 上)
   returnTarget: ((out: THREE.Vector3) => void) | null; // 回收終點 (每幀呼叫；需預先建立的函式)
   onEvent: ((ev: ProjectileEvent) => void) | null;     // 事件回呼 (需預先建立的函式)；回呼內可 kill / recall 改寫預設處置
 }
@@ -153,7 +156,7 @@ export function createProjectileSpawnOpts(kind: ProjectileKind): ProjectileSpawn
     hitStop: HIT_STOP_EXTRA, headHitStop: -1, falloffNear: 0, falloffFar: 0, falloffMin: 1, headshotMul: 1, hitFlashColor: ball ? 0xff8a2a : 0xffffff, hitDust: true,
     launchSound: 'throwWhoosh', hitSound: ball ? 'ballHit' : 'stoneHit', wallSound: ball ? 'dribble' : 'stoneHit',
     floorSound: ball ? 'dribble' : 'stoneHit', catchSound: ball ? 'ballCatch' : null,
-    tracerColor: ball ? 0xffb066 : 0xfff2cc, tracerHalfWidth: ball ? 0.09 : 0.04,
+    tracerColor: ball ? 0xffb066 : 0xfff2cc, tracerHalfWidth: ball ? 0.09 : 0.04, tracerStyle: TRACER_LINE, tracerLenMul: 1,
     returnTarget: null, onEvent: null
   };
 }
@@ -166,7 +169,7 @@ function copyOpts(s: ProjectileSpawnOpts, d: ProjectileSpawnOpts) {
   d.hitStop = s.hitStop; d.headHitStop = s.headHitStop; d.falloffNear = s.falloffNear; d.falloffFar = s.falloffFar; d.falloffMin = s.falloffMin;
   d.headshotMul = s.headshotMul; d.hitFlashColor = s.hitFlashColor; d.hitDust = s.hitDust;
   d.launchSound = s.launchSound; d.hitSound = s.hitSound; d.wallSound = s.wallSound; d.floorSound = s.floorSound; d.catchSound = s.catchSound;
-  d.tracerColor = s.tracerColor; d.tracerHalfWidth = s.tracerHalfWidth;
+  d.tracerColor = s.tracerColor; d.tracerHalfWidth = s.tracerHalfWidth; d.tracerStyle = s.tracerStyle; d.tracerLenMul = s.tracerLenMul;
   d.returnTarget = s.returnTarget; d.onEvent = s.onEvent;
 }
 
@@ -233,7 +236,9 @@ export class ProjectileSystem {
   // 預建各彈體 InstancedMesh 與光痕 (閒置 visible=false：0 draw call、不走訪矩陣)
   public init(scene: THREE.Object3D) {
     if (this.meshes[0]) return;
-    const ballMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    // 籃球彈體 (氣功彈)：不受光、色值放大的高亮球 (外層由 TracerFX 彗星光包覆)
+    const ballMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+    ballMat.color.setRGB(1.9, 1.6, 1.3);
     const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8b857c, flatShading: true });
     this.meshes[PROJ_BALL] = this.createMesh(buildBallGeometry(), ballMat, scene);
     this.meshes[PROJ_STONE] = this.createMesh(new THREE.IcosahedronGeometry(1, 0), stoneMat, scene);
@@ -605,7 +610,7 @@ export class ProjectileSystem {
     const d = Math.sqrt((_ret.x - fx) * (_ret.x - fx) + (_ret.y - fy) * (_ret.y - fy) + (_ret.z - fz) * (_ret.z - fz));
     this.retT[i] = returnDuration(d);
     this.retElapsed[i] = 0;
-    this.retArc[i] = Math.min(2.5, Math.max(0.5, d * 0.15));
+    this.retArc[i] = Math.min(1.0, Math.max(0.2, d * 0.06)); // 極速回收：低弧近直線
     this.state[i] = PSTATE_RETURN;
     this.gen[i]++;
     tracerFX.clear(i);
@@ -655,7 +660,9 @@ export class ProjectileSystem {
   // 寫入實例矩陣與光痕 (只處理存活槽；各種類網格僅在有實例時標記更新)
   private syncVisuals() {
     const tracerOn = tracerFX.enabled;
-    const tracerLife = getFxQuality().tracerLife;
+    const q = getFxQuality();
+    const tracerLife = q.tracerLife;
+    const kiLife = tracerFX.ready ? q.kiBeamLife : 0;
     let dirtyBall = false, dirtyStone = false;
     for (let i = 0; i < PROJ_MAX; i++) {
       if (this.state[i] === PSTATE_DEAD) continue;
@@ -670,16 +677,24 @@ export class ProjectileSystem {
         mesh.setMatrixAt(i, _m);
         if (k === PROJ_BALL) dirtyBall = true; else dirtyStone = true;
       }
-      if (tracerOn && this.state[i] === PSTATE_FLY && (this.flags[i] & PFLAG_TRACER)) {
+      const st = this.state[i];
+      const fl = this.flags[i];
+      const flyTrace = st === PSTATE_FLY && (fl & PFLAG_TRACER) !== 0;
+      const retTrace = st === PSTATE_RETURN && (fl & PFLAG_TRACER_RETURN) !== 0;
+      if (flyTrace || retTrace) {
+        const op = this.opts[i];
+        const ki = flyTrace && op.tracerStyle === TRACER_KI;
+        const life = (ki ? kiLife : tracerOn ? tracerLife : 0) * op.tracerLenMul;
         const v = this.vel;
         const speed = Math.sqrt(v[o] * v[o] + v[o + 1] * v[o + 1] + v[o + 2] * v[o + 2]);
-        if (speed > 1e-3) {
-          // 光痕長 = 速度 × 壽命，且不超過離發射點的距離 (不畫到出手點後方)
-          const ex = p[o] - this.origin[o], ey = p[o + 1] - this.origin[o + 1], ez = p[o + 2] - this.origin[o + 2];
-          const len = Math.min(speed * tracerLife, Math.sqrt(ex * ex + ey * ey + ez * ez));
+        if (life > 0 && speed > 1e-3) {
+          // 光痕長 = 速度 × 壽命，且不超過離發射點 (回收時為回收起點) 的距離 (不畫到出手點後方)
+          const from = retTrace ? this.retFrom : this.origin;
+          const ex = p[o] - from[o], ey = p[o + 1] - from[o + 1], ez = p[o + 2] - from[o + 2];
+          const len = Math.min(speed * life, Math.sqrt(ex * ex + ey * ey + ez * ez));
           const s = len / speed;
-          const op = this.opts[i];
-          tracerFX.set(i, p[o], p[o + 1], p[o + 2], p[o] - v[o] * s, p[o + 1] - v[o + 1] * s, p[o + 2] - v[o + 2] * s, op.tracerHalfWidth, op.tracerColor);
+          tracerFX.set(i, p[o], p[o + 1], p[o + 2], p[o] - v[o] * s, p[o + 1] - v[o + 1] * s, p[o + 2] - v[o + 2] * s,
+            ki ? op.tracerHalfWidth : Math.min(op.tracerHalfWidth, 0.09), op.tracerColor, ki ? TRACER_KI : TRACER_LINE);
           continue;
         }
       }

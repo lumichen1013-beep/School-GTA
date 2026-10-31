@@ -359,6 +359,28 @@ export class SoundEffects {
     this.tone('sine', [['set', 1975.5, now + 0.05]], [['set', 0.0001, now + 0.05], ['lin', 0.08, now + 0.056], ['exp', 0.0001, now + 0.26]], now + 0.05, now + 0.27);
   }
 
+  // 籃球氣功彈出手「啾」：低通 2.4k 的正弦快速上滑後回落 (能量射出) + 帶通 1.5k→3k 的細噪音上掃 (破風)，
+  // 起音 5ms、0.13 秒內收尾，量小柔和不刺耳
+  public playKiShot(pos: Vec3Like) {
+    if (!this.gate('kiShot', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('sine', [['set', 520, now], ['exp', 1500, now + 0.045], ['exp', 900, now + 0.12]],
+      [['set', 0.0001, now], ['lin', 0.15, now + 0.005], ['exp', 0.0001, now + 0.13]], now, now + 0.14, 2400);
+    this.noise(now, 0.09, { type: 'bandpass', freq: [['set', 1500, now], ['exp', 3000, now + 0.09]], q: 1.0 },
+      [['set', 0.0001, now], ['lin', 0.045, now + 0.01], ['exp', 0.0001, now + 0.09]]);
+  }
+
+  // 氣功彈命中衝擊波：低頻正弦重擊下滑 (身體受衝擊) + 低通 900Hz 噪音「轟」的短擴散，起音 6ms 避免喀聲；終結段 (heavy) 更低更長
+  public playKiImpact(pos: Vec3Like, heavy = false) {
+    if (!this.gate('kiImpact', pos)) return;
+    const now = this.audio().currentTime;
+    const len = heavy ? 0.3 : 0.17;
+    this.tone('sine', [['set', heavy ? 150 : 210, now], ['exp', heavy ? 42 : 70, now + len]],
+      [['set', 0.0001, now], ['lin', heavy ? 0.36 : 0.28, now + 0.006], ['exp', 0.0001, now + len]], now, now + len + 0.01);
+    this.noise(now, len, { type: 'lowpass', freq: [['set', heavy ? 1100 : 900, now], ['exp', 250, now + len]], q: 0.7 },
+      [['set', 0.0001, now], ['lin', heavy ? 0.16 : 0.1, now + 0.008], ['exp', 0.0001, now + len]]);
+  }
+
   // 接球：手掌包住球的輕拍 — 低通 700Hz 的正弦下滑 + 帶通 900Hz 的極短噪音，量小
   public playBallCatch(pos: Vec3Like) {
     if (!this.gate('ballCatch', pos)) return;

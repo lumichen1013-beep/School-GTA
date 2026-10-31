@@ -161,10 +161,10 @@ export function quadBezier(p0: number, p1: number, p2: number, u: number): numbe
   return v * v * p0 + 2 * v * u * p1 + u * u * p2;
 }
 
-// 回收 (RETURN) 飛行秒數：距離 / 20 m/s，限制於 0.35 ~ 0.9 秒
-export const RETURN_SPEED = 20;
-export const RETURN_T_MIN = 0.35;
-export const RETURN_T_MAX = 0.9;
+// 回收 (RETURN) 飛行秒數：距離 / 60 m/s，限制於 0.1 ~ 0.3 秒 (籃球氣功彈：命中後化為光束極速收回，不拖慢連段節奏)
+export const RETURN_SPEED = 60;
+export const RETURN_T_MIN = 0.1;
+export const RETURN_T_MAX = 0.3;
 export function returnDuration(dist: number): number {
   const t = dist / RETURN_SPEED;
   return t < RETURN_T_MIN ? RETURN_T_MIN : t > RETURN_T_MAX ? RETURN_T_MAX : t;
