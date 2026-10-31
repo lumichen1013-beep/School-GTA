@@ -229,6 +229,22 @@ describe('DynamicResolutionController', () => {
     expect(run(c, clock, 45, 600)).toEqual([1.23]);
   });
 
+  it('過場期間低 FPS 不降級；結束後 2 秒緩衝不降級；之後正常降級', () => {
+    const { c, clock } = make();
+    const runP = (fps: number, ms: number, paused: boolean) => {
+      const dt = 1000 / fps; const out: number[] = [];
+      for (let e = 0; e < ms; e += dt) { clock.t += dt; const r = c.onFrame(clock.t, dt, paused); if (r !== null) out.push(r); }
+      return out;
+    };
+    expect(runP(30, 8000, true)).toEqual([]);
+    expect(c.ratio).toBe(1.33);
+    // 緩衝 2 秒內低 FPS 不計入 (略少於 2 秒，之後的累計不應被緩衝期污染)
+    expect(runP(30, DYN_RES.RESUME_QUIET_MS - 100, false)).toEqual([]);
+    // 緩衝結束後仍需完整 2 秒才降
+    expect(runP(30, 1500, false)).toEqual([]);
+    expect(runP(30, 1000, false)).toEqual([1.23]);
+  });
+
   it('死區 55~58 不升不降；下限 1.0', () => {
     const { c, clock } = make();
     expect(run(c, clock, 56.5, 20000)).toEqual([]);

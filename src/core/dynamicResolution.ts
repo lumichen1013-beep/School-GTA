@@ -14,6 +14,7 @@ export const DYN_RES = {
   SETTLE_MS: 1000,      // 調整後丟棄的暖機時間
   BOUNCE_MS: 10000,     // 升級後多久內又降級視為來回
   BOUNCE_LOCK_MS: 60000,// 來回後鎖住升級的時間
+  RESUME_QUIET_MS: 2000,// 過場 / 場景切換結束後不計入取樣的緩衝時間 (過場尾端的尖峰不觸發降級)
   MAX_GAP_MS: 250,      // 單幀間隔超過此值 (切分頁、長暫停) 視為中斷，重新累計
 } as const;
 
@@ -30,6 +31,7 @@ export class DynamicResolutionController {
   private lastUpAt = -Infinity;
   private upCap = Infinity;
   private upCapUntil = -Infinity;
+  private quietUntil = 0;
 
   constructor(max: number) {
     this._max = max;
@@ -52,10 +54,21 @@ export class DynamicResolutionController {
     this.lastUpAt = -Infinity;
     this.upCap = Infinity;
     this.upCapUntil = -Infinity;
+    this.quietUntil = 0;
   }
 
   /** 每個實際執行幀回報 (now = 時間戳 ms，dtMs = 與上一執行幀的間隔)；像素比有變化時回傳新值，否則 null */
-  public onFrame(now: number, dtMs: number): number | null {
+  public onFrame(now: number, dtMs: number, paused: boolean = false): number | null {
+    // 過場 / 場景切換期間：不取樣、不調整，結束後再緩衝 RESUME_QUIET_MS
+    if (paused) {
+      this.winMs = 0;
+      this.winFrames = 0;
+      this.lowMs = 0;
+      this.highMs = 0;
+      this.quietUntil = now + DYN_RES.RESUME_QUIET_MS;
+      return null;
+    }
+    if (now < this.quietUntil) return null;
     if (!(dtMs > 0) || dtMs > DYN_RES.MAX_GAP_MS) {
       this.winMs = 0;
       this.winFrames = 0;

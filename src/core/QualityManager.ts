@@ -41,6 +41,7 @@ class QualityManager {
   private readonly dynRes = new DynamicResolutionController(1);
   private dynResActive = false;
   private dynLastFrameAt = 0;
+  private dynTransition = false;
 
   private listeners = new Set<() => void>();
   // 自動偵測完成時的簡短提示 (由 main 接到 HUD 橫幅)
@@ -193,7 +194,7 @@ class QualityManager {
   // ---------------- 動態解析度 ----------------
 
   /** 每個實際執行幀呼叫 (main.tick)：觸控中檔、未鎖幀、非偵測中時依實測 FPS 微調像素比 */
-  public onFrame(now: number) {
+  public onFrame(now: number, paused: boolean = false) {
     if (!this.engine) return;
     const allowed = dynamicResolutionAllowed({
       touch: isTouchDevice(), tier: this._tier, probing: this.isProbing, fpsCap: this.fpsCap, forcedRatio: getDiagFlags().rs,
@@ -207,12 +208,16 @@ class QualityManager {
     }
     const dt = now - this.dynLastFrameAt;
     this.dynLastFrameAt = now;
-    const next = this.dynRes.onFrame(now, dt);
+    const next = this.dynRes.onFrame(now, dt, paused || this.dynTransition);
+    this.dynTransition = false;
     if (next !== null) {
       this.engine.setDynamicPixelRatio(next);
       this.emit();
     }
   }
+
+  /** 場景切換 (切世界等一次性事件)：下一幀起暫停動態解析度取樣並緩衝 */
+  public noteSceneTransition() { this.dynTransition = true; }
 
   private disableDynRes(apply: boolean = true) {
     if (!this.dynResActive) return;

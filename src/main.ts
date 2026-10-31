@@ -392,6 +392,7 @@ class SchoolGTASandbox implements GameContext {
     // 花劍客戰 (含過場) 中切換世界：同一幀還原覺醒 / 體力上限與校園，再照常切換
     this.fencerBossFight.abort();
     this.forceDismount();
+    qualityManager.noteSceneTransition();
 
     this.wantedSystem.clearWanted(); // onWantedCleared 會一併重置所有 NPC 仇恨
     this.campus.resetTransientState();
@@ -740,7 +741,7 @@ class SchoolGTASandbox implements GameContext {
     if (diagOn) perfProbe.onRaf(now);
     if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
     this.lastRunAt = now;
-    qualityManager.onFrame(now);
+    qualityManager.onFrame(now, this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
     if (diagOn) {
       perfProbe.onFrameRun(now);
       this.frameStartMs = performance.now();
