@@ -29,6 +29,7 @@ import {
 import { loadFencerSave, storeFencerSave } from './fencerSave';
 import { safeTopNdc, shouldFitBubble } from './bubbleSafeArea';
 import { buildRapier } from '../../weapons/models/rapierModel';
+import { setConcealedById, showCutsceneOverlay } from '../../ui/uiConceal';
 
 // 世界 Boss【花劍客】總控：太陽花戳戳 → 開戰過場 (清場 / 結界 / 暮紅異空間 / Boss 亮相 / 玩家向陽覺醒)
 // → 三樂章戰鬥 (回血 / 脫戰快速回氣 / HUD) → 勝利 (獎勵、恢復) / 戰敗 (死亡前還原上限、恢復) / 中止 (切換世界)。
@@ -1020,12 +1021,10 @@ export class FencerBossFight {
 
   private setCutsceneUi(on: boolean, skippable: boolean = false) {
     if (typeof document === 'undefined') return;
-    for (const id of ['hud-overlay', 'mobile-controls-container']) {
-      const el = document.getElementById(id);
-      if (el) el.style.visibility = on ? 'hidden' : '';
-    }
-    const overlay = document.getElementById('cutscene-overlay');
-    if (overlay) overlay.style.display = on ? 'flex' : 'none';
+    // 大型容器只切 opacity (常駐合成層)，不切 visibility / display，避免 GPU 執行緒重新配置圖層貼圖造成卡頓
+    setConcealedById('hud-overlay', on);
+    setConcealedById('mobile-controls-container', on);
+    showCutsceneOverlay(on);
     const skip = document.getElementById('cutscene-skip-btn');
     if (skip) skip.style.display = on && skippable ? '' : 'none';
     if (!on) {
@@ -1041,14 +1040,21 @@ export class FencerBossFight {
     if (sub) sub.textContent = text;
   }
 
-  private whiteFlash() {
-    if (typeof document === 'undefined') return;
+  // 全螢幕閃白層：預熱時預先建立 (opacity 0 + will-change 常駐合成層)，閃白時只動 opacity
+  private ensureFlashEl(): HTMLDivElement | null {
+    if (typeof document === 'undefined' || !document.body) return null;
     if (!this.flashEl) {
       this.flashEl = document.createElement('div');
-      this.flashEl.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:9000;transition:opacity 0.15s ease-out;';
+      this.flashEl.setAttribute('aria-hidden', 'true');
+      this.flashEl.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:9000;will-change:opacity;transition:opacity 0.15s ease-out;';
       document.body.appendChild(this.flashEl);
     }
-    const el = this.flashEl;
+    return this.flashEl;
+  }
+
+  private whiteFlash() {
+    const el = this.ensureFlashEl();
+    if (!el) return;
     el.style.transition = 'none';
     el.style.opacity = '1';
     void el.offsetWidth;
@@ -1060,6 +1066,7 @@ export class FencerBossFight {
 
   public prewarm(compile: () => void) {
     if (!this.initialized) return;
+    this.ensureFlashEl();
     this.rapierProp.visible = true; // 細劍材質隨下列任一次編譯預熱
     this.arena.prewarm(compile);
     this.boss.prewarm(compile);

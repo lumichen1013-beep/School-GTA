@@ -61,6 +61,35 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   touch-action: none;
 }
 
+/* 大型 UI 容器常駐合成層：過場 / 雷達暫停時只切 opacity (見 ui/uiConceal.ts)，
+   不切 visibility / display，避免 GPU 執行緒重新配置圖層貼圖造成 30~60ms 卡頓。只加在少數大型容器上。 */
+#hud-overlay,
+#mobile-controls-container,
+#minimap-wrapper,
+#cutscene-overlay,
+#pursuit-vignette,
+#poison-vignette,
+#cinema-flash {
+  will-change: opacity;
+}
+
+/* 隱藏狀態：透明且自身與所有子孫皆不可點擊 (子元素自設 pointer-events:auto 亦無效；另以 inert 阻擋焦點) */
+.ui-concealed {
+  opacity: 0 !important;
+  transition: none !important;
+}
+/* 過場期間短暫隱藏的 HUD / 觸控按鍵：opacity 剛好為 0 時合成器會丟棄子圖層貼圖，顯示當下重新配置仍會卡頓；
+   保留肉眼不可見的 0.004 (< 1/255 色階) 讓貼圖常駐 (平板實測：0 → 顯示時偶發 50~83ms，0.004 → 無)。
+   長時間隱藏的字幕遮罩 / 雷達維持 0，不在平時多合成一層。 */
+#hud-overlay.ui-concealed,
+#mobile-controls-container.ui-concealed {
+  opacity: 0.004 !important;
+}
+.ui-concealed,
+.ui-concealed * {
+  pointer-events: none !important;
+}
+
 /* HUD UI Overlay */
 #hud-overlay {
   position: absolute;

@@ -54,6 +54,7 @@ import { SlingshotController } from './weapons/slingshot/SlingshotController';
 import { FencerBossFight } from './game/fencer/FencerBossFight';
 import { BossCameraLink } from './game/fencer/BossCameraLink';
 import { RESPAWN_HEART_DELAY_MS } from './game/fencer/fencerStory';
+import { showCutsceneOverlay } from './ui/uiConceal';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -204,8 +205,7 @@ class SchoolGTASandbox implements GameContext {
       if (subEl) subEl.textContent = sub;
     };
     this.detentionCutscene.onComplete = () => {
-      const cutsceneOverlay = document.getElementById('cutscene-overlay');
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
       this.weatherSystem.setWeather('SUNNY', true, false);
       this.detention.startEscape();
       this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
@@ -419,13 +419,12 @@ class SchoolGTASandbox implements GameContext {
     if (this.tennisGame.tennisState !== 'IDLE') {
       this.tennisGame.resetMatch(this.engine.scene, this.player);
     }
-    const cutsceneOverlay = document.getElementById('cutscene-overlay');
 
     if (targetWorld === 'CAMPUS') {
       if (this.detentionCutscene.isActive) {
         this.detentionCutscene.skip();
       }
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
 
       // 離開特訓院時收起 MGS 警戒列 (避免警戒中切換世界殘留於校園畫面)
       this.hud.updateMgsAlert('NORMAL', 0);
@@ -490,11 +489,11 @@ class SchoolGTASandbox implements GameContext {
     this.detention.reset();
 
     if (!skipCutscene) {
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'flex';
+      showCutsceneOverlay(true);
       this.weatherSystem.setWeather('THUNDERSTORM', false, false);
       this.detentionCutscene.start(this.cameraCtrl, this.player);
     } else {
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
       this.weatherSystem.setWeather('SUNNY', false, false);
       // 與開場結束相同：開局面向東方 (A 區長廊)，鏡頭置於身後
       this.player.position.copy(this.detentionWorld.spawnPos);

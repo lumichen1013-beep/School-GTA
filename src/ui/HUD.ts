@@ -27,6 +27,7 @@ import { QUALITY_PRESETS } from '../core/quality';
 import { getDiagFlags } from '../core/diagFlags';
 import { fencerQuestText } from '../game/fencer/fencerStory';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
+import { setConcealedById } from './uiConceal';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -1684,8 +1685,8 @@ export class HUD {
   public setRadarSuspended(suspended: boolean) {
     if (this.radarSuspended === suspended) return;
     this.radarSuspended = suspended;
-    const wrap = document.getElementById('minimap-wrapper');
-    if (wrap) wrap.style.visibility = suspended ? 'hidden' : '';
+    // 只切 opacity + 不可點擊 (容器常駐合成層)，不切 visibility，避免 GPU 執行緒重新配置圖層貼圖
+    setConcealedById('minimap-wrapper', suspended);
     if (!suspended) this.minimapDeltaAccumulator = 999;
   }
 

@@ -5,6 +5,7 @@ import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { soundManager } from '../audio/SoundEffects';
 import { CAMPUS_CENTER } from '../audio/spatialAudio';
 import { INITIAL_SPAWN } from './DetentionWorld';
+import { setConcealedById } from '../ui/uiConceal';
 
 // ==========================================================
 // 開場場景佈局：A 區牢房大樓 (Z: -75 ~ -45) 北側入監空地，玩家開局點 (-55, -84) 即在此處
@@ -44,13 +45,10 @@ const T_SHOT5 = 15.0;  // 押送至牢房區開局點
 const T_END = 18.0;
 
 // 過場期間隱藏遊戲 HUD (雷達、任務、快捷鍵指南、手機操控)，結束時還原
+// (只切 opacity + 不可點擊，見 ui/uiConceal：避免 visibility 切換在 GPU 執行緒重新配置圖層貼圖)
 const CUTSCENE_HIDDEN_UI = ['hud-overlay', 'mobile-controls-container'];
 const setGameUiHidden = (hidden: boolean) => {
-  if (typeof document === 'undefined') return;
-  for (const id of CUTSCENE_HIDDEN_UI) {
-    const el = document.getElementById(id);
-    if (el) el.style.visibility = hidden ? 'hidden' : '';
-  }
+  for (const id of CUTSCENE_HIDDEN_UI) setConcealedById(id, hidden);
 };
 
 const smooth = (t: number) => {
