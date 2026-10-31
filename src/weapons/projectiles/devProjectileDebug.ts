@@ -3,7 +3,7 @@ import type { GameContext } from '../../game/GameContext';
 import { devWeaponsMode } from '../featureFlags';
 import { createProjectileSpawnOpts, PROJ_BALL, PROJ_STONE, PFLAG_BOUNCE_FLOOR, PFLAG_BOUNCE_WALL, PFLAG_RETURN, PFLAG_TRACER } from './ProjectileSystem';
 
-// 開發驗證用測試彈：僅 DEV_WEAPONS_BUILD 建置會由 main.ts 呼叫 (正式版整段 tree-shake)，且需 dev 武器模式未關閉 (?devweapons=1 / locked)。
+// 開發驗證用測試彈：由 main.ts 呼叫，且需 dev 武器模式未關閉 (?devweapons=1 / locked)。
 // 按鍵 (遊戲中，未騎車)：T = 石子 (70 m/s 直射)、Y = 球 (24 m/s 輕拋，推擊 1.2m，落空彈地 / 撞牆反彈後回收)、
 // U = 球 (斜向地面的反彈傳球，終結擊飛)。彈道沿鏡頭水平前方，自玩家胸口前方發射。
 const DEV_LAUNCH_CAP = { h: 9, v: 5 };

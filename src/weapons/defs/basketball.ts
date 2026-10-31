@@ -4,7 +4,7 @@ import type { WeaponDefinition } from '../types';
 
 // 籃球 (遠程回收型，開發中 release 'dev')：三投連段 (胸前推傳 / 地板彈傳 / 高拋灌籃)，球命中後彈回手上；第 1、2 投推開 1.2m 並打斷前搖，
 // 第 3 投擊飛。投出到接回之前不能攻擊 (攻擊鍵進 0.25 秒預輸入)，飛行中可移動 / 跳 / 衝刺 / 閃身。只限校園，小遊戲投籃累計進 10 球解鎖。
-// 以函式包裝：頂層不執行物件建構，正式版 (DEV_WEAPONS_BUILD 為 false) 未引用時整個檔案可被 tree-shake。
+// 以函式包裝：頂層不執行物件建構，僅在 registry 呼叫時才建立。
 export const BASKETBALL_UNLOCK_GOAL = 10;
 export const BASKETBALL_SHOVE_DIST = 1.2;
 export const BASKETBALL_CHAIN_WINDOW = 0.8; // 連段接續窗：自接到球起算

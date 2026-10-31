@@ -46,7 +46,7 @@ import { InteractionSystem } from './game/InteractionSystem';
 import { ProjectileSystem } from './weapons/projectiles/ProjectileSystem';
 import { createProjectileHost } from './weapons/projectiles/gameHost';
 import { installProjectileDebug } from './weapons/projectiles/devProjectileDebug';
-import { DEV_WEAPONS_BUILD, devWeaponsMode } from './weapons/featureFlags';
+import { devWeaponsMode } from './weapons/featureFlags';
 import { BallThrowController } from './weapons/basketball/BallThrowController';
 import { SlingshotController } from './weapons/slingshot/SlingshotController';
 
@@ -211,7 +211,7 @@ class SchoolGTASandbox implements GameContext {
     slashFX.init(this.engine.scene);
     this.projectiles = new ProjectileSystem(createProjectileHost(this));
     this.projectiles.init(this.engine.scene);
-    if (DEV_WEAPONS_BUILD && devWeaponsMode !== 'off') {
+    if (devWeaponsMode !== 'off') {
       this.ballThrow = new BallThrowController(this);
       this.slingshot = new SlingshotController(this);
     }
@@ -296,8 +296,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
-    // 開發驗證用測試彈 (僅 dev 武器建置；正式版整段 tree-shake)
-    if (DEV_WEAPONS_BUILD) installProjectileDebug(this, () => this.isGameRunning);
+    // 開發驗證用測試彈 (dev 武器模式 off 時 installProjectileDebug 內直接略過)
+    installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
       onDodge: this.progression.triggerDodgeSkill

@@ -6,14 +6,14 @@ import { OVERRIDE_RACKET } from './defs/racket';
 import { createBookWhip } from './defs/bookWhip';
 import { createBasketball } from './defs/basketball';
 import { createSlingshot } from './defs/slingshot';
-import { DEV_WEAPONS_BUILD, devWeaponsMode } from './featureFlags';
+import { devWeaponsMode } from './featureFlags';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
 } from './types';
 
 const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET];
-// 開發中武器：非 DEV_WEAPONS_BUILD 的建置為空陣列，defs / models 因而被 tree-shake
-const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = DEV_WEAPONS_BUILD ? [createBookWhip(), createBasketball(), createSlingshot()] : [];
+// 開發中武器：所有建置都打包，是否進武器槽由 devWeaponsMode 決定 (off 時 WEAPONS 不含)
+const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = [createBookWhip(), createBasketball(), createSlingshot()];
 
 // 全部已定義的武器 (含未啟用的 dev 武器)；一般邏輯請用 WEAPONS
 export const ALL_WEAPONS: readonly WeaponDefinition[] = [...RELEASED_WEAPONS, ...DEV_WEAPON_DEFS];

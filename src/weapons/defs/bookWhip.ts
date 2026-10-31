@@ -5,7 +5,7 @@ import type { WeaponDefinition } from '../types';
 
 // 綁帶捆書 (長鞭型，開發中 release 'dev')：第 1 段扇形橫掃、第 2 段前方長條抽擊 (+ 回彈追擊)，兩段皆為群攻推擊 (lightPush 0.5m，
 // 打斷前搖、每 NPC 0.5 秒推擊免疫)，第 3 段旋身繞圈群攻並擊飛 (約 2.8m)。只限校園，贏游泳比賽 (小魚) 解鎖。
-// 以函式包裝：頂層不執行物件建構，正式版 (DEV_WEAPONS_BUILD 為 false) 未引用時整個檔案可被 tree-shake。
+// 以函式包裝：頂層不執行物件建構，僅在 registry 呼叫時才建立。
 export function createBookWhip(): WeaponDefinition {
   return {
     id: 'BOOK_WHIP',

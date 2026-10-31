@@ -115,7 +115,7 @@ export interface WeaponRanged {
 
 export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly id: WeaponId;
-  // 'dev' = 開發中武器，僅 DEV_WEAPONS_BUILD 的建置且 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
+  // 'dev' = 開發中武器，僅 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
   readonly release: 'released' | 'dev';
   readonly slot: number;
   readonly icon: string;

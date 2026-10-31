@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
-import { DEV_WEAPONS_BUILD } from '../weapons/featureFlags';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
@@ -552,20 +551,20 @@ export class CampusMode {
       this.lastTrackRecord = racingGame.bestTrackTime;
       tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
     }
-    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。DEV_WEAPONS_BUILD 為 false 的正式版整段被移除；
+    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。
     // 開關 off / unlocked 時 unlockWeapon 不會觸發 (off 直接略過，unlocked 視為已解鎖)
     progression.swimWon = racingGame.bestSwimTime !== null;
-    if (DEV_WEAPONS_BUILD && progression.swimWon) {
+    if (progression.swimWon) {
       progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
-    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)。正式版整段被移除
+    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)
     progression.basketballMade = basketballGame.totalMade;
-    if (DEV_WEAPONS_BUILD && basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
+    if (basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
       progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
     }
-    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓。正式版整段被移除
+    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓
     progression.trackWon = racingGame.bestTrackTime !== null;
-    if (DEV_WEAPONS_BUILD && racingGame.bestTrackTime) {
+    if (racingGame.bestTrackTime) {
       progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {

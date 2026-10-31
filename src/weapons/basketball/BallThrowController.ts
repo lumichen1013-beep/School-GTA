@@ -18,7 +18,7 @@ import {
   type BallMoveKind, type LaunchVelocity
 } from './aim';
 
-// 籃球武器狀態機 (僅 DEV_WEAPONS_BUILD 的建置由 main.ts 建立；正式版整檔 tree-shake，頂層無副作用)。
+// 籃球武器狀態機 (僅 devWeaponsMode 非 off 時由 main.ts 建立)。
 //   READY  球在手上 (顯示)：按攻擊 → 起手；起手條件不足 (如收招中) → 進 0.25 秒預輸入緩衝
 //   WINDUP 投球動作的預備段 (已鎖攻擊)，到命中時間點 (球離手) 由 CombatSystem 呼叫 launch() 發射
 //   FLIGHT 球在外 (投射物池的球飛行 / 彈跳 / 回收；手上的球隱藏、攻擊鎖定)，被接住 (CATCH) 回到 READY
