@@ -77,7 +77,7 @@ describe('開發中武器開關', () => {
     const entry = progression.getWeaponEquipEntries().find((e) => e.id === DEV)!;
     expect(entry.dev).toBe(true);
     expect(entry.status).toBe('unlocked');
-    expect(progression.getWeaponEquipEntries().filter((e) => e.id !== DEV).every((e) => !e.dev)).toBe(true);
+    expect(progression.getWeaponEquipEntries().filter((e) => e.id !== DEV && e.id !== 'BASKETBALL').every((e) => !e.dev)).toBe(true);
 
     expect(progression.equipById(DEV)).toBe(true);
     expect(state.current).toBe(DEV);

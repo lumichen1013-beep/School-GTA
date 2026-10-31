@@ -63,6 +63,7 @@ export interface WeaponUnlockBanner {
   text: string;
   duration: number;
   sfx?: () => void;
+  autoEquip?: boolean; // 解鎖後是否自動裝備 (預設 true；籃球因與小遊戲持球互斥設 false)
 }
 export interface WeaponEquipEntry {
   id: WeaponId;
@@ -109,7 +110,7 @@ export class Progression {
   public teacherDefeatedCount: number = 0;
   public dogDefeatedCount: number = 0;
   public bikePatrolDefeatedCount: number = 0;
-  // 新武器解鎖進度 (資料來源於階段 4-6 接上)
+  // 新武器解鎖進度 (由 CampusMode.updateMissionTracker 每幀寫入)
   public basketballMade: number = 0;
   public swimWon: boolean = false;
   public trackWon: boolean = false;
@@ -218,13 +219,13 @@ export class Progression {
     });
   }
 
-  // 解鎖武器並自動裝備、顯示橫幅與音效；未啟用 (dev 武器且開關關閉) 或已解鎖者直接返回，不設旗標 / 不橫幅 / 不裝備
+  // 解鎖武器並自動裝備 (banner.autoEquip 為 false 時不裝備)、顯示橫幅與音效；未啟用 (dev 武器且開關關閉) 或已解鎖者直接返回，不設旗標 / 不橫幅 / 不裝備
   public unlockWeapon(id: WeaponId, banner: WeaponUnlockBanner): boolean {
     if (!isWeaponEnabled(id)) return false;
     const { player, wantedSystem } = this.ctx;
     if (player.isWeaponUnlocked(id)) return false;
     player.setWeaponUnlocked(id, true);
-    player.setWeapon(id);
+    if (banner.autoEquip !== false) player.setWeapon(id);
     wantedSystem.showBanner(banner.text, banner.duration);
     banner.sfx?.();
     return true;
@@ -285,7 +286,7 @@ export class Progression {
         step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
       ];
       case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
-      // 開發中武器 (BOOK_WHIP 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id；BASKETBALL (basketballMade) / SLINGSHOT (trackWon) 待後續階段補
+      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id；SLINGSHOT (trackWon) 待後續階段補
       default: return (getWeapon(id).unlock?.steps?.(this) ?? []).map((s) => step(s.label, s.cur, s.max));
     }
   }

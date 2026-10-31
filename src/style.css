@@ -824,6 +824,39 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   100% { transform: translate(-50%, -50%) scale(1.18); border-color: #ff5252; box-shadow: 0 0 18px rgba(255, 82, 82, 0.9); }
 }
 
+/* 手機：持武器球時自動鎖定目標的準星 (DOM，只改 transform，不佔 GPU 特效) */
+.ball-lock-reticle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 15;
+  pointer-events: none;
+  will-change: transform;
+}
+.ball-lock-reticle::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: -20px;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #ff8a2a;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 138, 42, 0.9), inset 0 0 6px rgba(255, 138, 42, 0.45);
+}
+.ball-lock-reticle::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffd9a8;
+}
+
 /* Basketball Shot Timing Gauge */
 #shot-meter {
   position: absolute;

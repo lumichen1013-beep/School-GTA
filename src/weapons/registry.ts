@@ -4,6 +4,7 @@ import { SPECIAL_BAT } from './defs/goldBat';
 import { DUAL_RACKET } from './defs/dualRacket';
 import { OVERRIDE_RACKET } from './defs/racket';
 import { createBookWhip } from './defs/bookWhip';
+import { createBasketball } from './defs/basketball';
 import { DEV_WEAPONS_BUILD, devWeaponsMode } from './featureFlags';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
@@ -11,7 +12,7 @@ import type {
 
 const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET];
 // 開發中武器：非 DEV_WEAPONS_BUILD 的建置為空陣列，defs / models 因而被 tree-shake
-const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = DEV_WEAPONS_BUILD ? [createBookWhip()] : [];
+const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = DEV_WEAPONS_BUILD ? [createBookWhip(), createBasketball()] : [];
 
 // 全部已定義的武器 (含未啟用的 dev 武器)；一般邏輯請用 WEAPONS
 export const ALL_WEAPONS: readonly WeaponDefinition[] = [...RELEASED_WEAPONS, ...DEV_WEAPON_DEFS];
@@ -52,6 +53,7 @@ function buildResolved(def: WeaponDefinition | WeaponOverrideDefinition, variant
     fx: normalizeFx(variant ? variant.fxStyle : def.fxStyle),
     finisherFx: variant?.finisherFx ?? def.finisherFx ?? {},
     launchCap: variant?.launchCap ?? def.launchCap ?? null,
+    chainWindow: def.chainWindow ?? 0.6,
     anchors: def.anchors,
     sounds: def.sounds,
     readyPose: def.readyPose

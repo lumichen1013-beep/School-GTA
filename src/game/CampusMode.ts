@@ -6,6 +6,7 @@ import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { BASKETBALL_UNLOCK_GOAL } from '../weapons/defs/basketball';
 import { SurroundCoordinator } from './SurroundCoordinator';
 import { AttackTokenCoordinator } from './AttackTokenCoordinator';
 import { findSafeTeleportPos } from '../entities/shared/teleport';
@@ -342,6 +343,7 @@ export class CampusMode {
 
   private mountBike(bike: Bicycle, groundY: number) {
     this.ctx.player.cancelAttack();
+    this.ctx.ballThrow?.cancel();
     this.ctx.projectiles.reset(); // 上車：清空飛行中 / 回收中的投射物
     bike.mount(this.ctx.player, groundY);
     this.ctx.currentRidingBike = bike;
@@ -554,6 +556,11 @@ export class CampusMode {
     progression.swimWon = racingGame.bestSwimTime !== null;
     if (DEV_WEAPONS_BUILD && progression.swimWon) {
       progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
+    }
+    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)。正式版整段被移除
+    progression.basketballMade = basketballGame.totalMade;
+    if (DEV_WEAPONS_BUILD && basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
+      progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
     }
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;

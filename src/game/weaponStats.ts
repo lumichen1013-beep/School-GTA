@@ -1,7 +1,8 @@
 import type { KfMove } from '../entities/shared/kungfu';
 import { AOE_SECONDARY_DMG, strikeDmg, strikeRoute } from '../entities/shared/kungfu';
 import { getWeapon, resolveVariant } from '../weapons/registry';
-import type { WeaponId, WeaponWorld } from '../weapons/types';
+import { returnDuration } from '../weapons/projectiles/collide';
+import type { WeaponId, WeaponRanged, WeaponWorld } from '../weapons/types';
 
 // 大地圖【裝備】分頁用的連段估算 (純計算，不影響戰鬥數值)
 export interface MoveSummary {
@@ -9,6 +10,14 @@ export interface MoveSummary {
   finisher: boolean;
   mults: number[];   // 各擊傷害倍率 (主擊 + 額外命中)
   damage: number;    // 該招各擊取整後總傷
+}
+
+// 遠程口徑秒傷：單發期望傷害 ÷ (前搖 + 去程 + 回程 + 接後緩衝)，依目標距離列出；dps 欄位取 standardDistance 的值
+export const RANGED_DISTANCES: readonly number[] = [4, 8, 15];
+export interface RangedSummary {
+  standardDistance: number;
+  distances: readonly number[];
+  dpsAt: readonly number[]; // 與 distances 對應
 }
 
 export interface WeaponSummary {
@@ -19,13 +28,21 @@ export interface WeaponSummary {
   // 群攻估算：只有帶非終結技群攻 (aoe) 招式的武器 (如綁帶捆書) 才有，null = 不顯示；人數 = GROUP_TARGETS
   groupDps: number | null;
   groupTargets: number;
+  ranged: RangedSummary | null; // 遠程回收型武器才有 (dps 即為 standardDistance 的遠程秒傷)；近戰為 null
 }
 
 // 群攻秒傷估算的目標人數 (主目標全額，其餘 × AOE_SECONDARY_DMG，逐人取整同 CombatSystem.applyPlayerHitToNpc)
 export const GROUP_TARGETS = 3;
 
 // 逐擊 Math.round(基礎攻擊 × 倍率)；耗時 = Σ(cancel × dur × tempo)
-export function summarizeCombo(combo: readonly KfMove[], baseDamage: number, tempo: number): WeaponSummary {
+// 一套連段於目標距離 d (m) 的耗時：Σ(前搖 strike × dur × tempo + 去程 d / 初速 + 回程 returnDuration(d) + 接後緩衝)
+export function rangedSeconds(combo: readonly KfMove[], tempo: number, ranged: WeaponRanged, d: number): number {
+  let seconds = 0;
+  for (const m of combo) seconds += m.strike * m.dur * tempo + d / ranged.speed + returnDuration(d) + ranged.catchDelay;
+  return seconds;
+}
+
+export function summarizeCombo(combo: readonly KfMove[], baseDamage: number, tempo: number, ranged?: WeaponRanged): WeaponSummary {
   let totalDamage = 0;
   let totalSeconds = 0;
   let groupDamage = 0;
@@ -44,9 +61,17 @@ export function summarizeCombo(combo: readonly KfMove[], baseDamage: number, tem
     totalSeconds += m.cancel * m.dur * tempo;
     return { name: m.name, finisher: m.finisher, mults, damage };
   });
+  if (ranged) {
+    const dpsAt = RANGED_DISTANCES.map((d) => totalDamage / rangedSeconds(combo, tempo, ranged, d));
+    totalSeconds = rangedSeconds(combo, tempo, ranged, ranged.dpsDistance);
+    return {
+      moves, totalDamage, totalSeconds, dps: totalDamage / totalSeconds, groupDps: null, groupTargets: GROUP_TARGETS,
+      ranged: { standardDistance: ranged.dpsDistance, distances: RANGED_DISTANCES, dpsAt }
+    };
+  }
   return {
     moves, totalDamage, totalSeconds, dps: totalSeconds > 0 ? totalDamage / totalSeconds : 0,
-    groupDps: hasGroupMove && totalSeconds > 0 ? groupDamage / totalSeconds : null, groupTargets: GROUP_TARGETS
+    groupDps: hasGroupMove && totalSeconds > 0 ? groupDamage / totalSeconds : null, groupTargets: GROUP_TARGETS, ranged: null
   };
 }
 
@@ -58,7 +83,7 @@ export function getWeaponSummary(id: WeaponId, world: WeaponWorld): WeaponSummar
   let summary = cache.get(key);
   if (!summary) {
     const resolved = resolveVariant(id, world);
-    summary = summarizeCombo(resolved.combo, getWeapon(id).stats.damage, resolved.tempo);
+    summary = summarizeCombo(resolved.combo, getWeapon(id).stats.damage, resolved.tempo, getWeapon(id).ranged);
     cache.set(key, summary);
   }
   return summary;

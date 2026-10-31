@@ -7,6 +7,7 @@ import { getSupportFloorY, queryColliders } from '../../physics/aabb';
 import { updateVisibleMatricesOnly } from '../../core/matrixUpdate';
 import { getFxQuality } from '../../effects/fxQuality';
 import { tracerFX } from '../../effects/TracerFX';
+import { buildBallGeometry } from './ballGeometry';
 import { createPlayerHitSpec, HIT_STOP_EXTRA, type PlayerHitSpec } from '../../game/CombatSystem';
 import {
   DOG_CAPSULE_R, DOG_CAPSULE_Y0, DOG_CAPSULE_Y1, HUMAN_CAPSULE_R, HUMAN_CAPSULE_Y0, HUMAN_CAPSULE_Y1,
@@ -180,22 +181,6 @@ const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-
-function buildBallGeometry(): THREE.BufferGeometry {
-  // 12×8 段球，縫線 (赤道 + 兩條經線) 以頂點色烘焙
-  const geo = new THREE.SphereGeometry(1, 12, 8);
-  const pos = geo.getAttribute('position');
-  const colors = new Float32Array(pos.count * 3);
-  const base = new THREE.Color(0xd5621c);
-  const seam = new THREE.Color(0x2a160c);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i);
-    const c = Math.abs(x) < 0.14 || Math.abs(y) < 0.14 ? seam : base;
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return geo;
-}
 
 export class ProjectileSystem {
   readonly pos = new Float32Array(PROJ_MAX * 3);

@@ -66,6 +66,10 @@ export interface FinisherAoe {
   readonly hitStopGold?: number;
 }
 
+// 發射型招式 (遠程回收武器，如籃球)：命中時間點不做近戰判定而是發射彈體
+// BALL_CHEST 胸前推傳 (直線)、BALL_BOUNCE 地板反彈傳球 (目標前方彈一下)、BALL_LOB 高拋灌籃 (終結技)
+export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_BOUNCE' | 'BALL_LOB';
+
 export interface KfMove {
   readonly name: string;
   readonly dur: number; // 秒
@@ -93,6 +97,7 @@ export interface KfMove {
   readonly slashFx: SlashFx | null;
   readonly aoe: FinisherAoe | null; // 終結技群攻 (null 為單體判定)
   readonly fx: FinisherFx | null;
+  readonly projectile: ProjectileMoveKind | null; // 發射型招式 (非 null 時命中時間點改為發射彈體)
   readonly keys: Float32Array;
   readonly count: number;
 }
@@ -101,6 +106,7 @@ interface MoveOpts {
   dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
   trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
   trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx;
+  projectile?: ProjectileMoveKind;
 }
 
 // 預設拖尾區段：命中點前一個關鍵影格 → 後一個關鍵影格
@@ -154,6 +160,7 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
     slashFx: o.slashFx ?? null,
     aoe: o.aoe ?? null,
     fx: o.fx ?? null,
+    projectile: o.projectile ?? null,
     keys: data,
     count: keys.length
   };
@@ -325,13 +332,43 @@ const WHIP_3 = defineMove('旋鞭橫掃', {
   [1, E_SMOOTH, { tw: -TWO_PI, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.1] }]
 ]);
 
+// ───────────── 玩家：籃球 (遠程回收型，dev 武器；三投各自發射彈體，命中時間點 = 球離手) ─────────────
+// 1 胸前推傳：雙手抱球收到胸口 (0.25) → 雙臂向前一推球離手 (0.5，直線)，身體微前傾
+const BALL_1 = defineMove('胸前推傳', {
+  dur: 0.4, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_CHEST'
+}, [
+  [0.25, E_SMOOTH, { tw: 0.08, ln: -0.06, h: -0.04, la: [-1.0, 0, 0.5], ra: [-1.0, 0, -0.5], ll: [-0.2, 0, -0.05], rr: [0.2, 0, 0.05] }],
+  [0.5, E_IN, { tw: -0.05, ln: 0.14, h: -0.05, la: [-1.5, 0, 0.12], ra: [-1.5, 0, -0.12], ll: [-0.4, 0, -0.08], rr: [0.35, 0, 0.08] }],
+  [0.75, E_OUT, { tw: 0, ln: 0.1, h: -0.03, la: [-1.4, 0, 0.1], ra: [-1.4, 0, -0.1], ll: [-0.3, 0, -0.06], rr: [0.25, 0, 0.06] }],
+  [1, E_SMOOTH, REST]
+]);
+// 2 地板彈傳：抱球收胸 (0.25) → 屈膝前傾、雙臂斜下推出，球砸向目標前方地面 (0.5)
+const BALL_2 = defineMove('地板彈傳', {
+  dur: 0.42, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_BOUNCE'
+}, [
+  [0.25, E_SMOOTH, { tw: -0.08, ln: 0.02, h: -0.08, la: [-0.9, 0, 0.45], ra: [-0.9, 0, -0.45], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [0.5, E_IN, { tw: 0.06, ln: 0.4, h: -0.2, la: [-0.55, 0, 0.1], ra: [-0.55, 0, -0.1], ll: [-0.6, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.75, E_OUT, { tw: 0, ln: 0.34, h: -0.16, la: [-0.45, 0, 0.1], ra: [-0.45, 0, -0.1], ll: [-0.5, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [1, E_SMOOTH, REST]
+]);
+// 3 高拋灌籃 (終結技)：蹲低把球收到腰側蓄勢 (0.3) → 起身躍起、雙臂高舉過頂將球高拋 (0.55，擊飛) → 落地收勢
+const BALL_3 = defineMove('高拋灌籃', {
+  dur: 0.6, strike: 0.55, cancel: 0.75, reach: 1.0, arc: -1, dmg: 1.2, knock: 1.0, finisher: true, projectile: 'BALL_LOB'
+}, [
+  [0.3, E_SMOOTH, { tw: 0.1, ln: 0.18, h: -0.22, la: [-0.5, 0, 0.35], ra: [-0.5, 0, -0.35], ll: [-0.55, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.55, E_IN, { tw: -0.05, ln: -0.12, h: 0.1, la: [-2.9, 0, 0.15], ra: [-2.9, 0, -0.15], ll: [-0.2, 0, -0.06], rr: [0.15, 0, 0.06] }],
+  [0.8, E_OUT, { tw: 0, ln: 0.05, h: 0.0, la: [-2.3, 0, 0.2], ra: [-2.3, 0, -0.2], ll: [-0.25, 0, -0.06], rr: [0.2, 0, 0.06] }],
+  [1, E_SMOOTH, REST]
+]);
+
 export const PLAYER_COMBOS = {
   FIST: [FIST_1, FIST_2, FIST_3],
   BAT: [BAT_1, BAT_2, BAT_3],
   BATON: [BATON_1, BATON_2, BATON_3],
   RACKET: [RACKET],
   DUAL: [DUAL_1, DUAL_2, DUAL_3],
-  WHIP: [WHIP_1, WHIP_2, WHIP_3]
+  WHIP: [WHIP_1, WHIP_2, WHIP_3],
+  BALL: [BALL_1, BALL_2, BALL_3]
 } as const;
 export type PlayerComboSet = keyof typeof PLAYER_COMBOS;
 

@@ -296,18 +296,23 @@ export class SoundEffects {
   }
 
   // ===== 投射物 (待補：以下暫以既有合成音配方代替，正式音色另行設計) =====
-  // 出手破風聲 (暫代：羽球拍呼嘯配方)
+  // 籃球出手破風：低通 1.8k 的正弦下滑 (手臂揮出) + 帶通 600→1300Hz 的短噪音上掃 (空氣聲)，淡入淡出、量小不刺耳
   public playThrowWhoosh(pos: Vec3Like) {
     if (!this.gate('throwWhoosh', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('sine', [['set', 650, now], ['exp', 160, now + 0.16]], [['set', 0.3, now], ['exp', 0.001, now + 0.18]], now, now + 0.19);
+    this.softTone('sine', [['set', 460, now], ['exp', 170, now + 0.16]],
+      [['set', 0.0001, now], ['lin', 0.16, now + 0.02], ['exp', 0.0001, now + 0.18]], now, now + 0.19, 1800);
+    this.noise(now, 0.14, { type: 'bandpass', freq: [['set', 600, now], ['exp', 1300, now + 0.14]], q: 0.7 },
+      [['set', 0.0001, now], ['lin', 0.07, now + 0.03], ['exp', 0.0001, now + 0.14]]);
   }
 
-  // 球砸中目標悶響 (暫代：運球拍地配方加重)
+  // 球砸中目標悶響：低頻正弦下滑 (撞擊) + 低通 1.1k 的三角波橡膠拍擊，起音 6ms 避免喀聲
   public playBallHit(pos: Vec3Like) {
     if (!this.gate('ballHit', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('sine', [['set', 150, now], ['exp', 45, now + 0.1]], [['set', 0.36, now], ['exp', 0.001, now + 0.12]], now, now + 0.13);
+    this.tone('sine', [['set', 175, now], ['exp', 58, now + 0.13]], [['set', 0.0001, now], ['lin', 0.3, now + 0.006], ['exp', 0.0001, now + 0.15]], now, now + 0.16);
+    this.softTone('triangle', [['set', 480, now], ['exp', 190, now + 0.07]],
+      [['set', 0.0001, now], ['lin', 0.12, now + 0.005], ['exp', 0.0001, now + 0.08]], now, now + 0.09, 1100);
   }
 
   // 石子命中清脆撞擊 (暫代：羽球殺球配方)
@@ -317,11 +322,14 @@ export class SoundEffects {
     this.tone('triangle', [['set', 1400, now], ['exp', 320, now + 0.08]], [['set', 0.35, now], ['exp', 0.001, now + 0.1]], now, now + 0.11);
   }
 
-  // 接球 (暫代：跳躍落地鈍音配方)
+  // 接球：手掌包住球的輕拍 — 低通 700Hz 的正弦下滑 + 帶通 900Hz 的極短噪音，量小
   public playBallCatch(pos: Vec3Like) {
     if (!this.gate('ballCatch', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('sine', [['set', 200, now], ['exp', 80, now + 0.08]], [['set', 0.15, now], ['exp', 0.001, now + 0.1]], now, now + 0.1);
+    this.softTone('sine', [['set', 240, now], ['exp', 110, now + 0.09]],
+      [['set', 0.0001, now], ['lin', 0.14, now + 0.008], ['exp', 0.0001, now + 0.11]], now, now + 0.12, 700);
+    this.noise(now, 0.04, { type: 'bandpass', freq: [['set', 900, now], ['exp', 600, now + 0.04]], q: 0.8 },
+      [['set', 0.0001, now], ['lin', 0.06, now + 0.004], ['exp', 0.0001, now + 0.04]]);
   }
 
   // 綁帶捆書：甩鞭脆響。不用方波 / 高頻噪音：低通 2.4k 的三角波快速下滑（鞭梢破音）+ 帶通 1.6k 短噪音（空氣爆裂），整體量小、衰減快

@@ -230,6 +230,7 @@ export class CombatSystem {
     if (this.execPhase !== 'NONE') this.finishExecution(true);
     this.hitStop = 0;
     this.ctx.player.cancelAttack();
+    this.ctx.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
     this.ctx.projectiles.reset();
   }
 
@@ -684,6 +685,8 @@ export class CombatSystem {
     }
     // 暗殺動作期間鎖定攻擊；出招中提早按下則預先輸入下一段連招
     if (this.execPhase !== 'NONE') return;
+    // 籃球武器：投出到接回之前不能出招，按鍵進預輸入緩衝；已在上方處理小遊戲持球優先投籃
+    if (this.ctx.ballThrow?.handleAttack()) return;
     if (!player.canAttack) {
       player.attack();
       return;
@@ -726,6 +729,11 @@ export class CombatSystem {
 
   // 依命中序號分流：主擊沿用招式本身；終結技額外擊只扣血 (不擊飛、不觸發終結特效)；其餘額外擊為單體判定
   private resolvePlayerHit(move: KfMove, strikeIndex: number) {
+    // 發射型招式 (籃球)：球離手，不做近戰判定
+    if (move.projectile) {
+      this.ctx.ballThrow?.launch(move);
+      return;
+    }
     this.spawnSlashFx(move, strikeIndex);
     const route = strikeRoute(move, strikeIndex);
     if (route === 'AOE') this.resolveFinisherAoe(move, move.aoe!);

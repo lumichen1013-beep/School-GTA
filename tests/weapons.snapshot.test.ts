@@ -65,6 +65,8 @@ const DUAL_COMBO = { combo: PLAYER_COMBOS.DUAL, comboNames: ['二刀・快斬', 
 
 const BOOK_WHIP_COMBO = { combo: PLAYER_COMBOS.WHIP, comboNames: ['甩書橫掃', '回手抽擊', '旋鞭橫掃'] };
 
+const BASKETBALL_COMBO = { combo: PLAYER_COMBOS.BALL, comboNames: ['胸前推傳', '地板彈傳', '高拋灌籃'] };
+
 const BASELINE = {
   FIST: {
     ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playPunch', start: null,
@@ -91,6 +93,11 @@ const BASELINE = {
   BOOK_WHIP: {
     damage: 14, reach: 4.2, knock: 6.0, ...BOOK_WHIP_COMBO, tempo: 0.9, fxId: 'BOOK', anchors: { base: 0.3, tip: 1.5 }, strike: 'playWhipCrack', start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
+  },
+  // 籃球 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  BASKETBALL: {
+    damage: 45, reach: 18, knock: 9.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
+    readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   }
 } satisfies Record<string, Snapshot>;
 
@@ -182,6 +189,23 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(def.unlock?.steps?.({ swimWon: true } as never)).toEqual([{ label: '游泳比賽獲勝', cur: 1, max: 1 }]);
   });
 
+  it('BASKETBALL (開發中，兩個世界套組相同；既有武器期望值不變)', () => {
+    expectSame(snapshot('BASKETBALL', null, 'CAMPUS'), BASELINE.BASKETBALL);
+    expectSame(snapshot('BASKETBALL', null, 'DETENTION'), BASELINE.BASKETBALL);
+    const def = getWeapon('BASKETBALL');
+    expect(def.release).toBe('dev');
+    expect(def.slot).toBe(6);
+    expect(def.launchCap).toEqual({ h: 9, v: 5 });
+    expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
+    expect(def.banner.campus).toBe('🏀 切換武器：籃球 (ATK 45 遠程三連投，開發中)');
+    expect(resolveLoadout('BASKETBALL', null, 'CAMPUS').chainWindow).toBe(0.8);
+    // 既有武器連段接續窗維持 0.6
+    for (const id of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'BOOK_WHIP'] as const) {
+      expect(resolveLoadout(id, null, 'CAMPUS').chainWindow).toBe(0.6);
+    }
+    expect(resolveLoadout('FIST', 'RACKET', 'CAMPUS').chainWindow).toBe(0.6);
+  });
+
   it('RACKET 覆寫 (持任一武器、任一世界)', () => {
     for (const current of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET'] as const) {
       for (const world of ['CAMPUS', 'DETENTION'] as const) {
@@ -197,6 +221,7 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');
     expect(getWeaponBySlot(4)?.id).toBe('DUAL_RACKET');
     expect(getWeaponBySlot(5)?.release).toBe('dev'); // 槽 5 為開發中的綁帶捆書 (見下方 BOOK_WHIP 快照)
+    expect(getWeaponBySlot(6)?.id).toBe('BASKETBALL'); // 槽 6 為開發中的籃球
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
     expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' });

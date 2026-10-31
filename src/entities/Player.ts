@@ -825,7 +825,7 @@ export class Player {
     }
   }
 
-  // 出招 (連段)：上一招命中後 0.6 秒內再按接續下一段，否則從第一段開始；出招中提早按下則預先輸入
+  // 出招 (連段)：上一招命中後 (武器 chainWindow，預設 0.6 秒) 內再按接續下一段，否則從第一段開始；出招中提早按下則預先輸入
   public attack(): boolean {
     if (this.isDead || this.isSwimming) return false; // 游泳狀態下雙手劃水，不可出拳揮棒
     if (!this.canAttack) {
@@ -877,7 +877,7 @@ export class Player {
     // 套組：羽球拍覆寫 > 目前武器的世界變體 (如第二世界普通棒 → 警棍)；同一招式組才可接續連段
     const loadout = this.displayLoadout;
     const moves = loadout.combo;
-    const chain = moves === this.activeLoadout.combo && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
+    const chain = moves === this.activeLoadout.combo && this.sinceStrike <= this.activeLoadout.chainWindow && this.comboIndex + 1 < moves.length;
     this.comboIndex = chain ? this.comboIndex + 1 : 0;
     this.activeLoadout = loadout;
     this.sinceStrike = 99;
@@ -977,7 +977,8 @@ export class Player {
   private updateSwingFx() {
     const move = this.kf.move;
     // 僅一般連段套組出拖尾 (暗殺等專用招式不出)
-    if (!move || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
+    // 發射型招式 (球) 不揮拖尾：光痕由投射物負責
+    if (!move || move.projectile || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
     const p = this.kf.progress;
     // 第二條拖尾 (雙持左手等) 區段獨立，不影響主拖尾與武器發光
     if (move.trail2) this.updateTrailLane(1, move, p, move.trail2, move.trailLimb2);
@@ -1122,7 +1123,32 @@ export class Player {
   }
 
   public get canAttack(): boolean {
-    return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain;
+    return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain && !this.attackLock;
+  }
+
+  // 武器鎖：遠程回收型武器 (籃球) 的球在外時為 true，不可出招 (由 BallThrowController 設定)
+  public attackLock: boolean = false;
+
+  // 連段接續窗重新計時 (遠程回收型武器於接到球時呼叫，之後 chainWindow 秒內再出招接續下一段)
+  public refreshChainWindow() {
+    this.sinceStrike = 0;
+  }
+
+  // 手上武器模型顯示開關 (球投出期間隱藏)；只作用於目前顯示中的武器，換武器時由 WeaponRig.show 重設
+  public setHeldWeaponHidden(hidden: boolean) {
+    const part = this.weaponRig.part(this.displayWeaponId, 'R');
+    if (part) part.visible = !hidden;
+  }
+
+  // 瞬間轉向 (投球等需面向目標的出招)
+  public faceDirection(dx: number, dz: number) {
+    if (dx * dx + dz * dz < 1e-6) return;
+    this.rotationY = Math.atan2(dx, dz);
+  }
+
+  // 手部世界座標近似 (回收球的終點)：身前 0.3m、高 1.15m
+  public getHandPoint(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.position.x + Math.sin(this.rotationY) * 0.3, this.position.y + 1.15, this.position.z + Math.cos(this.rotationY) * 0.3);
   }
 
   public update(

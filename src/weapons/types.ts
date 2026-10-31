@@ -5,7 +5,7 @@ import type { LaunchCap } from './launch';
 import type { Vec3Like } from '../audio/spatialAudio';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-// BOOK_WHIP 為開發中武器 (release 'dev')；BASKETBALL / SLINGSHOT 為預留 id (尚未建 def)
+// BOOK_WHIP / BASKETBALL 為開發中武器 (release 'dev')；SLINGSHOT 為預留 id (尚未建 def)
 export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
@@ -77,7 +77,7 @@ export interface WeaponUnlockProgress {
   readonly teacherDefeatedCount: number;
   readonly dogDefeatedCount: number;
   readonly bikePatrolDefeatedCount: number;
-  readonly basketballMade: number; // 投籃累計進球 (資料來源於後續階段接上)
+  readonly basketballMade: number; // 小遊戲投籃累計進球 (BasketballGame.totalMade；武器投出的球不計)
   readonly swimWon: boolean;       // 是否贏過游泳 (小魚)
   readonly trackWon: boolean;      // 是否贏過跑操場 (阿凱)
 }
@@ -91,10 +91,21 @@ interface WeaponLoadoutFields {
   readonly finisherFx?: WeaponFinisherFx;
   // 玩家終結技擊飛初速度上限 (未設 = NPC.ts 預設 10 / 7)；飛行距離 = h × 2v / 26
   readonly launchCap?: LaunchCap;
+  // 連段接續窗 (秒)：預設 0.6 (自命中時間點起算)；遠程回收型武器改自接到球起算
+  readonly chainWindow?: number;
   readonly model?: WeaponModelSpec;
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
   readonly readyPose: WeaponReadyPose;
+}
+
+// 遠程武器彈道參數：speed = 出手初速 (m/s，去程估算用；回程速度見 projectiles/collide RETURN_SPEED)、range = 最大射程 (m)、
+// catchDelay = 接到球後到可再出手的緩衝 (秒)、dpsDistance = 裝備頁標準秒傷距離 (m)
+export interface WeaponRanged {
+  readonly speed: number;
+  readonly range: number;
+  readonly catchDelay: number;
+  readonly dpsDistance: number;
 }
 
 export interface WeaponDefinition extends WeaponLoadoutFields {
@@ -107,6 +118,8 @@ export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly stats: WeaponStats;
   // 終結技群攻改讀招式上的 maxGold / shakeGold / hitStopGold (未設時回退一般欄位)
   readonly useGoldAoe?: boolean;
+  // 遠程回收型武器 (投出後飛行並回手)：裝備頁秒傷改用遠程口徑 (單發期望傷害 ÷ (前搖 + 去程 + 回程 + 接後 0.1s))
+  readonly ranged?: WeaponRanged;
   // 非終結技推擊距離 (m)：> 0 時非終結技命中改走 SHOVE (推開並打斷前搖)；未設 / 0 = 只扣血 (現有武器)
   readonly lightPush?: number;
   // 左手持械 (雙持)：持有時不撐傘 (比照特訓院收傘)，出招也不鎖左臂
@@ -133,6 +146,7 @@ export interface ResolvedWeapon {
   readonly fx: { readonly R: WeaponFxId; readonly L: WeaponFxId };
   readonly finisherFx: WeaponFinisherFx;
   readonly launchCap: LaunchCap | null;
+  readonly chainWindow: number; // 連段接續窗 (秒)
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
   readonly readyPose: WeaponReadyPose;
