@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { soundManager } from '../audio/SoundEffects';
 import type { NPC, NPCIdleBehavior, NPCLifeTask } from '../entities/NPC';
+import { assignTask, createTask, isBusy } from './campusLifeTasks';
+import { CampusSoccerPair } from './CampusSoccerPair';
 import { createNameTagSprite } from '../entities/RaceRival';
 import { getAthleteLook } from '../entities/npc/models';
 import type { GameContext } from './GameContext';
@@ -16,7 +18,8 @@ import type { GameContext } from './GameContext';
  * - 籃球場：東南籃框半場的鬥牛雙人組，共用一顆自己的球 (與玩家的籃球各自獨立)，
  *   輪流運球走位 → 投籃 (拋物線、進/不進) → 落地彈跳 → 搶籃板 → 傳球或換手出手。
  *   任一人被打/追捕/倒地/對玩家反應中或下雨時暫停 (持球者把球掉在地上)，恢復後由較近者去撿球繼續。
- * 兩者都不參與 CampusLife 的地點活動與小團體，離開駐點太遠且玩家不在附近時直接回到駐點。
+ * - 操場球門前：踢足球雙人組 (CampusSoccerPair)，互相滾傳、偶爾射門。
+ * 以上都不參與 CampusLife 的地點活動與小團體，離開駐點太遠且玩家不在附近時直接回到駐點。
  */
 
 const BALL_R = 0.24;
@@ -69,35 +72,6 @@ type FlightKind = 'MAKE' | 'MISS' | 'PASS';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
-const createTask = (): NPCLifeTask => ({
-  target: new THREE.Vector3(),
-  speedMul: 1, run: false, arriveDist: 0.5, hold: 'LOOK_AROUND', holdTime: 1,
-  hasFace: false, faceX: 0, faceZ: 0, sitBack: 0, bubble: '', phase: 'DONE'
-});
-
-// 改寫並指派重複使用的活動物件 (不配置新物件)
-function assignTask(
-  npc: NPC, task: NPCLifeTask, x: number, z: number, hold: NPCIdleBehavior, holdTime: number,
-  faceX: number, faceZ: number, speedMul = 1, run = false, arriveDist = 0.5, bubble = ''
-) {
-  task.target.set(x, npc.baseFloorY, z);
-  task.speedMul = speedMul;
-  task.run = run;
-  task.arriveDist = arriveDist;
-  task.hold = hold;
-  task.holdTime = holdTime;
-  task.hasFace = true;
-  task.faceX = faceX;
-  task.faceZ = faceZ;
-  task.sitBack = 0;
-  task.bubble = bubble;
-  npc.assignLifeTask(task);
-}
-
-function isBusy(npc: NPC): boolean {
-  return npc.isChasing || npc.isKnockedDown || npc.isKnockedFlying || npc.isPermanentlyKnockedOut || npc.freezeTimer > 0 || npc.isOffstage;
-}
-
 export class CampusSportsCrew {
   private initialized = false;
 
@@ -141,7 +115,11 @@ export class CampusSportsCrew {
   private playerNear = false;
   private playerLineNear = false;
 
-  constructor(private readonly ctx: GameContext) {}
+  private readonly soccer: CampusSoccerPair;
+
+  constructor(private readonly ctx: GameContext) {
+    this.soccer = new CampusSoccerPair(ctx);
+  }
 
   private init() {
     this.initialized = true;
@@ -214,6 +192,7 @@ export class CampusSportsCrew {
 
   // 切換世界：收回球場活動 (泳池小魚由每幀更新依陪泳對手是否在場自動復位)
   public reset() {
+    this.soccer.reset();
     if (!this.initialized) return;
     for (let i = 0; i < this.ballers.length; i++) {
       if (this.ballers[i].lifeTask === this.ballerTasks[i]) this.ballers[i].clearLifeTask();
@@ -237,6 +216,7 @@ export class CampusSportsCrew {
     this.updateAthletes(playerPos);
     this.updatePool(playerPos, raining);
     if (this.ball) this.updateCourt(delta, playerPos, raining);
+    this.soccer.update(delta, playerPos);
   }
 
   // 遠離駐點且玩家不在附近：直接回到駐點 (直線移動無尋路，避免卡在圍欄外)

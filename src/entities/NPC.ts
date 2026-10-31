@@ -37,7 +37,7 @@ export type NPCRole =
 export type NPCIdleBehavior =
   | 'LOOK_AROUND' | 'PHONE' | 'STRETCH' | 'HANDS_BEHIND_BACK' | 'CHAT' | 'DOG_SNIFF' | 'DOG_SIT'
   // 第一世界校園生活 (CampusLife 指派)：坐下、投籃、舉手機拍攝、歡呼起鬨、驚嚇抱頭、訓話、洗手
-  | 'SIT' | 'SHOOT_HOOP' | 'FILM' | 'CHEER' | 'COWER' | 'SCOLD' | 'WASH';
+  | 'SIT' | 'SHOOT_HOOP' | 'FILM' | 'CHEER' | 'COWER' | 'SCOLD' | 'WASH' | 'KICK';
 
 // 第一世界校園生活導演 (CampusLife) 指派的活動：前往 target，抵達後面向指定點做 hold 動作 holdTime 秒
 // 進行中為 GO / HOLD，完成或放棄 (受阻) 時為 DONE，由導演收回後恢復原巡邏路線
@@ -59,7 +59,7 @@ export type NPCMovementStyle = 'CASUAL_WALK' | 'HURRIED_WALK' | 'JOGGING' | 'OFF
 // 學生外觀：DEFAULT 隨機制服/運動服、PE 固定運動服 (籃球場)、SWIMMER 游泳隊小魚 (泳池)、TRACK 田徑隊阿凱 (操場)
 export type NPCLook = 'DEFAULT' | 'PE' | 'SWIMMER' | 'TRACK';
 // 固定駐點：由 CampusSportsCrew 管理，不參與校園生活的地點活動、小團體與角色事件 (仍會對玩家反應)
-export type NPCCampusAnchor = 'POOL' | 'COURT' | 'TRACK';
+export type NPCCampusAnchor = 'POOL' | 'COURT' | 'TRACK' | 'PITCH';
 
 export interface ShuttlecockProjectile {
   mesh: THREE.Group;
@@ -2253,6 +2253,18 @@ export class NPC {
         if (this.rightArm) this.rightArm.rotation.set(-0.9 - 2.1 * shoot, 0, 0.1);
         if (this.leftLeg) this.leftLeg.rotation.set(-crouch * 2.5, 0, 0);
         if (this.rightLeg) this.rightLeg.rotation.set(-crouch * 2.5, 0, 0);
+        break;
+      }
+      case 'KICK': {
+        // 踢球：右腳後擺蓄力 → 快速前踢 (0.9 秒一循環，0.5 秒觸球)，雙臂配合擺動
+        const t = (this.pauseAnimTimer % 0.9) / 0.9;
+        const wind = t < 0.45 ? t / 0.45 : 0;
+        const swing = t >= 0.45 ? (t < 0.6 ? (t - 0.45) / 0.15 : Math.max(0, 1 - (t - 0.6) / 0.4)) : 0;
+        if (this.headMesh) this.headMesh.rotation.x = 0.12;
+        if (this.leftArm) this.leftArm.rotation.set(0.5 * wind - 0.6 * swing, 0, -0.35);
+        if (this.rightArm) this.rightArm.rotation.set(-0.5 * wind + 0.6 * swing, 0, 0.35);
+        if (this.leftLeg) this.leftLeg.rotation.set(0, 0, 0);
+        if (this.rightLeg) this.rightLeg.rotation.set(0.75 * wind - 1.25 * swing, 0, 0);
         break;
       }
       case 'FILM': {

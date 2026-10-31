@@ -250,6 +250,14 @@ export class SoundEffects {
     this.osc('triangle', [['set', 1420, now], ['exp', 710, now + 0.12]], now, now + 0.2, gain);
   }
 
+  // 足球踢球悶響 (Soccer Kick)：低頻下滑 + 短促低通雜訊，音量柔和
+  public playSoccerKick(pos: Vec3Like) {
+    if (!this.gate('soccerKick', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 190, now], ['exp', 70, now + 0.1]], [['set', 0.3, now], ['exp', 0.001, now + 0.12]], now, now + 0.13);
+    this.noise(now, 0.06, { type: 'lowpass', freq: [['set', 700, now]], q: 0.7 }, [['set', 0.12, now], ['exp', 0.001, now + 0.06]]);
+  }
+
   // 籃球運球落地拍球聲 (Dribble Bounce)
   public playDribble(pos: Vec3Like) {
     if (!this.gate('dribble', pos)) return;

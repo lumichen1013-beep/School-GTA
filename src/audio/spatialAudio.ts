@@ -15,7 +15,9 @@ export type SpatialSoundId =
   // 綁帶捆書：甩鞭脆響、書堆悶響
   | 'whipCrack' | 'bookThud'
   // 彈弓：拉弦吱嘎、放弦彈響、爆頭叮聲
-  | 'slingDraw' | 'slingTwang' | 'headshotDing';
+  | 'slingDraw' | 'slingTwang' | 'headshotDing'
+  // 操場踢足球雙人組：腳面觸球悶響
+  | 'soccerKick';
 
 // 最大可聞距離 (公尺)：超過即完全不播放、不建立 audio node。小動作小、全校性事件大
 export const SOUND_RANGE: Record<SpatialSoundId, number> = {
@@ -52,12 +54,14 @@ export const SOUND_RANGE: Record<SpatialSoundId, number> = {
   slingDraw: 8,
   slingTwang: 15,
   headshotDing: 20,
+  soccerKick: 12,
   thunder: 1000 // 天空全域事件：以校園中心計距離，任何世界位置皆接近滿音量
 };
 
 // 音量倍率 (乘在距離衰減上)：未列出者為 1。閃身步老師演武為背景練習聲，約實戰 55%
 export const SOUND_VOLUME: Partial<Record<SpatialSoundId, number>> = {
-  dodgePractice: 0.55
+  dodgePractice: 0.55,
+  soccerKick: 0.6
 };
 
 // 全域冷卻 (秒)：同一音效不論來源，間隔內最多播放一次；未列出者不設冷卻
@@ -66,7 +70,8 @@ export const SOUND_COOLDOWN: Partial<Record<SpatialSoundId, number>> = {
   bell: 1.5,
   dogBark: 1.2,
   dodge: 0.25,
-  headshotDing: 0.2
+  headshotDing: 0.2,
+  soccerKick: 0.15
 };
 
 // 無明確發聲物件的全域／場景音效定點位置 (校園中心；校鐘、廣播、雷聲等大範圍事件以此計距離)
