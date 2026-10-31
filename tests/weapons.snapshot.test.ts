@@ -105,17 +105,17 @@ const BASELINE = {
     ...STATS.DUAL_RACKET, ...DUAL_COMBO, tempo: 1, fxId: 'DUAL_R', anchors: { base: 0.5, tip: 1.0 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
     readyPose: 'DUAL', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
-  // 綁帶捆書 (開發中武器；本測試環境 DEV_WEAPONS_BUILD 為 true、模式預設 unlocked)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 綁帶捆書 (群攻長鞭)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BOOK_WHIP: {
     damage: 30, reach: 4.2, knock: 7.5, ...BOOK_WHIP_COMBO, tempo: 1, fxId: 'BOOK', anchors: null, strike: 'playWhipCrack', start: 'playThrowWhoosh',
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
-  // 籃球氣功彈 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 籃球氣功彈 (遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BASKETBALL: {
     damage: 45, reach: 18, knock: 11.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   },
-  // 彈弓 (開發中遠程狙擊武器；放弦招式無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 彈弓 (遠程狙擊武器；放弦招式無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   SLINGSHOT: {
     damage: 60, reach: 50, knock: 0, ...SLINGSHOT_COMBO, tempo: 1, fxId: 'STONE', anchors: null, strike: null, start: null,
     readyPose: 'SLING_AIM', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
@@ -196,11 +196,10 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expectSame(snapshot('DUAL_RACKET', null, 'DETENTION'), BASELINE.DUAL_RACKET);
   });
 
-  it('BOOK_WHIP (開發中，兩個世界套組相同；額外擊改播書堆悶響)', () => {
+  it('BOOK_WHIP (兩個世界套組相同；額外擊改播書堆悶響)', () => {
     expectSame(snapshot('BOOK_WHIP', null, 'CAMPUS'), BASELINE.BOOK_WHIP);
     expectSame(snapshot('BOOK_WHIP', null, 'DETENTION'), BASELINE.BOOK_WHIP);
     const def = getWeapon('BOOK_WHIP');
-    expect(def.release).toBe('dev');
     expect(def.lightPush ?? 0).toBe(0);
     expect(def.launchCap).toEqual({ h: 9.4, v: 5.5 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
@@ -212,15 +211,14 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(def.unlock?.steps?.({ swimWon: true } as never)).toEqual([{ label: '游泳比賽獲勝', cur: 1, max: 1 }]);
   });
 
-  it('BASKETBALL (開發中，兩個世界套組相同；既有武器期望值不變)', () => {
+  it('BASKETBALL (兩個世界套組相同；既有武器期望值不變)', () => {
     expectSame(snapshot('BASKETBALL', null, 'CAMPUS'), BASELINE.BASKETBALL);
     expectSame(snapshot('BASKETBALL', null, 'DETENTION'), BASELINE.BASKETBALL);
     const def = getWeapon('BASKETBALL');
-    expect(def.release).toBe('dev');
     expect(def.slot).toBe(6);
     expect(def.launchCap).toEqual({ h: 11.5, v: 6.2 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
-    expect(def.banner.campus).toBe('🏀 切換武器：籃球氣功彈 (ATK 45 遠程光束三連投，開發中)');
+    expect(def.banner.campus).toBe('🏀 切換武器：籃球氣功彈 (ATK 45 遠程光束三連投)');
     expect(resolveLoadout('BASKETBALL', null, 'CAMPUS').chainWindow).toBe(0.8);
     // 既有武器連段接續窗維持 0.6
     for (const id of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'BOOK_WHIP', 'SLINGSHOT'] as const) {
@@ -229,11 +227,10 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(resolveLoadout('FIST', 'RACKET', 'CAMPUS').chainWindow).toBe(0.6);
   });
 
-  it('SLINGSHOT (開發中，兩個世界套組相同；單發放弦)', () => {
+  it('SLINGSHOT (兩個世界套組相同；單發放弦)', () => {
     expectSame(snapshot('SLINGSHOT', null, 'CAMPUS'), BASELINE.SLINGSHOT);
     expectSame(snapshot('SLINGSHOT', null, 'DETENTION'), BASELINE.SLINGSHOT);
     const def = getWeapon('SLINGSHOT');
-    expect(def.release).toBe('dev');
     expect(def.slot).toBe(7);
     expect(def.combo).toHaveLength(1);
     expect(def.combo[0]).toMatchObject({ name: '放弦', dur: 0.3, strike: 0.05, projectile: 'SLING', knock: 0 });
@@ -251,13 +248,13 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
   });
 
   it('武器槽順序與切換提示', () => {
-    expect(WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'RAPIER']);
+    expect(WEAPONS.map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'RAPIER', 'BOOK_WHIP', 'BASKETBALL', 'SLINGSHOT']);
     expect(getWeaponBySlot(1)?.id).toBe('FIST');
     expect(getWeaponBySlot(2)?.id).toBe('NORMAL_BAT');
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');
     expect(getWeaponBySlot(4)?.id).toBe('DUAL_RACKET');
-    expect(getWeaponBySlot(5)?.release).toBe('dev'); // 槽 5 為開發中的綁帶捆書 (見下方 BOOK_WHIP 快照)
-    expect(getWeaponBySlot(6)?.id).toBe('BASKETBALL'); // 槽 6 為開發中的籃球
+    expect(getWeaponBySlot(5)?.id).toBe('BOOK_WHIP'); // 槽 5 為綁帶捆書 (見下方 BOOK_WHIP 快照)
+    expect(getWeaponBySlot(6)?.id).toBe('BASKETBALL'); // 槽 6 為籃球
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
     expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' });

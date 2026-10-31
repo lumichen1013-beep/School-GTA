@@ -30,8 +30,7 @@ const DEF = getWeapon('RAPIER');
 const REACH = DEF.stats.reach;
 
 describe('玫瑰細劍：定義與上線', () => {
-  it('與花劍客同步正式上線 (三種 dev 模式皆在武器槽)、只限校園、HEAVY 分級、FENCE 架勢', () => {
-    expect(DEF.release).toBe('released');
+  it('與花劍客同步正式上線 (在武器槽)、只限校園、HEAVY 分級、FENCE 架勢', () => {
     expect(isWeaponEnabled('RAPIER')).toBe(true);
     expect(WEAPONS.map((w) => w.id)).toContain('RAPIER');
     expect(DEF.worlds).toEqual({ CAMPUS: true, DETENTION: false });

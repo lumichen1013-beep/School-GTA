@@ -7,20 +7,14 @@ import { createBookWhip } from './defs/bookWhip';
 import { createBasketball } from './defs/basketball';
 import { createSlingshot } from './defs/slingshot';
 import { createRapier } from './defs/rapier';
-import { devWeaponsMode } from './featureFlags';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
 } from './types';
 
-// 玫瑰細劍與世界 Boss 花劍客同步上線 (Boss 對所有玩家開放 → 正式)
-const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET, createRapier()];
-// 開發中武器：所有建置都打包，是否進武器槽由 devWeaponsMode 決定 (off 時 WEAPONS 不含)
-const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = [createBookWhip(), createBasketball(), createSlingshot()];
-
-// 全部已定義的武器 (含未啟用的 dev 武器)；一般邏輯請用 WEAPONS
-export const ALL_WEAPONS: readonly WeaponDefinition[] = [...RELEASED_WEAPONS, ...DEV_WEAPON_DEFS];
-// 武器槽順序 (循環切換依此順序)：released + 開關開啟的 dev。模組載入時決定，切換模式需重整
-export const WEAPONS: readonly WeaponDefinition[] = ALL_WEAPONS.filter((w) => w.release === 'released' || devWeaponsMode !== 'off');
+// 武器槽順序 (循環切換依此順序)；玫瑰細劍與世界 Boss 花劍客同步上線
+export const WEAPONS: readonly WeaponDefinition[] = [
+  FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET, createRapier(), createBookWhip(), createBasketball(), createSlingshot()
+];
 export const WEAPON_OVERRIDES: Readonly<Record<WeaponOverrideId, WeaponOverrideDefinition>> = { RACKET: OVERRIDE_RACKET };
 
 const BY_ID: Partial<Record<WeaponId, WeaponDefinition>> = {};

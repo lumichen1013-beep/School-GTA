@@ -78,7 +78,6 @@ export interface WeaponEquipEntry {
   reach: number;
   knockback: number;
   status: WeaponEquipStatus;
-  dev: boolean; // 開發中武器 (裝備頁標「🧪 開發中」)
   hint: string;
   summary: WeaponSummary; // 本世界連段估算 (秒傷 / 總傷 / 各招)
   unlockSteps: WeaponUnlockStep[]; // 解鎖進度 (徒手為空)
@@ -280,7 +279,6 @@ export class Progression {
         : !this.ctx.player.isWeaponUnlocked(def.id) ? 'locked'
         : 'unlocked';
       return {
-        dev: def.release === 'dev',
         id: def.id,
         icon: def.icon,
         name: resolveVariant(def.id, world).name,
@@ -308,7 +306,7 @@ export class Progression {
         step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
       ];
       case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
-      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id
+      // BOOK_WHIP / BASKETBALL / SLINGSHOT 等的步驟寫在武器定義 unlock.steps
       default: return (getWeapon(id).unlock?.steps?.(this) ?? []).map((s) => step(s.label, s.cur, s.max));
     }
   }

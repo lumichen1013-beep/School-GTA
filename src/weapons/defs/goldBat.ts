@@ -7,7 +7,6 @@ import type { WeaponDefinition } from '../types';
 // 下劈地裂附帶雷電、終結技群攻改讀招式上的黃金欄位
 export const SPECIAL_BAT: WeaponDefinition = {
   id: 'SPECIAL_BAT',
-  release: 'released',
   slot: 3,
   icon: '⚡',
   name: '黃金雷霆棒球棍',

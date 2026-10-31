@@ -10,7 +10,6 @@ import { getWeaponSummary, summarizeCombo } from '../src/game/weaponStats';
 import { getWeapon } from '../src/weapons/registry';
 import { launchDistance } from '../src/weapons/launch';
 import { SOUND_RANGE, soundGain } from '../src/audio/spatialAudio';
-import type { DevWeaponsMode } from '../src/weapons/featureFlags';
 
 const [W1, W2, W3] = PLAYER_COMBOS.WHIP;
 const DEF = getWeapon('BOOK_WHIP');
@@ -169,10 +168,8 @@ describe('綁帶捆書：裝備頁秒傷', () => {
 });
 
 // 解鎖：CampusMode.updateMissionTracker 每幀檢查 racingGame.bestSwimTime
-async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
+async function makeCampus(bestSwimTime: number | null) {
   vi.resetModules();
-  const flags = await import('../src/weapons/featureFlags');
-  flags.__setDevWeaponsMode(mode);
   const registry = await import('../src/weapons/registry');
   const { Progression } = await import('../src/game/Progression');
   const { CampusMode } = await import('../src/game/CampusMode');
@@ -185,7 +182,6 @@ async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
     isWeaponUnlocked(id: string) {
       if (!registry.isWeaponEnabled(id as never)) return false;
       const def = registry.getWeapon(id as never);
-      if (def.release === 'dev' && flags.devWeaponsMode === 'unlocked') return true;
       return def.unlock === null || unlocked.has(id);
     },
     setWeaponUnlocked(id: string, v: boolean) { if (v) unlocked.add(id); else unlocked.delete(id); },
@@ -206,8 +202,8 @@ async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
 }
 
 describe('綁帶捆書：游泳比賽獲勝解鎖', () => {
-  it('locked：尚未贏游泳不解鎖；bestSwimTime 有值後解鎖、跳橫幅並自動裝備，之後不重複', async () => {
-    const t = await makeCampus('locked', null);
+  it('尚未贏游泳不解鎖；bestSwimTime 有值後解鎖、跳橫幅並自動裝備，之後不重複', async () => {
+    const t = await makeCampus(null);
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
     expect(t.progression.swimWon).toBe(false);
@@ -224,22 +220,6 @@ describe('綁帶捆書：游泳比賽獲勝解鎖', () => {
     t.showBanner.mockClear();
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
-  });
-
-  it('off：bestSwimTime 有值也不觸發 (無橫幅、無旗標、不裝備)，武器不在武器槽', async () => {
-    const t = await makeCampus('off', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.unlocked.has('BOOK_WHIP')).toBe(false);
-    expect(t.state.current).toBe('FIST');
-    expect(t.registry.WEAPONS.map((w) => w.id)).not.toContain('BOOK_WHIP');
-  });
-
-  it('unlocked：視為已解鎖，不跳橫幅', async () => {
-    const t = await makeCampus('unlocked', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.state.current).toBe('FIST');
   });
 });
 

@@ -48,7 +48,6 @@ import { InteractionSystem } from './game/InteractionSystem';
 import { ProjectileSystem } from './weapons/projectiles/ProjectileSystem';
 import { createProjectileHost } from './weapons/projectiles/gameHost';
 import { installProjectileDebug } from './weapons/projectiles/devProjectileDebug';
-import { devWeaponsMode } from './weapons/featureFlags';
 import { BallThrowController } from './weapons/basketball/BallThrowController';
 import { SlingshotController } from './weapons/slingshot/SlingshotController';
 import { FencerBossFight } from './game/fencer/FencerBossFight';
@@ -119,8 +118,8 @@ class SchoolGTASandbox implements GameContext {
   private readonly sportsCrew: CampusSportsCrew = new CampusSportsCrew(this);
   public readonly combat: CombatSystem = new CombatSystem(this);
   public projectiles!: ProjectileSystem; // 共用投射物池 (於初始化時建立)
-  public ballThrow: BallThrowController | null = null; // 籃球武器狀態機 (僅開發中武器建置且開關未關閉)
-  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機 (同上)
+  public ballThrow: BallThrowController | null = null; // 籃球武器狀態機
+  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機
   private readonly interaction = new InteractionSystem(this);
   // 世界 Boss【花劍客】(操場太陽花、開戰過場、結界戰、戰後恢復)
   public readonly fencerBossFight: FencerBossFight = new FencerBossFight(this);
@@ -223,10 +222,8 @@ class SchoolGTASandbox implements GameContext {
     hitSparkFX.init(this.engine.scene);
     this.projectiles = new ProjectileSystem(createProjectileHost(this));
     this.projectiles.init(this.engine.scene);
-    if (devWeaponsMode !== 'off') {
-      this.ballThrow = new BallThrowController(this);
-      this.slingshot = new SlingshotController(this);
-    }
+    this.ballThrow = new BallThrowController(this);
+    this.slingshot = new SlingshotController(this);
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
     this.prewarmFx();
     // 畫質切換開關陰影後材質會重新編譯：立即重新預熱，避免之後首次施放特效時才卡頓
@@ -315,7 +312,7 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
-    // 開發驗證用測試彈 (dev 武器模式 off 時 installProjectileDebug 內直接略過)
+    // 開發驗證用測試彈 (正式建置時 installProjectileDebug 內直接略過)
     installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,

@@ -15,8 +15,6 @@ const STATUS_LABELS: Record<WeaponEquipEntry['status'], string> = {
   equipped: '✅ 已裝備', unlocked: '🟢 已解鎖', locked: '🔒 未解鎖', unavailable: '🚫 本世界不可用'
 };
 
-const DEV_LABEL = '🧪 開發中';
-
 function make(tag: string, cls: string, text?: string): HTMLElement {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
@@ -192,7 +190,6 @@ export class FullMapPanels {
       card.dataset.weaponId = w.id;
       card.setAttribute('aria-pressed', w.id === sel.id ? 'true' : 'false');
       const nameEl = make('span', 'gear-name', w.name);
-      if (w.dev) nameEl.append(make('small', 'gear-dev', ` ${DEV_LABEL}`));
       card.append(make('span', 'gear-icon', w.icon), nameEl, make('span', 'gear-status', STATUS_LABELS[w.status]));
       return card;
     }));
@@ -205,7 +202,6 @@ export class FullMapPanels {
     const title = make('div', 'gear-detail-title');
     title.append(make('div', 'gear-detail-name', w.name));
     if (w.name !== w.baseName) title.append(make('div', 'gear-detail-sub', `本名：${w.baseName}`));
-    if (w.dev) title.append(make('div', 'gear-detail-sub gear-dev', DEV_LABEL));
     head.append(make('span', 'gear-detail-icon', w.icon), title, make('span', `gear-status gear-status-${w.status}`, STATUS_LABELS[w.status]));
 
     const stat = (label: string, value: string, note?: string) => {

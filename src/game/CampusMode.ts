@@ -558,18 +558,18 @@ export class CampusMode {
       this.lastTrackRecord = racingGame.bestTrackTime;
       tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
     }
-    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。
+    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖武器綁帶捆書。
     // 開關 off / unlocked 時 unlockWeapon 不會觸發 (off 直接略過，unlocked 視為已解鎖)
     progression.swimWon = racingGame.bestSwimTime !== null;
     if (progression.swimWon) {
       progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
-    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)
+    // 小遊戲投籃累計進 10 球 → 解鎖武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)
     progression.basketballMade = basketballGame.totalMade;
     if (basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
       progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
     }
-    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓
+    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖武器彈弓
     progression.trackWon = racingGame.bestTrackTime !== null;
     if (racingGame.bestTrackTime) {
       progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });

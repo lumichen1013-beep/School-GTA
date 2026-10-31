@@ -15,7 +15,6 @@ import { slashFX } from '../effects/SlashFX';
 import { weaponFxStyle, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
 import { WeaponRig } from '../weapons/WeaponRig';
 import { getWeapon, isWeaponEnabled, resolveLoadout, resolveVariant } from '../weapons/registry';
-import { devWeaponsMode } from '../weapons/featureFlags';
 import { SLING_AIM_STANCE } from '../weapons/slingshot/pose';
 import type { ResolvedWeapon, WeaponDefinition, WeaponDisplayId, WeaponId } from '../weapons/types';
 import { IMPACT_PROFILES } from '../weapons/impactClass';
@@ -878,8 +877,6 @@ export class Player {
   public isWeaponUnlocked(id: WeaponId): boolean {
     if (!isWeaponEnabled(id)) return false;
     const def = getWeapon(id);
-    // unlocked 模式下開發中武器免解鎖；locked 模式照一般規則
-    if (def.release === 'dev' && devWeaponsMode === 'unlocked') return true;
     return def.unlock === null || this.unlockedWeapons.has(id);
   }
 

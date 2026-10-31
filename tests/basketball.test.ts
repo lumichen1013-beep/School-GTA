@@ -29,7 +29,6 @@ import { BasketballGame } from '../src/systems/BasketballGame';
 import { impactDust } from '../src/effects/ImpactDust';
 import { comboFinisherFX } from '../src/effects/ComboFinisherFX';
 import { SOUND_RANGE, soundGain } from '../src/audio/spatialAudio';
-import type { DevWeaponsMode } from '../src/weapons/featureFlags';
 import type { GameContext } from '../src/game/GameContext';
 
 const DEF = getWeapon('BASKETBALL');
@@ -37,8 +36,7 @@ const [B1, B2, B3] = PLAYER_COMBOS.BALL;
 const DT = 1 / 60;
 
 describe('籃球：武器定義與招式', () => {
-  it('數值：ATK 45 / 射程 18 / 擊退 11 / launchCap 11.5,6.2 (擊飛約 5.5m) / 光束 60 m/s / dev / 只限校園', () => {
-    expect(DEF.release).toBe('dev');
+  it('數值：ATK 45 / 射程 18 / 擊退 11 / launchCap 11.5,6.2 (擊飛約 5.5m) / 光束 60 m/s / 只限校園', () => {
     expect(DEF.stats).toEqual({ damage: 45, reach: 18, knockback: 11 });
     expect(DEF.launchCap).toEqual({ h: 11.5, v: 6.2 });
     // 終結段擊飛距離介於拳 (4m) / 雙拍 (5m) / 棒 (5.4m) 與黃金棒 (7m) 之間
@@ -622,10 +620,8 @@ describe('籃球：手機自動鎖定準星', () => {
 });
 
 describe('籃球：解鎖與小遊戲計數', () => {
-  async function makeCampus(mode: DevWeaponsMode, totalMade: number) {
+  async function makeCampus(totalMade: number) {
     vi.resetModules();
-    const flags = await import('../src/weapons/featureFlags');
-    flags.__setDevWeaponsMode(mode);
     const registry = await import('../src/weapons/registry');
     const { Progression } = await import('../src/game/Progression');
     const { CampusMode } = await import('../src/game/CampusMode');
@@ -636,7 +632,6 @@ describe('籃球：解鎖與小遊戲計數', () => {
       isWeaponUnlocked(id: string) {
         if (!registry.isWeaponEnabled(id as never)) return false;
         const def = registry.getWeapon(id as never);
-        if (def.release === 'dev' && flags.devWeaponsMode === 'unlocked') return true;
         return def.unlock === null || unlocked.has(id);
       },
       setWeaponUnlocked(id: string, v: boolean) { if (v) unlocked.add(id); else unlocked.delete(id); },
@@ -655,8 +650,8 @@ describe('籃球：解鎖與小遊戲計數', () => {
   }
   const BANNER = '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)';
 
-  it('locked：9 球不解鎖；達 10 球跳橫幅解鎖但不自動裝備，之後不重複；basketballMade 與裝備頁進度接上 totalMade', async () => {
-    const t = await makeCampus('locked', 9);
+  it('9 球不解鎖；達 10 球跳橫幅解鎖但不自動裝備，之後不重複；basketballMade 與裝備頁進度接上 totalMade', async () => {
+    const t = await makeCampus(9);
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
     expect(t.progression.basketballMade).toBe(9);
@@ -677,20 +672,7 @@ describe('籃球：解鎖與小遊戲計數', () => {
     expect(t.state.current).toBe('BASKETBALL');
   });
 
-  it('off：累計再多也不觸發 (無橫幅、無旗標)，武器不在武器槽', async () => {
-    const t = await makeCampus('off', 50);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.unlocked.has('BASKETBALL')).toBe(false);
-    expect(t.registry.WEAPONS.map((w) => w.id)).not.toContain('BASKETBALL');
-  });
 
-  it('unlocked：視為已解鎖，不跳橫幅', async () => {
-    const t = await makeCampus('unlocked', 50);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.state.current).toBe('FIST');
-  });
 
   it('BasketballGame：PERFECT / GOOD 入網各 +1 totalMade，打鐵不計', () => {
     const game = new BasketballGame(new THREE.Scene(), new THREE.Vector3(30, 0, 30));

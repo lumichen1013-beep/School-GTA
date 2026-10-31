@@ -10,7 +10,7 @@ import {
 import { NPC, SHOVE_IMMUNE_TIME, canBeShoved, type NPCRole } from '../src/entities/NPC';
 import { isAttackFromBehind, isBehindFacing, isBehindNpc } from '../src/game/DetentionMode';
 import { SerialSlot } from '../src/game/serialSlot';
-import { ALL_WEAPONS } from '../src/weapons/registry';
+import { WEAPONS } from '../src/weapons/registry';
 
 const DEG = Math.PI / 180;
 
@@ -83,8 +83,8 @@ describe('命中模式 (strikeHitMode) 與群攻分流', () => {
     expect(strikeHitMode(FINISHER_AOE, 1, 0.5)).toBe('LIGHT');
   });
   it('現有武器不設 lightPush；現有招式模式與改前 strikeCanLaunch 一致', () => {
-    for (const w of ALL_WEAPONS.filter((x) => x.release === 'released')) expect(w.lightPush ?? 0).toBe(0);
-    // 開發中的綁帶捆書 (WHIP) 另有專屬測試 tests/bookWhip.test.ts
+    for (const w of WEAPONS.filter((x) => x.id !== 'BOOK_WHIP')) expect(w.lightPush ?? 0).toBe(0);
+    // 綁帶捆書 (WHIP) 另有專屬測試 tests/bookWhip.test.ts
     for (const [k, set] of Object.entries(PLAYER_COMBOS)) {
       if (k === 'WHIP') continue;
       for (const m of set) {

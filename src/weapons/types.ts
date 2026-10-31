@@ -6,7 +6,7 @@ import type { Vec3Like } from '../audio/spatialAudio';
 import type { ImpactClass } from './impactClass';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')；RAPIER 為花劍客首勝獎勵 (與 Boss 同步正式上線)
+// BOOK_WHIP / BASKETBALL / SLINGSHOT 由小遊戲 / 比賽成績解鎖；RAPIER 為花劍客首勝獎勵 (與 Boss 同步正式上線)
 export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'RAPIER' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
@@ -122,8 +122,6 @@ export interface WeaponRanged {
 
 export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly id: WeaponId;
-  // 'dev' = 開發中武器，僅 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
-  readonly release: 'released' | 'dev';
   readonly slot: number;
   readonly icon: string;
   readonly banner: { readonly campus: string; readonly detention: string };
