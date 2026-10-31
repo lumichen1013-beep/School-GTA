@@ -787,6 +787,12 @@ export class CombatSystem {
     else if (move.hitShake > 0) requestCameraShake(move.hitShake);
   }
 
+  // 本招推擊距離：目前武器的 lightPush；持羽球拍 (場景覆寫套組) 揮拍時不套用，維持只扣血
+  private lightPush(): number {
+    const player = this.ctx.player;
+    return player.isHoldingRacket ? 0 : player.weaponDef.lightPush ?? 0;
+  }
+
   // 同一招 (出招序號) 只通緝 / 提示一次：回傳本次是否應結算 (近戰傳入目前 moveSerial，投射物傳入發射當下序號)
   private takeCrimeSlot(serial: number): boolean {
     return this.crimeSlot.take(serial);
@@ -807,7 +813,7 @@ export class CombatSystem {
     const route = strikeRoute(move, strikeIndex);
     if (route === 'AOE') this.resolveFinisherAoe(move, move.aoe!);
     else if (route === 'AOE_LIGHT') {
-      _aoeLightOpts.mode = strikeHitMode(move, strikeIndex, this.ctx.player.weaponDef.lightPush ?? 0);
+      _aoeLightOpts.mode = strikeHitMode(move, strikeIndex, this.lightPush());
       _aoeLightOpts.dmgMul = strikeDmg(move, strikeIndex);
       _aoeLightOpts.index = strikeIndex;
       this.resolveFinisherAoe(move, move.aoe!, _aoeLightOpts);
@@ -871,7 +877,7 @@ export class CombatSystem {
     const damage = Math.round(baseDamage);
     const knockback = player.getWeaponKnockback() * move.knock;
     const cap = player.activeWeapon.launchCap; // 武器 (含世界變體) 的擊飛上限，null = NPC 預設
-    const lightPush = player.weaponDef.lightPush ?? 0;
+    const lightPush = this.lightPush();
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
 
@@ -1067,7 +1073,7 @@ export class CombatSystem {
   // opts：額外擊改為不觸發終結特效與群攻震動 / 橫幅 (小擊停格)，模式由呼叫端決定；未傳為主擊
   private resolveFinisherAoe(move: KfMove, aoe: NonNullable<KfMove['aoe']>, opts?: AoeStrikeOpts) {
     const { player, wantedSystem, ecologicalGarden } = this.ctx;
-    const lightPush = player.weaponDef.lightPush ?? 0;
+    const lightPush = this.lightPush();
     const mode = opts ? opts.mode : strikeHitMode(move, 0, lightPush);
     const fx = opts ? opts.fx : true;
     const isDetention = this.ctx.currentWorldType === 'DETENTION';

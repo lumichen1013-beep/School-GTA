@@ -421,6 +421,24 @@ describe('籃球狀態機：取消與互斥', () => {
     burst.mockRestore();
   });
 
+  it('手持小遊戲籃球：手上的武器球隱藏 (不出現兩顆球)，放下後恢復；只在狀態改變時寫入', () => {
+    const r = makeRig();
+    r.step();
+    expect(r.state.calls.held).toEqual([]);
+    r.basketballGame.isHolding = true;
+    r.step();
+    r.step();
+    expect(r.state.calls.held).toEqual([true]);
+    r.basketballGame.isHolding = false;
+    r.step();
+    expect(r.state.calls.held).toEqual([true, false]);
+    // 持其他武器時不處理
+    r.player.currentWeapon = 'FIST';
+    r.basketballGame.isHolding = true;
+    r.step();
+    expect(r.state.calls.held).toEqual([true, false]);
+  });
+
   it('飛行中連按攻擊只進緩衝，不會再出招', () => {
     const r = makeRig();
     r.throwBall(B1);

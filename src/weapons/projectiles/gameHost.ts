@@ -19,7 +19,8 @@ export function createProjectileHost(ctx: GameContext): ProjectileHost {
     hitTarget: (target, spec) => ctx.combat.applyPlayerHitToNpc(target as NPC, spec),
     hitGardenAt: (point, r, damage) => {
       if (ctx.currentWorldType !== 'CAMPUS') return null;
-      const hit = ctx.ecologicalGarden.tryHitAtPoint(point, r, damage);
+      // 投射物傷害未取整 (彈弓蓄力比例)：比照近戰取整後再扣血與顯示橫幅
+      const hit = ctx.ecologicalGarden.tryHitAtPoint(point, r, Math.round(damage));
       if (hit.hit) ctx.combat.reportPlantHit(hit, hit.damage);
       return hit;
     },

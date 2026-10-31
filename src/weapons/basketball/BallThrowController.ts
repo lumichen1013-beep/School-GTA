@@ -50,6 +50,7 @@ export class BallThrowController {
   private readonly launchV: LaunchVelocity = { h: 0, vy: 0 };
   private flightTime = 0;
   private aimTarget: NPC | null = null;
+  private heldHidden = false; // 手上武器球目前是否已隱藏 (見 syncHeldBall)
   private readonly reticle = new ScreenReticle('ballLockReticle', 'ball-lock-reticle');
   private readonly returnTarget = (out: THREE.Vector3) => { this.ctx.player.getHandPoint(out); };
   private readonly onEvent = (ev: ProjectileEvent) => this.handleEvent(ev);
@@ -140,7 +141,7 @@ export class BallThrowController {
     this.flightTime = 0;
     this.state = 'FLIGHT';
     this.lastPos.copy(this.origin);
-    player.setHeldWeaponHidden(true);
+    this.setHeld(true);
   }
 
   private finishWindup() {
@@ -172,7 +173,7 @@ export class BallThrowController {
     this.slot = -1;
     this.state = 'READY';
     player.attackLock = false;
-    player.setHeldWeaponHidden(false);
+    this.setHeld(false);
     player.refreshChainWindow(); // 連段接續窗自接到球起算
   }
 
@@ -183,6 +184,7 @@ export class BallThrowController {
       if (this.state !== 'READY') this.cancel(); // 只處理自己的狀態 (attackLock 可能是其他遠程武器設定)
       this.buffer = 0;
       this.showReticle(false);
+      this.syncHeldBall();
       return;
     }
     if (this.buffer > 0) this.buffer -= delta;
@@ -206,6 +208,22 @@ export class BallThrowController {
       if (this.buffer > 0 && player.canAttack) this.startThrow(); // 接球瞬間自動投出下一球
       this.updateReticle();
     } else this.showReticle(false);
+    this.syncHeldBall();
+  }
+
+  // 手上武器球顯示：球在外或手持小遊戲籃球時隱藏 (避免手上同時出現兩顆球)；只在持籃球武器且未持羽球拍時處理
+  // (換武器 / 持拍時 WeaponRig.show 會重設顯示，快取隨之歸零)
+  private syncHeldBall() {
+    const { player, basketballGame } = this.ctx;
+    if (player.currentWeapon !== 'BASKETBALL' || player.isHoldingRacket) { this.heldHidden = false; return; }
+    this.setHeld(this.state === 'FLIGHT' || basketballGame.isHolding);
+  }
+
+  // 只在狀態改變時寫入 (Player.setHeldWeaponHidden 作用於目前顯示中的武器)
+  private setHeld(hidden: boolean) {
+    if (hidden === this.heldHidden) return;
+    this.heldHidden = hidden;
+    this.ctx.player.setHeldWeaponHidden(hidden);
   }
 
   // 球在池中已消失但未收到接住事件 (被外部 reset 清掉)：視為遺失，煙塵後回到持球
@@ -214,7 +232,7 @@ export class BallThrowController {
     this.slot = -1;
     this.state = 'READY';
     this.ctx.player.attackLock = false;
-    this.ctx.player.setHeldWeaponHidden(false);
+    this.setHeld(false);
   }
 
   // 立即取消 (換武器 / 上車 / 換世界 / 死亡 / 手持小遊戲籃球)：球消失並噴煙塵，回到持球狀態
@@ -229,7 +247,7 @@ export class BallThrowController {
     this.state = 'READY';
     this.buffer = 0;
     player.attackLock = false;
-    player.setHeldWeaponHidden(false);
+    this.setHeld(false);
     this.showReticle(false);
   }
 

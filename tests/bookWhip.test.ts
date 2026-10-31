@@ -223,3 +223,30 @@ describe('綁帶捆書：音效距離衰減', () => {
     expect(soundGain('bookThud', 16)).toBe(0);
   });
 });
+
+describe('綁帶捆書：持羽球拍時不推擊', () => {
+  async function swing(holdingRacket: boolean) {
+    const { CombatSystem } = await import('../src/game/CombatSystem');
+    const THREE = await import('three');
+    const npc = { position: new THREE.Vector3(0, 0, 1.5), isKnockedDown: false, isPermanentlyKnockedOut: false };
+    const ctx = {
+      currentWorldType: 'CAMPUS', npcs: [npc],
+      player: {
+        isDead: false, position: new THREE.Vector3(), rotationY: 0, moveSerial: 1, isHoldingRacket: holdingRacket,
+        weaponDef: DEF, activeWeapon: { launchCap: null },
+        strikeMove: holdingRacket ? PLAYER_COMBOS.RACKET[0] : W1, strikeIndex: 0,
+        getWeaponReach: () => REACH, getWeaponDamage: () => DEF.stats.damage, getWeaponKnockback: () => DEF.stats.knockback
+      },
+      ecologicalGarden: { tryHitByPlayer: () => ({ hit: false }) }
+    } as never;
+    const combat = new CombatSystem(ctx);
+    const modes: string[] = [];
+    combat.applyPlayerHitToNpc = ((_n: unknown, spec: { mode: string }) => { modes.push(spec.mode); return true; }) as never;
+    combat.updatePlayerStrike();
+    return modes;
+  }
+
+  it('裝備綁帶捆書但持羽球拍揮拍：只扣血 (LIGHT)，不套用 lightPush', async () => {
+    expect(await swing(true)).toEqual(['LIGHT']);
+  });
+});

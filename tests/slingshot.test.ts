@@ -997,3 +997,17 @@ describe('彈弓：桌機收斂距離 (準星所指之處)', () => {
     expect(rayConvergeDistance([{ ...T(0.6, 15), isKnockedDown: true }], [], 0.6, 1.4, 0, 0, 0, 1, 60, 40)).toBe(40);
   });
 });
+
+describe('彈弓：生態園命中傷害取整', () => {
+  it('非整數蓄力傷害打到生態園生物：以取整後數值扣血與顯示橫幅 (比照近戰)', async () => {
+    const { createProjectileHost } = await import('../src/weapons/projectiles/gameHost');
+    const tryHitAtPoint = vi.fn((_p: unknown, _r: number, dmg: number) => ({ hit: true, name: '食人藤蔓', defeated: false, isBoss: false, damage: dmg }));
+    const reportPlantHit = vi.fn();
+    const host = createProjectileHost({
+      currentWorldType: 'CAMPUS', ecologicalGarden: { tryHitAtPoint }, combat: { reportPlantHit }
+    } as never);
+    host.hitGardenAt(new THREE.Vector3(), 0.05, 60 * (0.4 + 0.6 * (0.43 - 0.25) / 0.45));
+    expect(tryHitAtPoint.mock.calls[0][2]).toBe(Math.round(60 * (0.4 + 0.6 * (0.43 - 0.25) / 0.45)));
+    expect(Number.isInteger(reportPlantHit.mock.calls[0][1])).toBe(true);
+  });
+});
