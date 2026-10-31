@@ -4,6 +4,7 @@ import { Player } from '../entities/Player';
 import { soundManager } from '../audio/SoundEffects';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bakeStatic, freezeStatic } from './sceneUtils';
+import { FAN_ANGLE_MIN_DIST, probeLine } from '../entities/shared/kungfu';
 
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
@@ -30,18 +31,62 @@ function mergeParts(parts: THREE.Mesh[]): THREE.Mesh {
 const BOSS_HIT_PAD = 2.4;
 const VINE_HIT_PAD = 0.8;
 const BUG_HIT_PAD = 0.6;
+// 投射物點判定：各目標受擊高度 (自目標位置 y 起算)
+const BOSS_HIT_HEIGHT = 4.5;
+const VINE_HIT_HEIGHT = 2.5;
+const BUG_HIT_HEIGHT = 0.8;
+// 園區圍欄範圍 (生物活動與投射物粗篩共用)
+const GARDEN_MIN_X = -92;
+const GARDEN_MAX_X = -48;
+const GARDEN_MIN_Z = -102.5;
+const GARDEN_MAX_Z = -78.5;
+// 投射物命中結果 (預配置重用，呼叫端需於下次呼叫前取用)
+export interface GardenPointHit extends PlantHitResult { hit: boolean }
+const _pointHit: GardenPointHit = { hit: false, name: '', defeated: false, isBoss: false, damage: 0 };
+// 點 (彈體中心) 是否位於目標的受擊圓柱 (水平半徑 pad、高度 0 ~ h，各向外擴彈體半徑 r) 內
+function pointInTargetCylinder(target: THREE.Vector3, pad: number, h: number, point: THREE.Vector3, r: number): boolean {
+  const dy = point.y - target.y;
+  if (dy < -r || dy > h + r) return false;
+  const dx = point.x - target.x;
+  const dz = point.z - target.z;
+  const rr = pad + r;
+  return dx * dx + dz * dz < rr * rr;
+}
 // 終結技群攻候選暫存 (依距離排序；kind 0 Boss、1 藤蔓、2 甲蟲)
 const AOE_PLANT_CAP = 8;
 const _plantDist = new Float32Array(AOE_PLANT_CAP);
 const _plantKind = new Int8Array(AOE_PLANT_CAP);
 const _plantIdx = new Int32Array(AOE_PLANT_CAP);
 let _plantN = 0;
+const _plantProbe = new Float32Array(3);
+
+// 群攻形狀過濾 (圓形粗篩之後的精篩)：kind 0 = FAN 扇形 (頂點 = (ox, oz)、面向 fx / fz、半角餘弦 cosHalf)、
+// 1 = LINE 長條 (自 (ox, oz) 沿面向長 len、半寬 halfWidth)；ox / oz 為頂點 / 起點 (圓形粗篩的 origin 為形狀中心，兩者不同)；呼叫端預配置重複使用 (set 就地覆寫)
+export class PlantAoeShape {
+  kind = 0; ox = 0; oz = 0; fx = 0; fz = 1; cosHalf = -1; len = 0; halfWidth = 0;
+  set(kind: number, ox: number, oz: number, fx: number, fz: number, cosHalf: number, len: number, halfWidth: number): this {
+    this.kind = kind; this.ox = ox; this.oz = oz; this.fx = fx; this.fz = fz; this.cosHalf = cosHalf; this.len = len; this.halfWidth = halfWidth;
+    return this;
+  }
+}
+let _plantShape: PlantAoeShape | null = null;
+
+// 形狀精篩：pad 為目標體型補正 (扇形貼身 / 長條半寬一併放寬)
+function insidePlantShape(pos: THREE.Vector3, pad: number, shape: PlantAoeShape): boolean {
+  if (shape.kind === 1) return probeLine(shape.ox, shape.oz, shape.fx, shape.fz, shape.len, shape.halfWidth + pad, pos.x, pos.z, _plantProbe) >= 0;
+  const dx = pos.x - shape.ox;
+  const dz = pos.z - shape.oz;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist - pad <= FAN_ANGLE_MIN_DIST) return true;
+  return (dx * shape.fx + dz * shape.fz) / dist >= shape.cosHalf;
+}
 // 依「水平距離扣除體型補正」保留最近 cap 個候選 (插入排序)
 function considerPlant(kind: number, idx: number, pos: THREE.Vector3, pad: number, origin: THREE.Vector3, radius: number, cap: number) {
   const dx = pos.x - origin.x;
   const dz = pos.z - origin.z;
   const d = Math.sqrt(dx * dx + dz * dz) - pad;
   if (d >= radius) return;
+  if (_plantShape && !insidePlantShape(pos, pad, _plantShape)) return;
   if (_plantN === cap && d >= _plantDist[cap - 1]) return;
   let i = _plantN < cap ? _plantN++ : cap - 1;
   while (i > 0 && _plantDist[i - 1] > d) {
@@ -1046,10 +1091,10 @@ export class EcologicalGarden {
     }
 
     // F. 生態園快速移動毒甲蟲 AI (速度 4.8 m/s, 攻擊力 1, 攻速 1.0s, 嚴格限制在園內且絕不超出學校圍牆)
-    const gardenMinX = -92;
-    const gardenMaxX = -48;
-    const gardenMinZ = -102.5;
-    const gardenMaxZ = -78.5;
+    const gardenMinX = GARDEN_MIN_X;
+    const gardenMaxX = GARDEN_MAX_X;
+    const gardenMinZ = GARDEN_MIN_Z;
+    const gardenMaxZ = GARDEN_MAX_Z;
     const isPlayerInGarden = (
       playerPos.x >= gardenMinX - 1.0 && playerPos.x <= gardenMaxX + 1.0 &&
       playerPos.z >= gardenMinZ - 1.0 && playerPos.z <= gardenMaxZ + 1.0
@@ -1181,12 +1226,43 @@ export class EcologicalGarden {
     return { hit: false, name: '', defeated: false, isBoss: false };
   }
 
+  // 投射物命中判定：point 為彈體中心、r 為彈體半徑。先以園區邊界粗篩 (園外直接回傳未命中)，
+  // 依 Boss > 藤蔓 > 甲蟲 順序命中第一個受擊圓柱內的目標並扣血 dmg；回傳預配置結果 (下次呼叫前取用)
+  public tryHitAtPoint(point: THREE.Vector3, r: number, dmg: number): GardenPointHit {
+    const out = _pointHit;
+    out.hit = false;
+    const pad = BOSS_HIT_PAD + r;
+    if (point.x < GARDEN_MIN_X - pad || point.x > GARDEN_MAX_X + pad || point.z < GARDEN_MIN_Z - pad || point.z > GARDEN_MAX_Z + pad) return out;
+    if (!this.boss.isDead && pointInTargetCylinder(this.boss.position, BOSS_HIT_PAD, BOSS_HIT_HEIGHT, point, r)) {
+      out.hit = true; out.name = '變異食人花王'; out.isBoss = true; out.damage = dmg;
+      out.defeated = this.hitBoss(dmg);
+      return out;
+    }
+    for (let i = 0; i < this.hostileVines.length; i++) {
+      const vine = this.hostileVines[i];
+      if (vine.isDead || !pointInTargetCylinder(vine.position, VINE_HIT_PAD, VINE_HIT_HEIGHT, point, r)) continue;
+      out.hit = true; out.name = '食人藤蔓'; out.isBoss = false; out.damage = dmg;
+      out.defeated = this.hitVine(vine, dmg);
+      return out;
+    }
+    for (let i = 0; i < this.bugs.length; i++) {
+      const bug = this.bugs[i];
+      if (bug.isDead || !pointInTargetCylinder(bug.position, BUG_HIT_PAD, BUG_HIT_HEIGHT, point, r)) continue;
+      out.hit = true; out.name = '生態園毒甲蟲'; out.isBoss = false; out.damage = dmg;
+      out.defeated = this.hitBug(bug, dmg);
+      return out;
+    }
+    return out;
+  }
+
   // 連段終結技群攻：以 origin 為圓心 (水平距離) 命中範圍內最近的 max 個目標 (Boss / 藤蔓 / 甲蟲)，
+  // shape：FAN / LINE 時再以扇形 / 長條精篩 (圓形為粗篩，radius 須涵蓋整個形狀)；
   // 最近者承受全額傷害、其餘 × secondaryMult；結果依距離由近到遠寫入 out (呼叫端預配置，長度 ≥ max)，回傳命中數
-  public tryHitAllByPlayer(origin: THREE.Vector3, radius: number, damage: number, max: number, out: PlantHitResult[], secondaryMult: number = 1): number {
+  public tryHitAllByPlayer(origin: THREE.Vector3, radius: number, damage: number, max: number, out: PlantHitResult[], secondaryMult: number = 1, shape: PlantAoeShape | null = null): number {
     const cap = Math.min(max, out.length, AOE_PLANT_CAP);
     if (cap <= 0) return 0;
     _plantN = 0;
+    _plantShape = shape;
     if (!this.boss.isDead) considerPlant(0, 0, this.boss.position, BOSS_HIT_PAD, origin, radius, cap);
     for (let i = 0; i < this.hostileVines.length; i++) {
       if (!this.hostileVines[i].isDead) considerPlant(1, i, this.hostileVines[i].position, VINE_HIT_PAD, origin, radius, cap);

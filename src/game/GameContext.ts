@@ -19,6 +19,7 @@ import type { DetentionMode } from './DetentionMode';
 import type { CampusMode } from './CampusMode';
 import type { CampusLife } from './CampusLife';
 import type { CombatSystem } from './CombatSystem';
+import type { ProjectileSystem } from '../weapons/projectiles/ProjectileSystem';
 
 export type WorldType = 'CAMPUS' | 'DETENTION';
 
@@ -47,6 +48,8 @@ export interface GameContext {
   readonly campus: CampusMode;
   readonly campusLife: CampusLife;
   readonly combat: CombatSystem;
+  /** 共用投射物池 (球 / 石子) */
+  readonly projectiles: ProjectileSystem;
 
   readonly currentWorldType: WorldType;
   readonly activeColliders: CollidableBox[];

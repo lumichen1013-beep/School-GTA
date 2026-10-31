@@ -379,6 +379,13 @@
               <button type="button" class="fm-quality-opt" role="radio" data-quality="low">低</button>
               <button type="button" class="fm-quality-opt fm-quality-redetect" id="fm-quality-redetect" title="重新實測 FPS 並自動選擇畫質">🔄 偵測</button>
             </div>
+            <div class="fm-quality-extra">
+              <button type="button" class="fm-quality-opt fm-quality-lock" id="fm-fpslock" role="switch" aria-checked="false" title="限制為 30 FPS，降低發熱與耗電">🔒 鎖定 30 FPS</button>
+              <div class="fm-quality-aa" id="fm-quality-aa" hidden>
+                <span>抗鋸齒變更將於重新整理後生效</span>
+                <button type="button" class="fm-quality-opt fm-quality-redetect" id="fm-quality-reload">立即重新整理</button>
+              </div>
+            </div>
           </div>
         </div>
 

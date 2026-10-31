@@ -5,7 +5,8 @@ import type { LaunchCap } from './launch';
 import type { Vec3Like } from '../audio/spatialAudio';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET';
+// BOOK_WHIP 為開發中武器 (release 'dev')；BASKETBALL / SLINGSHOT 為預留 id (尚未建 def)
+export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
 export type WeaponWorld = 'CAMPUS' | 'DETENTION';
@@ -25,9 +26,10 @@ export interface WeaponStats {
 }
 
 // 連段終結技特效參數：slamBolt = 下劈地裂附帶雷電、waistY = 旋身衝擊環高度、landRadius = 著地補環半徑 (0 / 未設 = 不補)、
-// feathers = 主擊噴發羽毛
+// feathers = 主擊噴發羽毛 (featherColors = 自訂色盤，未設為雙燕羽刃預設白 / 青 / 粉；綁帶捆書用紙白 / 墨藍當書頁)
 export interface WeaponFinisherFx {
   readonly feathers?: boolean;
+  readonly featherColors?: readonly number[];
   readonly slamBolt?: boolean;
   readonly waistY?: number;
   readonly landRadius?: number;
@@ -75,6 +77,9 @@ export interface WeaponUnlockProgress {
   readonly teacherDefeatedCount: number;
   readonly dogDefeatedCount: number;
   readonly bikePatrolDefeatedCount: number;
+  readonly basketballMade: number; // 投籃累計進球 (資料來源於後續階段接上)
+  readonly swimWon: boolean;       // 是否贏過游泳 (小魚)
+  readonly trackWon: boolean;      // 是否贏過跑操場 (阿凱)
 }
 
 // 實際揮擊時生效的套組共通欄位 (武器定義與場景覆寫共用)
@@ -94,16 +99,23 @@ interface WeaponLoadoutFields {
 
 export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly id: WeaponId;
+  // 'dev' = 開發中武器，僅 DEV_WEAPONS_BUILD 的建置且 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
+  readonly release: 'released' | 'dev';
   readonly slot: number;
   readonly icon: string;
   readonly banner: { readonly campus: string; readonly detention: string };
   readonly stats: WeaponStats;
   // 終結技群攻改讀招式上的 maxGold / shakeGold / hitStopGold (未設時回退一般欄位)
   readonly useGoldAoe?: boolean;
+  // 非終結技推擊距離 (m)：> 0 時非終結技命中改走 SHOVE (推開並打斷前搖)；未設 / 0 = 只扣血 (現有武器)
+  readonly lightPush?: number;
   // 左手持械 (雙持)：持有時不撐傘 (比照特訓院收傘)，出招也不鎖左臂
   readonly suppressUmbrella?: boolean;
-  // null = 一開始即持有
-  readonly unlock: { lockedHint(p: WeaponUnlockProgress, world: WeaponWorld): string } | null;
+  // null = 一開始即持有；steps = 大地圖裝備頁的解鎖進度條 (未設則依 Progression 內建的舊武器步驟)
+  readonly unlock: {
+    lockedHint(p: WeaponUnlockProgress, world: WeaponWorld): string;
+    steps?(p: WeaponUnlockProgress): readonly { readonly label: string; readonly cur: number; readonly max: number }[];
+  } | null;
   // true = 沿用定義本身；false = 該世界不可用；物件 = 該世界變體
   readonly worlds: { readonly CAMPUS: true | WeaponVariant; readonly DETENTION: boolean | WeaponVariant };
 }

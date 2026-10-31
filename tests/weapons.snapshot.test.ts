@@ -6,7 +6,9 @@ const sfx = vi.hoisted(() => ({
   playBatHit: vi.fn(),
   playSpecialBatHit: vi.fn(),
   playBadmintonWhoosh: vi.fn(),
-  playBadmintonHit: vi.fn()
+  playBadmintonHit: vi.fn(),
+  playWhipCrack: vi.fn(),
+  playBookThud: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
 
@@ -14,6 +16,7 @@ import { PLAYER_COMBOS } from '../src/entities/shared/kungfu';
 import { getWeapon, getWeaponBySlot, resolveLoadout, WEAPONS } from '../src/weapons/registry';
 import { buildNormalBat, buildGoldBat } from '../src/weapons/models/batModels';
 import { buildRacket, buildDualRackets } from '../src/weapons/models/racketModel';
+import { buildBookWhip } from '../src/weapons/models/bookWhipModel';
 import type { WeaponId, WeaponOverrideId, WeaponWorld } from '../src/weapons/types';
 import type * as THREE from 'three';
 
@@ -60,6 +63,8 @@ const BATON_COMBO = { combo: PLAYER_COMBOS.BATON, comboNames: ['上步斜劈', '
 const RACKET_COMBO = { combo: PLAYER_COMBOS.RACKET, comboNames: ['揮拍'] };
 const DUAL_COMBO = { combo: PLAYER_COMBOS.DUAL, comboNames: ['二刀・快斬', '二刀・交叉斬', '鬼斬'] };
 
+const BOOK_WHIP_COMBO = { combo: PLAYER_COMBOS.WHIP, comboNames: ['甩書橫掃', '回手抽擊', '旋鞭橫掃'] };
+
 const BASELINE = {
   FIST: {
     ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playPunch', start: null,
@@ -81,6 +86,11 @@ const BASELINE = {
   DUAL_RACKET: {
     ...STATS.DUAL_RACKET, ...DUAL_COMBO, tempo: 1, fxId: 'DUAL_R', anchors: { base: 0.5, tip: 1.0 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
     readyPose: 'DUAL', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
+  },
+  // 綁帶捆書 (開發中武器；本測試環境 DEV_WEAPONS_BUILD 為 true、模式預設 unlocked)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  BOOK_WHIP: {
+    damage: 14, reach: 4.2, knock: 6.0, ...BOOK_WHIP_COMBO, tempo: 0.9, fxId: 'BOOK', anchors: { base: 0.3, tip: 1.5 }, strike: 'playWhipCrack', start: null,
+    readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   }
 } satisfies Record<string, Snapshot>;
 
@@ -156,6 +166,22 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expectSame(snapshot('DUAL_RACKET', null, 'DETENTION'), BASELINE.DUAL_RACKET);
   });
 
+  it('BOOK_WHIP (開發中，兩個世界套組相同；額外擊改播書堆悶響)', () => {
+    expectSame(snapshot('BOOK_WHIP', null, 'CAMPUS'), BASELINE.BOOK_WHIP);
+    expectSame(snapshot('BOOK_WHIP', null, 'DETENTION'), BASELINE.BOOK_WHIP);
+    const def = getWeapon('BOOK_WHIP');
+    expect(def.release).toBe('dev');
+    expect(def.lightPush).toBe(0.5);
+    expect(def.launchCap).toEqual({ h: 8, v: 4.6 });
+    expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
+    sfx.playBookThud.mockClear();
+    def.sounds.strike!(1, { x: 1, y: 2, z: 3 });
+    expect(sfx.playBookThud).toHaveBeenCalledWith({ x: 1, y: 2, z: 3 });
+    expect(def.unlock?.lockedHint({ swimWon: false } as never, 'DETENTION')).toBe('⚠️ 特訓院管制區：器材已遭沒收！');
+    expect(def.unlock?.lockedHint({ swimWon: false } as never, 'CAMPUS')).toContain('游泳比賽');
+    expect(def.unlock?.steps?.({ swimWon: true } as never)).toEqual([{ label: '游泳比賽獲勝', cur: 1, max: 1 }]);
+  });
+
   it('RACKET 覆寫 (持任一武器、任一世界)', () => {
     for (const current of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET'] as const) {
       for (const world of ['CAMPUS', 'DETENTION'] as const) {
@@ -165,12 +191,12 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
   });
 
   it('武器槽順序與切換提示', () => {
-    expect(WEAPONS.map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
+    expect(WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
     expect(getWeaponBySlot(1)?.id).toBe('FIST');
     expect(getWeaponBySlot(2)?.id).toBe('NORMAL_BAT');
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');
     expect(getWeaponBySlot(4)?.id).toBe('DUAL_RACKET');
-    expect(getWeaponBySlot(5)).toBeUndefined();
+    expect(getWeaponBySlot(5)?.release).toBe('dev'); // 槽 5 為開發中的綁帶捆書 (見下方 BOOK_WHIP 快照)
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
     expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' });
@@ -225,6 +251,33 @@ describe('武器模型 (mesh 數不變 → draw call 不變；發光基準值還
     const h = buildRacket();
     expect(meshCount(h.parts.R!)).toBe(4);
     expect(h.glow).toBeNull();
+  });
+
+  it('綁帶捆書：握把 + 綁帶合併 1 mesh、書堆 1 mesh (共 2 mesh、約 100 三角形)、不投影，glow 的 k 驅動綁帶甩長並可還原', () => {
+    const h = buildBookWhip();
+    const root = h.parts.R!;
+    expect(h.parts.L).toBeUndefined();
+    expect(meshCount(root)).toBe(2);
+    let tris = 0;
+    root.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh) return;
+      expect(m.castShadow).toBe(false);
+      expect(m.geometry.getAttribute('color')).toBeTruthy();
+      tris += (m.geometry.index ? m.geometry.index.count : m.geometry.getAttribute('position').count) / 3;
+    });
+    expect(tris).toBeGreaterThanOrEqual(90);
+    expect(tris).toBeLessThanOrEqual(110);
+    expect(root.visible).toBe(false);
+    expect(root.position.toArray()).toEqual([0, -0.28, 0.12]);
+    const [body, books] = root.children as THREE.Mesh[];
+    const rest = books.position.y;
+    h.glow!(1, 0, 0xffffff);
+    expect(body.scale.y).toBeGreaterThan(1.2);
+    expect(books.position.y).toBeGreaterThan(rest);
+    h.resetGlow();
+    expect(body.scale.y).toBe(1);
+    expect(books.position.y).toBe(rest);
   });
 
   it('雙燕羽刃：每支 握把+中桿+拍框+網線烘焙頂點色 共 1 mesh，掛點同其他武器，各以自己的拍框色發光', () => {

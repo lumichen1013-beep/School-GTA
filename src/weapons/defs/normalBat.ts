@@ -6,6 +6,7 @@ import type { WeaponDefinition } from '../types';
 // 普通木質棒球棍；第二世界 (特訓院) 同一把武器改以特訓防暴警棍連段呈現 (終結技旋身橫打：腰高衝擊環)
 export const NORMAL_BAT: WeaponDefinition = {
   id: 'NORMAL_BAT',
+  release: 'released',
   slot: 2,
   icon: '🏏',
   name: '普通木質棒球棍',

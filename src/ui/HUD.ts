@@ -22,6 +22,9 @@ import type { WeaponId } from '../weapons/types';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, CAMPUS_POIS, CAMPUS_WALL_HALF, CAMPUS_GATE, CAMPUS_GUARD_HOUSE, getCampusZoneName } from '../world/campusLayout';
 import { FullMapPanels } from './FullMapPanels';
 import { isTouchDevice } from '../core/device';
+import { qualityManager } from '../core/QualityManager';
+import { QUALITY_PRESETS } from '../core/quality';
+import { getDiagFlags } from '../core/diagFlags';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
@@ -382,17 +385,19 @@ export class HUD {
       this.fullmapCtx = this.fullmapCanvas.getContext('2d');
       // 大地圖依實際顯示尺寸 × DPR (上限 2) 調整畫布解析度；尺寸變更時才重設，並觸發立即重繪
       const canvas = this.fullmapCanvas;
-      new ResizeObserver(() => {
+      const syncFullmapResolution = () => {
         const cssSide = canvas.clientWidth;
         if (cssSide <= 0) return;
-        const side = Math.round(cssSide * Math.min(window.devicePixelRatio || 1, 2));
+        const side = Math.round(cssSide * Math.min(window.devicePixelRatio || 1, QUALITY_PRESETS[qualityManager.tier].minimapDprMax));
         this.fullmapCssSide = cssSide;
         if (canvas.width !== side) {
           canvas.width = side;
           canvas.height = side;
         }
         this.lastFullmapRenderAt = 0;
-      }).observe(canvas);
+      };
+      new ResizeObserver(syncFullmapResolution).observe(canvas);
+      qualityManager.onChange(syncFullmapResolution); // 切換檔位時依新的 DPR 上限重設畫布
     }
     this.fullmapCloseBtnEl = document.getElementById('fullmap-close-btn');
     this.fullmapTitleEl = document.getElementById('fullmap-title');
@@ -424,11 +429,11 @@ export class HUD {
       syncHudTopBottom();
     }
 
-    // 雷達畫布像素尺寸跟隨 CSS 尺寸 × DPR (上限 2)，僅於尺寸變動時重設，無每幀成本
+    // 雷達畫布像素尺寸跟隨 CSS 尺寸 × DPR (上限依畫質檔位：低 1 / 中高 2)，僅於尺寸或檔位變動時重設，無每幀成本
     const syncMinimapResolution = () => {
       const cssSize = this.canvas.clientWidth;
       if (cssSize <= 0) return;
-      const px = Math.round(cssSize * Math.min(window.devicePixelRatio || 1, 2));
+      const px = Math.round(cssSize * Math.min(window.devicePixelRatio || 1, QUALITY_PRESETS[qualityManager.tier].minimapDprMax));
       if (this.canvas.width !== px) {
         this.canvas.width = px;
         this.canvas.height = px;
@@ -437,6 +442,7 @@ export class HUD {
     };
     if ('ResizeObserver' in window) new ResizeObserver(syncMinimapResolution).observe(this.canvas);
     window.addEventListener('app-layout-change', syncMinimapResolution);
+    qualityManager.onChange(syncMinimapResolution);
     syncMinimapResolution();
 
     // 大地圖分頁列 (點擊 / 觸控切換)
@@ -1526,7 +1532,8 @@ export class HUD {
     // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪；畫布僅在【地圖】分頁繪製，學生證 / 戰績同節流且值變才寫 DOM
     if (this.isFullMapOpen) {
       const nowMs = performance.now();
-      if (nowMs - this.lastFullmapRenderAt >= 50) {
+      // 頻率依畫質檔位 (中高 20Hz / 低 10Hz)，容差 4ms 避免 30fps 鎖幀時因差一點點而多等一幀
+      if (nowMs - this.lastFullmapRenderAt >= 1000 / QUALITY_PRESETS[qualityManager.tier].fullmapHz - 4) {
         this.lastFullmapRenderAt = nowMs;
         this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
         if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
@@ -1604,16 +1611,19 @@ export class HUD {
     currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
     detentionData?: DetentionRadarData
   ) {
+    if (getDiagFlags().map === false) return; // ?diag=&map=0：停止小地圖重繪
     const now = performance.now();
     const dt = delta !== undefined ? delta : (this.lastMinimapTime > 0 ? (now - this.lastMinimapTime) / 1000 : 0.04);
     this.lastMinimapTime = now;
     this.minimapDeltaAccumulator += dt;
 
-    // 控制小地圖繪製頻率為約 25fps（每隔 0.04 秒重繪一次，省去每幀無意義 2D Canvas 重繪開銷）
-    if (this.minimapDeltaAccumulator < 0.04) {
+    // 控制小地圖繪製頻率（中高檔 25Hz / 低檔 10Hz，省去每幀無意義 2D Canvas 重繪開銷）；
+    // 容差 2ms 避免 30fps 鎖幀時累積值差一點點而多等一幀，扣除後保留餘量 (落後過多則歸零避免連發)
+    const minimapInterval = 1 / QUALITY_PRESETS[qualityManager.tier].minimapHz;
+    if (this.minimapDeltaAccumulator < minimapInterval - 0.002) {
       return;
     }
-    this.minimapDeltaAccumulator = this.minimapDeltaAccumulator % 0.04;
+    this.minimapDeltaAccumulator = this.minimapDeltaAccumulator >= minimapInterval * 2 ? 0 : this.minimapDeltaAccumulator - minimapInterval;
 
     const ctx = this.ctx;
     const w = HUD.MINIMAP_LOGICAL_SIZE;

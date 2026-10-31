@@ -201,7 +201,7 @@ describe('突進路徑命中範圍 (aoe.shape PATH)', () => {
 describe('既有招式群攻形狀不變', () => {
   it('SELF / FRONT 圓形群攻的 shape 未設 (沿用圓形)', () => {
     for (const [k, moves] of Object.entries(PLAYER_COMBOS)) {
-      if (k === 'DUAL') continue;
+      if (k === 'DUAL' || k === 'WHIP') continue;
       for (const m of moves) if (m.aoe) expect(m.aoe.shape).toBeUndefined();
     }
     expect(PLAYER_COMBOS.BAT[2].aoe!.center).toBe('FRONT');

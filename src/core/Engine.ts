@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { QUALITY_STORAGE_KEY, parseStoredQuality, resolveAntialias } from './quality';
+import { getDiagFlags } from './diagFlags';
 
 // 陽光相對於陰影焦點 (玩家) 的固定偏移，維持原有光照方向
 const SUN_OFFSET = new THREE.Vector3(45, 70, 30);
@@ -15,6 +17,8 @@ export class Engine {
   public hemiLight!: THREE.HemisphereLight;
   public dirLight!: THREE.DirectionalLight;
   private clock: THREE.Clock;
+  // 本次 WebGL context 實際的抗鋸齒設定 (建立後無法更改，變更需重新整理)
+  public readonly antialias: boolean;
   private shadowTexelSize = 0;
   // 畫質檔位決定的像素比上限與陰影貼圖尺寸 (由 QualityManager.attach / applyQuality 設定；預設為中檔)
   private maxPixelRatio = 1.5;
@@ -26,19 +30,23 @@ export class Engine {
     // 1. Scene with atmospheric fog
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xa0c4e2); // 明亮校園天藍色
-    this.scene.fog = new THREE.FogExp2(0xa0c4e2, 0.007);
+    this.scene.fog = getDiagFlags().fog === false ? null : new THREE.FogExp2(0xa0c4e2, 0.007);
     // 場景根節點永不移動：凍結其本地矩陣，否則每幀 updateMatrix 會強制重算全場所有物件的世界矩陣，
     // 世界群組內已凍結的靜態子樹 (見 sceneUtils.freezeStatic) 便無法略過
     this.scene.matrixAutoUpdate = false;
 
     // 2. High-quality WebGL Renderer
+    // 抗鋸齒需在建立 context 時決定：讀取上次存下的畫質設定 (低檔關閉；首次啟動維持開啟)；?diag=&aa= 可強制覆蓋
+    let storedRaw: string | null = null;
+    try { storedRaw = window.localStorage.getItem(QUALITY_STORAGE_KEY); } catch { /* 無法讀取時視為首次啟動 */ }
+    this.antialias = getDiagFlags().aa ?? resolveAntialias(parseStoredQuality(storedRaw));
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: this.antialias,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
+    this.renderer.setPixelRatio(this.effectivePixelRatio());
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -161,6 +169,8 @@ export class Engine {
   }
 
   private effectivePixelRatio(): number {
+    const forced = getDiagFlags().rs; // ?diag=&rs= 診斷覆蓋，優先於檔位
+    if (forced !== null) return forced;
     return Math.min(window.devicePixelRatio || 1, this.maxPixelRatio);
   }
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
+import { DEV_WEAPONS_BUILD } from '../weapons/featureFlags';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
@@ -341,6 +342,7 @@ export class CampusMode {
 
   private mountBike(bike: Bicycle, groundY: number) {
     this.ctx.player.cancelAttack();
+    this.ctx.projectiles.reset(); // 上車：清空飛行中 / 回收中的投射物
     bike.mount(this.ctx.player, groundY);
     this.ctx.currentRidingBike = bike;
     this.ctx.player.isRidingVehicle = true;
@@ -546,6 +548,12 @@ export class CampusMode {
     if (racingGame.bestTrackTime !== this.lastTrackRecord) {
       this.lastTrackRecord = racingGame.bestTrackTime;
       tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
+    }
+    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。DEV_WEAPONS_BUILD 為 false 的正式版整段被移除；
+    // 開關 off / unlocked 時 unlockWeapon 不會觸發 (off 直接略過，unlocked 視為已解鎖)
+    progression.swimWon = racingGame.bestSwimTime !== null;
+    if (DEV_WEAPONS_BUILD && progression.swimWon) {
+      progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;

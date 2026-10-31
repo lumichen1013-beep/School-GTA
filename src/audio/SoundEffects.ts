@@ -295,6 +295,54 @@ export class SoundEffects {
     }
   }
 
+  // ===== 投射物 (待補：以下暫以既有合成音配方代替，正式音色另行設計) =====
+  // 出手破風聲 (暫代：羽球拍呼嘯配方)
+  public playThrowWhoosh(pos: Vec3Like) {
+    if (!this.gate('throwWhoosh', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 650, now], ['exp', 160, now + 0.16]], [['set', 0.3, now], ['exp', 0.001, now + 0.18]], now, now + 0.19);
+  }
+
+  // 球砸中目標悶響 (暫代：運球拍地配方加重)
+  public playBallHit(pos: Vec3Like) {
+    if (!this.gate('ballHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 150, now], ['exp', 45, now + 0.1]], [['set', 0.36, now], ['exp', 0.001, now + 0.12]], now, now + 0.13);
+  }
+
+  // 石子命中清脆撞擊 (暫代：羽球殺球配方)
+  public playStoneHit(pos: Vec3Like) {
+    if (!this.gate('stoneHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('triangle', [['set', 1400, now], ['exp', 320, now + 0.08]], [['set', 0.35, now], ['exp', 0.001, now + 0.1]], now, now + 0.11);
+  }
+
+  // 接球 (暫代：跳躍落地鈍音配方)
+  public playBallCatch(pos: Vec3Like) {
+    if (!this.gate('ballCatch', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 200, now], ['exp', 80, now + 0.08]], [['set', 0.15, now], ['exp', 0.001, now + 0.1]], now, now + 0.1);
+  }
+
+  // 綁帶捆書：甩鞭脆響。不用方波 / 高頻噪音：低通 2.4k 的三角波快速下滑（鞭梢破音）+ 帶通 1.6k 短噪音（空氣爆裂），整體量小、衰減快
+  public playWhipCrack(pos: Vec3Like) {
+    if (!this.gate('whipCrack', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 1500, now], ['exp', 380, now + 0.07]],
+      [['set', 0.0001, now], ['lin', 0.2, now + 0.006], ['exp', 0.0001, now + 0.09]], now, now + 0.1, 2400);
+    this.noise(now, 0.06, { type: 'bandpass', freq: [['set', 1600, now], ['exp', 700, now + 0.06]], q: 0.9 },
+      [['set', 0.0001, now], ['lin', 0.16, now + 0.005], ['exp', 0.0001, now + 0.06]]);
+  }
+
+  // 綁帶捆書：書堆打在身上的悶響 (低頻正弦下滑 + 低通 900Hz 的三角波紙張拍擊)
+  public playBookThud(pos: Vec3Like) {
+    if (!this.gate('bookThud', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 150, now], ['exp', 55, now + 0.12]], [['set', 0.0001, now], ['lin', 0.3, now + 0.008], ['exp', 0.0001, now + 0.14]], now, now + 0.15);
+    this.softTone('triangle', [['set', 420, now], ['exp', 160, now + 0.06]],
+      [['set', 0.0001, now], ['lin', 0.14, now + 0.005], ['exp', 0.0001, now + 0.07]], now, now + 0.08, 900);
+  }
+
   // 普通棒球棍重擊木擊聲 (Wooden Bat Crack)
   public playBatHit(pos: Vec3Like) {
     if (!this.gate('batHit', pos)) return;

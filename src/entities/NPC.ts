@@ -83,6 +83,7 @@ const PLAYER_LAUNCH_MAX_V = 7; // 玩家終結技擊飛垂直速度上限 (其�
 const W2_STAGGER_TIME = 0.3; // 一般受擊踉蹌總時間 (前段後退、後段縮身)
 const W2_STAGGER_PUSH_TIME = 0.15;
 const W2_STAGGER_DIST = 0.4; // 踉蹌後退距離 (m)，仍留在攻擊範圍內
+export const SHOVE_IMMUNE_TIME = 0.5; // 推擊 (SHOVE) 後每個 NPC 各自的推擊免疫秒數 (期間命中只扣血不再推)
 const W2_HYPER_ARMOR_PROGRESS = 0.5; // 出招預備過半即霸體：受擊不中斷出招
 const W2_COUNTER_COOLDOWN = 0.2; // 盾擋 / 狗熊哆嗦毛成功後立即反擊
 const W2_SURROUND_RADIUS = 1.6; // 包夾站位半徑 (m)
@@ -109,6 +110,13 @@ const GRAB_LUNGE_START = 0.12; // 撲抓開始時間點 (占全長比例)
 const GRAB_LUNGE_STOP_DIST = 0.9; // 與玩家相距此距離內停止撲抓 (不推擠玩家)
 const RAGE_BADGE_CODE = -110;
 export type EnforcerSignature = 'GRAB' | 'RULER';
+
+// launchFlying 結果 (見 NPC.lastHitResult)
+export type NpcHitResult = 'BLOCKED' | 'HIT' | 'KO';
+// 推擊 (SHOVE) 可否推動：重訓霸榜生與總教官霸體不吃推；推擊免疫期間不再推
+export function canBeShoved(role: NPCRole, shoveImmune: number): boolean {
+  return role !== 'DETENTION_HEAVY' && role !== 'DETENTION_BOSS' && shoveImmune <= 0;
+}
 // NPC 技能/對話氣泡外觀：大字版 (世界尺寸約為舊版 1.8 倍、畫布 512×160)，長句換成 2 行而不縮小字級，
 // 底部對齊於血條/告示牌上方
 const NPC_BUBBLE_STYLE: SkillBubbleStyle = {
@@ -373,6 +381,10 @@ export class NPC {
   public staggerTimer: number = 0;
   private staggerDirX: number = 0;
   private staggerDirZ: number = 0;
+  private staggerDist: number = W2_STAGGER_DIST; // 本次踉蹌後退總距離 (一般 0.4m，推擊依武器 lightPush)
+  public shoveImmune: number = 0; // 推擊免疫剩餘秒數 (見 SHOVE_IMMUNE_TIME)
+  // 最近一次 launchFlying 結果：BLOCKED = 未造成傷害 (盾擋 / 閃身 / 格擋 / 哆嗦毛 / 受擊保護 / 金鐘護盾 / 已倒地)、HIT = 受傷未倒、KO = 擊倒
+  public lastHitResult: NpcHitResult = 'HIT';
   // 第二世界多人包夾站位 (由 DetentionMode 低頻指派)：環繞玩家的目標方位角
   public hasSurroundSlot: boolean = false;
   public surroundAngle: number = 0;
@@ -1247,8 +1259,12 @@ export class NPC {
   // fromPlayer：玩家武器攻擊。canLaunch 為 false 時 (連段第 1、2 段 / 非終結技) 僅扣血：
   //   不擊飛、不位移、不踉蹌、不打斷出招，也不吃/不設 0.65 秒受擊保護 (連段間隔約 0.3 秒，每段都須吃到傷害)；
   //   擊飛時水平 / 垂直速度上限另行下修 (預設 PLAYER_LAUNCH_MAX_H / V，武器可由 playerCapH / V 覆寫，見 WeaponDefinition.launchCap)
-  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false, playerCapH: number = PLAYER_LAUNCH_MAX_H, playerCapV: number = PLAYER_LAUNCH_MAX_V): boolean {
+  // shoveDist：> 0 且 fromPlayer、canLaunch 為 false 時改為推擊 (SHOVE)：同只扣血規則 (不吃/不設 0.65 秒保護)，
+  //   另沿 impactDir 推開 shoveDist 公尺並打斷前搖 (未過半)，之後 SHOVE_IMMUNE_TIME 秒內不再被推；重訓霸榜生與總教官不吃推
+  // 結果另寫入 lastHitResult (BLOCKED / HIT / KO)
+  public launchFlying(impactDir: THREE.Vector3, force: number, damage: number, canLaunch: boolean = true, ignoreCooldown: boolean = false, fromPlayer: boolean = false, playerCapH: number = PLAYER_LAUNCH_MAX_H, playerCapV: number = PLAYER_LAUNCH_MAX_V, shoveDist: number = 0): boolean {
     const lightHit = fromPlayer && !canLaunch;
+    this.lastHitResult = 'BLOCKED';
     if (this.isKnockedDown || this.isPermanentlyKnockedOut) return false;
     if (this.role === 'DODGE_TEACHER') {
       if (this.isDodging || this.isBearShaking) return false;
@@ -1279,13 +1295,22 @@ export class NPC {
     }
     if (!lightHit) this.hitCooldown = 0.65; // 0.65秒受擊保護
 
+    // 金鐘護盾無敵期間 takeDamage 不扣血 (視為被擋)
+    const shielded = this.isBossInvulnerable;
     const wasKnockedDown = this.takeDamage(damage);
+    this.lastHitResult = wasKnockedDown ? 'KO' : shielded ? 'BLOCKED' : 'HIT';
     if (!this.isKnockedDown && this.hp > 0) {
       this.isChasing = true; // 存活時被撞激怒追擊
     } else {
       this.isChasing = false;
     }
-    if (lightHit) return wasKnockedDown;
+    if (lightHit) {
+      if (shoveDist > 0 && this.lastHitResult === 'HIT' && canBeShoved(this.role, this.shoveImmune)) {
+        this.startStagger(impactDir, shoveDist);
+        this.shoveImmune = SHOVE_IMMUNE_TIME;
+      }
+      return wasKnockedDown;
+    }
 
     // 戰鬥積極角色 (特訓群 / 校園執法者)：非終結技命中 (或重訓霸榜生半血以上) 只踉蹌不擊飛，仍留在攻擊範圍內
     if (this.cfg.aggressiveCombat && !this.isKnockedDown &&
@@ -1465,9 +1490,10 @@ export class NPC {
     this.stuckCheckTimer = 0;
   }
 
-  // 一般受擊踉蹌：沿受擊方向後退約 0.4m 並縮身；出招預備未過半時中斷出招，過半則霸體照常命中
-  private startStagger(impactDir: THREE.Vector3) {
+  // 一般受擊踉蹌：沿受擊方向後退 dist (預設約 0.4m) 並縮身；出招預備未過半時中斷出招，過半則霸體照常命中
+  private startStagger(impactDir: THREE.Vector3, dist: number = W2_STAGGER_DIST) {
     this.staggerTimer = W2_STAGGER_TIME;
+    this.staggerDist = dist;
     this.staggerDirX = impactDir.x;
     this.staggerDirZ = impactDir.z;
     const move = this.kf.move;
@@ -1484,7 +1510,7 @@ export class NPC {
     this.staggerTimer = Math.max(0, this.staggerTimer - delta);
     const pushDt = Math.min(W2_STAGGER_TIME - this.staggerTimer, W2_STAGGER_PUSH_TIME) - Math.min(elapsed, W2_STAGGER_PUSH_TIME);
     if (pushDt <= 0) return;
-    const step = (W2_STAGGER_DIST / W2_STAGGER_PUSH_TIME) * pushDt;
+    const step = (this.staggerDist / W2_STAGGER_PUSH_TIME) * pushDt;
     const radius = this.cfg.isCanine ? 0.35 : 0.45;
     const nextX = this.position.x + this.staggerDirX * step;
     if (!isBlockedXZ(colliders, nextX, this.position.z, radius, this.position.y, 0.3, 1.6)) this.position.x = nextX;
@@ -3070,6 +3096,7 @@ export class NPC {
     isPlayerMoving: boolean = true
   ) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
+    if (this.shoveImmune > 0) this.shoveImmune -= delta;
     this.seesPlayerNow = false;
     this.lastColliders = colliders;
 

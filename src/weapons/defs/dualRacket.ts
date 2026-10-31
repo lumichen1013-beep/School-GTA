@@ -7,6 +7,7 @@ import type { WeaponDefinition } from '../types';
 // 終結技「鬼斬」突進穿過敵群後收刀爆開，只有主擊擊飛。左手持械不撐傘，只限校園，擊敗羽球大如老師解鎖
 export const DUAL_RACKET: WeaponDefinition = {
   id: 'DUAL_RACKET',
+  release: 'released',
   slot: 4,
   icon: '🏸🏸',
   name: '雙燕羽刃',
