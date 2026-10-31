@@ -1,5 +1,5 @@
 // 武器連段特效樣式表 (拖尾與武器發光共用；地裂特效可沿用 color)；各武器 / 世界變體使用哪一組見 src/weapons/defs
-export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET' | 'DUAL_R' | 'DUAL_L';
+export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET' | 'DUAL_R' | 'DUAL_L' | 'BOOK' | 'BALL' | 'STONE';
 
 export interface WeaponFxStyle {
   color: number;     // 拖尾握把端 / 主色
@@ -19,6 +19,12 @@ export const WEAPON_FX_STYLES: Record<WeaponFxId, WeaponFxStyle> = {
   // 雙燕羽刃：右拍青綠、左拍櫻粉
   DUAL_R: { color: 0x2ef2c8, tipColor: 0xeafffb, intensity: 1.3,  life: 0.22, glow: 0.9, impact: 0x2ef2c8 },
   DUAL_L: { color: 0xff6fcf, tipColor: 0xfff0fa, intensity: 1.3,  life: 0.22, glow: 0.9, impact: 0xff6fcf },
+  // 綁帶捆書：握把端紙白、尖端墨藍；模型不發光 (glow 0)
+  BOOK:   { color: 0xf3efe2, tipColor: 0x3d5fd0, intensity: 1.25, life: 0.2,  glow: 0,   impact: 0x4f6fdc },
+  // 籃球：橘色 (命中閃光 / 第 3 投衝擊環)；球不揮拖尾 (光痕由投射物 TracerFX 負責)
+  BALL:   { color: 0xff8a2a, tipColor: 0xffd0a0, intensity: 1.0, life: 0.15, glow: 0,   impact: 0xff8a2a },
+  // 彈弓：淡金 / 米白 (蓄力光環 / 光痕 / 命中閃光)；不揮拖尾
+  STONE:  { color: 0xffd98a, tipColor: 0xfff4d6, intensity: 1.0, life: 0.15, glow: 0,   impact: 0xffd98a },
 };
 
 // 拖尾條帶寬度倍率 (以握把 → 尖端線段長為基準，兩端外擴)：一般招式 / 第三段 (終結技)

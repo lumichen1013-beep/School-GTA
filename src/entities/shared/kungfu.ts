@@ -24,8 +24,8 @@ export const E_OUT = 2;
 export const E_LINEAR = 3;
 
 type V3 = readonly [number, number, number];
-interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
-type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
+export interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
+export type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
 
 // 揮擊拖尾錨點：W 手持武器 (右手)、WL 左手武器 (雙持)、RA 右拳、RL 右腿、LL 左腿
 export type TrailLimb = 'W' | 'WL' | 'RA' | 'RL' | 'LL';
@@ -41,14 +41,19 @@ export interface KfLunge {
   readonly to: number;
 }
 
-// 終結技群攻範圍：offset / radius 為攻擊距離 (getWeaponReach) 倍率
+// 群攻範圍 (終結技或帶 aoe 的非終結技)：offset / radius / len / halfWidth 皆為攻擊距離 (getWeaponReach) 倍率
 // shape：未設或 'CIRCLE' 為圓形 (center 決定圓心)；'PATH' 為沿本招突進路徑 (突進起點 → 目前位置) 的矩形 / 膠囊，
-// radius 為半寬 (攻擊距離倍率)、長度取實際突進距離 (撞牆時較短)，center / offset 不使用
+// radius 為半寬 (攻擊距離倍率)、長度取實際突進距離 (撞牆時較短)，center / offset 不使用；
+// 'FAN' 為以 center 為頂點、沿面向的扇形 (radius + halfAngle)；'LINE' 為自玩家位置沿面向的長條 (len + halfWidth，center / offset 不使用)
+export type AoeShape = 'CIRCLE' | 'PATH' | 'FAN' | 'LINE';
 export interface FinisherAoe {
-  readonly shape?: 'CIRCLE' | 'PATH';
+  readonly shape?: AoeShape;
   readonly center: 'SELF' | 'FRONT'; // 以玩家為圓心 / 以面前衝擊點為圓心
   readonly offset: number; // FRONT 衝擊點前移距離
   readonly radius: number;
+  readonly halfAngle?: number; // FAN 半角 (弧度)
+  readonly len?: number; // LINE 長度 (攻擊距離倍率)
+  readonly halfWidth?: number; // LINE 半寬 (攻擊距離倍率)
   readonly max: number; // 最多命中人數 (上限 8)
   readonly falloff: number; // 擊退距離衰減：× (1 − falloff · d / radius)
   readonly shake: number; // 命中鏡頭震動
@@ -60,6 +65,10 @@ export interface FinisherAoe {
   readonly shakeGold?: number;
   readonly hitStopGold?: number;
 }
+
+// 發射型招式 (遠程回收武器，如籃球)：命中時間點不做近戰判定而是發射彈體
+// BALL_CHEST 胸前推傳 (直線)、BALL_BOUNCE 地板反彈傳球 (目標前方彈一下)、BALL_LOB 高拋灌籃 (終結技)、SLING 彈弓放弦 (石子)
+export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_BOUNCE' | 'BALL_LOB' | 'SLING';
 
 export interface KfMove {
   readonly name: string;
@@ -88,14 +97,16 @@ export interface KfMove {
   readonly slashFx: SlashFx | null;
   readonly aoe: FinisherAoe | null; // 終結技群攻 (null 為單體判定)
   readonly fx: FinisherFx | null;
+  readonly projectile: ProjectileMoveKind | null; // 發射型招式 (非 null 時命中時間點改為發射彈體)
   readonly keys: Float32Array;
   readonly count: number;
 }
 
-interface MoveOpts {
+export interface MoveOpts {
   dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
   trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
   trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx;
+  projectile?: ProjectileMoveKind;
 }
 
 // 預設拖尾區段：命中點前一個關鍵影格 → 後一個關鍵影格
@@ -109,7 +120,7 @@ function defaultTrail(strike: number, keys: readonly KeySpec[]): [number, number
   return [from, to];
 }
 
-function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
+export function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
   const data = new Float32Array(keys.length * STRIDE);
   keys.forEach(([t, ease, p], i) => {
     const b = i * STRIDE;
@@ -149,12 +160,13 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
     slashFx: o.slashFx ?? null,
     aoe: o.aoe ?? null,
     fx: o.fx ?? null,
+    projectile: o.projectile ?? null,
     keys: data,
     count: keys.length
   };
 }
 
-const REST: PoseSpec = {};
+export const REST: PoseSpec = {};
 
 // ───────────── 玩家：徒手 ─────────────
 // 1 弓步衝拳：沉身扭腰蓄勢 → 擰腰送肩直拳、另一拳收抱腰間
@@ -286,12 +298,77 @@ const DUAL_3 = defineMove('鬼斬', {
   [1, E_SMOOTH, { tw: TWO_PI }]
 ]);
 
+// ───────────── 玩家：綁帶捆書 (長鞭型，dev 武器；第 1、2 段 FAN / LINE 群攻 + 推擊，第 3 段旋鞭擊飛) ─────────────
+// 1 甩書橫掃：右手持鞭拉到身體右後方 (0.2) → 擰腰自右向左大幅橫甩 (0.4 命中，扇形 ±70°、4.2m) → 鞭身甩過頭收到左側
+const WHIP_1 = defineMove('甩書橫掃', {
+  dur: 0.36, strike: 0.4, cancel: 0.6, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, trailLimb: 'W', trail: [0.2, 0.62], slashFx: 'LINE',
+  aoe: { shape: 'FAN', center: 'SELF', offset: 0, radius: 1.0, halfAngle: 70 * Math.PI / 180, max: 4, falloff: 0, shake: 0.12, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+}, [
+  [0.2, E_SMOOTH, { tw: 1.55, ln: -0.08, rl: -0.1, h: -0.06, la: [-1.0, 0, -0.35], ra: [-0.35, 0.2, 1.55], ll: [-0.4, 0, -0.12], rr: [0.35, 0, 0.12] }],
+  [0.4, E_IN, { tw: -1.0, ln: 0.14, rl: 0.1, h: -0.1, la: [0.55, 0, -0.7], ra: [-0.45, -0.4, 1.4], ll: [-0.55, 0, -0.18], rr: [0.45, 0, 0.18] }],
+  [0.65, E_OUT, { tw: -1.55, ln: 0.1, rl: 0.14, h: -0.08, la: [0.6, 0, -0.85], ra: [-0.55, -0.7, 1.1], ll: [-0.5, 0, -0.18], rr: [0.42, 0, 0.18] }],
+  [1, E_SMOOTH, { tw: -0.2, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.12] }]
+]);
+// 2 回手抽擊：鞭高舉過頂蓄勢 (0.2) → 自上而下直線抽出 (0.4 命中，前方長條 4.8m × 1.2m) → 手腕一抖回彈 (0.6 追擊，傷害 ×0.5)
+const WHIP_2 = defineMove('回手抽擊', {
+  dur: 0.36, strike: 0.4, cancel: 0.62, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, extraStrikes: [0.6], extraDmg: [0.5],
+  trailLimb: 'W', trail: [0.2, 0.7], slashFx: 'LINE',
+  aoe: { shape: 'LINE', center: 'SELF', offset: 0, radius: 1.0, len: 4.8 / 4.2, halfWidth: 0.6 / 4.2, max: 4, falloff: 0, shake: 0.12, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+}, [
+  [0.2, E_SMOOTH, { tw: -0.5, ln: -0.3, h: 0.06, la: [-1.2, 0, 0.35], ra: [-2.95, 0.3, 0.45], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [0.4, E_IN, { tw: 0.3, ln: 0.34, h: -0.14, la: [0.6, 0, -0.5], ra: [-1.45, 0, 0.1], ll: [-0.7, 0, -0.1], rr: [0.6, 0, 0.1] }],
+  [0.6, E_IN, { tw: 0.15, ln: 0.06, h: 0.0, la: [0.3, 0, -0.5], ra: [-2.2, 0.1, 0.3], ll: [-0.45, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [0.8, E_OUT, { tw: 0.2, ln: 0.12, h: -0.04, la: [0.3, 0, -0.5], ra: [-1.6, 0, 0.25], ll: [-0.4, 0, -0.1], rr: [0.35, 0, 0.1] }],
+  [1, E_SMOOTH, REST]
+]);
+// 3 旋鞭橫掃 (終結技)：蓄勢 (0.18) → 原地旋身一圈、鞭身平舉掃出 4.2m 圓 (0.5 命中，擊飛主目標) → 收鞭亮相
+const WHIP_3 = defineMove('旋鞭橫掃', {
+  dur: 0.6, strike: 0.5, cancel: 0.75, reach: 1.0, arc: -1, dmg: 1.3, knock: 1.3, finisher: true, trailLimb: 'W', trail: [0.18, 0.74], fx: 'SPIN', slashFx: 'LINE',
+  aoe: { center: 'SELF', offset: 0, radius: 1.0, max: 6, falloff: 0.15, shake: 0.4, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+}, [
+  [0.18, E_SMOOTH, { tw: 0.9, ln: 0.08, rl: -0.1, h: -0.18, la: [-1.1, 0, -0.3], ra: [-0.4, 0, 1.45], ll: [-0.4, 0, -0.15], rr: [0.35, 0, 0.15] }],
+  [0.5, E_IN, { tw: -TWO_PI - 0.3, ln: 0.06, rl: 0.1, h: 0.08, la: [0.3, 0, -1.25], ra: [-0.25, -0.2, 1.55], ll: [-0.35, 0, -0.22], rr: [0.3, 0, 0.22] }],
+  [0.74, E_OUT, { tw: -TWO_PI - 0.95, ln: 0.08, rl: 0.14, h: -0.1, la: [0.35, 0, -1.1], ra: [-0.3, -0.35, 1.3], ll: [-0.45, 0, -0.25], rr: [0.4, 0, 0.25] }],
+  [1, E_SMOOTH, { tw: -TWO_PI, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.1] }]
+]);
+
+// ───────────── 玩家：籃球 (遠程回收型，dev 武器；三投各自發射彈體，命中時間點 = 球離手) ─────────────
+// 1 胸前推傳：雙手抱球收到胸口 (0.25) → 雙臂向前一推球離手 (0.5，直線)，身體微前傾
+const BALL_1 = defineMove('胸前推傳', {
+  dur: 0.4, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_CHEST'
+}, [
+  [0.25, E_SMOOTH, { tw: 0.08, ln: -0.06, h: -0.04, la: [-1.0, 0, 0.5], ra: [-1.0, 0, -0.5], ll: [-0.2, 0, -0.05], rr: [0.2, 0, 0.05] }],
+  [0.5, E_IN, { tw: -0.05, ln: 0.14, h: -0.05, la: [-1.5, 0, 0.12], ra: [-1.5, 0, -0.12], ll: [-0.4, 0, -0.08], rr: [0.35, 0, 0.08] }],
+  [0.75, E_OUT, { tw: 0, ln: 0.1, h: -0.03, la: [-1.4, 0, 0.1], ra: [-1.4, 0, -0.1], ll: [-0.3, 0, -0.06], rr: [0.25, 0, 0.06] }],
+  [1, E_SMOOTH, REST]
+]);
+// 2 地板彈傳：抱球收胸 (0.25) → 屈膝前傾、雙臂斜下推出，球砸向目標前方地面 (0.5)
+const BALL_2 = defineMove('地板彈傳', {
+  dur: 0.42, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_BOUNCE'
+}, [
+  [0.25, E_SMOOTH, { tw: -0.08, ln: 0.02, h: -0.08, la: [-0.9, 0, 0.45], ra: [-0.9, 0, -0.45], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [0.5, E_IN, { tw: 0.06, ln: 0.4, h: -0.2, la: [-0.55, 0, 0.1], ra: [-0.55, 0, -0.1], ll: [-0.6, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.75, E_OUT, { tw: 0, ln: 0.34, h: -0.16, la: [-0.45, 0, 0.1], ra: [-0.45, 0, -0.1], ll: [-0.5, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [1, E_SMOOTH, REST]
+]);
+// 3 高拋灌籃 (終結技)：蹲低把球收到腰側蓄勢 (0.3) → 起身躍起、雙臂高舉過頂將球高拋 (0.55，擊飛) → 落地收勢
+const BALL_3 = defineMove('高拋灌籃', {
+  dur: 0.6, strike: 0.55, cancel: 0.75, reach: 1.0, arc: -1, dmg: 1.2, knock: 1.0, finisher: true, projectile: 'BALL_LOB'
+}, [
+  [0.3, E_SMOOTH, { tw: 0.1, ln: 0.18, h: -0.22, la: [-0.5, 0, 0.35], ra: [-0.5, 0, -0.35], ll: [-0.55, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.55, E_IN, { tw: -0.05, ln: -0.12, h: 0.1, la: [-2.9, 0, 0.15], ra: [-2.9, 0, -0.15], ll: [-0.2, 0, -0.06], rr: [0.15, 0, 0.06] }],
+  [0.8, E_OUT, { tw: 0, ln: 0.05, h: 0.0, la: [-2.3, 0, 0.2], ra: [-2.3, 0, -0.2], ll: [-0.25, 0, -0.06], rr: [0.2, 0, 0.06] }],
+  [1, E_SMOOTH, REST]
+]);
+
 export const PLAYER_COMBOS = {
   FIST: [FIST_1, FIST_2, FIST_3],
   BAT: [BAT_1, BAT_2, BAT_3],
   BATON: [BATON_1, BATON_2, BATON_3],
   RACKET: [RACKET],
-  DUAL: [DUAL_1, DUAL_2, DUAL_3]
+  DUAL: [DUAL_1, DUAL_2, DUAL_3],
+  WHIP: [WHIP_1, WHIP_2, WHIP_3],
+  BALL: [BALL_1, BALL_2, BALL_3]
 } as const;
 export type PlayerComboSet = keyof typeof PLAYER_COMBOS;
 
@@ -485,21 +562,53 @@ export function strikeFrac(move: KfMove, i: number): number {
   return i === 0 ? move.strike : move.extraStrikes[i - 1];
 }
 
+// 群攻次目標傷害倍率 (主目標全額，其餘 ×此值；戰鬥系統與裝備頁群攻秒傷共用)
+export const AOE_SECONDARY_DMG = 0.8;
+
 // 第 i 擊傷害倍率：主擊為 dmg，額外擊取 extraDmg (未設時沿用 dmg)
 export function strikeDmg(move: KfMove, i: number): number {
   return i === 0 ? move.dmg : move.extraDmg[i - 1] ?? move.dmg;
 }
 
-// 第 i 擊結算方式：主擊沿用招式本身 (群攻 / 單體)；終結技額外擊為只扣血的群攻、其餘額外擊為單體判定
+// 第 i 擊結算方式：主擊沿用招式本身 (群攻 / 單體)；帶 aoe 的招式 (終結技或非終結技) 額外擊為群攻、其餘額外擊為單體判定
+// (主擊 / 額外擊是否擊飛另由 strikeHitMode 決定：只有終結技主擊擊飛)
 export type StrikeRoute = 'AOE' | 'AOE_LIGHT' | 'SINGLE';
 export function strikeRoute(move: KfMove, i: number): StrikeRoute {
   if (i === 0) return move.aoe ? 'AOE' : 'SINGLE';
-  return move.finisher && move.aoe ? 'AOE_LIGHT' : 'SINGLE';
+  return move.aoe ? 'AOE_LIGHT' : 'SINGLE';
 }
 
 // 第 i 擊可否擊飛：只有終結技主擊
 export function strikeCanLaunch(move: KfMove, i: number): boolean {
   return move.finisher && i === 0;
+}
+
+// 玩家命中 NPC 的結算模式：LAUNCH 擊飛 (終結技主擊)、SHOVE 推開指定距離並打斷前搖、LIGHT 只扣血
+export type PlayerHitMode = 'LIGHT' | 'SHOVE' | 'LAUNCH';
+// 第 i 擊模式：終結技主擊擊飛；武器設 lightPush > 0 時非終結技改為推擊；其餘只扣血
+export function strikeHitMode(move: KfMove, i: number, lightPush: number): PlayerHitMode {
+  if (strikeCanLaunch(move, i)) return 'LAUNCH';
+  return lightPush > 0 && !move.finisher ? 'SHOVE' : 'LIGHT';
+}
+
+// 扇形判定 (水平)：頂點 (cx, cz)、面向單位向量 (fx, fz)、半徑 radius、半角餘弦 cosHalf；
+// 回傳點 (px, pz) 到頂點的距離，範圍外回傳 -1 (距頂點 ≤ FAN_ANGLE_MIN_DIST 時不檢查角度，避免貼身目標因方向抖動落空)
+export const FAN_ANGLE_MIN_DIST = 0.6;
+export function probeFan(cx: number, cz: number, fx: number, fz: number, radius: number, cosHalf: number, px: number, pz: number): number {
+  const dx = px - cx;
+  const dz = pz - cz;
+  const d = Math.sqrt(dx * dx + dz * dz);
+  if (d > radius) return -1;
+  if (d > FAN_ANGLE_MIN_DIST && (dx * fx + dz * fz) / d < cosHalf) return -1;
+  return d;
+}
+
+// 長條判定 (水平)：自 (ox, oz) 沿面向單位向量 (fx, fz) 長 len、半寬 halfWidth 的膠囊 (以 probePath 取中心線最近點)；
+// 回傳沿長條方向的距離 (0..len)，範圍外回傳 -1；out 同 probePath (最近點 x / z、沿線比例)
+export function probeLine(ox: number, oz: number, fx: number, fz: number, len: number, halfWidth: number, px: number, pz: number, out: Float32Array | number[]): number {
+  const lateral = probePath(ox, oz, ox + fx * len, oz + fz * len, px, pz, out);
+  if (lateral > halfWidth) return -1;
+  return out[2] * len;
 }
 
 // 本幀跨過的額外命中時間點 (位元 i = 第 i 擊)；prevT / nowT 為圖層時間 (秒)，dur 為含節奏縮放的整招秒數

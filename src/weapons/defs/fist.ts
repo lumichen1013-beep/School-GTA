@@ -5,6 +5,7 @@ import type { WeaponDefinition } from '../types';
 // 徒手拳擊：無手持模型，連段為拳腳 (終結技騰空旋風腿：腰高衝擊環 + 著地補環)
 export const FIST: WeaponDefinition = {
   id: 'FIST',
+  release: 'released',
   slot: 1,
   icon: '🥊',
   name: '徒手拳擊',

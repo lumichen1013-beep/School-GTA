@@ -1,5 +1,5 @@
 import { soundManager } from '../audio/SoundEffects';
-import { getWeapon, isWeaponAvailable, resolveVariant, WEAPONS } from '../weapons/registry';
+import { getWeapon, isWeaponAvailable, isWeaponEnabled, resolveVariant, WEAPONS } from '../weapons/registry';
 import type { WeaponDefinition, WeaponId, WeaponWorld } from '../weapons/types';
 import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
@@ -58,6 +58,13 @@ export interface WeaponUnlockStep {
   cur: number;
   max: number;
 }
+// 武器解鎖橫幅：text/duration 為橫幅，sfx 為解鎖音效
+export interface WeaponUnlockBanner {
+  text: string;
+  duration: number;
+  sfx?: () => void;
+  autoEquip?: boolean; // 解鎖後是否自動裝備 (預設 true；籃球因與小遊戲持球互斥設 false)
+}
 export interface WeaponEquipEntry {
   id: WeaponId;
   icon: string;
@@ -67,6 +74,7 @@ export interface WeaponEquipEntry {
   reach: number;
   knockback: number;
   status: WeaponEquipStatus;
+  dev: boolean; // 開發中武器 (裝備頁標「🧪 開發中」)
   hint: string;
   summary: WeaponSummary; // 本世界連段估算 (秒傷 / 總傷 / 各招)
   unlockSteps: WeaponUnlockStep[]; // 解鎖進度 (徒手為空)
@@ -102,6 +110,10 @@ export class Progression {
   public teacherDefeatedCount: number = 0;
   public dogDefeatedCount: number = 0;
   public bikePatrolDefeatedCount: number = 0;
+  // 新武器解鎖進度 (由 CampusMode.updateMissionTracker 每幀寫入)
+  public basketballMade: number = 0;
+  public swimWon: boolean = false;
+  public trackWon: boolean = false;
   public inspectorDefeatedCount: number = 0;
   public hasRiddenBike: boolean = false;
   public hasEscapedDog: boolean = false;
@@ -175,35 +187,48 @@ export class Progression {
         else this.inspectorDefeatedCount++;
       }
     }
-    const { player, wantedSystem } = this.ctx;
-    if (role === 'STUDENT' && this.studentDefeatedCount >= 5 && !player.hasNormalBat) {
-      player.hasNormalBat = true;
-      player.setWeapon('NORMAL_BAT');
-      wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(滾輪或大地圖【裝備】切換，ATK 35)', 6000);
-      soundManager.playBatHit(player.position);
+    const { player } = this.ctx;
+    if (role === 'STUDENT' && this.studentDefeatedCount >= 5) {
+      this.unlockWeapon('NORMAL_BAT', {
+        text: '🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(滾輪或大地圖【裝備】切換，ATK 35)',
+        duration: 6000,
+        sfx: () => soundManager.playBatHit(player.position)
+      });
     }
     return entry;
   }
 
   // 傳奇成就【校園霸王】：擊倒生教、校犬與 5 名單車騎士解鎖神兵
   public checkSpecialBatUnlock() {
-    const { player, wantedSystem } = this.ctx;
-    if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5 && !player.hasSpecialBat) {
-      player.hasSpecialBat = true;
-      player.setWeapon('SPECIAL_BAT');
-      wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或大地圖【裝備】切換，ATK 68)', 7000);
-      soundManager.playSpecialBatHit(player.position);
+    const { player } = this.ctx;
+    if (this.teacherDefeatedCount >= 1 && this.dogDefeatedCount >= 1 && this.bikePatrolDefeatedCount >= 5) {
+      this.unlockWeapon('SPECIAL_BAT', {
+        text: '⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或大地圖【裝備】切換，ATK 68)',
+        duration: 7000,
+        sfx: () => soundManager.playSpecialBatHit(player.position)
+      });
     }
   }
 
   // 稀有成就【羽壇雙燕】：4F 羽球賽擊敗大如老師解鎖雙燕羽刃 (只限校園，呼叫端確認已擊敗；已解鎖時立即返回)
   public checkDualRacketUnlock() {
+    this.unlockWeapon('DUAL_RACKET', {
+      text: '🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或大地圖【裝備】切換，ATK 25×7 連擊)',
+      duration: 7000,
+      sfx: () => soundManager.playFanfare()
+    });
+  }
+
+  // 解鎖武器並自動裝備 (banner.autoEquip 為 false 時不裝備)、顯示橫幅與音效；未啟用 (dev 武器且開關關閉) 或已解鎖者直接返回，不設旗標 / 不橫幅 / 不裝備
+  public unlockWeapon(id: WeaponId, banner: WeaponUnlockBanner): boolean {
+    if (!isWeaponEnabled(id)) return false;
     const { player, wantedSystem } = this.ctx;
-    if (player.isWeaponUnlocked('DUAL_RACKET')) return;
-    player.setWeaponUnlocked('DUAL_RACKET', true);
-    player.setWeapon('DUAL_RACKET');
-    wantedSystem.showBanner('🏸 達成【羽壇雙燕】！擊敗羽球大如老師，解鎖神兵【雙燕羽刃】！(滾輪或大地圖【裝備】切換，ATK 25×7 連擊)', 7000);
-    soundManager.playFanfare();
+    if (player.isWeaponUnlocked(id)) return false;
+    player.setWeaponUnlocked(id, true);
+    if (banner.autoEquip !== false) player.setWeapon(id);
+    wantedSystem.showBanner(banner.text, banner.duration);
+    banner.sfx?.();
+    return true;
   }
 
   // 切換武器並顯示提示文字 (第一世界 / 第二世界，見武器定義 banner)
@@ -233,6 +258,7 @@ export class Progression {
         : !this.ctx.player.isWeaponUnlocked(def.id) ? 'locked'
         : 'unlocked';
       return {
+        dev: def.release === 'dev',
         id: def.id,
         icon: def.icon,
         name: resolveVariant(def.id, world).name,
@@ -260,7 +286,8 @@ export class Progression {
         step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
       ];
       case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
-      default: return [];
+      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id
+      default: return (getWeapon(id).unlock?.steps?.(this) ?? []).map((s) => step(s.label, s.cur, s.max));
     }
   }
 
@@ -293,6 +320,7 @@ export class Progression {
 
   // 大地圖點選裝備：檢查同 cycleWeapon，不可用時顯示解鎖條件橫幅
   public readonly equipById = (id: WeaponId): boolean => {
+    if (!isWeaponEnabled(id)) return false;
     const def = getWeapon(id);
     const { player, wantedSystem } = this.ctx;
     if (!this.canEquip(def)) {

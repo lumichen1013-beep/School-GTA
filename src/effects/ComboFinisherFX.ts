@@ -329,8 +329,8 @@ class ComboFinisherFXSystem {
     if (groundRadius > 0) this.spawnRing(center.x, groundY + 0.06, center.z, groundRadius, style.impact, delay);
   }
 
-  // 羽毛噴發：自 center (胸口高度) 放射向上、重力飄落旋轉；整池一次噴發
-  public featherBurst(center: THREE.Vector3) {
+  // 羽毛噴發：自 center (胸口高度) 放射向上、重力飄落旋轉；整池一次噴發。palette 依序輪流上色 (預設白 / 青 / 粉 = 雙燕羽刃；綁帶捆書傳書頁色)
+  public featherBurst(center: THREE.Vector3, palette: readonly number[] = FEATHER_COLORS) {
     const mesh = this.featherMesh;
     if (!mesh) return;
     const n = Math.min(this.feathers.length, getFxQuality().featherPool);
@@ -340,6 +340,7 @@ class ComboFinisherFXSystem {
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.6;
       const sp = 3.2 + Math.random() * 3.2;
       f.life = FEATHER_LIFE * (0.8 + Math.random() * 0.2);
+      f.color = palette[i % palette.length];
       f.x = center.x + Math.cos(a) * 0.3; f.y = center.y; f.z = center.z + Math.sin(a) * 0.3;
       f.vx = Math.cos(a) * sp; f.vz = Math.sin(a) * sp; f.vy = 2.2 + Math.random() * 3.6;
       f.rx = Math.random() * 6.28; f.ry = Math.random() * 6.28; f.rz = Math.random() * 6.28;

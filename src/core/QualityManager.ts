@@ -1,11 +1,12 @@
 import type { Engine } from './Engine';
 import { isTouchDevice } from './device';
 import {
-  PROBE, QUALITY_PRESETS, QUALITY_STORAGE_KEY, MODE_LABELS,
+  PROBE, QUALITY_PRESETS, QUALITY_STORAGE_KEY, FPS_LOCK_STORAGE_KEY, MODE_LABELS,
   analyzeFrames, areaChangedSignificantly, decideFromHigh, decideFromMedium, makeDeviceKey,
-  parseStoredQuality, resolvePixelRatio, resolveStartupTier, serializeStoredQuality,
+  parseStoredQuality, resolveAntialias, resolveFpsCap, resolvePixelRatio, resolveStartupTier, serializeStoredQuality,
   type QualityMode, type QualityTier, type StoredQuality,
 } from './quality';
+import { getDiagFlags } from './diagFlags';
 import { setFxTier } from '../effects/fxQuality';
 import { setNpcLodDistanceScale } from '../entities/npc/lod';
 
@@ -18,6 +19,7 @@ class QualityManager {
   private _tier: QualityTier = 'medium';
   private deviceKey = '';
   private gpu = '';
+  private blurOff = false; // 本次頁面是否已關閉 backdrop-filter (觸控裝置或 ?diag=&blur=0)；偵測結果以此為條件
   private needProbe = false;
   private lastFps: number | null = null;
 
@@ -31,6 +33,8 @@ class QualityManager {
   private mediumFps = 0;
   private areaCheckTimer = 0;
   private probeArmed = false; // 已進入世界 (開始畫面期間不量測)
+  private fpsLockUser: boolean | null = null; // 使用者手動「鎖定 30 FPS」開關 (null = 跟隨檔位)
+  private aaNoticeShown = false;
 
   private listeners = new Set<() => void>();
   // 自動偵測完成時的簡短提示 (由 main 接到 HUD 橫幅)
@@ -44,10 +48,31 @@ class QualityManager {
   get isProbing(): boolean { return this.phase !== 'idle'; }
   get gpuRenderer(): string { return this.gpu; }
 
+  // 目前生效的幀率上限 (0 = 不限)；開局偵測期間暫時解除
+  get fpsCap(): number {
+    return resolveFpsCap(QUALITY_PRESETS[this._tier].fpsCap, this.fpsLockUser, this.isProbing, getDiagFlags().fps);
+  }
+  // 設定 UI 開關狀態：使用者設定優先，否則跟隨檔位預設
+  get fpsLocked(): boolean {
+    return this.fpsLockUser ?? QUALITY_PRESETS[this._tier].fpsCap > 0;
+  }
+  // 本次 context 的抗鋸齒設定，與下次啟動將採用的設定是否不同 (需重新整理才生效)
+  get aaRestartNeeded(): boolean {
+    if (!this.engine || getDiagFlags().aa !== null) return false;
+    return resolveAntialias(this.stored) !== this.engine.antialias;
+  }
+  get antialias(): boolean { return this.engine?.antialias ?? true; }
+
   // 綁定引擎並套用啟動檔位 (須在第一次 compile / render 前呼叫，陰影開關不額外產生重新編譯)
   public attach(engine: Engine) {
     this.engine = engine;
     this.stored = parseStoredQuality(this.readStorage());
+    // 觸控裝置不分檔位一律關閉毛玻璃 (style.css 的 .no-blur)，須在第一次偵測前就生效，
+    // 否則偵測會把毛玻璃造成的低幀率誤判為低檔。桌機偵測時維持原狀 (毛玻璃開啟，與中、高檔最終狀態一致)。
+    // 診斷面板僅在 ?diag= 時建立，一般玩家偵測不受其影響。
+    this.blurOff = isTouchDevice() || getDiagFlags().blur === false;
+    document.body.classList.toggle('no-blur', isTouchDevice());
+    this.fpsLockUser = this.readFpsLock();
     this.gpu = readGpuRenderer(engine);
     this.deviceKey = makeDeviceKey({
       screenW: window.screen?.width || window.innerWidth,
@@ -56,7 +81,7 @@ class QualityManager {
       touch: isTouchDevice(),
       gpu: this.gpu,
     });
-    const start = resolveStartupTier(this.stored, this.deviceKey, viewportArea());
+    const start = resolveStartupTier(this.stored, this.deviceKey, viewportArea(), this.blurOff);
     this.needProbe = start.needProbe;
     if (!start.needProbe && this.stored.mode === 'auto' && this.stored.auto) this.lastFps = this.stored.auto.fps;
     this.applyTier(start.tier);
@@ -91,12 +116,19 @@ class QualityManager {
       this.needProbe = false;
       this.applyTier(mode);
     } else {
-      const start = resolveStartupTier(this.stored, this.deviceKey, viewportArea());
+      const start = resolveStartupTier(this.stored, this.deviceKey, viewportArea(), this.blurOff);
       this.lastFps = start.needProbe ? this.lastFps : this.stored.auto?.fps ?? null;
       this.applyTier(start.tier);
       this.needProbe = start.needProbe;
       if (start.needProbe && this.probeArmed) this.scheduleProbe(PROBE.SETTLE_MS);
     }
+    this.emit();
+  }
+
+  // 「鎖定 30 FPS」手動開關：存檔並優先於檔位預設
+  public setFpsLock(on: boolean) {
+    this.fpsLockUser = on;
+    try { window.localStorage.setItem(FPS_LOCK_STORAGE_KEY, on ? '1' : '0'); } catch { /* 無法寫入時僅本次生效 */ }
     this.emit();
   }
 
@@ -139,6 +171,8 @@ class QualityManager {
   private applyTier(tier: QualityTier) {
     this._tier = tier;
     const p = QUALITY_PRESETS[tier];
+    // 低檔關閉 backdrop-filter (見 style.css 的 .q-low；觸控裝置另由 .no-blur 一律關閉)
+    document.body.classList.toggle('q-low', tier === 'low');
     setFxTier(tier);
     setNpcLodDistanceScale(p.npcLodScale);
     if (this.engine) {
@@ -231,11 +265,16 @@ class QualityManager {
     this.intervals.length = 0;
     this.needProbe = false;
     this.lastFps = fps;
-    this.stored.auto = { tier, fps: Math.round(fps * 10) / 10, key: this.deviceKey, area: viewportArea(), at: Date.now() };
+    this.stored.auto = { tier, fps: Math.round(fps * 10) / 10, key: this.deviceKey, area: viewportArea(), blurOff: this.blurOff, at: Date.now() };
     this.writeStorage();
     if (this.stored.mode === 'auto') {
       if (tier !== this._tier) this.applyTier(tier);
       if (this.onNotify) this.onNotify(`已自動調整畫質：${MODE_LABELS[tier]}`);
+      // 抗鋸齒只能在建立 context 時決定：提示一次，下次啟動才套用
+      if (this.aaRestartNeeded && !this.aaNoticeShown && this.onNotify) {
+        this.aaNoticeShown = true;
+        this.onNotify('抗鋸齒變更將於重新整理後生效');
+      }
     }
     this.emit();
   }
@@ -246,6 +285,13 @@ class QualityManager {
     try { return window.localStorage.getItem(QUALITY_STORAGE_KEY); } catch { return null; }
   }
 
+  private readFpsLock(): boolean | null {
+    try {
+      const v = window.localStorage.getItem(FPS_LOCK_STORAGE_KEY);
+      return v === '1' ? true : v === '0' ? false : null;
+    } catch { return null; }
+  }
+
   private writeStorage() {
     try { window.localStorage.setItem(QUALITY_STORAGE_KEY, serializeStoredQuality(this.stored)); } catch { /* 無痕模式等無法寫入時僅本次生效 */ }
   }
@@ -254,11 +300,14 @@ class QualityManager {
     for (const fn of this.listeners) fn();
   }
 
-  // 診斷用：目前像素比與繪圖解析度
-  public rendererInfo(): { pixelRatio: number; width: number; height: number; shadow: number } {
+  // 診斷用：目前像素比與繪圖解析度，以及上一次 render 的 draw calls / 三角形 / shader programs 數
+  public rendererInfo(): { pixelRatio: number; width: number; height: number; shadow: number; calls: number; triangles: number; programs: number } {
     const r = this.engine?.renderer;
-    if (!r) return { pixelRatio: 0, width: 0, height: 0, shadow: 0 };
-    return { pixelRatio: r.getPixelRatio(), width: r.domElement.width, height: r.domElement.height, shadow: this.engine!.getShadowMapSize() };
+    if (!r) return { pixelRatio: 0, width: 0, height: 0, shadow: 0, calls: 0, triangles: 0, programs: 0 };
+    return {
+      pixelRatio: r.getPixelRatio(), width: r.domElement.width, height: r.domElement.height, shadow: this.engine!.getShadowMapSize(),
+      calls: r.info.render.calls, triangles: r.info.render.triangles, programs: r.info.programs?.length ?? 0,
+    };
   }
 
   public expectedPixelRatio(): number {

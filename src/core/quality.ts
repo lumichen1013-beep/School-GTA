@@ -12,12 +12,16 @@ export interface QualityPreset {
   pixelRatioMax: number; // 像素比上限 (另受 devicePixelRatio 限制)
   shadowMapSize: number; // 陽光陰影貼圖邊長 (0 = 關閉陰影)
   npcLodScale: number;   // NPC 分級模型距離倍率 (<1 = 更早改用合併網格)
+  fpsCap: number;        // 預設幀率上限 (0 = 不限)
+  minimapHz: number;     // 小地圖重繪頻率
+  fullmapHz: number;     // 大地圖開啟時的重繪頻率
+  minimapDprMax: number; // 雷達畫布的像素比上限
 }
 
 export const QUALITY_PRESETS: Readonly<Record<QualityTier, Readonly<QualityPreset>>> = {
-  high: { label: '高', pixelRatioMax: 2, shadowMapSize: 2048, npcLodScale: 1 },
-  medium: { label: '中', pixelRatioMax: 1.5, shadowMapSize: 1024, npcLodScale: 1 },
-  low: { label: '低', pixelRatioMax: 1, shadowMapSize: 0, npcLodScale: 0.7 },
+  high: { label: '高', pixelRatioMax: 2, shadowMapSize: 2048, npcLodScale: 1, fpsCap: 0, minimapHz: 25, fullmapHz: 20, minimapDprMax: 2 },
+  medium: { label: '中', pixelRatioMax: 1.5, shadowMapSize: 1024, npcLodScale: 1, fpsCap: 0, minimapHz: 25, fullmapHz: 20, minimapDprMax: 2 },
+  low: { label: '低', pixelRatioMax: 1, shadowMapSize: 0, npcLodScale: 0.7, fpsCap: 30, minimapHz: 10, fullmapHz: 10, minimapDprMax: 1 },
 };
 
 export const MODE_LABELS: Readonly<Record<QualityMode, string>> = { auto: '自動', high: '高', medium: '中', low: '低' };
@@ -34,6 +38,32 @@ export function isQualityTier(v: unknown): v is QualityTier {
 export function resolvePixelRatio(devicePixelRatio: number, tier: QualityTier): number {
   const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
   return Math.min(dpr, QUALITY_PRESETS[tier].pixelRatioMax);
+}
+
+// ---------------- 幀率上限 / 抗鋸齒 ----------------
+
+export const FPS_LOCK = 30;         // 「鎖定 30 FPS」開關開啟時的上限
+export const FPS_CAP_TOLERANCE_MS = 2; // 幀間隔容差：rAF 抖動時不至於因差 1~2ms 而多跳一幀
+
+// 實際幀率上限 (0 = 不限)。優先序：網址診斷覆蓋 > 開局偵測中 (暫時解除，否則會誤判) > 使用者手動開關 > 檔位預設
+export function resolveFpsCap(presetCap: number, userLock: boolean | null, probing: boolean, diagCap: number | null = null): number {
+  if (diagCap !== null) return diagCap;
+  if (probing) return 0;
+  if (userLock !== null) return userLock ? FPS_LOCK : 0;
+  return presetCap;
+}
+
+// 距上次執行邏輯 / 繪製已過 elapsedMs，是否應略過這個 rAF (不跑邏輯也不 render)
+export function shouldSkipFrame(elapsedMs: number, capFps: number): boolean {
+  if (!(capFps > 0)) return false;
+  return elapsedMs < 1000 / capFps - FPS_CAP_TOLERANCE_MS;
+}
+
+// 下次啟動是否開啟抗鋸齒：手動低檔、或自動模式已偵測為低檔時關閉；首次啟動 (無存檔) 維持開啟
+export function resolveAntialias(stored: StoredQuality): boolean {
+  if (stored.mode === 'low') return false;
+  if (stored.mode === 'auto' && stored.auto?.tier === 'low') return false;
+  return true;
 }
 
 // ---------------- 開局 FPS 實測 ----------------
@@ -119,6 +149,7 @@ export function decideFromHigh(s: FrameStats): QualityTier {
 // ---------------- 設定儲存 ----------------
 
 export const QUALITY_STORAGE_KEY = 'schoolgta.quality.v1';
+export const FPS_LOCK_STORAGE_KEY = 'schoolgta.fpslock.v1'; // '1' = 鎖定 30 / '0' = 不鎖；無值 = 跟隨檔位
 // 視窗面積 (CSS 像素) 與上次偵測時相差超過此倍率即重新偵測 (例如切換全螢幕、分割畫面、換螢幕)
 export const AREA_REDETECT_RATIO = 1.6;
 
@@ -127,6 +158,7 @@ export interface AutoResult {
   fps: number;
   key: string;   // 裝置識別鍵 (螢幕尺寸 / 像素比 / 觸控 / GPU)
   area: number;  // 偵測當下視窗 CSS 面積
+  blurOff: boolean; // 偵測當下頁面是否已關閉 backdrop-filter (舊結果無此欄位 = false；毛玻璃會拉低量測幀率，條件不同即不採用)
   at: number;    // 偵測時間 (epoch ms)
 }
 
@@ -145,7 +177,7 @@ export function parseStoredQuality(raw: string | null): StoredQuality {
     const a = o.auto;
     const auto = a && typeof a === 'object' && isQualityTier(a.tier) && typeof a.key === 'string' &&
       Number.isFinite(a.fps) && Number.isFinite(a.area) && a.area > 0
-      ? { tier: a.tier, fps: a.fps, key: a.key, area: a.area, at: Number.isFinite(a.at) ? a.at : 0 }
+      ? { tier: a.tier, fps: a.fps, key: a.key, area: a.area, blurOff: a.blurOff === true, at: Number.isFinite(a.at) ? a.at : 0 }
       : null;
     return { mode, auto };
   } catch {
@@ -178,10 +210,10 @@ export function areaChangedSignificantly(prevArea: number, area: number): boolea
   return r > AREA_REDETECT_RATIO || r < 1 / AREA_REDETECT_RATIO;
 }
 
-// 啟動時決定初始檔位：手動模式直接採用；自動模式且已有同裝置、相近視窗面積的偵測結果則沿用，否則以中檔起跑並重新偵測
-export function resolveStartupTier(stored: StoredQuality, key: string, area: number): { tier: QualityTier; needProbe: boolean } {
+// 啟動時決定初始檔位：手動模式直接採用；自動模式且已有同裝置、相近視窗面積、相同毛玻璃條件 (blurOff) 的偵測結果則沿用，否則以中檔起跑並重新偵測
+export function resolveStartupTier(stored: StoredQuality, key: string, area: number, blurOff = false): { tier: QualityTier; needProbe: boolean } {
   if (stored.mode !== 'auto') return { tier: stored.mode, needProbe: false };
   const a = stored.auto;
-  if (a && a.key === key && !areaChangedSignificantly(a.area, area)) return { tier: a.tier, needProbe: false };
+  if (a && a.key === key && a.blurOff === blurOff && !areaChangedSignificantly(a.area, area)) return { tier: a.tier, needProbe: false };
   return { tier: 'medium', needProbe: true };
 }

@@ -15,6 +15,8 @@ const STATUS_LABELS: Record<WeaponEquipEntry['status'], string> = {
   equipped: '✅ 已裝備', unlocked: '🟢 已解鎖', locked: '🔒 未解鎖', unavailable: '🚫 本世界不可用'
 };
 
+const DEV_LABEL = '🧪 開發中';
+
 function make(tag: string, cls: string, text?: string): HTMLElement {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
@@ -189,7 +191,9 @@ export class FullMapPanels {
       card.type = 'button';
       card.dataset.weaponId = w.id;
       card.setAttribute('aria-pressed', w.id === sel.id ? 'true' : 'false');
-      card.append(make('span', 'gear-icon', w.icon), make('span', 'gear-name', w.name), make('span', 'gear-status', STATUS_LABELS[w.status]));
+      const nameEl = make('span', 'gear-name', w.name);
+      if (w.dev) nameEl.append(make('small', 'gear-dev', ` ${DEV_LABEL}`));
+      card.append(make('span', 'gear-icon', w.icon), nameEl, make('span', 'gear-status', STATUS_LABELS[w.status]));
       return card;
     }));
     detail.replaceChildren(...this.buildDetail(sel));
@@ -201,6 +205,7 @@ export class FullMapPanels {
     const title = make('div', 'gear-detail-title');
     title.append(make('div', 'gear-detail-name', w.name));
     if (w.name !== w.baseName) title.append(make('div', 'gear-detail-sub', `本名：${w.baseName}`));
+    if (w.dev) title.append(make('div', 'gear-detail-sub gear-dev', DEV_LABEL));
     head.append(make('span', 'gear-detail-icon', w.icon), title, make('span', `gear-status gear-status-${w.status}`, STATUS_LABELS[w.status]));
 
     const stat = (label: string, value: string, note?: string) => {
@@ -215,7 +220,10 @@ export class FullMapPanels {
       stat('ATK', `${w.damage}`),
       stat('射程', `${w.reach}`),
       stat('擊退', `${w.knockback}`),
-      stat('約秒傷', `約 ${Math.round(s.dps)}/s`, '估算'),
+      stat('約秒傷', `約 ${Math.round(s.dps)}/s`, s.ranged ? `估算 · 距離 ${s.ranged.standardDistance}m` : '估算'),
+      ...(s.ranged === null ? [] : [stat('各距離秒傷', s.ranged.distances.map((d, i) => `${d}m ${Math.round(s.ranged!.dpsAt[i])}`).join(' · '), '遠程口徑')]),
+      ...(s.ranged?.scenarios ? [stat('蓄力情境秒傷', s.ranged.scenarios.map((c) => `${c.label} ${Math.round(c.dps)}`).join(' · '), '估算')] : []),
+      ...(s.groupDps === null ? [] : [stat(`群攻 ${s.groupTargets} 人`, `約 ${Math.round(s.groupDps)}/s`, '估算')]),
       stat('整套總傷', `${s.totalDamage}`, `${s.moves.length} 招 · ${s.totalSeconds.toFixed(1)} 秒`)
     );
 

@@ -28,6 +28,7 @@ export class BasketballGame {
   public currentActiveHotspot: ShootingHotspot | null = null;
   public scoreStreak: number = 0;
   public bestStreak: number = 0;
+  public totalMade: number = 0; // 累計進球數 (PERFECT / GOOD 入網；解鎖開發中武器用，只計小遊戲籃球)
 
   private ballVelocity: THREE.Vector3 = new THREE.Vector3();
   private ballResetTimer: number = 0;
@@ -277,6 +278,7 @@ export class BasketballGame {
             if (this.targetShotQuality === 'PERFECT') {
               soundManager.playSwish(this.basketballMesh.position);
               this.scoreStreak++;
+              this.totalMade++;
               if (this.scoreStreak > this.bestStreak) {
                 this.bestStreak = this.scoreStreak;
               }
@@ -289,6 +291,7 @@ export class BasketballGame {
               soundManager.playRimHit(this.basketballMesh.position);
               setTimeout(() => soundManager.playSwish(this.basketballMesh.position), 180);
               this.scoreStreak++;
+              this.totalMade++;
               if (this.scoreStreak > this.bestStreak) {
                 this.bestStreak = this.scoreStreak;
               }

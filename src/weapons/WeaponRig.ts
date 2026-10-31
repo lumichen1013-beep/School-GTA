@@ -48,6 +48,11 @@ export class WeaponRig {
     this.byId[id]?.glow?.(k, peak, color);
   }
 
+  // 瞄準姿勢模型變化 (彈弓橡皮筋拉伸等)；該武器無 aim 時不處理
+  public setAim(id: WeaponDisplayId, ratio: number) {
+    this.byId[id]?.aim?.(ratio);
+  }
+
   // 還原所有武器材質原值
   public resetGlow() {
     for (let i = 0; i < this.entries.length; i++) this.entries[i].handle.resetGlow();

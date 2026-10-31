@@ -14,7 +14,9 @@ import { swingTrail } from '../effects/SwingTrail';
 import { slashFX } from '../effects/SlashFX';
 import { WEAPON_FX_STYLES, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
 import { WeaponRig } from '../weapons/WeaponRig';
-import { getWeapon, resolveLoadout, resolveVariant } from '../weapons/registry';
+import { getWeapon, isWeaponEnabled, resolveLoadout, resolveVariant } from '../weapons/registry';
+import { devWeaponsMode } from '../weapons/featureFlags';
+import { SLING_AIM_STANCE } from '../weapons/slingshot/pose';
 import type { ResolvedWeapon, WeaponDefinition, WeaponDisplayId, WeaponId } from '../weapons/types';
 
 export type WeaponType = WeaponId;
@@ -720,7 +722,11 @@ export class Player {
   }
 
   public isWeaponUnlocked(id: WeaponId): boolean {
-    return getWeapon(id).unlock === null || this.unlockedWeapons.has(id);
+    if (!isWeaponEnabled(id)) return false;
+    const def = getWeapon(id);
+    // unlocked 模式下開發中武器免解鎖；locked 模式照一般規則
+    if (def.release === 'dev' && devWeaponsMode === 'unlocked') return true;
+    return def.unlock === null || this.unlockedWeapons.has(id);
   }
 
   // 只改解鎖旗標，不切換手上武器 (由呼叫端決定是否 setWeapon)
@@ -820,7 +826,7 @@ export class Player {
     }
   }
 
-  // 出招 (連段)：上一招命中後 0.6 秒內再按接續下一段，否則從第一段開始；出招中提早按下則預先輸入
+  // 出招 (連段)：上一招命中後 (武器 chainWindow，預設 0.6 秒) 內再按接續下一段，否則從第一段開始；出招中提早按下則預先輸入
   public attack(): boolean {
     if (this.isDead || this.isSwimming) return false; // 游泳狀態下雙手劃水，不可出拳揮棒
     if (!this.canAttack) {
@@ -872,7 +878,7 @@ export class Player {
     // 套組：羽球拍覆寫 > 目前武器的世界變體 (如第二世界普通棒 → 警棍)；同一招式組才可接續連段
     const loadout = this.displayLoadout;
     const moves = loadout.combo;
-    const chain = moves === this.activeLoadout.combo && this.sinceStrike <= 0.6 && this.comboIndex + 1 < moves.length;
+    const chain = moves === this.activeLoadout.combo && this.sinceStrike <= this.activeLoadout.chainWindow && this.comboIndex + 1 < moves.length;
     this.comboIndex = chain ? this.comboIndex + 1 : 0;
     this.activeLoadout = loadout;
     this.sinceStrike = 99;
@@ -972,7 +978,8 @@ export class Player {
   private updateSwingFx() {
     const move = this.kf.move;
     // 僅一般連段套組出拖尾 (暗殺等專用招式不出)
-    if (!move || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
+    // 發射型招式 (球) 不揮拖尾：光痕由投射物負責
+    if (!move || move.projectile || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
     const p = this.kf.progress;
     // 第二條拖尾 (雙持左手等) 區段獨立，不影響主拖尾與武器發光
     if (move.trail2) this.updateTrailLane(1, move, p, move.trail2, move.trailLimb2);
@@ -1117,7 +1124,39 @@ export class Player {
   }
 
   public get canAttack(): boolean {
-    return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain;
+    return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain && !this.attackLock;
+  }
+
+  // 瞄準姿勢 (readyPose 'SLING_AIM')：aimCharge = 目標蓄力比例 0..1 (由彈弓控制器每幀設定)，aimRatio = 平滑後實際套用比例；
+  // aimYaw 非 null 時角色朝向鎖定該角度 (蓄力開鏡期間面向鏡頭前方)
+  public aimCharge: number = 0;
+  public aimYaw: number | null = null;
+  private aimRatio: number = 0;
+  private aimRigId: WeaponDisplayId | null = null;
+
+  // 武器鎖：遠程回收型武器 (籃球) 的球在外時為 true，不可出招 (由 BallThrowController 設定)
+  public attackLock: boolean = false;
+
+  // 連段接續窗重新計時 (遠程回收型武器於接到球時呼叫，之後 chainWindow 秒內再出招接續下一段)
+  public refreshChainWindow() {
+    this.sinceStrike = 0;
+  }
+
+  // 手上武器模型顯示開關 (球投出期間隱藏)；只作用於目前顯示中的武器，換武器時由 WeaponRig.show 重設
+  public setHeldWeaponHidden(hidden: boolean) {
+    const part = this.weaponRig.part(this.displayWeaponId, 'R');
+    if (part) part.visible = !hidden;
+  }
+
+  // 瞬間轉向 (投球等需面向目標的出招)
+  public faceDirection(dx: number, dz: number) {
+    if (dx * dx + dz * dz < 1e-6) return;
+    this.rotationY = Math.atan2(dx, dz);
+  }
+
+  // 手部世界座標近似 (回收球的終點)：身前 0.3m、高 1.15m
+  public getHandPoint(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.position.x + Math.sin(this.rotationY) * 0.3, this.position.y + 1.15, this.position.z + Math.cos(this.rotationY) * 0.3);
   }
 
   public update(
@@ -1419,8 +1458,12 @@ export class Player {
       this.mesh.rotation.z = 0;
     }
 
-    // 6. 朝向旋轉 (Facing Direction)
-    if (isMoving && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
+    // 6. 朝向旋轉 (Facing Direction)；瞄準中 (aimYaw) 面向鏡頭前方，不隨移動方向轉身
+    if (this.aimYaw !== null && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
+      const diff = Math.atan2(Math.sin(this.aimYaw - this.rotationY), Math.cos(this.aimYaw - this.rotationY));
+      this.rotationY += diff * Math.min(delta * 18.0, 1.0);
+      this.mesh.rotation.y = this.rotationY;
+    } else if (isMoving && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
       const targetRotation = Math.atan2(_playerMoveDir.x, _playerMoveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
@@ -1844,7 +1887,30 @@ export class Player {
     }
 
     this.applyDualStance(delta);
+    this.applyAimStance(delta);
     this.applyCrouchReadyPose(isMoving);
+  }
+
+  // 瞄準姿勢 (readyPose 'SLING_AIM')：依蓄力比例把右臂前舉持弓、左臂前伸拉弦，同時驅動模型 (整支轉向前、橡皮筋拉伸)；
+  // 撐傘時左臂維持撐傘姿勢；出招圖層 (放弦) 啟動後由圖層接手並以目前姿勢為第 0 格
+  private applyAimStance(delta: number) {
+    const wants = this.displayLoadout.readyPose === 'SLING_AIM' && !this.isDead;
+    const target = wants ? this.aimCharge : 0;
+    this.aimRatio = THREE.MathUtils.lerp(this.aimRatio, target, Math.min(delta * 16, 1));
+    if (target === 0 && this.aimRatio < 0.002) this.aimRatio = 0;
+    if (wants) this.aimRigId = this.currentWeaponId;
+    if (this.aimRigId) {
+      this.weaponRig.setAim(this.aimRigId, this.aimRatio);
+      if (this.aimRatio === 0) this.aimRigId = null;
+    }
+    const d = this.aimRatio;
+    if (d === 0) return;
+    const S = SLING_AIM_STANCE;
+    const ra = this.rightArm.rotation;
+    ra.set(THREE.MathUtils.lerp(ra.x, S.rightArm.x, d), THREE.MathUtils.lerp(ra.y, S.rightArm.y, d), THREE.MathUtils.lerp(ra.z, S.rightArm.z, d));
+    if (this.isHoldingUmbrella) return;
+    const la = this.leftArm.rotation;
+    la.set(THREE.MathUtils.lerp(la.x, S.leftArm.x, d), THREE.MathUtils.lerp(la.y, S.leftArm.y, d), THREE.MathUtils.lerp(la.z, S.leftArm.z, d));
   }
 
   // 雙持架勢 (readyPose 'DUAL')：雙臂固定為倒提雙拍姿勢，不隨步伐擺動 (跑步時只隨步伐小幅晃動)，雙腿照常；蹲姿時淡出
@@ -1902,7 +1968,7 @@ export class Player {
       this.leftLeg.rotation.z = -0.07 * c;
       this.rightLeg.rotation.z = 0.07 * c;
     }
-    this.updateArmRig(c, Math.max(c, this.dualRatio));
+    this.updateArmRig(c, Math.max(c, this.dualRatio, this.aimRatio));
   }
 
   // 雙臂骨架：縮放、肩部基準位置 (站立維持原本以手臂中心為軸；蹲姿以肩為軸) 並同步給出招圖層

@@ -28,6 +28,9 @@ import { ColliderGrid } from './physics/ColliderGrid';
 import { StartScreen } from './ui/StartScreen';
 import { setupQualitySettings } from './ui/QualitySettings';
 import { setupDiagPanel } from './ui/DiagPanel';
+import { getDiagFlags } from './core/diagFlags';
+import { perfProbe } from './core/perfProbe';
+import { shouldSkipFrame } from './core/quality';
 import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
@@ -40,6 +43,12 @@ import { CampusLife } from './game/CampusLife';
 import { CampusSportsCrew } from './game/CampusSportsCrew';
 import { CombatSystem } from './game/CombatSystem';
 import { InteractionSystem } from './game/InteractionSystem';
+import { ProjectileSystem } from './weapons/projectiles/ProjectileSystem';
+import { createProjectileHost } from './weapons/projectiles/gameHost';
+import { installProjectileDebug } from './weapons/projectiles/devProjectileDebug';
+import { DEV_WEAPONS_BUILD, devWeaponsMode } from './weapons/featureFlags';
+import { BallThrowController } from './weapons/basketball/BallThrowController';
+import { SlingshotController } from './weapons/slingshot/SlingshotController';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -103,6 +112,9 @@ class SchoolGTASandbox implements GameContext {
   public readonly campusLife: CampusLife = new CampusLife(this);
   private readonly sportsCrew: CampusSportsCrew = new CampusSportsCrew(this);
   public readonly combat: CombatSystem = new CombatSystem(this);
+  public projectiles!: ProjectileSystem; // 共用投射物池 (於初始化時建立)
+  public ballThrow: BallThrowController | null = null; // 籃球武器狀態機 (僅開發中武器建置且開關未關閉)
+  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機 (同上)
   private readonly interaction = new InteractionSystem(this);
 
   private isGameRunning: boolean = false;
@@ -155,6 +167,10 @@ class SchoolGTASandbox implements GameContext {
     setupDiagPanel();
     this.input = new InputManager(this.engine.canvas);
     this.cameraCtrl = new ThirdPersonCamera(65, window.innerWidth / window.innerHeight, 0.1, 350);
+    if (this.diag.far !== null) { // ?diag=&far=：覆蓋相機遠裁切面
+      this.cameraCtrl.camera.far = this.diag.far;
+      this.cameraCtrl.camera.updateProjectionMatrix();
+    }
     await nextFrame();
 
     // 階段 1 (25%)：建置 3D 校園地圖、教學大樓、泳池與跑道
@@ -193,6 +209,12 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.init(this.engine.scene);
     comboFinisherFX.init(this.engine.scene);
     slashFX.init(this.engine.scene);
+    this.projectiles = new ProjectileSystem(createProjectileHost(this));
+    this.projectiles.init(this.engine.scene);
+    if (DEV_WEAPONS_BUILD && devWeaponsMode !== 'off') {
+      this.ballThrow = new BallThrowController(this);
+      this.slingshot = new SlingshotController(this);
+    }
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
     this.prewarmFx();
     // 畫質切換開關陰影後材質會重新編譯：立即重新預熱，避免之後首次施放特效時才卡頓
@@ -274,6 +296,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
+    // 開發驗證用測試彈 (僅 dev 武器建置；正式版整段 tree-shake)
+    if (DEV_WEAPONS_BUILD) installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
       onDodge: this.progression.triggerDodgeSkill
@@ -339,6 +363,8 @@ class SchoolGTASandbox implements GameContext {
     slashFX.prewarm(compile);
     impactDust.prewarm(this.engine.scene, compile);
     this.waterSplashVFX.prewarm(compile);
+    this.projectiles.prewarm(compile);
+    this.slingshot?.prewarm(compile);
   }
 
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
@@ -555,6 +581,9 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.reset();
     comboFinisherFX.reset();
     slashFX.reset();
+    this.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
+    this.slingshot?.cancel(); // 取消蓄力 / 開鏡
+    this.projectiles.reset();
     if (!isCampus) {
       this.detention.resetGuards();
     }
@@ -612,6 +641,7 @@ class SchoolGTASandbox implements GameContext {
     const colliders = this.activeColliders;
     this.isAnyChasing = false;
     this.isHighDanger = false;
+    if (this.diag.npc === false) return; // ?diag=&npc=0：跳過 NPC AI / update，照常繪製
     // 被搶單車數量超過上限 (含玩家下車後閒置者) 時回收最舊的路邊單車
     if (isCampus) this.campus.enforceStolenBikeCap();
     NPC.updateSharedEffects(delta);
@@ -648,8 +678,37 @@ class SchoolGTASandbox implements GameContext {
     }
   }
 
-  private tick = () => {
+  // 繪製一幀；?diag= 時量測邏輯 ms (本幀起點到此) 與 render 呼叫 ms，render=0 跳過繪製
+  private renderFrame() {
+    if (!perfProbe.enabled) {
+      if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+      return;
+    }
+    const t1 = performance.now();
+    perfProbe.logic.push(t1, t1 - this.frameStartMs);
+    if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+    const t2 = performance.now();
+    perfProbe.render.push(t2, t2 - t1);
+  }
+
+  private readonly diag = getDiagFlags();
+  private lastRunAt = 0;      // 上次實際執行邏輯 / 繪製的 rAF 時間戳
+  private frameStartMs = 0;   // 診斷計時：本幀邏輯起點 (僅 ?diag= 時使用)
+
+  private tick = (ts?: number) => {
     requestAnimationFrame(this.tick);
+
+    // 幀率上限：未達間隔就整幀略過 (不跑邏輯也不 render)。Engine.getDelta 只在執行幀呼叫，
+    // 因此 delta 自然是自上次執行幀起累積的實際時間 (上限 0.1s)，跳幀不會讓遊戲變慢或變快
+    const now = ts ?? performance.now();
+    const diagOn = perfProbe.enabled;
+    if (diagOn) perfProbe.onRaf(now);
+    if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
+    this.lastRunAt = now;
+    if (diagOn) {
+      perfProbe.onFrameRun(now);
+      this.frameStartMs = performance.now();
+    }
 
     const rawDelta = this.engine.getDelta();
     const delta = this.combat.scaleDelta(rawDelta);
@@ -663,7 +722,7 @@ class SchoolGTASandbox implements GameContext {
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
         this.engine.updateShadowFocus(this.player.position);
-        this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+        this.renderFrame();
         return;
       }
     }
@@ -671,7 +730,7 @@ class SchoolGTASandbox implements GameContext {
     // -0.5 主畫面/世界選單狀態：尚未進入遊戲時僅渲染背景天氣，嚴禁背景運算與操控天天國中
     if (!this.isGameRunning) {
       this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
-      this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+      this.renderFrame();
       return;
     }
 
@@ -792,15 +851,19 @@ class SchoolGTASandbox implements GameContext {
     if (isCampus) this.campus.updateEnforcers(delta, targetPosition);
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
-    if (isCampus) this.campusLife.update(delta, targetPosition);
+    if (isCampus && this.diag.npc !== false) this.campusLife.update(delta, targetPosition);
     // 固定駐點同學 (泳池小魚、操場阿凱、籃球場鬥牛)
-    if (isCampus) this.sportsCrew.update(delta, targetPosition);
+    if (isCampus && this.diag.npc !== false) this.sportsCrew.update(delta, targetPosition);
 
     // 校犬脫逃判定
     if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
 
     // 玩家招式命中結算與 NPC 攻擊玩家判定
     this.combat.updatePlayerStrike();
+    // 投射物：使用停格縮放後的 delta (停格 / 計量表暫停時凍結)；閒置時不走訪
+    this.ballThrow?.update(delta); // 預輸入 / 自動接投 / 準星 (須在投射物更新之前)
+    this.slingshot?.update(delta); // 蓄力 / 開鏡 / 鎖定 / 上彈 / 預輸入 (須在鏡頭更新之前)
+    this.projectiles.update(delta);
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);
     slashFX.update(delta, this.cameraCtrl.camera);
@@ -890,7 +953,7 @@ class SchoolGTASandbox implements GameContext {
 
     // 16. 渲染畫面 (陽光陰影跟隨玩家)
     this.engine.updateShadowFocus(targetPosition);
-    this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+    this.renderFrame();
   };
 }
 

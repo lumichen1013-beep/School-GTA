@@ -275,8 +275,11 @@ export class WeatherSystem {
       this.currentRainCount = targetPreset.rainCount;
 
       (this.engine.scene.background as THREE.Color).setHex(targetPreset.skyColor);
-      (this.engine.scene.fog as THREE.FogExp2).color.setHex(targetPreset.fogColor);
-      (this.engine.scene.fog as THREE.FogExp2).density = targetPreset.fogDensity;
+      const fogNow = this.engine.scene.fog as THREE.FogExp2 | null; // ?diag=&fog=0 時為 null
+      if (fogNow) {
+        fogNow.color.setHex(targetPreset.fogColor);
+        fogNow.density = targetPreset.fogDensity;
+      }
 
       this.engine.dirLight.intensity = targetPreset.dirIntensity;
       this.engine.dirLight.color.setHex(targetPreset.dirColor);
@@ -294,9 +297,10 @@ export class WeatherSystem {
     _fromSkyColor.copy(this.engine.scene.background as THREE.Color);
     _toSkyColor.setHex(targetPreset.skyColor);
 
-    _fromFogColor.copy((this.engine.scene.fog as THREE.FogExp2).color);
+    const fogStart = this.engine.scene.fog as THREE.FogExp2 | null;
+    if (fogStart) _fromFogColor.copy(fogStart.color);
     _toFogColor.setHex(targetPreset.fogColor);
-    this.fromFogDensity = (this.engine.scene.fog as THREE.FogExp2).density;
+    this.fromFogDensity = fogStart ? fogStart.density : targetPreset.fogDensity;
     this.toFogDensity = targetPreset.fogDensity;
 
     this.fromDirIntensity = this.engine.dirLight.intensity;
@@ -341,9 +345,11 @@ export class WeatherSystem {
       (this.engine.scene.background as THREE.Color).lerpColors(_fromSkyColor, _toSkyColor, transitionBlend);
 
       // 插值霧氣顏色與濃度
-      const fog = this.engine.scene.fog as THREE.FogExp2;
-      fog.color.lerpColors(_fromFogColor, _toFogColor, transitionBlend);
-      fog.density = THREE.MathUtils.lerp(this.fromFogDensity, this.toFogDensity, transitionBlend);
+      const fog = this.engine.scene.fog as THREE.FogExp2 | null;
+      if (fog) {
+        fog.color.lerpColors(_fromFogColor, _toFogColor, transitionBlend);
+        fog.density = THREE.MathUtils.lerp(this.fromFogDensity, this.toFogDensity, transitionBlend);
+      }
 
       // 插值日光與天光
       this.engine.dirLight.intensity = THREE.MathUtils.lerp(this.fromDirIntensity, this.toDirIntensity, transitionBlend);

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
+import { DEV_WEAPONS_BUILD } from '../weapons/featureFlags';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
+import { BASKETBALL_UNLOCK_GOAL } from '../weapons/defs/basketball';
 import { SurroundCoordinator } from './SurroundCoordinator';
 import { AttackTokenCoordinator } from './AttackTokenCoordinator';
 import { findSafeTeleportPos } from '../entities/shared/teleport';
@@ -341,6 +343,9 @@ export class CampusMode {
 
   private mountBike(bike: Bicycle, groundY: number) {
     this.ctx.player.cancelAttack();
+    this.ctx.ballThrow?.cancel();
+    this.ctx.slingshot?.cancel();
+    this.ctx.projectiles.reset(); // 上車：清空飛行中 / 回收中的投射物
     bike.mount(this.ctx.player, groundY);
     this.ctx.currentRidingBike = bike;
     this.ctx.player.isRidingVehicle = true;
@@ -546,6 +551,22 @@ export class CampusMode {
     if (racingGame.bestTrackTime !== this.lastTrackRecord) {
       this.lastTrackRecord = racingGame.bestTrackTime;
       tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
+    }
+    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。DEV_WEAPONS_BUILD 為 false 的正式版整段被移除；
+    // 開關 off / unlocked 時 unlockWeapon 不會觸發 (off 直接略過，unlocked 視為已解鎖)
+    progression.swimWon = racingGame.bestSwimTime !== null;
+    if (DEV_WEAPONS_BUILD && progression.swimWon) {
+      progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
+    }
+    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)。正式版整段被移除
+    progression.basketballMade = basketballGame.totalMade;
+    if (DEV_WEAPONS_BUILD && basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
+      progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
+    }
+    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓。正式版整段被移除
+    progression.trackWon = racingGame.bestTrackTime !== null;
+    if (DEV_WEAPONS_BUILD && racingGame.bestTrackTime) {
+      progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;

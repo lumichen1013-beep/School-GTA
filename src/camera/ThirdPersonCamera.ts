@@ -29,6 +29,15 @@ export class ThirdPersonCamera {
   public dashPull: number = 0;
   private dashPullBlend: number = 0;
 
+  // 瞄準鏡 (彈弓蓄力開鏡)：由呼叫端每幀設定目標比例 aimZoom (0..1，線性對應蓄力) 與倍率 aimZoomFactor (桌機 2×、手機 1.5×)，
+  // 內部平滑過渡；FOV 線性拉近到 1/factor、鏡頭距離 4.2 → 2.2 並加過肩偏移 (遵守室內距離上限與直屏補償)，放開後平滑回復
+  public aimZoom: number = 0;
+  public aimZoomFactor: number = 2;
+  private aimBlend: number = 0;
+  private static readonly AIM_DISTANCE = 2.2;
+  private static readonly AIM_SHOULDER = 0.6;
+  private static readonly AIM_BLEND_RATE = 10;
+
   public sensitivityX: number = 0.0022;
   public sensitivityY: number = 0.002;
 
@@ -97,8 +106,10 @@ export class ThirdPersonCamera {
     if (this.isCinematicExecution) return; // 暗殺運鏡期間鎖定自由視角旋轉
     if (this.isMatchView) return; // 羽球比賽轉播視角鎖定朝向球場
     if (this.isVehicleFollow) return; // 手機騎車視角跟隨車頭
-    this.yaw -= deltaX * this.sensitivityX;
-    this.pitch += deltaY * this.sensitivityY;
+    // 開鏡時靈敏度 × fov / 預設 fov (放大倍率越高轉得越慢)
+    const k = this.aimBlend > 0 ? this.camera.fov / this.defaultFov : 1;
+    this.yaw -= deltaX * this.sensitivityX * k;
+    this.pitch += deltaY * this.sensitivityY * k;
 
     // Clamp pitch to avoid camera flipping over head or under ground
     const minPitch = -0.15; // slightly looking up
@@ -125,9 +136,23 @@ export class ThirdPersonCamera {
   private applyPortraitFov() {
     this.defaultFov = portraitFov(this.baseFov(), this.portraitBlend);
     if (!this.isCinematicExecution) {
-      this.camera.fov = this.defaultFov;
+      this.camera.fov = this.aimedFov();
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  // 開鏡後的垂直 FOV：預設 FOV 依開鏡平滑比例線性拉近到 1/aimZoomFactor
+  private aimedFov(): number {
+    return this.aimBlend > 0 ? this.defaultFov * (1 - this.aimBlend * (1 - 1 / this.aimZoomFactor)) : this.defaultFov;
+  }
+
+  // 開鏡比例逼近目標 (真實時間)；變化時重算 FOV
+  private stepAimBlend(delta: number) {
+    const target = this.aimZoom < 0 ? 0 : this.aimZoom > 1 ? 1 : this.aimZoom;
+    const diff = target - this.aimBlend;
+    if (diff === 0) return;
+    this.aimBlend = Math.abs(diff) < 1e-3 ? target : this.aimBlend + diff * Math.min(delta * ThirdPersonCamera.AIM_BLEND_RATE, 1.0);
+    this.applyPortraitFov();
   }
 
   // 平滑係數逼近目標；僅在尚未收斂時重算 FOV
@@ -321,6 +346,7 @@ export class ThirdPersonCamera {
     if (this.isCinematicExecution) return;
 
     this.stepPortraitBlend(delta);
+    this.stepAimBlend(delta);
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)
     const focusPoint = this._focus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
@@ -354,6 +380,12 @@ export class ThirdPersonCamera {
       effectiveTargetDistance = ThirdPersonCamera.MATCH_DISTANCE;
     }
 
+    // 開鏡拉近：距離往 AIM_DISTANCE (直屏同樣乘補償係數) 靠攏，但不超過當下場景距離 (室內 2.8m / 樓梯間 / 電梯更近者維持)
+    if (this.aimBlend > 0) {
+      const aimDist = ThirdPersonCamera.AIM_DISTANCE * (isIndoors ? 1 : portraitDistanceScale(this.portraitBlend));
+      effectiveTargetDistance = THREE.MathUtils.lerp(effectiveTargetDistance, Math.min(effectiveTargetDistance, aimDist), this.aimBlend);
+    }
+
     this.dashPullBlend = THREE.MathUtils.lerp(this.dashPullBlend, this.dashPull, Math.min(delta * 8.0, 1.0));
     // 衝刺拉遠不得超過當下場景的距離上限 (電梯 1.75m / 樓梯間 1.85m / 室內 2.8m)
     const sceneCap = inElevator ? 1.75 : (inStairwell ? 1.85 : (isIndoors ? 2.8 : Infinity));
@@ -364,10 +396,14 @@ export class ThirdPersonCamera {
     const horizontalDistance = this.distance * Math.cos(this.pitch);
     // 直屏戶外額外抬高機位 (室內不抬高，避免頂到天花板)
     const heightLift = isIndoors ? 0 : PORTRAIT_HEIGHT_LIFT * this.portraitBlend;
+    // 過肩偏移：機位與視線同向右移 (鏡頭右方向 = (cos yaw, 0, −sin yaw))，遮擋射線仍由角色頭部出發，故不會穿牆
+    const shoulder = ThirdPersonCamera.AIM_SHOULDER * this.aimBlend;
+    const shoulderX = Math.cos(this.yaw) * shoulder;
+    const shoulderZ = -Math.sin(this.yaw) * shoulder;
     const idealPosition = this._ideal.set(
-      focusPoint.x + horizontalDistance * Math.sin(this.yaw),
+      focusPoint.x + horizontalDistance * Math.sin(this.yaw) + shoulderX,
       focusPoint.y + this.distance * Math.sin(this.pitch) + heightLift,
-      focusPoint.z + horizontalDistance * Math.cos(this.yaw)
+      focusPoint.z + horizontalDistance * Math.cos(this.yaw) + shoulderZ
     );
 
     // 4. 實體障礙物與實體牆壁遮擋射線/球體檢測 (AABB Swept-Sphere Raycast)
@@ -449,9 +485,9 @@ export class ThirdPersonCamera {
     // 比賽視角時視線焦點往鏡頭前方 (球網方向) 推移，角色落在畫面下方
     const lookAhead = ThirdPersonCamera.MATCH_LOOK_AHEAD * this.matchBlend;
     this.matchLookAt.set(
-      focusPoint.x - Math.sin(this.yaw) * lookAhead,
+      focusPoint.x - Math.sin(this.yaw) * lookAhead + shoulderX,
       focusPoint.y + PORTRAIT_LOOK_LIFT * this.portraitBlend,
-      focusPoint.z - Math.cos(this.yaw) * lookAhead
+      focusPoint.z - Math.cos(this.yaw) * lookAhead + shoulderZ
     );
     this.currentLookAt.lerp(this.matchLookAt, lerpFactor);
 

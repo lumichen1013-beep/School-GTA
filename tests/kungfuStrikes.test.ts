@@ -15,8 +15,8 @@ const DEBUG_LIGHT: KfMove = {
 // 額外擊排在主擊之前 (序號順序 ≠ 時間順序)
 const DEBUG_FINISHER: KfMove = { ...BAT_3, name: '測試終結', extraStrikes: [0.2, 0.35], extraDmg: [0.5, 0.5] };
 
-// 既有武器招式 (雙燕羽刃為多段招式，另有專屬測試 tests/dualRacket.test.ts)
-const ALL_PLAYER_MOVES = Object.entries(PLAYER_COMBOS).filter(([k]) => k !== 'DUAL').flatMap(([, v]) => [...v]);
+// 既有武器招式 (雙燕羽刃為多段招式，另有專屬測試 tests/dualRacket.test.ts；綁帶捆書見 tests/bookWhip.test.ts)
+const ALL_PLAYER_MOVES = Object.entries(PLAYER_COMBOS).filter(([k]) => k !== 'DUAL' && k !== 'WHIP').flatMap(([, v]) => [...v]);
 
 // 以固定幀長推進整招，回傳各幀送出的 strikeIndex 與送出時的圖層時間
 function runMove(move: KfMove, tempo: number, frames: readonly number[]) {

@@ -5,7 +5,8 @@ import type { LaunchCap } from './launch';
 import type { Vec3Like } from '../audio/spatialAudio';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET';
+// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')
+export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
 export type WeaponWorld = 'CAMPUS' | 'DETENTION';
@@ -25,9 +26,10 @@ export interface WeaponStats {
 }
 
 // 連段終結技特效參數：slamBolt = 下劈地裂附帶雷電、waistY = 旋身衝擊環高度、landRadius = 著地補環半徑 (0 / 未設 = 不補)、
-// feathers = 主擊噴發羽毛
+// feathers = 主擊噴發羽毛 (featherColors = 自訂色盤，未設為雙燕羽刃預設白 / 青 / 粉；綁帶捆書用紙白 / 墨藍當書頁)
 export interface WeaponFinisherFx {
   readonly feathers?: boolean;
+  readonly featherColors?: readonly number[];
   readonly slamBolt?: boolean;
   readonly waistY?: number;
   readonly landRadius?: number;
@@ -43,7 +45,8 @@ export interface WeaponSounds {
 // 拖尾 / 發光樣式：單一樣式或依持握手分色
 export type WeaponFxSpec = WeaponFxId | { readonly R: WeaponFxId; readonly L?: WeaponFxId };
 
-export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL';
+// SLING_AIM：待命同 WEAPON，蓄力時右臂前舉 / 左臂拉弦依蓄力比例插值 (Player.aimCharge)
+export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM';
 
 // 預建模型 (建構時一次建立，執行期只切換 visible / scale / 材質數值)
 export interface WeaponModelHandle {
@@ -52,6 +55,8 @@ export interface WeaponModelHandle {
   readonly glow: ((k: number, peak: number, color: number) => void) | null;
   // 還原材質原值 (發光基準)
   resetGlow(): void;
+  // 瞄準姿勢模型變化 (如彈弓橡皮筋拉伸 / 整支轉向前)：ratio = 蓄力比例 0..1；無則不處理
+  readonly aim?: (ratio: number) => void;
 }
 
 export interface WeaponModelSpec {
@@ -75,6 +80,9 @@ export interface WeaponUnlockProgress {
   readonly teacherDefeatedCount: number;
   readonly dogDefeatedCount: number;
   readonly bikePatrolDefeatedCount: number;
+  readonly basketballMade: number; // 小遊戲投籃累計進球 (BasketballGame.totalMade；武器投出的球不計)
+  readonly swimWon: boolean;       // 是否贏過游泳 (小魚)
+  readonly trackWon: boolean;      // 是否贏過跑操場 (阿凱)
 }
 
 // 實際揮擊時生效的套組共通欄位 (武器定義與場景覆寫共用)
@@ -86,24 +94,46 @@ interface WeaponLoadoutFields {
   readonly finisherFx?: WeaponFinisherFx;
   // 玩家終結技擊飛初速度上限 (未設 = NPC.ts 預設 10 / 7)；飛行距離 = h × 2v / 26
   readonly launchCap?: LaunchCap;
+  // 連段接續窗 (秒)：預設 0.6 (自命中時間點起算)；遠程回收型武器改自接到球起算
+  readonly chainWindow?: number;
   readonly model?: WeaponModelSpec;
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
   readonly readyPose: WeaponReadyPose;
 }
 
+// 遠程武器彈道參數：speed = 出手初速 (m/s，去程估算用；回程速度見 projectiles/collide RETURN_SPEED)、range = 最大射程 (m)、
+// catchDelay = 接到球後到可再出手的緩衝 (秒)、dpsDistance = 裝備頁標準秒傷距離 (m)；
+// charged = 蓄力單發型 (彈弓)：秒傷改用蓄力曲線 (slingshot/ballistics)，無回收
+export interface WeaponRanged {
+  readonly speed: number;
+  readonly range: number;
+  readonly catchDelay: number;
+  readonly dpsDistance: number;
+  readonly charged?: boolean;
+}
+
 export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly id: WeaponId;
+  // 'dev' = 開發中武器，僅 DEV_WEAPONS_BUILD 的建置且 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
+  readonly release: 'released' | 'dev';
   readonly slot: number;
   readonly icon: string;
   readonly banner: { readonly campus: string; readonly detention: string };
   readonly stats: WeaponStats;
   // 終結技群攻改讀招式上的 maxGold / shakeGold / hitStopGold (未設時回退一般欄位)
   readonly useGoldAoe?: boolean;
+  // 遠程回收型武器 (投出後飛行並回手)：裝備頁秒傷改用遠程口徑 (單發期望傷害 ÷ (前搖 + 去程 + 回程 + 接後 0.1s))
+  readonly ranged?: WeaponRanged;
+  // 非終結技推擊距離 (m)：> 0 時非終結技命中改走 SHOVE (推開並打斷前搖)；未設 / 0 = 只扣血 (現有武器)
+  readonly lightPush?: number;
   // 左手持械 (雙持)：持有時不撐傘 (比照特訓院收傘)，出招也不鎖左臂
   readonly suppressUmbrella?: boolean;
-  // null = 一開始即持有
-  readonly unlock: { lockedHint(p: WeaponUnlockProgress, world: WeaponWorld): string } | null;
+  // null = 一開始即持有；steps = 大地圖裝備頁的解鎖進度條 (未設則依 Progression 內建的舊武器步驟)
+  readonly unlock: {
+    lockedHint(p: WeaponUnlockProgress, world: WeaponWorld): string;
+    steps?(p: WeaponUnlockProgress): readonly { readonly label: string; readonly cur: number; readonly max: number }[];
+  } | null;
   // true = 沿用定義本身；false = 該世界不可用；物件 = 該世界變體
   readonly worlds: { readonly CAMPUS: true | WeaponVariant; readonly DETENTION: boolean | WeaponVariant };
 }
@@ -121,6 +151,7 @@ export interface ResolvedWeapon {
   readonly fx: { readonly R: WeaponFxId; readonly L: WeaponFxId };
   readonly finisherFx: WeaponFinisherFx;
   readonly launchCap: LaunchCap | null;
+  readonly chainWindow: number; // 連段接續窗 (秒)
   readonly anchors: WeaponHandMap<WeaponAnchor>;
   readonly sounds: WeaponSounds;
   readonly readyPose: WeaponReadyPose;

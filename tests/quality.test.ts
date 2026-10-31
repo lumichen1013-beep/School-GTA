@@ -160,8 +160,23 @@ describe('設定儲存與啟動檔位', () => {
   });
 
   it('序列化往返', () => {
-    const s: StoredQuality = { mode: 'low', auto: { tier: 'high', fps: 59.8, key, area: 1024000, at: 1 } };
+    const s: StoredQuality = { mode: 'low', auto: { tier: 'high', fps: 59.8, key, area: 1024000, blurOff: true, at: 1 } };
     expect(parseStoredQuality(serializeStoredQuality(s))).toEqual(s);
+  });
+
+  it('舊版偵測結果 (無 blurOff) 解析為 false；手動檔位不受影響', () => {
+    const raw = JSON.stringify({ mode: 'high', auto: { tier: 'low', fps: 27.6, key, area: 1e6, at: 5 } });
+    const s = parseStoredQuality(raw);
+    expect(s.mode).toBe('high');
+    expect(s.auto?.blurOff).toBe(false);
+  });
+
+  it('毛玻璃條件不同的偵測結果失效 (舊結果在有毛玻璃下測得；觸控裝置現已關閉)，手動模式不受影響', () => {
+    const old = { tier: 'low' as const, fps: 27.6, key, area: 1_000_000, blurOff: false, at: 0 };
+    expect(resolveStartupTier({ mode: 'auto', auto: old }, key, 1e6, true)).toEqual({ tier: 'medium', needProbe: true });
+    expect(resolveStartupTier({ mode: 'auto', auto: old }, key, 1e6, false)).toEqual({ tier: 'low', needProbe: false });
+    expect(resolveStartupTier({ mode: 'auto', auto: { ...old, blurOff: true } }, key, 1e6, true)).toEqual({ tier: 'low', needProbe: false });
+    expect(resolveStartupTier({ mode: 'high', auto: old }, key, 1e6, true)).toEqual({ tier: 'high', needProbe: false });
   });
 
   it('手動模式直接採用，不量測', () => {
@@ -169,12 +184,12 @@ describe('設定儲存與啟動檔位', () => {
   });
 
   it('自動模式：同裝置、面積相近沿用上次結果', () => {
-    const auto = { tier: 'high' as const, fps: 60, key, area: 1_000_000, at: 0 };
+    const auto = { tier: 'high' as const, fps: 60, key, area: 1_000_000, blurOff: false, at: 0 };
     expect(resolveStartupTier({ mode: 'auto', auto }, key, 1_100_000)).toEqual({ tier: 'high', needProbe: false });
   });
 
   it('自動模式：無結果 / 換裝置 / 面積大幅改變 → 中檔起跑並重新量測', () => {
-    const auto = { tier: 'high' as const, fps: 60, key, area: 1_000_000, at: 0 };
+    const auto = { tier: 'high' as const, fps: 60, key, area: 1_000_000, blurOff: false, at: 0 };
     expect(resolveStartupTier({ mode: 'auto', auto: null }, key, 1e6)).toEqual({ tier: 'medium', needProbe: true });
     expect(resolveStartupTier({ mode: 'auto', auto }, key + 'x', 1e6)).toEqual({ tier: 'medium', needProbe: true });
     expect(resolveStartupTier({ mode: 'auto', auto }, key, 2_000_000)).toEqual({ tier: 'medium', needProbe: true });

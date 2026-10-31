@@ -295,6 +295,91 @@ export class SoundEffects {
     }
   }
 
+  // ===== 投射物 / 彈弓 =====
+  // 籃球出手破風：低通 1.8k 的正弦下滑 (手臂揮出) + 帶通 600→1300Hz 的短噪音上掃 (空氣聲)，淡入淡出、量小不刺耳
+  public playThrowWhoosh(pos: Vec3Like) {
+    if (!this.gate('throwWhoosh', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('sine', [['set', 460, now], ['exp', 170, now + 0.16]],
+      [['set', 0.0001, now], ['lin', 0.16, now + 0.02], ['exp', 0.0001, now + 0.18]], now, now + 0.19, 1800);
+    this.noise(now, 0.14, { type: 'bandpass', freq: [['set', 600, now], ['exp', 1300, now + 0.14]], q: 0.7 },
+      [['set', 0.0001, now], ['lin', 0.07, now + 0.03], ['exp', 0.0001, now + 0.14]]);
+  }
+
+  // 球砸中目標悶響：低頻正弦下滑 (撞擊) + 低通 1.1k 的三角波橡膠拍擊，起音 6ms 避免喀聲
+  public playBallHit(pos: Vec3Like) {
+    if (!this.gate('ballHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 175, now], ['exp', 58, now + 0.13]], [['set', 0.0001, now], ['lin', 0.3, now + 0.006], ['exp', 0.0001, now + 0.15]], now, now + 0.16);
+    this.softTone('triangle', [['set', 480, now], ['exp', 190, now + 0.07]],
+      [['set', 0.0001, now], ['lin', 0.12, now + 0.005], ['exp', 0.0001, now + 0.08]], now, now + 0.09, 1100);
+  }
+
+  // 石子命中 (彈弓專屬)：小石擊中身體的乾脆「啪」— 低頻正弦下滑 (撞擊) + 低通 1.6k 的三角波短促敲擊，起音 4ms 避免喀聲、整體量小不刺耳
+  public playStoneHit(pos: Vec3Like) {
+    if (!this.gate('stoneHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 260, now], ['exp', 90, now + 0.07]], [['set', 0.0001, now], ['lin', 0.24, now + 0.004], ['exp', 0.0001, now + 0.09]], now, now + 0.1);
+    this.softTone('triangle', [['set', 820, now], ['exp', 340, now + 0.05]],
+      [['set', 0.0001, now], ['lin', 0.13, now + 0.003], ['exp', 0.0001, now + 0.06]], now, now + 0.07, 1600);
+  }
+
+  // 彈弓拉弦：橡皮筋被拉緊的低沉吱嘎 — 低通 900Hz 的三角波緩慢上滑 + 帶通 500Hz 的細噪音摩擦，淡入淡出，量小
+  public playSlingDraw(pos: Vec3Like) {
+    if (!this.gate('slingDraw', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 150, now], ['exp', 260, now + 0.3]],
+      [['set', 0.0001, now], ['lin', 0.1, now + 0.08], ['exp', 0.0001, now + 0.32]], now, now + 0.34, 900);
+    this.noise(now, 0.28, { type: 'bandpass', freq: [['set', 450, now], ['exp', 700, now + 0.28]], q: 1.2 },
+      [['set', 0.0001, now], ['lin', 0.05, now + 0.08], ['exp', 0.0001, now + 0.28]]);
+  }
+
+  // 彈弓放弦：橡皮筋彈響 — 低通 1.4k 的三角波快速下滑 (弦振) + 低頻正弦 (回彈)，衰減快不拖尾
+  public playSlingTwang(pos: Vec3Like) {
+    if (!this.gate('slingTwang', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 720, now], ['exp', 210, now + 0.12]],
+      [['set', 0.0001, now], ['lin', 0.2, now + 0.004], ['exp', 0.0001, now + 0.14]], now, now + 0.15, 1400);
+    this.tone('sine', [['set', 130, now], ['exp', 70, now + 0.08]], [['set', 0.0001, now], ['lin', 0.14, now + 0.004], ['exp', 0.0001, now + 0.1]], now, now + 0.11);
+  }
+
+  // 爆頭叮聲：兩個柔和正弦泛音 (E6 / B6) 快速淡出，不用方波與高頻噪音，冷卻 0.2 秒避免連發刺耳
+  public playHeadshotDing(pos: Vec3Like) {
+    if (!this.gate('headshotDing', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 1318.5, now]], [['set', 0.0001, now], ['lin', 0.16, now + 0.006], ['exp', 0.0001, now + 0.22]], now, now + 0.23);
+    this.tone('sine', [['set', 1975.5, now + 0.05]], [['set', 0.0001, now + 0.05], ['lin', 0.08, now + 0.056], ['exp', 0.0001, now + 0.26]], now + 0.05, now + 0.27);
+  }
+
+  // 接球：手掌包住球的輕拍 — 低通 700Hz 的正弦下滑 + 帶通 900Hz 的極短噪音，量小
+  public playBallCatch(pos: Vec3Like) {
+    if (!this.gate('ballCatch', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('sine', [['set', 240, now], ['exp', 110, now + 0.09]],
+      [['set', 0.0001, now], ['lin', 0.14, now + 0.008], ['exp', 0.0001, now + 0.11]], now, now + 0.12, 700);
+    this.noise(now, 0.04, { type: 'bandpass', freq: [['set', 900, now], ['exp', 600, now + 0.04]], q: 0.8 },
+      [['set', 0.0001, now], ['lin', 0.06, now + 0.004], ['exp', 0.0001, now + 0.04]]);
+  }
+
+  // 綁帶捆書：甩鞭脆響。不用方波 / 高頻噪音：低通 2.4k 的三角波快速下滑（鞭梢破音）+ 帶通 1.6k 短噪音（空氣爆裂），整體量小、衰減快
+  public playWhipCrack(pos: Vec3Like) {
+    if (!this.gate('whipCrack', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 1500, now], ['exp', 380, now + 0.07]],
+      [['set', 0.0001, now], ['lin', 0.2, now + 0.006], ['exp', 0.0001, now + 0.09]], now, now + 0.1, 2400);
+    this.noise(now, 0.06, { type: 'bandpass', freq: [['set', 1600, now], ['exp', 700, now + 0.06]], q: 0.9 },
+      [['set', 0.0001, now], ['lin', 0.16, now + 0.005], ['exp', 0.0001, now + 0.06]]);
+  }
+
+  // 綁帶捆書：書堆打在身上的悶響 (低頻正弦下滑 + 低通 900Hz 的三角波紙張拍擊)
+  public playBookThud(pos: Vec3Like) {
+    if (!this.gate('bookThud', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 150, now], ['exp', 55, now + 0.12]], [['set', 0.0001, now], ['lin', 0.3, now + 0.008], ['exp', 0.0001, now + 0.14]], now, now + 0.15);
+    this.softTone('triangle', [['set', 420, now], ['exp', 160, now + 0.06]],
+      [['set', 0.0001, now], ['lin', 0.14, now + 0.005], ['exp', 0.0001, now + 0.07]], now, now + 0.08, 900);
+  }
+
   // 普通棒球棍重擊木擊聲 (Wooden Bat Crack)
   public playBatHit(pos: Vec3Like) {
     if (!this.gate('batHit', pos)) return;

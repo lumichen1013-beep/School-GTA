@@ -22,13 +22,22 @@ export function isBossStunOpening(npc: NPC): boolean {
   return npc.role === 'DETENTION_BOSS' && npc.isBossStunned && !npc.isBossInvulnerable && npc.bossInvulnerableTimer <= 0;
 }
 
-// 指定位置是否位於 NPC 背後盲區 (面向與指向該點夾角 dot < -0.15，約背後 162 度)
-export function isBehindNpc(npc: NPC, x: number, z: number): boolean {
-  const dx = x - npc.position.x;
-  const dz = z - npc.position.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
+// 面向 rotY 的角色，來源方向 (toX, toZ)＝自角色指向攻擊來源 (不需正規化) 是否位於背後盲區
+// (面向與來源方向夾角 dot < -0.15，約背後 162 度)；長度過短視為正面
+export function isBehindFacing(rotY: number, toX: number, toZ: number): boolean {
+  const dist = Math.sqrt(toX * toX + toZ * toZ);
   if (dist <= 0.001) return false;
-  return (Math.sin(npc.rotationY) * dx + Math.cos(npc.rotationY) * dz) / dist < -0.15;
+  return (Math.sin(rotY) * toX + Math.cos(rotY) * toZ) / dist < -0.15;
+}
+
+// 指定位置是否位於 NPC 背後盲區 (近戰：攻擊來源 = 玩家位置)
+export function isBehindNpc(npc: NPC, x: number, z: number): boolean {
+  return isBehindFacing(npc.rotationY, x - npc.position.x, z - npc.position.z);
+}
+
+// 外部傳入攻擊行進方向 (dirX, dirZ)＝來源 → NPC (如投射物速度方向) 時是否來自背後：來源方向取其反向
+export function isAttackFromBehind(npc: NPC, dirX: number, dirZ: number): boolean {
+  return isBehindFacing(npc.rotationY, -dirX, -dirZ);
 }
 
 export class DetentionMode {
