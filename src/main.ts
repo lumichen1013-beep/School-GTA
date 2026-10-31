@@ -53,6 +53,7 @@ import { BallThrowController } from './weapons/basketball/BallThrowController';
 import { SlingshotController } from './weapons/slingshot/SlingshotController';
 import { FencerBossFight } from './game/fencer/FencerBossFight';
 import { BossCameraLink } from './game/fencer/BossCameraLink';
+import { RESPAWN_HEART_DELAY_MS } from './game/fencer/fencerStory';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -638,6 +639,9 @@ class SchoolGTASandbox implements GameContext {
         ? '已在保健室休養恢復，全校警報全面解除'
         : `🛡️ 已在【${this.detentionWorld.currentCheckpointName}】復甦！獲得 5 秒隱蔽保護，守衛警戒已重置！`;
       this.wantedSystem.showBanner(recoverMsg, 4000);
+      // 剛輸給花劍客：復活 1 秒後向陽之心打氣
+      const fencerNote = this.fencerBossFight.consumeDefeatNotice();
+      if (fencerNote) setTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
     }, 3000);
   }
 

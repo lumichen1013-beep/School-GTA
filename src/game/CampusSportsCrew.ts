@@ -7,6 +7,7 @@ import { CampusSoccerPair } from './CampusSoccerPair';
 import { createNameTagSprite } from '../entities/RaceRival';
 import { getAthleteLook } from '../entities/npc/models';
 import type { GameContext } from './GameContext';
+import { RUMOR } from './fencer/fencerStory';
 
 /**
  * 第一世界【天天國中】固定駐點同學 (npc.campusAnchor)：
@@ -80,6 +81,7 @@ export class CampusSportsCrew {
   private swimmer: NPC | null = null;
   private swimTask = createTask();
   private trackTask = createTask();
+  private trackChats = 0; // 拉筋輪播計數：隔一輪說一次花劍客傳聞 / 後日談
   private deckIdx = 0;
   private deckLineIdx = 0;
   private inviteCooldown = 0;
@@ -257,8 +259,16 @@ export class CampusSportsCrew {
       const first = npc.lifeTask !== task;
       // 起跑線外側分道 (陪跑模型起跑位置)，面向逆時針前進方向
       assignTask(npc, task, TRACK_START_X, TRACK_START_Z, 'STRETCH', 4, TRACK_START_X, TRACK_START_Z - 5, 1, true, 0.6,
-        first ? '要跟我比 200m 嗎？' : '');
+        first ? RUMOR.trackChallenge : this.nextTrackRumor());
     }
+  }
+
+  // 阿凱重新拉筋時：隔一輪說一句操場太陽花的傳聞 (首勝後換成後日談)
+  private nextTrackRumor(): string {
+    const n = this.trackChats++;
+    if (n % 2 === 1) return '';
+    const lines = this.ctx.progression.fencerDefeated ? RUMOR.trackAfter : RUMOR.trackBefore;
+    return lines[(n >> 1) % lines.length];
   }
 
   // 比賽開始：暫離 NPC 名單 (不受攻擊、不出現在雷達、不跑 AI)，由陪賽模型代演；不論是否被打倒或正在追人一律上場

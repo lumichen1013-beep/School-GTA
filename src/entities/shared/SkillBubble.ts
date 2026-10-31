@@ -17,6 +17,18 @@ export interface SkillBubbleStyle {
   anchorBottom?: boolean;
 }
 
+// NPC / 太陽花 / 花劍客共用的大字對話框 (512 畫布、46px 字、最多 2 行，放不下縮到 38px；建議 ≤ 18 字、上限 22 字)
+export const TALK_BUBBLE_STYLE: SkillBubbleStyle = {
+  fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: () => 46,
+  canvasW: 512, canvasH: 160, worldW: 3.9, worldH: 1.21875,
+  wrap: true, minFontSize: 38, anchorBottom: true
+};
+
+// 不可出現在行首的標點 (換行避頭)
+const NO_LINE_START = '，。、！？；：」』）〉》…—～~,.!?)';
+// 適合斷行的位置 (句讀之後)
+const BREAK_AFTER = '，。、！？；：…—～ ';
+
 const BUBBLE_FONT_FAMILY = '"Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
 
 // 頭頂技能名稱 / 對話氣泡 (3D Billboard Sprite，CanvasTexture 0-GC，可延遲建立)
@@ -68,20 +80,25 @@ export class SkillBubble {
   private static wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] | null {
     if (ctx.measureText(text).width <= maxW) return [text];
     const chars = Array.from(text);
-    // 從中間附近找最平均的斷點，兩行皆需放得下
-    let best: string[] | null = null;
-    let bestDiff = Infinity;
-    for (let i = 1; i < chars.length; i++) {
-      const a = chars.slice(0, i).join('');
-      const b = chars.slice(i).join('');
-      const wa = ctx.measureText(a).width;
-      const wb = ctx.measureText(b).width;
-      if (wa <= maxW && wb <= maxW && Math.abs(wa - wb) < bestDiff) {
-        bestDiff = Math.abs(wa - wb);
-        best = [a, b.trimStart()];
+    // 從中間附近找最平均的斷點，兩行皆需放得下；優先斷在句讀之後、第二行不以標點開頭 (避頭點)，找不到才放寬
+    for (let pass = 0; pass < 2; pass++) {
+      let best: string[] | null = null;
+      let bestScore = Infinity;
+      for (let i = 1; i < chars.length; i++) {
+        if (pass === 0 && NO_LINE_START.includes(chars[i])) continue;
+        const a = chars.slice(0, i).join('');
+        const b = chars.slice(i).join('');
+        const wa = ctx.measureText(a).width;
+        const wb = ctx.measureText(b).width;
+        const score = Math.abs(wa - wb) + (BREAK_AFTER.includes(chars[i - 1]) ? 0 : maxW * 0.3);
+        if (wa <= maxW && wb <= maxW && score < bestScore) {
+          bestScore = score;
+          best = [a, b.trimStart()];
+        }
       }
+      if (best) return best;
     }
-    return best;
+    return null;
   }
 
   private draw(text: string, isAdvanced: boolean) {

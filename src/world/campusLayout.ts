@@ -53,7 +53,7 @@ export const CAMPUS_POIS: readonly CampusPoi[] = [
   { id: 'pond', icon: '⛲', label: '生態園區 許願池', x: -55, z: -86 },
   { id: 'dodgeTeacher', icon: '🥋', label: '敬業樓 A 棟 閃身步老師', x: 32, z: 18 },
   { id: 'gate', icon: '🚪', label: '校門', x: 0, z: 105 },
-  { id: 'sunflower', icon: '🌻', label: '操場中央 太陽花 (花劍客)', x: -55, z: 34 },
+  { id: 'sunflower', icon: '🌻', label: '操場中央 太陽花', x: -55, z: 34 },
   { id: 'bikeShed', icon: '', label: '自行車棚', x: -55, z: -65 },
   { id: 'basketball', icon: '', label: '籃球場', x: 30, z: -45 },
   { id: 'track', icon: '', label: '操場跑道', x: -55, z: 30 },

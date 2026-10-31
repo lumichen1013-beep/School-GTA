@@ -3,6 +3,7 @@ import { soundManager } from '../audio/SoundEffects';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
+import { BROADCAST } from './fencer/fencerStory';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { BASKETBALL_UNLOCK_GOAL } from '../weapons/defs/basketball';
@@ -84,7 +85,8 @@ export class CampusMode {
     hasWishedPond: false,
     hasTastedHotFood: false,
     dodgeSkillLevel: 0,
-    fencerDefeated: false
+    fencerDefeated: false,
+    fencerStage: 0
   };
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
@@ -310,7 +312,9 @@ export class CampusMode {
     if (this.broadcastCooldown <= 0) {
       this.broadcastCooldown = 15.0;
       soundManager.playBroadcastChime(this.ctx.player.position);
-      wantedSystem.showBanner(this.announcements.next(), 6000);
+      // 首勝花劍客後偶爾插播太陽花鞠躬的後日談廣播
+      const afterWin = this.ctx.progression.fencerDefeated && Math.random() < BROADCAST.afterWinChance;
+      wantedSystem.showBanner(afterWin ? BROADCAST.afterWin : this.announcements.next(), 6000);
       for (const npc of this.ctx.npcs) {
         npc.freeze(4.0);
       }
@@ -582,6 +586,7 @@ export class CampusMode {
     tracker.hasTastedHotFood = progression.hasTastedHotFood;
     tracker.dodgeSkillLevel = progression.dodgeSkillLevel;
     tracker.fencerDefeated = !!progression.fencerDefeated;
+    tracker.fencerStage = this.ctx.fencerBossFight?.questStage ?? 0; // 測試替身可能未提供
     this.ctx.hud.updateMissionTracker(tracker);
   }
 }

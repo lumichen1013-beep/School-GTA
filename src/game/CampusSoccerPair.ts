@@ -3,6 +3,7 @@ import { soundManager } from '../audio/SoundEffects';
 import type { NPC, NPCLifeTask } from '../entities/NPC';
 import { assignTask, createTask, isBusy } from './campusLifeTasks';
 import type { GameContext } from './GameContext';
+import { RUMOR } from './fencer/fencerStory';
 
 /**
  * 第一世界操場北端球門前的踢足球雙人組 (npc.campusAnchor === 'PITCH')，共用一顆自己的足球：
@@ -67,6 +68,8 @@ export class CampusSoccerPair {
   private spotIdx = 0;
   private shotIsGoal = true;
   private lineCooldown = 0;
+  private replyTimer = 0;  // 太陽花傳聞：隊友接話倒數
+  private replyBy = 0;
   private hidden = false;
   private playerNear = false;
   private playerLineNear = false;
@@ -143,6 +146,10 @@ export class CampusSoccerPair {
       ball.visible = true;
     }
     if (this.lineCooldown > 0) this.lineCooldown -= delta;
+    if (this.replyTimer > 0) {
+      this.replyTimer -= delta;
+      if (this.replyTimer <= 0) this.players[this.replyBy].showSpeechBubble(RUMOR.soccerReplyBefore, false, 2.2);
+    }
     this.playerNear = d2 < SOUND_DIST2;
     this.playerLineNear = d2 < 18 * 18;
     const weather = this.ctx.weatherSystem.currentWeather;
@@ -343,7 +350,14 @@ export class CampusSoccerPair {
     if (this.playerNear) soundManager.playSoccerKick(this.ballPos);
     if (shot && this.lineCooldown <= 0 && this.playerLineNear) {
       this.lineCooldown = 6;
-      h.showSpeechBubble(this.shotIsGoal ? '看我射門！' : '射門～', false, 1.6);
+      if (!this.shotIsGoal && Math.random() < 1 / 3) {
+        // 太陽花傳聞 (首勝後換成後日談)；隊友 1.8s 後接話
+        const after = this.ctx.progression.fencerDefeated;
+        h.showSpeechBubble(after ? RUMOR.soccerShooterAfter : RUMOR.soccerShooterBefore, false, 1.8);
+        if (!after) { this.replyTimer = 1.8; this.replyBy = 1 - this.holder; }
+      } else {
+        h.showSpeechBubble(this.shotIsGoal ? '看我射門！' : '射門～', false, 1.6);
+      }
     }
     this.phase = 'FLIGHT';
     this.phaseTimer = 0;

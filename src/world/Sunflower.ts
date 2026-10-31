@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SkillBubble, type SkillBubbleStyle } from '../entities/shared/SkillBubble';
+import { SkillBubble, TALK_BUBBLE_STYLE } from '../entities/shared/SkillBubble';
 import type { SunflowerFace, SunflowerReaction } from '../game/fencer/fencerRules';
 
 // 操場中央的巨型太陽花 (花劍客的召喚者)：莖 + 葉 (1 call)、花盤 + 20 瓣 (1 call)、臉 (表情圖集 quad，1 call) = 3 draw calls。
@@ -11,11 +11,6 @@ const ATLAS_COLS = 4;
 const ATLAS_ROWS = 3;
 const CELL = 128;
 const HEAD_Y = 1.75;
-const BUBBLE_STYLE: SkillBubbleStyle = {
-  fillAlpha: 0.85, strokeAlpha: 0.85, fontSize: () => 46,
-  canvasW: 512, canvasH: 160, worldW: 3.9, worldH: 1.21875,
-  wrap: true, minFontSize: 38, anchorBottom: true
-};
 
 function colorize(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   const c = new THREE.Color(hex);
@@ -141,7 +136,7 @@ export class Sunflower {
     this.root.add(this.bendPivot);
     parent.add(this.root);
 
-    this.bubble = new SkillBubble(this.root, 2.85, BUBBLE_STYLE);
+    this.bubble = new SkillBubble(this.root, 2.85, TALK_BUBBLE_STYLE);
     this.setFace('SMUG');
   }
 

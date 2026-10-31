@@ -4,6 +4,7 @@ import { soundManager } from '../audio/SoundEffects';
 import type { NPC, NPCIdleBehavior, NPCLifeTask } from '../entities/NPC';
 import type { CollidableBox } from '../world/ColliderRegistry';
 import type { GameContext } from './GameContext';
+import { RUMOR } from './fencer/fencerStory';
 
 /**
  * 第一世界【天天國中】校園生活導演：讓 NPC 不只沿固定路線來回
@@ -86,7 +87,7 @@ const buildPoiSlots = (): PoiSlot[] => [
   // 中央花台邊緣 (背對花台坐在邊緣)
   ...[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((a) => ({
     x: Math.sin(a) * 4.7, z: 15 + Math.cos(a) * 4.7, faceX: Math.sin(a) * 9, faceZ: 15 + Math.cos(a) * 9,
-    hold: 'SIT' as NPCIdleBehavior, holdTime: 10, sitBack: 0.55, lines: ['今天天氣真好～', '花開得好漂亮', '午休好短喔'], occupant: null
+    hold: 'SIT' as NPCIdleBehavior, holdTime: 10, sitBack: 0.55, lines: ['今天天氣真好～', '花開得好漂亮', '午休好短喔', RUMOR.bench], occupant: null
   })),
   // 洗手台 (面向洗手台)
   ...mkSlots([[18.5, -6.3], [21.5, -6.3]], 20, -5, 'WASH', 3.5, ['洗手洗手～', '水好冰！'])
@@ -117,10 +118,13 @@ const FIGHT_LINES: Record<Persona, string[]> = {
   TIMID: ['嗚哇…好可怕…', '不要打了啦…'],
   GOOD: ['我去叫老師！', '不要打架啦！']
 };
-const GROUP_CHAT_LINES = [
+const GROUP_CHAT_BASE = [
   '昨天的影片你看了嗎？', '哈哈哈笑死', '真的假的啦', '下節是體育課耶！', '午餐要吃什麼？',
   '大如老師今天又在殺球', '你作業寫完沒？', '週末要去哪？'
 ];
+// 花劍客傳聞 (前導) / 後日談 (首勝後)：依旗標選表，預先組好不每次配置
+const GROUP_CHAT_LINES = [...GROUP_CHAT_BASE, RUMOR.chatBefore];
+const GROUP_CHAT_LINES_AFTER = [...GROUP_CHAT_BASE, ...RUMOR.chatAfter];
 
 // ---------- 鴿子 ----------
 const PIGEON_SPOTS: [number, number][] = [[6, 28], [-8, -14], [10, -12]];
@@ -486,7 +490,8 @@ export class CampusLife {
       if (g.chatTimer <= 0) {
         g.chatTimer = 2.4;
         const speaker = g.members[g.chatLineIdx % g.members.length].npc;
-        speaker.showSpeechBubble(`💬 ${GROUP_CHAT_LINES[g.chatLineIdx % GROUP_CHAT_LINES.length]}`, false, 2.2);
+        const chat = this.ctx.progression.fencerDefeated ? GROUP_CHAT_LINES_AFTER : GROUP_CHAT_LINES;
+        speaker.showSpeechBubble(`💬 ${chat[g.chatLineIdx % chat.length]}`, false, 2.2);
         g.chatLineIdx++;
       }
     }

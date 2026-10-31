@@ -2,12 +2,14 @@ import { PLAYER_COMBOS } from '../../entities/shared/kungfu';
 import { soundManager } from '../../audio/SoundEffects';
 import { buildRapier, RAPIER_BLADE_BASE, RAPIER_BLADE_TIP } from '../models/rapierModel';
 import type { WeaponDefinition } from '../types';
+import { RAPIER_UNLOCK_BANNER } from '../../game/fencer/fencerStory';
 
 // 玫瑰細劍 (花劍客首勝獎勵；release 與世界 Boss 花劍客同步：Boss 對所有玩家開放 → 正式)：快、準、遠的決鬥武器。
 // 第 1 段「含苞點刺」2 刺、第 2 段「薔薇三重奏」3 刺：窄錐單體 (3.6m、±45°)，只扣血不位移 (同全武器規則)；
 // 第 3 段「謝幕禮・千瓣綻放」突進 3.2m 後一線貫穿 (LINE 自突進起點起算，最多 4 人)，主擊沿面向擊飛約 6.0m。
 // 秒傷約 140 (介於雙燕羽刃 132 與黃金雷霆棒 150)；群攻只有終結技且限一直線，清群仍以黃金棒為王。只限校園。
-export const RAPIER_UNLOCK_TEXT = '🌹 擊敗花劍客！獲得 Boss 遺物【玫瑰細劍】！(滾輪或大地圖【裝備】切換，ATK 30 突刺連段)';
+// 劇情文案集中於 fencerStory.ts (首勝過場「劍借你」的回禮)，這裡只補操作說明
+export const RAPIER_UNLOCK_TEXT = `${RAPIER_UNLOCK_BANNER}(滾輪或大地圖【裝備】切換，ATK 30 突刺連段)`;
 
 export function createRapier(): WeaponDefinition {
   return {

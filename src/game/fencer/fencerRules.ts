@@ -1,5 +1,7 @@
+import { SUNFLOWER_LINES, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS, SUNFLOWER_DAILY_LINES, SUNFLOWER_WARM_LINES, HEART_MAX_PER_FIGHT, type DailyLine, type HeartLineId } from './fencerStory';
+
 // 世界 Boss【花劍客】的純規則 (無 three.js / DOM 依賴，可單元測試)：
-// 數值常數、太陽花台詞計數與再戰規則、三管血與換樂章、戰鬥中回血 (基礎 + 脫離戰鬥快速回氣)、獎勵。
+// 數值常數、太陽花台詞計數與再戰規則、劇情台詞頻率規則 (文字本身在 fencerStory.ts)、三管血與換樂章、戰鬥中回血 (基礎 + 脫離戰鬥快速回氣)、獎勵。
 
 export const FENCER = {
   /** 操場草皮中央：結界中心 (= 太陽花 / Boss 現身點) */
@@ -47,39 +49,35 @@ export interface SunflowerLine {
   face: SunflowerFace;
 }
 
-export const SUNFLOWER_LINES: readonly SunflowerLine[] = [
-  { text: '.', reaction: 'TWITCH', face: 'BLANK' },
-  { text: '..', reaction: 'TURN_TO', face: 'SIDE' },
-  { text: '...', reaction: 'DROOP_SWEAT', face: 'SWEAT' },
-  { text: '嘖。', reaction: 'TURN_AWAY', face: 'ANNOYED' },
-  { text: '滾', reaction: 'BURST_RED', face: 'ANGRY' },
-  { text: '哎呀別踩我', reaction: 'SHRINK', face: 'SHOCK' },
-  { text: '不要逼我', reaction: 'STIFFEN_HUM', face: 'ANGRY' },
-  { text: '我只是一朵花啊……', reaction: 'TREMBLE', face: 'CRY' },
-  { text: '大哥我錯了', reaction: 'BOW', face: 'CRY' },
-  { text: '看來不好好教訓你不行了', reaction: 'AWAKEN', face: 'EVIL' }
-];
-
-export const REMATCH_LINE_AFTER_WIN = '別、別再來了……好啦再一場';
-export const REMATCH_LINE_AFTER_LOSS = '又是你？還沒學乖？';
+export { SUNFLOWER_LINES, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS } from './fencerStory';
 
 export type FightResult = 'NONE' | 'WIN' | 'LOSS';
 
 export interface PokeResult {
   accepted: boolean;  // false = 冷卻中 (略過本次)
   line: SunflowerLine | null;
-  index: number;      // 第幾句 (1 起算；再戰為 0)
+  index: number;      // 第幾句 (1 起算；再戰 / 日常為 0)
   startFight: boolean;
+  /** 首勝後第一下的日常台詞 (含一次性溫情句)；followUp = 溫情句 2.6s 後的接話 */
+  daily: boolean;
+  followUp: DailyLine | null;
 }
 
+/** 首勝後：第 1 下說日常台詞，REMATCH_ARM_SEC 秒內再戳才開戰 (戰敗後仍戳 1 下即開戰) */
+export const REMATCH_ARM_SEC = 4;
+
 /**
- * 太陽花戳戳計數：首戰前需戳滿 10 次 (離開不歸零)，之後勝或敗都只需戳 1 次即可再戰；
- * 每次間隔 POKE_COOLDOWN 秒防連點跳過台詞。now 為秒。
+ * 太陽花戳戳計數：首戰前需戳滿 10 次 (離開不歸零)；戰敗後戳 1 次即可再戰；
+ * 首勝後先說日常台詞 (首次為一次性溫情句)，4 秒內再戳一下才開戰。每次間隔 POKE_COOLDOWN 秒防連點。now 為秒。
  */
 export class SunflowerTaunt {
   public pokes = 0;
   public lastResult: FightResult = 'NONE';
+  /** 一次性溫情句已播 (存檔) */
+  public warmLineShown = false;
   private lastPokeAt = -Infinity;
+  private armedUntil = -Infinity;
+  private lastDaily = -1;
 
   public get needsFullTaunt(): boolean {
     return this.lastResult === 'NONE';
@@ -89,21 +87,132 @@ export class SunflowerTaunt {
     return this.needsFullTaunt ? Math.max(0, FENCER.TAUNT_COUNT - this.pokes) : 1;
   }
 
-  public poke(now: number): PokeResult {
-    if (now - this.lastPokeAt < FENCER.POKE_COOLDOWN) return { accepted: false, line: null, index: 0, startFight: false };
+  /** 首勝後：已說過日常台詞、在 4 秒內 (再戳即開戰) */
+  public isArmed(now: number): boolean {
+    return this.lastResult === 'WIN' && now <= this.armedUntil;
+  }
+
+  public poke(now: number, rng: () => number = Math.random): PokeResult {
+    if (now - this.lastPokeAt < FENCER.POKE_COOLDOWN) return { accepted: false, line: null, index: 0, startFight: false, daily: false, followUp: null };
     this.lastPokeAt = now;
-    if (!this.needsFullTaunt) {
-      const text = this.lastResult === 'WIN' ? REMATCH_LINE_AFTER_WIN : REMATCH_LINE_AFTER_LOSS;
-      return { accepted: true, line: { text, reaction: 'AWAKEN', face: 'EVIL' }, index: 0, startFight: true };
+    if (this.lastResult === 'LOSS') {
+      return { accepted: true, line: { text: REMATCH_LINE_AFTER_LOSS, reaction: 'AWAKEN', face: 'EVIL' }, index: 0, startFight: true, daily: false, followUp: null };
+    }
+    if (this.lastResult === 'WIN') {
+      if (now <= this.armedUntil) {
+        this.armedUntil = -Infinity;
+        return { accepted: true, line: { text: REMATCH_LINE_AFTER_WIN, reaction: 'AWAKEN', face: 'EVIL' }, index: 0, startFight: true, daily: false, followUp: null };
+      }
+      this.armedUntil = now + REMATCH_ARM_SEC;
+      if (!this.warmLineShown) {
+        this.warmLineShown = true;
+        const w = SUNFLOWER_WARM_LINES[0];
+        return { accepted: true, line: { text: w.text, reaction: 'TURN_TO', face: w.face }, index: 0, startFight: false, daily: true, followUp: SUNFLOWER_WARM_LINES[1] };
+      }
+      // 日常 5 句隨機 (不連續重複)
+      const n = SUNFLOWER_DAILY_LINES.length;
+      let i = Math.min(n - 1, Math.floor(rng() * n));
+      if (i === this.lastDaily) i = (i + 1) % n;
+      this.lastDaily = i;
+      const d = SUNFLOWER_DAILY_LINES[i];
+      return { accepted: true, line: { text: d.text, reaction: 'TURN_TO', face: d.face }, index: 0, startFight: false, daily: true, followUp: null };
     }
     this.pokes = Math.min(FENCER.TAUNT_COUNT, this.pokes + 1);
     const line = SUNFLOWER_LINES[this.pokes - 1];
-    return { accepted: true, line, index: this.pokes, startFight: this.pokes >= FENCER.TAUNT_COUNT };
+    return { accepted: true, line, index: this.pokes, startFight: this.pokes >= FENCER.TAUNT_COUNT, daily: false, followUp: null };
   }
 
-  /** 戰鬥結束 (勝 / 敗 / 中途離開) 後記錄結果：離開視為敗，之後戳 1 次即可再戰 */
+  /** 戰鬥結束 (勝 / 敗 / 中途離開) 後記錄結果：離開視為敗 */
   public recordResult(result: 'WIN' | 'LOSS') {
     this.lastResult = result;
+    this.armedUntil = -Infinity;
+  }
+}
+
+/** 任務看板 / 大地圖揭露階段：0 未知 (還沒開過戰)、1 已遭遇、2 已首勝 */
+export function fencerQuestStage(fightsStarted: number, defeated: boolean): 0 | 1 | 2 {
+  if (defeated) return 2;
+  return fightsStarted > 0 ? 1 : 0;
+}
+
+// ===== 開場過場時間軸 (秒)：首戰 8.2s (向陽之心多 1.4s 台詞)、再戰 6.8s =====
+
+export interface IntroTimeline {
+  awaken: number;
+  blend: number;
+  end: number;
+}
+export const INTRO_FIRST: IntroTimeline = { awaken: 5.3, blend: 7.4, end: 8.2 };
+export const INTRO_REMATCH: IntroTimeline = { awaken: 4.5, blend: 6.0, end: 6.8 };
+export function introTimeline(fightsStarted: number): IntroTimeline {
+  return fightsStarted <= 1 ? INTRO_FIRST : INTRO_REMATCH;
+}
+
+/** 首勝才播 7s 長過場 (鎖操作)；之後的勝利一律短收尾 */
+export function victoryIsLong(alreadyDefeated: boolean): boolean {
+  return !alreadyDefeated;
+}
+
+/** 首勝過場 (鎖操作)：總長、恢復校園時間點、Boss 化花瓣時間點 */
+export const VICTORY_FIRST = { end: 7.0, restoreAt: 4.6, outroAt: 4.4, rapierAt: 5.8, faceAt: 2.8, dissolveAt: 3.4, freeze: 0.25 } as const;
+/** 再戰勝利 (短收尾，不鎖操作) */
+export const VICTORY_REPEAT = { end: 3.6, restoreAt: 2.2, dissolveAt: 1.4 } as const;
+
+// ===== Boss 台詞頻率 =====
+
+/** 開戰後這段時間內不喊「追擊」台詞 (開場玩家本來就站在 11m 外) */
+export const CHASE_LINE_MIN_FIGHT_SEC = 6;
+
+export type BossCue = 'S1' | 'S2' | 'S3_JUMP' | 'S3_FINALE' | 'BOW' | 'S4' | 'S5' | 'CHASE';
+
+/**
+ * 招式宣言頻率：大招 (S3 / S4 / S5) 與收招致意每次都喊；小招 (S1 / S2) 每個樂章只喊第一次；追擊每場一次。
+ */
+export class BossLineGate {
+  private perBar = 0;   // 位元：bar * 2 + (S1 0 / S2 1)
+  private once = 0;
+
+  public resetFight() {
+    this.perBar = 0;
+    this.once = 0;
+  }
+
+  public allow(cue: BossCue, bar: number): boolean {
+    if (cue === 'S1' || cue === 'S2') {
+      const bit = 1 << (Math.max(0, Math.min(7, bar)) * 2 + (cue === 'S1' ? 0 : 1));
+      if (this.perBar & bit) return false;
+      this.perBar |= bit;
+      return true;
+    }
+    if (cue === 'CHASE') {
+      if (this.once & 1) return false;
+      this.once |= 1;
+      return true;
+    }
+    return true;
+  }
+}
+
+/** 向陽之心：每場每句最多一次，合計最多 HEART_MAX_PER_FIGHT 句 */
+export class HeartVoice {
+  private fired = 0;
+  private count = 0;
+
+  public resetFight() {
+    this.fired = 0;
+    this.count = 0;
+  }
+
+  public get spoken(): number {
+    return this.count;
+  }
+
+  public tryFire(id: HeartLineId): boolean {
+    const bit = 1 << (id.charCodeAt(1) - 49);
+    if ((this.fired & bit) || this.count >= HEART_MAX_PER_FIGHT) return false;
+    this.fired |= bit;
+    this.count++;
+    return true;
   }
 }
 

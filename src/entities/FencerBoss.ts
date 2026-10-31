@@ -7,9 +7,10 @@ import { BossFX, PETAL_PALETTE_ROSE, PETAL_PALETTE_SUN, PETAL_PALETTE_DUSK, PETA
 import type { WeaponFxStyle } from '../effects/weaponFxStyle';
 import { FAN_ANGLE_MIN_DIST, probeLine } from './shared/kungfu';
 import type { PlantAoeShape } from '../world/EcologicalGarden';
+import { SkillBubble, TALK_BUBBLE_STYLE } from './shared/SkillBubble';
 import {
   BossHealthBars, FENCER, segmentPointDistance, rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit,
-  pinchClonePos, pinchHitMask, type BossDamageResult
+  pinchClonePos, pinchHitMask, type BossDamageResult, type BossCue
 } from '../game/fencer/fencerRules';
 
 // 世界 Boss【花劍客・向日爵士】：英倫紳士劍客。模型 7 個部件 (軀幹+頭+燕尾 / 雙臂 (右臂含細劍) / 雙腿 / 披風 / 高帽)，
@@ -122,7 +123,11 @@ export interface FencerBossHost {
   onBossDamaged(result: BossDamageResult, point: THREE.Vector3): void;
   shake(amount: number): void;
   hitStop(seconds: number): void;
+  /** 劇情提示點 (招式宣言 / 收招致意 / 追擊)：由宿主依頻率規則決定是否說話 */
+  onCue?(cue: BossCue): void;
 }
+
+const BUBBLE_Y = 2.75;
 
 // ===== 模型 =====
 function colored(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
@@ -315,6 +320,11 @@ export class FencerBoss {
   private readonly s5CloneTo = new THREE.Vector3();
   // 開場 / 亮相 / 換樂章
   private introPose = 0;
+  /** 擊敗後化成花瓣的秒數 (首勝長過場 3.4s；再戰 1.4s) */
+  public defeatDissolveAt = 1.4;
+  // 頭頂對話框 (跟隨位置但不受縮放 / 化花瓣隱藏影響；1 sprite，預建畫布)
+  private readonly bubbleAnchor = new THREE.Group();
+  private readonly bubble = new SkillBubble(this.bubbleAnchor, BUBBLE_Y, TALK_BUBBLE_STYLE);
 
   constructor(private readonly host: FencerBossHost, private readonly fx: BossFX) {
     this.container.name = 'fencer_boss';
@@ -343,7 +353,7 @@ export class FencerBoss {
     this.hat.position.copy(this.hatHome);
     this.body.add(this.hat);
     this.hat2.visible = false;
-    this.container.add(this.root, this.hat2);
+    this.container.add(this.root, this.hat2, this.bubbleAnchor);
     this.container.visible = false;
 
     const mkHat = (mesh: THREE.Mesh): HatFlight => ({
@@ -401,6 +411,17 @@ export class FencerBoss {
     return this.act === 'DEFEATED';
   }
 
+  /** 換樂章過場已進行秒數 (非換樂章時 -1) */
+  public get transitionTime(): number {
+    return this.act === 'TRANSITION' ? this.actTimer : -1;
+  }
+
+  /** 頭頂對話框 (NPC 樣式，≤ 22 字) */
+  public say(text: string, duration: number) {
+    if (typeof document === 'undefined') return;
+    this.bubble.show(text, text.length > 6, duration);
+  }
+
   // ===== 生命週期 =====
 
   /** 重置為新一場 (三管血全滿)；位置 = 結界中心 */
@@ -433,6 +454,7 @@ export class FencerBoss {
   public hide() {
     this.act = 'HIDDEN';
     this.container.visible = false;
+    this.bubble.hide();
     this.resetHats();
     this.clearSpecials();
     for (const r of this.rings) r.active = false;
@@ -632,7 +654,7 @@ export class FencerBoss {
         if (this.actTimer >= this.transitionTotal) this.endTransition();
         break;
       case 'DEFEATED':
-        if (this.actTimer >= 1.4 && this.root.visible) {
+        if (this.actTimer >= this.defeatDissolveAt && this.root.visible) {
           this.root.visible = false;
           this.fx.petalBurst(this.position.x, 1.2, this.position.z, 140, 7, PETAL_PALETTE_SUN, 4);
           this.fx.petalBurst(this.position.x, 1.2, this.position.z, 60, 5, PETAL_PALETTE_ROSE, 3);
@@ -647,6 +669,7 @@ export class FencerBoss {
     this.clampToArena();
     this.syncTransform();
     this.animate(dt);
+    this.bubble.update(dt);
   }
 
   private updateIntro(dt: number) {
@@ -675,7 +698,9 @@ export class FencerBoss {
     // 反貼身：玩家貼身 > 1.2s 或 2 秒內吃到 5 擊 → 後空翻脫身
     if (dist < 1.2) this.closeTimer += dt; else this.closeTimer = 0;
     // 反風箏：玩家脫戰或距離 > 8m 超過 1.5s → 追擊
+    const wasChasing = this.farTimer > CHASE_AFTER;
     if (this.host.playerOutOfCombat || dist > FENCER.OOC_MIN_DIST) this.farTimer += dt; else this.farTimer = 0;
+    if (!wasChasing && this.farTimer > CHASE_AFTER) this.host.onCue?.('CHASE');
 
     if (this.host.playerDead) return;
     if (this.move === 'NONE' && this.movePause <= 0 && (this.closeTimer > 1.2 || this.hitsInLast(2) >= 5)) {
@@ -853,6 +878,7 @@ export class FencerBoss {
       this.s5Round = 0;
       this.beginPinchAim(true);
     }
+    if (id !== 'S3') this.host.onCue?.(id);
   }
 
   /** 收招；extraRecover = 額外破綻秒數 (RECOVER 期間可被輸出) */
@@ -861,6 +887,7 @@ export class FencerBoss {
     this.sinceLastAttack = 0;
     this.act = toBow ? 'BOW' : 'RECOVER';
     this.actTimer = toBow ? 0 : 0.1 * Math.random() - extraRecover;
+    if (toBow) this.host.onCue?.('BOW');
   }
 
   private updateAttack(dt: number) {
@@ -1072,6 +1099,7 @@ export class FencerBoss {
         this.s3RingTimer = 0;
         soundManager.playDodge(true, this.position);
         this.fx.petalBurst(this.position.x, 0.5, this.position.z, 30, 4, PETAL_PALETTE_ROSE, 3);
+        this.host.onCue?.('S3_JUMP');
       }
       return;
     }
@@ -1097,6 +1125,7 @@ export class FencerBoss {
           this.queueRing(this.s3Land.x, this.s3Land.z, S3_FINAL_R, S3_FINAL_WARN + S3_RING_GAP, S3_FINAL_DMG, true);
           this.atkStep = 2;
           this.atkTimer = 0;
+          this.host.onCue?.('S3_FINALE');
         }
       }
       return;
@@ -1422,6 +1451,7 @@ export class FencerBoss {
   private syncTransform() {
     this.root.position.copy(this.position);
     this.root.rotation.y = this.rotY;
+    this.bubbleAnchor.position.copy(this.position);
   }
 
   // 程序化姿勢 (依狀態)：只改各部件旋轉，不改幾何
@@ -1460,6 +1490,8 @@ export class FencerBoss {
       armR = -2.9; armL = -0.3; armLz = 0.6; bodyPitch = -0.1;
     } else if (this.act === 'DEFEATED') {
       hipY = 0.55; bodyPitch = 0.5; armR = 0.2; armL = 0.1; legL = -1.4; legR = 0.2;
+      // 長過場 1.6s 起：抬頭、以劍拄地
+      if (this.defeatDissolveAt > 2 && this.actTimer >= 1.6) { bodyPitch = 0.12; armR = -0.75; }
     } else if (this.move === 'SIDESTEP') {
       legL = 0.5; legR = -0.4;
     } else {
@@ -1483,6 +1515,10 @@ export class FencerBoss {
   public prewarm(compile: () => void) {
     const v = this.container.visible;
     const cv = this.clone.visible;
+    if (typeof document !== 'undefined') this.bubble.ensure(); // 預建對話框畫布與 sprite (之後只重畫文字)
+    const sprite = this.bubble.sprite;
+    const sv = sprite?.visible ?? false;
+    if (sprite) sprite.visible = true;
     this.container.visible = true;
     this.hat2.visible = true;
     this.clone.visible = true;
@@ -1490,5 +1526,6 @@ export class FencerBoss {
     this.hat2.visible = false;
     this.clone.visible = cv;
     this.container.visible = v;
+    if (sprite) sprite.visible = sv;
   }
 }

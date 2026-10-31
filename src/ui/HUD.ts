@@ -25,6 +25,7 @@ import { isTouchDevice } from '../core/device';
 import { qualityManager } from '../core/QualityManager';
 import { QUALITY_PRESETS } from '../core/quality';
 import { getDiagFlags } from '../core/diagFlags';
+import { QUEST_STAGES } from '../game/fencer/fencerStory';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
@@ -116,6 +117,8 @@ export interface MissionTrackerData {
   hasTastedHotFood: boolean;
   dodgeSkillLevel: number;
   fencerDefeated: boolean;
+  /** 花劍客任務揭露段：0 未知 (操場中央的怪花)、1 已遭遇、2 完成 */
+  fencerStage: number;
 }
 
 export interface DetentionRadarData {
@@ -586,6 +589,9 @@ export class HUD {
     this.qPlantStatus = document.getElementById('q-plant-status');
     this.qFencerItem = document.getElementById('q-fencer-item');
     this.qFencerStatus = document.getElementById('q-fencer-status');
+    this.qFencerIcon = document.getElementById('q-fencer-icon');
+    this.qFencerName = document.getElementById('q-fencer-name');
+    this.qFencerDesc = document.getElementById('q-fencer-desc');
 
     this.qInspectorItem = document.getElementById('q-inspector-item');
     this.qInspectorProg = document.getElementById('q-inspector-prog');
@@ -680,6 +686,9 @@ export class HUD {
   private qPlantStatus: HTMLElement | null;
   private qFencerItem: HTMLElement | null;
   private qFencerStatus: HTMLElement | null;
+  private qFencerIcon: HTMLElement | null;
+  private qFencerName: HTMLElement | null;
+  private qFencerDesc: HTMLElement | null;
 
   private qInspectorItem: HTMLElement | null;
   private qInspectorProg: HTMLElement | null;
@@ -1117,7 +1126,8 @@ export class HUD {
       last.hasWishedPond === data.hasWishedPond &&
       last.hasTastedHotFood === data.hasTastedHotFood &&
       last.dodgeSkillLevel === data.dodgeSkillLevel &&
-      last.fencerDefeated === data.fencerDefeated
+      last.fencerDefeated === data.fencerDefeated &&
+      last.fencerStage === data.fencerStage
     ) {
       return;
     }
@@ -1192,6 +1202,10 @@ export class HUD {
 
     // 13. 世界 Boss：擊敗操場花劍客
     const fencerDone = data.fencerDefeated;
+    const fencerText = QUEST_STAGES[Math.max(0, Math.min(2, data.fencerStage))];
+    if (this.qFencerIcon) this.qFencerIcon.textContent = fencerText.goalIcon;
+    if (this.qFencerName) this.qFencerName.textContent = fencerText.name;
+    if (this.qFencerDesc) this.qFencerDesc.textContent = fencerText.desc;
     this.setQuestState(this.qFencerItem, this.qFencerStatus, fencerDone);
 
     const completedCount = [
@@ -1295,7 +1309,8 @@ export class HUD {
   }
 
   // 閃身步老師 (教學大樓身法教練) 對話視窗控制
-  public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void) {
+  // egg：首勝花劍客後句末接上的彩蛋台詞 (閃身步源自爵士老師的西洋劍步法)
+  public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void, egg?: string) {
     if (!this.dodgeTeacherModalEl) return;
     this.isDodgeDialogOpen = true;
 
@@ -1350,6 +1365,7 @@ export class HUD {
       this.dodgeLearnBtnEl.textContent = '✨ 技能已臻化境 (已完全精通)';
       this.dodgeLearnBtnEl.onclick = null;
     }
+    if (egg) this.dodgeDialogTextEl.textContent += egg;
 
     this.dodgeTeacherModalEl.style.display = 'flex';
   }

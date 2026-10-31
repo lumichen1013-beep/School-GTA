@@ -328,7 +328,7 @@ export class InteractionSystem {
           else if (lvl === 1) this.showPrompt('🐻 與閃身步老師對話 / 領悟【狗熊哆嗦毛】($2000)');
           else this.showPrompt('🥋 與閃身步老師對話 (技能已大成)');
         },
-        act: () => ctx.hud.openDodgeDialog(ctx.progression.cash, ctx.progression.dodgeSkillLevel, ctx.progression.learnDodgeSkill)
+        act: () => ctx.hud.openDodgeDialog(ctx.progression.cash, ctx.progression.dodgeSkillLevel, ctx.progression.learnDodgeSkill, ctx.fencerBossFight.dodgeEggLine())
       },
       // 持球中：提示由籃球系統自行顯示，E 鍵放下籃球
       {

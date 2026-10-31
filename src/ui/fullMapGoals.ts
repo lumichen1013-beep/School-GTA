@@ -1,5 +1,6 @@
 import type { MissionTrackerData, DetentionRadarData } from './HUD';
 import { getCampusPoi, type CampusPoiId } from '../world/campusLayout';
+import { QUEST_STAGES } from '../game/fencer/fencerStory';
 
 // 大地圖「下一步目標」：第一個未完成且有固定地點的任務 (純函式，供地圖脈衝環與目標卡共用)
 export interface FullMapGoal {
@@ -18,7 +19,14 @@ interface CampusGoalDef {
   title: string;
   desc: string;
   done: (d: MissionTrackerData) => boolean;
+  /** 依進度改寫圖示 / 標題 / 說明 (花劍客三段揭露) */
+  text?: (d: MissionTrackerData) => { icon: string; title: string; desc: string };
 }
+
+const fencerStageText = (d: MissionTrackerData) => {
+  const s = QUEST_STAGES[Math.max(0, Math.min(2, d.fencerStage))];
+  return { icon: s.goalIcon, title: s.goalTitle, desc: s.goalDesc };
+};
 
 // 依任務清單順序 (戰鬥 → 競技 → 探索)；無固定地點的任務 (擊倒同學 / 神兵 / 教官 / 甩掉校犬) 略過
 const CAMPUS_GOALS: readonly CampusGoalDef[] = [
@@ -31,7 +39,7 @@ const CAMPUS_GOALS: readonly CampusGoalDef[] = [
   { key: 'bike', poi: 'bikeShed', icon: '🚲', title: '騎乘火柴人自行車', desc: '自行車棚取車，按 E 騎乘', done: (d) => d.hasRiddenBike },
   { key: 'pond', poi: 'pond', icon: '🪙', title: '許願池投幣', desc: '生態園區蓮花許願池', done: (d) => d.hasWishedPond },
   { key: 'hotfood', poi: 'commissary', icon: '🍱', title: '合作社品嚐熱食', desc: '天天合作社櫃台', done: (d) => d.hasTastedHotFood },
-  { key: 'fencer', poi: 'sunflower', icon: '🎩', title: '挑戰操場花劍客', desc: '操場中央的太陽花，戳到它生氣為止', done: (d) => d.fencerDefeated }
+  { key: 'fencer', poi: 'sunflower', icon: '❓', title: QUEST_STAGES[0].goalTitle, desc: QUEST_STAGES[0].goalDesc, done: (d) => d.fencerDefeated, text: fencerStageText }
 ];
 
 // 校園下一目標 (全部完成回傳 null)
@@ -39,7 +47,8 @@ export function pickCampusGoal(d: MissionTrackerData): FullMapGoal | null {
   for (const g of CAMPUS_GOALS) {
     if (g.done(d)) continue;
     const poi = getCampusPoi(g.poi);
-    return { key: g.key, icon: g.icon, title: g.title, desc: g.desc, x: poi.x, z: poi.z };
+    const t = g.text ? g.text(d) : g;
+    return { key: g.key, icon: t.icon, title: t.title, desc: t.desc, x: poi.x, z: poi.z };
   }
   return null;
 }

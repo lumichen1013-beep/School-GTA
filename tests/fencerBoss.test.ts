@@ -53,10 +53,11 @@ describe('太陽花 10 次計數與再戰規則', () => {
     expect(t.remaining).toBe(6);
   });
 
-  it('首戰後 (勝或敗) 戳 1 次即可再戰，台詞依結果', () => {
+  it('戰敗後戳 1 次即可再戰；首勝後第 1 下日常台詞、4 秒內再戳才開戰，台詞依結果', () => {
     const win = new SunflowerTaunt();
     win.recordResult('WIN');
-    const r1 = win.poke(100);
+    expect(win.poke(100).startFight).toBe(false);
+    const r1 = win.poke(102);
     expect(r1.startFight).toBe(true);
     expect(r1.line!.text).toBe(REMATCH_LINE_AFTER_WIN);
     const loss = new SunflowerTaunt();

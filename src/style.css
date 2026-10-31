@@ -2073,6 +2073,8 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   bottom: calc(8.5vh + 20px);
   left: 50%;
   transform: translateX(-50%);
+  /* max-content：避免 left:50% 讓縮放寬度只剩半個畫面 (手機直屏一行僅 8 字) */
+  width: max-content;
   max-width: 85%;
   text-align: center;
   z-index: calc(var(--z-cutscene) + 15);

@@ -15,9 +15,19 @@ import type { GameContext } from '../GameContext';
 import { BattleModeSwitch } from './BattleMode';
 import { AwakeningStats, PlayerAwakening } from './PlayerAwakening';
 import {
-  FENCER, SunflowerTaunt, CombatRegen, canSkipIntro, victoryReward, bossBarLabel, MOVEMENT_NAMES,
-  type BossDamageResult
+  FENCER, SunflowerTaunt, CombatRegen, canSkipIntro, victoryReward, bossBarLabel, BossLineGate, HeartVoice,
+  introTimeline, fencerQuestStage, victoryIsLong, INTRO_FIRST, VICTORY_FIRST, VICTORY_REPEAT, CHASE_LINE_MIN_FIGHT_SEC,
+  type BossDamageResult, type BossCue, type IntroTimeline
 } from './fencerRules';
+import {
+  INTRO_FIRST_BEATS, INTRO_REMATCH_BEATS, REMATCH_BOSS_LINE, PLAYER_AWAKEN_BUBBLE, AWAKEN_BANNERS, AWAKEN_BANNER_GAP,
+  BOSS_OPEN_LINE, BOSS_OPEN_DELAY, BOSS_CUE_LINES, TRANSITION_BEATS, MOVEMENT_BANNERS, HEART_LINES, HEART_LOW_HP,
+  HEART_CRITICAL_HP, REGEN_BANNER, VICTORY_FIRST_BEATS, VICTORY_SLEEPY_LINE, VICTORY_BANNER, PLAYER_WIN_BUBBLE,
+  REMATCH_WIN_BOSS_LINE, DEFEAT_BOSS_LINES, RESPAWN_HEART_LINE, SUNFLOWER_DAILY_SEC, POKE_PROMPT, DODGE_TEACHER_EGG,
+  type StoryBeat, type DailyLine, type HeartLineId
+} from './fencerStory';
+import { loadFencerSave, storeFencerSave } from './fencerSave';
+import { buildRapier } from '../../weapons/models/rapierModel';
 
 // 世界 Boss【花劍客】總控：太陽花戳戳 → 開戰過場 (清場 / 結界 / 暮紅異空間 / Boss 亮相 / 玩家向陽覺醒)
 // → 三樂章戰鬥 (回血 / 脫戰快速回氣 / HUD) → 勝利 (獎勵、恢復) / 戰敗 (死亡前還原上限、恢復) / 中止 (切換世界)。
@@ -30,17 +40,12 @@ export interface FencerMainHooks {
   setNpcsSuspended(suspended: boolean): void;
 }
 
-// 開戰過場時間軸 (秒)：變身與 Boss 劍禮台詞重疊，總長 6.8s
+// 開戰過場時間軸 (秒)：前段固定；覺醒 / 鏡頭混回 / 結束依首戰 (8.2s) 或再戰 (6.8s) 取 introTimeline()
 const T_PETALS = 0.6;
 const T_FLASH = 1.0;
 const T_WALL_UP = 2.5;
 const T_BOSS = 2.6;
-const T_AWAKEN = 4.5;
-const T_BLEND = 6.0;
-const T_END = 6.8;
 const FIGHT_GRACE = 1.0;      // 開戰前 Boss 不出手秒數
-const VICTORY_RESTORE_AT = 2.2;
-const VICTORY_END_AT = 3.6;
 const DEFEAT_RESTORE_AT = 1.2;
 const DEFEAT_END_AT = 2.6;
 const DUSK_SKY = 0x3a1222;
@@ -56,6 +61,13 @@ const _cam = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _final = new THREE.Vector3();
 const _camObstacle = { x: 0, z: 0, r: 0.75, top: 2.5 };
+const _vicMid = new THREE.Vector3();
+const _vicSide = new THREE.Vector3();
+const VICTORY_CAM_BLEND = 0.8;
+const RAPIER_DROP_FROM = 7;
+const RAPIER_DROP_SEC = 0.28;
+const RAPIER_PROP_SCALE = 1.4; // 過場道具放大 (遠鏡頭看得清楚)
+const RAPIER_STUCK_Y = 1.16 * RAPIER_PROP_SCALE - 0.25; // 劍尖 (本地 +1.16) 朝下插入草地約 0.25m
 
 const smooth = (t: number) => {
   const c = Math.max(0, Math.min(1, t));
@@ -73,6 +85,7 @@ export class FencerBossFight {
   public boss!: FencerBoss;
   public fx!: BossFX;
   public awakening!: PlayerAwakening;
+  private rapierProp!: THREE.Object3D; // 首勝過場插地的玫瑰細劍
   private battle!: BattleModeSwitch;
   private hooks: FencerMainHooks | null = null;
   private timer = 0;
@@ -82,6 +95,24 @@ export class FencerBossFight {
   private wasFastRegen = false;
   private readonly bossHost: FencerBossHost;
   private initialized = false;
+  // ----- 劇情 (文字見 fencerStory.ts) -----
+  private tl: IntroTimeline = INTRO_FIRST;
+  private beats: readonly StoryBeat[] = INTRO_FIRST_BEATS;
+  private beatIdx = 0;
+  private readonly lineGate = new BossLineGate();
+  private readonly heart = new HeartVoice();
+  private transBar = 1;
+  private transBeatIdx = 0;
+  private fightFlags = 0;          // 1 = 開戰第一句已處理、2 = 第二則覺醒橫幅已出
+  private skippedIntro = false;
+  private longVictory = false;     // 首勝 7s 過場 (鎖操作)
+  private bannersHeld = false;
+  private defeatNotice = false;
+  private followUp: DailyLine | null = null;
+  private followUpTimer = 0;
+  private dodgeEggShown = false;
+  private promptN = -1;
+  private promptText = '';
 
   constructor(private readonly ctx: GameContext) {
     const self = this;
@@ -94,7 +125,8 @@ export class FencerBossFight {
       damagePlayer: (amount, dir, h, v, reason) => this.damagePlayer(amount, dir, h, v, reason),
       onBossDamaged: (res, point) => this.onBossDamaged(res, point),
       shake: (a) => requestCameraShake(a),
-      hitStop: (s) => this.ctx.combat.requestHitStop(s)
+      hitStop: (s) => this.ctx.combat.requestHitStop(s),
+      onCue: (cue) => this.onBossCue(cue)
     };
   }
 
@@ -113,13 +145,63 @@ export class FencerBossFight {
     this.fx = new BossFX();
     this.boss = new FencerBoss(this.bossHost, this.fx);
     this.awakening = new PlayerAwakening(engine.scene, player);
-    engine.scene.add(this.arena.group, this.boss.container, this.fx.group);
+    this.rapierProp = buildRapier().parts.R!;
+    this.rapierProp.visible = false;
+    this.rapierProp.scale.setScalar(RAPIER_PROP_SCALE);
+    engine.scene.add(this.arena.group, this.boss.container, this.fx.group, this.rapierProp);
     this.battle = new BattleModeSwitch({
       actorsDetach: () => [ecologicalGarden.group, ...this.ctx.campusNPCs.map((n) => n.mesh)],
       actorsHide: () => [...this.ctx.bicycles.map((b) => b.mesh), this.ctx.basketballGame.basketballMesh],
       worldDetach: () => [world.group]
     });
     void player;
+    this.loadSave();
+  }
+
+  // ===== 存檔 (劇情進度旗標) =====
+
+  private loadSave() {
+    const s = loadFencerSave();
+    const { progression } = this.ctx;
+    this.fightsStarted = s.fightsStarted;
+    progression.fencerDefeated = s.defeated;
+    progression.fencerWins = s.wins;
+    this.taunt.lastResult = s.lastResult;
+    this.taunt.pokes = s.pokes;
+    this.taunt.warmLineShown = s.warmLineShown;
+    this.dodgeEggShown = s.dodgeEggShown;
+    if (s.lastResult === 'WIN') this.sunflower.resetPose('SLEEPY');
+  }
+
+  private persist() {
+    const { progression } = this.ctx;
+    storeFencerSave({
+      fightsStarted: this.fightsStarted, defeated: progression.fencerDefeated, wins: progression.fencerWins,
+      lastResult: this.taunt.lastResult, pokes: this.taunt.pokes, warmLineShown: this.taunt.warmLineShown,
+      dodgeEggShown: this.dodgeEggShown
+    });
+  }
+
+  /** 任務看板 / 大地圖揭露段：0 未知、1 已遭遇、2 已首勝 */
+  public get questStage(): 0 | 1 | 2 {
+    return fencerQuestStage(this.fightsStarted, this.ctx.progression.fencerDefeated);
+  }
+
+  /** 閃身步老師彩蛋 (首勝後對話視窗句末接一句)；第一次看到時記錄存檔 */
+  public dodgeEggLine(): string | undefined {
+    if (!this.initialized || !this.ctx.progression.fencerDefeated) return undefined;
+    if (!this.dodgeEggShown) {
+      this.dodgeEggShown = true;
+      this.persist();
+    }
+    return DODGE_TEACHER_EGG;
+  }
+
+  /** 保健室復活後：剛輸給花劍客才回傳向陽之心的鼓勵 (取一次即清除) */
+  public consumeDefeatNotice(): string | null {
+    if (!this.defeatNotice) return null;
+    this.defeatNotice = false;
+    return RESPAWN_HEART_LINE;
   }
 
   // ===== 狀態 =====
@@ -133,8 +215,9 @@ export class FencerBossFight {
     return this.initialized && this.battle.active;
   }
 
+  /** 鎖操作的過場 (開戰過場 / 首勝 7s 過場)：main 期間只跑 updateCutscene + render */
   public get isCutscene(): boolean {
-    return this.phase === 'INTRO';
+    return this.phase === 'INTRO' || (this.phase === 'VICTORY' && this.longVictory);
   }
 
   public get canSkip(): boolean {
@@ -165,21 +248,31 @@ export class FencerBossFight {
   }
 
   public pokePromptText(): string {
-    if (!this.taunt.needsFullTaunt) return '🌻 戳一下太陽花 (再戰花劍客)';
-    return `🌻 戳一下太陽花 (${this.taunt.pokes}/${FENCER.TAUNT_COUNT})`;
+    const t = this.taunt;
+    if (t.lastResult === 'LOSS') return POKE_PROMPT.afterLoss;
+    if (t.lastResult === 'WIN') return t.isArmed(performance.now() / 1000) ? POKE_PROMPT.afterWinArmed : POKE_PROMPT.afterWinIdle;
+    if (t.pokes !== this.promptN) {
+      // 依進度烘托氣氛 (第 5 句後追問、第 9 句後警告)；只在計數變動時組字串
+      this.promptN = t.pokes;
+      const fmt = t.pokes >= 9 ? POKE_PROMPT.warn : t.pokes >= 5 ? POKE_PROMPT.tense : POKE_PROMPT.calm;
+      this.promptText = fmt(t.pokes, FENCER.TAUNT_COUNT);
+    }
+    return this.promptText;
   }
 
   public poke(): boolean {
     const res = this.taunt.poke(performance.now() / 1000);
     if (!res.accepted || !res.line) return true;
     this.sunflower.react(res.line.reaction, res.line.face, this.ctx.player.position);
-    this.sunflower.say(res.line.text, res.startFight ? 2.2 : 3.0);
+    this.sunflower.say(res.line.text, res.startFight ? 2.2 : res.daily ? SUNFLOWER_DAILY_SEC : 3.0);
     if (res.line.reaction === 'STIFFEN_HUM') soundManager.playBarrierHum(this.sunflower.position);
     else soundManager.playPetalBloom(this.sunflower.position);
-    if (res.startFight) {
-      this.ctx.wantedSystem.showBanner(`🌻「${res.line.text}」`, 2500);
-      this.startIntro();
-    }
+    // 首勝後日常台詞：溫情句 2.6s 後接話；溫情句只出現一次 (存檔)
+    this.followUp = res.followUp;
+    this.followUpTimer = SUNFLOWER_DAILY_SEC;
+    if (res.followUp || res.index > 0) this.persist();
+    // 第 10 句不另出橫幅 (開場字幕第一拍即同一句；過場期間橫幅一律暫存)
+    if (res.startFight) this.startIntro();
     return true;
   }
 
@@ -191,6 +284,14 @@ export class FencerBossFight {
     this.phase = 'INTRO';
     this.timer = 0;
     this.introSteps = 0;
+    this.followUp = null;
+    this.skippedIntro = false;
+    this.tl = introTimeline(this.fightsStarted);
+    this.beats = this.fightsStarted <= 1 ? INTRO_FIRST_BEATS
+      : this.taunt.lastResult === 'WIN' ? INTRO_REMATCH_BEATS.afterWin : INTRO_REMATCH_BEATS.afterLoss;
+    this.beatIdx = 0;
+    this.holdBanners();
+    this.persist();
     this.ctx.forceDismount();
     if (basketballGame.isHolding) basketballGame.drop(player, hud, wantedSystem);
     this.ctx.combat.resetTransientState(); // 中止出招、投射物、彈弓 / 籃球
@@ -210,15 +311,17 @@ export class FencerBossFight {
     player.rotationY = Math.PI;
     player.mesh.position.copy(player.position);
     player.mesh.rotation.set(0, Math.PI, 0);
-    this.setCutsceneUi(true);
-    this.subtitle('🌻 太陽花：「看來不好好教訓你不行了……」');
+    this.setCutsceneUi(true, canSkipIntro(this.fightsStarted));
+    this.playBeats(0);
   }
 
   /** 過場每幀 (main 於過場期間只跑這裡 + render) */
   public updateCutscene(dt: number) {
+    if (this.phase === 'VICTORY' && this.longVictory) { this.updateVictoryCutscene(dt); return; }
     if (this.phase !== 'INTRO') return;
     this.timer += dt;
     const t = this.timer;
+    this.playBeats(t);
     if (t >= T_PETALS && this.step(1)) {
       this.sunflower.setSpin(18);
       this.fx.petalBurst(FENCER.CENTER_X, 1.8, FENCER.CENTER_Z, 120, 7, PETAL_PALETTE_SUN, 3);
@@ -226,7 +329,7 @@ export class FencerBossFight {
     if (t >= T_FLASH && this.step(2)) this.stepUnloadActors();
     if (t >= T_WALL_UP && this.step(4)) this.stepUnloadWorld();
     if (t >= T_BOSS && this.step(8)) this.stepBossAppear();
-    if (t >= T_AWAKEN && this.step(16)) this.stepAwaken(false);
+    if (t >= this.tl.awaken && this.step(16)) this.stepAwaken(false);
     this.sunflower.update(dt);
     this.arena.update(dt);
     this.boss.update(dt);
@@ -236,7 +339,19 @@ export class FencerBossFight {
     this.awakening.update(dt, this.ctx.player.position, false);
     this.ctx.player.updateSkillBubble(dt);
     this.updateCutsceneCamera(t);
-    if (t >= T_END) this.finishIntro();
+    if (t >= this.tl.end) this.finishIntro();
+  }
+
+  /** 依時間播放劇情拍點 (字幕 / Boss框 / 玩家框) */
+  private playBeats(t: number) {
+    const beats = this.beats;
+    while (this.beatIdx < beats.length && t >= beats[this.beatIdx].t) this.showBeat(beats[this.beatIdx++]);
+  }
+
+  private showBeat(b: StoryBeat) {
+    if (b.who === 'PLAYER') this.ctx.player.showSkillBubble(b.text, false);
+    else if (b.who === 'BOSS') this.boss.say(b.text, b.dur ?? 2);
+    else this.subtitle(b.text);
   }
 
   private step(bit: number): boolean {
@@ -282,7 +397,6 @@ export class FencerBossFight {
     this.boss.resetForFight(FENCER.CENTER_X, FENCER.CENTER_Z);
     this.boss.beginIntro(Math.atan2(p.x - FENCER.CENTER_X, p.z - FENCER.CENTER_Z));
     this.ctx.hud.setBossHealth(FENCER.BAR_HP, FENCER.BAR_HP, false);
-    this.subtitle('🎩 花劍客・向日爵士：「午茶時間到了，就讓我來教教你什麼叫禮貌。」');
   }
 
   // 4.5s 玩家向陽覺醒 (數值立即套用；跳過時直接套用常駐視覺)
@@ -290,10 +404,11 @@ export class FencerBossFight {
     const { player } = this.ctx;
     this.stats.apply(player);
     this.regen.reset();
+    this.heart.resetFight();
+    this.lineGate.resetFight();
     if (instant) this.awakening.applyInstant();
     else this.awakening.playIntro();
-    player.showSkillBubble('☀️ 向陽覺醒', true);
-    if (!instant) this.subtitle('☀️ 太陽花最後一道朝陽選擇了你——向陽覺醒！');
+    player.showSkillBubble(PLAYER_AWAKEN_BUBBLE, true);
   }
 
   private updateCutsceneCamera(t: number) {
@@ -306,20 +421,20 @@ export class FencerBossFight {
       const a = 0.35 + t * 0.35;
       _cam.set(cx + Math.sin(a) * 6.5, 2.6 + t * 0.4, cz + Math.cos(a) * 6.5);
       _look.set(cx, 1.6, cz);
-    } else if (t < T_AWAKEN) {
+    } else if (t < this.tl.awaken) {
       // 玩家肩後看向結界中心 (花劍客亮相)
       const k = smooth((t - T_WALL_UP) / 0.8);
       _cam.set(p.x + 2.2, 2.2 + 0.6 * (1 - k), p.z + 3.6 - k * 7.5);
       _look.set(cx, 1.5 + (1 - k) * 0.6, cz);
-    } else if (t < T_BLEND) {
+    } else if (t < this.tl.blend) {
       // 玩家正面中景 (變身)
-      const k = smooth((t - T_AWAKEN) / 1.5);
+      const k = smooth((t - this.tl.awaken) / 1.5);
       _cam.set(p.x + 1.6, 1.5 + k * 0.4, p.z - 4.6 + k * 0.5);
       _look.set(p.x, 0.9 + k * 0.2, p.z);
     } else {
       // 混回玩家身後 (與 resetBehind 相同公式，結束時無跳切)
       this.behindCamPos(_final);
-      const k = smooth((t - T_BLEND) / (T_END - T_BLEND));
+      const k = smooth((t - this.tl.blend) / (this.tl.end - this.tl.blend));
       _cam.set(p.x + 1.6, 1.9, p.z - 4.1).lerp(_final, k);
       _cam.y += Math.sin(k * Math.PI) * 1.5; // 弧形升高繞過角色頭頂
       _look.set(p.x, 1.1 + 0.25 * k, p.z);
@@ -339,6 +454,7 @@ export class FencerBossFight {
   /** 跳過過場：補做尚未執行的步驟，覺醒直接套用 */
   public skipIntro() {
     if (!this.canSkip) return;
+    this.skippedIntro = true;
     if (this.step(1)) { /* 花瓣爆散略過 */ }
     if (this.step(2)) this.stepUnloadActors();
     if (this.step(4)) this.stepUnloadWorld();
@@ -360,7 +476,9 @@ export class FencerBossFight {
     cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
     this.boss.startFight(FIGHT_GRACE);
     this.ctx.input.requestPointerLock();
-    wantedSystem.showBanner('☀️ 向陽覺醒！體力上限 200・戰鬥中持續回氣，拉開距離可快速回氣！', 3500);
+    this.fightFlags = 0;
+    this.releaseBanners();
+    wantedSystem.showBanner(AWAKEN_BANNERS[0], AWAKEN_BANNER_GAP * 1000);
   }
 
   // ===== 戰鬥每幀 (main 一般流程；玩家更新之後) =====
@@ -405,13 +523,21 @@ export class FencerBossFight {
   public update(delta: number) {
     if (!this.initialized) return;
     if (this.phase === 'IDLE') {
+      if (this.followUp) {
+        this.followUpTimer -= delta;
+        if (this.followUpTimer <= 0) {
+          this.sunflower.setFace(this.followUp.face);
+          this.sunflower.say(this.followUp.text, SUNFLOWER_DAILY_SEC);
+          this.followUp = null;
+        }
+      }
       if (this.ctx.currentWorldType === 'CAMPUS') this.sunflower.update(delta);
       if (this.arena.anim !== 'DOWN') this.arena.update(delta);
       if (this.fx.group.visible) this.fx.update(delta);
       if (this.awakening.isOn) this.awakening.update(delta, this.ctx.player.position, this.ctx.player.isDead); // 勝利還原收尾
       return;
     }
-    if (this.phase === 'INTRO') return;
+    if (this.isCutscene) return;
     const { player, hud } = this.ctx;
     this.timer += delta;
     this.boss.update(delta);
@@ -430,13 +556,14 @@ export class FencerBossFight {
     } else cam.obstacle = null;
 
     if (this.phase === 'FIGHT') {
+      this.updateFightStory();
       this.updateRegen(delta);
       const bars = this.boss.bars;
       hud.setBossHealth(Math.max(0, bars.hp), FENCER.BAR_HP, !this.boss.isDefeated, `${bossBarLabel(bars.bar)}`, '🎩');
     } else if (this.phase === 'VICTORY') {
       hud.setBossHealth(0, FENCER.BAR_HP, false);
-      if (this.timer >= VICTORY_RESTORE_AT && this.step(32)) this.restoreAfterVictory();
-      if (this.timer >= VICTORY_END_AT) this.endToIdle();
+      if (this.timer >= VICTORY_REPEAT.restoreAt && this.step(32)) this.restoreAfterVictory(true);
+      if (this.timer >= VICTORY_REPEAT.end) this.endToIdle();
     } else if (this.phase === 'DEFEAT') {
       hud.setBossHealth(0, FENCER.BAR_HP, false);
       if (this.timer >= DEFEAT_RESTORE_AT && this.step(32)) this.restoreAfterDefeat();
@@ -461,9 +588,53 @@ export class FencerBossFight {
     this.fx.setRegenRing(fast, player.position);
     if (fast && !this.wasFastRegen && !this.regen.bannerShown) {
       this.regen.bannerShown = true;
-      wantedSystem.showBanner('🍃 脫離戰鬥・快速回氣', 1200);
+      if (!this.heartSay('H3')) wantedSystem.showBanner(REGEN_BANNER, 1200); // 每場第一次由向陽之心說
     }
     this.wasFastRegen = fast;
+    // 向陽之心：危機打氣 (<20%) / 教脫戰 (<35% 且還在纏鬥)；換樂章過場中不說
+    if (!this.boss.isInTransition) {
+      const r = player.hp / player.maxHp;
+      if (r < HEART_CRITICAL_HP) this.heartSay('H4');
+      else if (r < HEART_LOW_HP && !this.regen.outOfCombat) this.heartSay('H2');
+    }
+  }
+
+  /** 向陽之心橫幅 (每場每句一次、合計 ≤ 4 句)；回傳是否有說 */
+  private heartSay(id: HeartLineId): boolean {
+    if (!this.heart.tryFire(id)) return false;
+    this.ctx.wantedSystem.showBanner(HEART_LINES[id].text, HEART_LINES[id].ms);
+    return true;
+  }
+
+  // 戰中劇情：開戰第一句 / 第二則覺醒橫幅 / 換樂章對白 (依 Boss 換樂章過場內時間)
+  private updateFightStory() {
+    const t = this.timer;
+    if (!(this.fightFlags & 1) && t >= BOSS_OPEN_DELAY) {
+      this.fightFlags |= 1;
+      if (this.fightsStarted <= 1) this.boss.say(BOSS_OPEN_LINE, 1.6);
+      else if (this.skippedIntro) this.boss.say(this.taunt.lastResult === 'WIN' ? REMATCH_BOSS_LINE.afterWin : REMATCH_BOSS_LINE.afterLoss, 2.4);
+    }
+    if (!(this.fightFlags & 2) && t >= AWAKEN_BANNER_GAP) {
+      this.fightFlags |= 2;
+      this.ctx.wantedSystem.showBanner(AWAKEN_BANNERS[1], AWAKEN_BANNER_GAP * 1000);
+    }
+    const tt = this.boss.transitionTime;
+    if (tt >= 0) {
+      const beats = TRANSITION_BEATS[this.transBar - 1];
+      while (this.transBeatIdx < beats.length && tt >= beats[this.transBeatIdx].t) this.showBeat(beats[this.transBeatIdx++]);
+    }
+  }
+
+  // Boss 招式宣言 / 收招致意 / 追擊 (頻率規則 BossLineGate)
+  private onBossCue(cue: BossCue) {
+    if (this.phase !== 'FIGHT') return;
+    if (cue === 'CHASE' && this.timer < CHASE_LINE_MIN_FIGHT_SEC) return;
+    const bar = this.boss.currentBar;
+    if (!this.lineGate.allow(cue, bar)) return;
+    const spec = BOSS_CUE_LINES[cue];
+    const pool = bar === 0 ? spec.first : spec.later;
+    this.boss.say(pool[Math.floor(Math.random() * pool.length)], spec.dur);
+    if (cue === 'BOW') this.heartSay('H1');
   }
 
   // ===== Boss 命中玩家 =====
@@ -503,7 +674,9 @@ export class FencerBossFight {
       this.startVictory();
     } else if (res.barBroken) {
       const next = Math.min(FENCER.BARS - 1, this.boss.bars.bar + 1);
-      this.ctx.wantedSystem.showBanner(`🎩 花劍客脫帽致意……「${MOVEMENT_NAMES[next]}，開始。」(換樂章：喘口氣快速回氣)`, 4000);
+      this.transBar = Math.max(1, next);
+      this.transBeatIdx = 0;
+      this.ctx.wantedSystem.showBanner(MOVEMENT_BANNERS[next], 3000); // 對白交給 Boss框
     }
   }
 
@@ -519,35 +692,168 @@ export class FencerBossFight {
     const { progression, wantedSystem, player } = this.ctx;
     this.phase = 'VICTORY';
     this.timer = 0;
-    this.introSteps &= ~32;
+    this.introSteps = 0;
     this.ctx.combat.requestHitStop(0.25);
     this.fx.setRegenRing(false);
     this.ctx.hud.setHpRegen(false);
     const first = !progression.fencerDefeated;
     const reward = victoryReward(!first);
+    this.longVictory = victoryIsLong(!first);
+    this.boss.defeatDissolveAt = first ? VICTORY_FIRST.dissolveAt : VICTORY_REPEAT.dissolveAt;
     progression.addCash(reward);
     progression.fencerWins++;
-    if (first) {
+    if (this.longVictory) {
+      // 首勝：7s 過場 (鎖操作、字幕遮罩)，期間橫幅暫存、結束後依序播出
       progression.fencerDefeated = true;
-      // TODO(細劍)：首勝解鎖新武器「細劍」——由細劍實作接手，例如
-      // progression.unlockWeapon('RAPIER', { text: '🗡️ 獲得花劍客的【細劍】！', duration: 7000, sfx: () => soundManager.playFanfare() });
-      wantedSystem.showBanner(`🎩 擊敗世界 Boss【花劍客・向日爵士】！獲得零用錢 +$${reward}！`, 6000);
+      this.holdBanners();
+      this.enterVictoryCutscene();
+      // 玫瑰細劍解鎖：Progression.checkRapierUnlock 輪詢 (戰鬥 / 本過場期間延後，回校園才跳橫幅並自動換上)
+      wantedSystem.showBanner(VICTORY_BANNER.first(reward), 6000);
     } else {
-      wantedSystem.showBanner(`🎩 再次擊敗花劍客！獲得零用錢 +$${reward}！`, 4500);
+      wantedSystem.showBanner(VICTORY_BANNER.repeat(reward), 4500);
+      this.boss.say(REMATCH_WIN_BOSS_LINE, 1.6);
+      player.showSkillBubble(PLAYER_WIN_BUBBLE, true);
     }
     soundManager.playFanfare();
     this.taunt.recordResult('WIN');
-    player.showSkillBubble('🏆 勝利！', true);
+    this.persist();
   }
 
-  // 勝利：降下前一幀先掛回校園、還原背景 / 霧 / 天氣，再降結界；覺醒播放還原、體力上限還原並補滿
-  private restoreAfterVictory() {
+  // 首勝過場開始 (在玩家命中 Boss 的結算途中呼叫：中止出招等重置延到過場第一幀)
+  private enterVictoryCutscene() {
+    const { player, hud } = this.ctx;
+    player.isCinematicLocked = true;
+    player.velocity.set(0, 0, 0);
+    player.knockVelocity.set(0, 0, 0);
+    player.isKnockedFlying = false;
+    if (player.position.y > 0) player.position.y = 0;
+    player.mesh.position.copy(player.position);
+    hud.hidePrompt();
+    this.beats = VICTORY_FIRST_BEATS;
+    this.beatIdx = 0;
+    this.setCutsceneUi(true, false);
+    this.playBeats(0);
+  }
+
+  // 首勝 7s 過場每幀：0.25 停格 → 跪地 / 回禮 / 化花瓣 / 光還太陽花 / 恢復校園 / 細劍插地 (替身) → 解鎖
+  private updateVictoryCutscene(dt: number) {
+    const { player, combat, hud } = this.ctx;
+    this.timer += dt;
+    const t = this.timer;
+    if (this.step(64)) {
+      combat.resetTransientState();
+      swingTrail.reset();
+      hud.setBossHealth(0, FENCER.BAR_HP, false);
+    }
+    const bdt = t < VICTORY_FIRST.freeze ? 0 : dt;
+    this.boss.update(bdt);
+    this.arena.update(dt);
+    this.fx.update(bdt);
+    this.sunflower.update(dt);
+    comboFinisherFX.update(dt, this.ctx.cameraCtrl.camera);
+    slashFX.update(dt, this.ctx.cameraCtrl.camera);
+    this.awakening.update(dt, player.position, false);
+    player.updateSkillBubble(dt);
+    this.playBeats(t);
+    if (t >= VICTORY_FIRST.faceAt && this.step(128)) {
+      // 玩家轉向 Boss 回禮
+      player.rotationY = Math.atan2(this.boss.position.x - player.position.x, this.boss.position.z - player.position.z);
+      player.mesh.rotation.set(0, player.rotationY, 0);
+    }
+    if (t >= VICTORY_FIRST.outroAt && this.step(256)) this.awakening.playOutro(); // 胸口的光 (日輪花瓣) 飛回太陽花
+    if (t >= VICTORY_FIRST.restoreAt && this.step(32)) this.restoreAfterVictory(false);
+    if (t >= VICTORY_FIRST.rapierAt && this.step(512)) this.dropRapier();
+    this.updateRapierDrop(t);
+    this.updateVictoryCamera(t);
+    if (t >= VICTORY_FIRST.end) this.finishVictoryCutscene();
+  }
+
+  // 細劍自天而降、插進玩家面前的草地 (玫瑰細劍武器模型，預建隱藏；劍尖朝下)
+  private dropRapier() {
+    const p = this.ctx.player.position;
+    const yaw = this.ctx.player.rotationY;
+    const sword = this.rapierProp;
+    // 前方 1.6m、偏一側 0.8m (不被玩家身體擋住)
+    sword.position.set(p.x + Math.sin(yaw) * 1.6 - Math.cos(yaw) * 0.8, RAPIER_DROP_FROM, p.z + Math.cos(yaw) * 1.6 + Math.sin(yaw) * 0.8);
+    sword.rotation.set(Math.PI, yaw, 0.12);
+    sword.visible = true;
+  }
+
+  private updateRapierDrop(t: number) {
+    const sword = this.rapierProp;
+    if (!sword.visible) return;
+    const k = Math.min(1, (t - VICTORY_FIRST.rapierAt) / RAPIER_DROP_SEC);
+    sword.position.y = RAPIER_DROP_FROM + (RAPIER_STUCK_Y - RAPIER_DROP_FROM) * k * k;
+    if (k >= 1 && this.step(2048)) {
+      const { x, z } = sword.position;
+      this.fx.petalBurst(x, 0.4, z, 50, 3.5, PETAL_PALETTE_ROSE, 2.5);
+      this.fx.petalBurst(x, 1.2, z, 30, 2, PETAL_PALETTE_SUN, 2);
+      slashFX.hitFlash(x, 0.3, z, 0xffe0ea);
+      soundManager.playRapierThrust(_v.set(x, 0.3, z));
+      requestCameraShake(0.15);
+    }
+  }
+
+  // 首勝過場鏡頭：玩家斜後方望向跪地的 Boss (兩人前後排開，手機直屏窄視角也同框)，緩慢推近；最後 0.8s 混回玩家身後
+  private updateVictoryCamera(t: number) {
+    const cam = this.ctx.cameraCtrl.camera;
+    const p = this.ctx.player.position;
+    const b = this.boss.position;
+    if (this.step(1024)) {
+      // _vicMid = 玩家→Boss 單位向量 (y = 兩人距離)、_vicSide = 側向 (取靠結界中心的一側，不貼牆)
+      const dx = b.x - p.x;
+      const dz = b.z - p.z;
+      const d = Math.hypot(dx, dz) || 1;
+      _vicMid.set(dx / d, d, dz / d);
+      let nx = -dz / d;
+      let nz = dx / d;
+      if ((p.x + nx - FENCER.CENTER_X) ** 2 + (p.z + nz - FENCER.CENTER_Z) ** 2 > (p.x - nx - FENCER.CENTER_X) ** 2 + (p.z - nz - FENCER.CENTER_Z) ** 2) { nx = -nx; nz = -nz; }
+      _vicSide.set(nx, 0, nz);
+    }
+    const ux = _vicMid.x;
+    const uz = _vicMid.z;
+    const back = 3.8 - Math.min(1, t / VICTORY_FIRST.end) * 0.8; // 緩慢推近
+    _cam.set(p.x - ux * back + _vicSide.x * 1.7, 2.1, p.z - uz * back + _vicSide.z * 1.7);
+    // 留在結界內 (看不到牆外)
+    const ox = _cam.x - FENCER.CENTER_X;
+    const oz = _cam.z - FENCER.CENTER_Z;
+    const od = Math.hypot(ox, oz);
+    const maxR = FENCER.ARENA_R - 1.2;
+    if (od > maxR) { _cam.x = FENCER.CENTER_X + (ox / od) * maxR; _cam.z = FENCER.CENTER_Z + (oz / od) * maxR; }
+    const ahead = Math.min(_vicMid.y * 0.6, 4);
+    _look.set(p.x + ux * ahead, 1.0, p.z + uz * ahead);
+    const blendFrom = VICTORY_FIRST.end - VICTORY_CAM_BLEND;
+    if (t > blendFrom) {
+      const k = smooth((t - blendFrom) / VICTORY_CAM_BLEND);
+      _cam.lerp(this.behindCamPos(_final), k);
+      _look.lerp(_v.set(p.x, 1.35, p.z), k);
+    }
+    cam.position.copy(_cam);
+    cam.lookAt(_look);
+  }
+
+  private finishVictoryCutscene() {
+    const { player, cameraCtrl } = this.ctx;
+    if (this.step(32)) this.restoreAfterVictory(false);
+    this.longVictory = false;
+    player.isCinematicLocked = false;
+    this.setCutsceneUi(false);
+    cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
+    this.releaseBanners();
+    this.sunflower.say(VICTORY_SLEEPY_LINE, 3);
+    this.endToIdle();
+    this.ctx.input.requestPointerLock();
+  }
+
+  // 勝利：降下前一幀先掛回校園、還原背景 / 霧 / 天氣，再降結界；體力上限還原並補滿；
+  // outro = 覺醒還原 (再戰勝利在此播放；首勝過場已提前於 4.4s 播放)
+  private restoreAfterVictory(outro: boolean) {
     this.exitBattleMode();
     this.arena.lower();
     this.stats.remove(this.ctx.player, true);
-    this.awakening.playOutro();
+    if (outro) this.awakening.playOutro();
     this.sunflower.resetPose('SLEEPY');
-    this.sunflower.say('呼……呼……(太陽花打起了瞌睡)', 3);
+    if (!this.longVictory) this.sunflower.say(VICTORY_SLEEPY_LINE, 3);
     this.fx.petalBurst(FENCER.CENTER_X, 1.6, FENCER.CENTER_Z, 60, 4, PETAL_PALETTE_SUN, 3);
   }
 
@@ -561,9 +867,12 @@ export class FencerBossFight {
     this.timer = 0;
     this.introSteps &= ~32;
     this.boss.triumph();
+    this.boss.say(DEFEAT_BOSS_LINES[Math.floor(Math.random() * DEFEAT_BOSS_LINES.length)], 2.0);
+    this.defeatNotice = true;
     this.fx.setRegenRing(false);
     this.ctx.hud.setHpRegen(false);
     this.taunt.recordResult('LOSS');
+    this.persist();
   }
 
   private restoreAfterDefeat() {
@@ -583,11 +892,14 @@ export class FencerBossFight {
     if (!this.initialized || this.phase === 'IDLE') return;
     const wasFighting = this.phase !== 'VICTORY';
     this.restorePlayerHp(this.phase === 'VICTORY');
-    if (this.phase === 'INTRO') {
+    if (this.isCutscene) {
       this.ctx.player.isCinematicLocked = false;
       this.setCutsceneUi(false);
     }
+    this.longVictory = false;
+    this.releaseBanners();
     if (wasFighting && this.taunt.lastResult === 'NONE') this.taunt.recordResult('LOSS');
+    this.persist();
     this.exitBattleMode();
     this.sunflower.resetPose(this.taunt.lastResult === 'WIN' ? 'SLEEPY' : 'SMUG');
     this.endToIdle();
@@ -596,6 +908,7 @@ export class FencerBossFight {
 
   private endToIdle() {
     this.phase = 'IDLE';
+    if (this.rapierProp) this.rapierProp.visible = false;
     this.ctx.cameraCtrl.obstacle = null;
     this.timer = 0;
     this.boss.hide();
@@ -624,7 +937,20 @@ export class FencerBossFight {
 
   // ===== UI =====
 
-  private setCutsceneUi(on: boolean) {
+  // 過場期間橫幅暫存 (HUD 隱藏時看不到)，結束後依序播出
+  private holdBanners() {
+    if (this.bannersHeld) return;
+    this.bannersHeld = true;
+    this.ctx.wantedSystem.holdBanners();
+  }
+
+  private releaseBanners() {
+    if (!this.bannersHeld) return;
+    this.bannersHeld = false;
+    this.ctx.wantedSystem.releaseBannerHold();
+  }
+
+  private setCutsceneUi(on: boolean, skippable: boolean = false) {
     if (typeof document === 'undefined') return;
     for (const id of ['hud-overlay', 'mobile-controls-container']) {
       const el = document.getElementById(id);
@@ -633,7 +959,7 @@ export class FencerBossFight {
     const overlay = document.getElementById('cutscene-overlay');
     if (overlay) overlay.style.display = on ? 'flex' : 'none';
     const skip = document.getElementById('cutscene-skip-btn');
-    if (skip) skip.style.display = on && canSkipIntro(this.fightsStarted) ? '' : 'none';
+    if (skip) skip.style.display = on && skippable ? '' : 'none';
     if (!on) {
       const sub = document.getElementById('cutscene-subtitle-text');
       if (sub) sub.textContent = '';
@@ -666,10 +992,12 @@ export class FencerBossFight {
 
   public prewarm(compile: () => void) {
     if (!this.initialized) return;
+    this.rapierProp.visible = true; // 細劍材質隨下列任一次編譯預熱
     this.arena.prewarm(compile);
     this.boss.prewarm(compile);
     this.fx.prewarm(compile);
     this.awakening.prewarm(compile);
+    this.rapierProp.visible = false;
   }
 }
 
