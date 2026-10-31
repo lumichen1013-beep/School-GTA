@@ -21,6 +21,8 @@ export function setupDiagPanel(): void {
   const render = () => {
     const t = readTouchSignals();
     const r = qualityManager.rendererInfo();
+    const dyn = qualityManager.dynResInfo();
+    const sh = qualityManager.shadowInfo();
     const fx = getFxQuality();
     const fps = qualityManager.measuredFps;
     const now = performance.now();
@@ -40,11 +42,11 @@ export function setupDiagPanel(): void {
       `UA: ${navigator.userAgent}`,
       `maxTouchPoints: ${t.maxTouchPoints}  ontouchstart: ${t.hasOnTouchStart}  pointer:coarse: ${t.coarsePointer}`,
       `inner: ${window.innerWidth}x${window.innerHeight}  screen: ${window.screen?.width}x${window.screen?.height}`,
-      `devicePixelRatio: ${window.devicePixelRatio}  實際像素比: ${r.pixelRatio}`,
+      `devicePixelRatio: ${window.devicePixelRatio}  實際像素比: ${r.pixelRatio}  動態解析度: ${dyn.active ? `啟用 ${dyn.ratio} / 上限 ${dyn.max}` : '停用'}`,
       `renderer 解析度: ${r.width}x${r.height}`,
       `畫質: ${qualityManager.tier}  來源: ${qualityManager.mode === 'auto' ? '自動' : '手動'} (mode=${qualityManager.mode})${qualityManager.isProbing ? '  偵測中' : ''}`,
       `量測 FPS: ${fps !== null ? fps.toFixed(1) : '-'}`,
-      `陰影: ${r.shadow > 0 ? `${r.shadow}x${r.shadow}` : '關閉'}  NPC LOD 倍率: ${getNpcLodDistanceScale()}`,
+      `陰影: ${r.shadow > 0 ? `${r.shadow}x${r.shadow}` : '關閉'}  更新: ${sh.isThrottled ? `降頻 (近 ${sh.recentFrames} 幀重繪 ${sh.recentUpdates} 次，監看 ${sh.watchedCount})` : '每幀'}  NPC LOD 倍率: ${getNpcLodDistanceScale()}`,
       `特效: slash ${fx.slashPool} ring ${fx.ringPool} dust ${fx.dustPool} feather ${fx.featherPool} crack ${fx.crackPool}x${fx.crackLayers} bolt ${fx.lightningStrands} trailSub ${fx.trailSubdiv}`,
       `WebGL: ${qualityManager.gpuRenderer || '(無法讀取)'}`,
     ];

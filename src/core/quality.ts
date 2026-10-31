@@ -40,6 +40,16 @@ export function resolvePixelRatio(devicePixelRatio: number, tier: QualityTier): 
   return Math.min(dpr, QUALITY_PRESETS[tier].pixelRatioMax);
 }
 
+// 陰影貼圖降頻 (見 shadowScheduler)：中 / 低檔與觸控裝置啟用，桌機高檔維持每幀
+export function shadowThrottled(tier: QualityTier, touch: boolean): boolean {
+  return tier !== 'high' || touch;
+}
+
+// 動態解析度 (見 dynamicResolution)：只在觸控裝置中檔、未鎖幀、非開局偵測、無 ?diag=&rs= 強制像素比時啟用
+export function dynamicResolutionAllowed(s: { touch: boolean; tier: QualityTier; probing: boolean; fpsCap: number; forcedRatio: number | null }): boolean {
+  return s.touch && s.tier === 'medium' && !s.probing && !(s.fpsCap > 0) && s.forcedRatio === null;
+}
+
 // ---------------- 幀率上限 / 抗鋸齒 ----------------
 
 export const FPS_LOCK = 30;         // 「鎖定 30 FPS」開關開啟時的上限

@@ -4,11 +4,13 @@ import {
   PROBE, QUALITY_PRESETS, QUALITY_STORAGE_KEY, FPS_LOCK_STORAGE_KEY, MODE_LABELS,
   analyzeFrames, areaChangedSignificantly, decideFromHigh, decideFromMedium, makeDeviceKey,
   parseStoredQuality, resolveAntialias, resolveFpsCap, resolvePixelRatio, resolveStartupTier, serializeStoredQuality,
+  dynamicResolutionAllowed, shadowThrottled,
   type QualityMode, type QualityTier, type StoredQuality,
 } from './quality';
 import { getDiagFlags } from './diagFlags';
 import { setFxTier } from '../effects/fxQuality';
 import { setNpcLodDistanceScale } from '../entities/npc/lod';
+import { DynamicResolutionController } from './dynamicResolution';
 
 type ProbePhase = 'idle' | 'waiting' | 'settle-medium' | 'measure-medium' | 'settle-high' | 'measure-high';
 
@@ -35,6 +37,10 @@ class QualityManager {
   private probeArmed = false; // 已進入世界 (開始畫面期間不量測)
   private fpsLockUser: boolean | null = null; // 使用者手動「鎖定 30 FPS」開關 (null = 跟隨檔位)
   private aaNoticeShown = false;
+  // 動態解析度 (觸控中檔備援)
+  private readonly dynRes = new DynamicResolutionController(1);
+  private dynResActive = false;
+  private dynLastFrameAt = 0;
 
   private listeners = new Set<() => void>();
   // 自動偵測完成時的簡短提示 (由 main 接到 HUD 橫幅)
@@ -176,10 +182,47 @@ class QualityManager {
     setFxTier(tier);
     setNpcLodDistanceScale(p.npcLodScale);
     if (this.engine) {
+      this.disableDynRes(false); // 換檔解除動態像素比 (由下方 setQualityParams 一併套用)，動態解析度依新檔位重新開始
       const shaderChanged = this.engine.setQualityParams(p.pixelRatioMax, p.shadowMapSize);
+      this.engine.shadowScheduler.setThrottled(shadowThrottled(tier, isTouchDevice()));
       if (shaderChanged && this.onShaderStateChange) this.onShaderStateChange();
     }
     this.emit();
+  }
+
+  // ---------------- 動態解析度 ----------------
+
+  /** 每個實際執行幀呼叫 (main.tick)：觸控中檔、未鎖幀、非偵測中時依實測 FPS 微調像素比 */
+  public onFrame(now: number) {
+    if (!this.engine) return;
+    const allowed = dynamicResolutionAllowed({
+      touch: isTouchDevice(), tier: this._tier, probing: this.isProbing, fpsCap: this.fpsCap, forcedRatio: getDiagFlags().rs,
+    });
+    if (!allowed) { this.disableDynRes(); return; }
+    if (!this.dynResActive) {
+      this.dynResActive = true;
+      this.dynRes.reset(this.expectedPixelRatio(), now);
+      this.dynLastFrameAt = now;
+      return;
+    }
+    const dt = now - this.dynLastFrameAt;
+    this.dynLastFrameAt = now;
+    const next = this.dynRes.onFrame(now, dt);
+    if (next !== null) {
+      this.engine.setDynamicPixelRatio(next);
+      this.emit();
+    }
+  }
+
+  private disableDynRes(apply: boolean = true) {
+    if (!this.dynResActive) return;
+    this.dynResActive = false;
+    this.engine?.setDynamicPixelRatio(null, apply);
+  }
+
+  /** 診斷：動態解析度狀態 */
+  public dynResInfo(): { active: boolean; ratio: number; max: number } {
+    return { active: this.dynResActive, ratio: this.dynRes.ratio, max: this.dynRes.max };
   }
 
   // ---------------- 開局實測 ----------------
@@ -308,6 +351,11 @@ class QualityManager {
       pixelRatio: r.getPixelRatio(), width: r.domElement.width, height: r.domElement.height, shadow: this.engine!.getShadowMapSize(),
       calls: r.info.render.calls, triangles: r.info.render.triangles, programs: r.info.programs?.length ?? 0,
     };
+  }
+
+  public shadowInfo(): { isThrottled: boolean; recentUpdates: number; recentFrames: number; watchedCount: number } {
+    const s = this.engine?.shadowScheduler;
+    return { isThrottled: s?.isThrottled ?? false, recentUpdates: s?.recentUpdates ?? 0, recentFrames: s?.recentFrames ?? 0, watchedCount: s?.watchedCount ?? 0 };
   }
 
   public expectedPixelRatio(): number {

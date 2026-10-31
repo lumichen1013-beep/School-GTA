@@ -716,12 +716,12 @@ class SchoolGTASandbox implements GameContext {
   // 繪製一幀；?diag= 時量測邏輯 ms (本幀起點到此) 與 render 呼叫 ms，render=0 跳過繪製
   private renderFrame() {
     if (!perfProbe.enabled) {
-      if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+      if (this.diag.render !== false) this.engine.render(this.cameraCtrl.camera);
       return;
     }
     const t1 = performance.now();
     perfProbe.logic.push(t1, t1 - this.frameStartMs);
-    if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+    if (this.diag.render !== false) this.engine.render(this.cameraCtrl.camera);
     const t2 = performance.now();
     perfProbe.render.push(t2, t2 - t1);
   }
@@ -740,6 +740,7 @@ class SchoolGTASandbox implements GameContext {
     if (diagOn) perfProbe.onRaf(now);
     if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
     this.lastRunAt = now;
+    qualityManager.onFrame(now);
     if (diagOn) {
       perfProbe.onFrameRun(now);
       this.frameStartMs = performance.now();

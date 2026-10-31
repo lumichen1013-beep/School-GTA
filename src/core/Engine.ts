@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { QUALITY_STORAGE_KEY, parseStoredQuality, resolveAntialias } from './quality';
 import { getDiagFlags } from './diagFlags';
+import { ShadowScheduler } from './shadowScheduler';
 
 // 陽光相對於陰影焦點 (玩家) 的固定偏移，維持原有光照方向
 const SUN_OFFSET = new THREE.Vector3(45, 70, 30);
@@ -25,6 +26,10 @@ export class Engine {
   // 畫質檔位決定的像素比上限與陰影貼圖尺寸 (由 QualityManager.attach / applyQuality 設定；預設為中檔)
   private maxPixelRatio = 1.5;
   private shadowRes = 1024;
+  // 動態解析度：觸控中檔掉幀時暫降的像素比上限 (null = 不限制，見 QualityManager / dynamicResolution)
+  private dynamicPixelRatio: number | null = null;
+  // 陰影貼圖降頻 (中 / 低檔與觸控裝置；高檔每幀)
+  public readonly shadowScheduler = new ShadowScheduler();
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -162,6 +167,7 @@ export class Engine {
       light.shadow.map = null;
     }
     light.castShadow = casting;
+    this.shadowScheduler.invalidate();
     return wasCasting !== casting;
   }
 
@@ -173,7 +179,23 @@ export class Engine {
   private effectivePixelRatio(): number {
     const forced = getDiagFlags().rs; // ?diag=&rs= 診斷覆蓋，優先於檔位
     if (forced !== null) return forced;
-    return Math.min(window.devicePixelRatio || 1, this.maxPixelRatio);
+    const ratio = Math.min(window.devicePixelRatio || 1, this.maxPixelRatio);
+    return this.dynamicPixelRatio !== null ? Math.min(ratio, this.dynamicPixelRatio) : ratio;
+  }
+
+  // 動態解析度：設定暫時的像素比上限 (null = 解除)，有變化才重配繪圖緩衝
+  public setDynamicPixelRatio(ratio: number | null, apply: boolean = true) {
+    this.dynamicPixelRatio = ratio;
+    if (apply && Math.abs(this.renderer.getPixelRatio() - this.effectivePixelRatio()) > 1e-6) {
+      this.renderer.setPixelRatio(this.effectivePixelRatio());
+    }
+  }
+
+  // 繪製一幀 (含陰影貼圖降頻排程)
+  public render(camera: THREE.Camera) {
+    this.shadowScheduler.beforeRender(this.renderer, this.dirLight);
+    this.renderer.render(this.scene, camera);
+    this.shadowScheduler.afterRender(this.scene);
   }
 
   private setupLighting() {
@@ -217,6 +239,7 @@ export class Engine {
     cam.bottom = -d;
     cam.updateProjectionMatrix();
     this.shadowTexelSize = (d * 2) / this.shadowRes;
+    this.shadowScheduler.invalidate();
   }
 
   // 陽光與陰影相機跟隨焦點 (玩家/載具)；焦點在光源視角平面上對齊陰影像素格，避免移動時陰影邊緣閃爍
@@ -225,9 +248,12 @@ export class Engine {
     const u = focus.dot(_sunAxisX);
     const v = focus.dot(_sunAxisY);
     const target = this.dirLight.target.position;
+    const cu = Math.round(u / texel);
+    const cv = Math.round(v / texel);
     target.copy(focus)
-      .addScaledVector(_sunAxisX, Math.round(u / texel) * texel - u)
-      .addScaledVector(_sunAxisY, Math.round(v / texel) * texel - v);
+      .addScaledVector(_sunAxisX, cu * texel - u)
+      .addScaledVector(_sunAxisY, cv * texel - v);
+    this.shadowScheduler.setFocusCell(cu, cv);
     this.dirLight.position.copy(target).add(SUN_OFFSET);
   }
 
