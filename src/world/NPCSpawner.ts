@@ -70,7 +70,7 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
     waypoints: [[0, 0, 92], [-16, 0, 82], [-10, 0, 65], [12, 0, 65], [16, 0, 82]],
     style: 'OFFICER_PATROL'
   },
-  // 6. 普通學生 (1F 12 名 (含田徑隊阿凱) + 泳池 1 名 + 籃球場 2 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
+  // 6. 普通學生 (1F 12 名 (含田徑隊阿凱) + 泳池 1 名 + 籃球場 2 名 + 操場足球 2 名，各具獨特行為風格、慢跑/疾走/散步與長距離移動路線)
   // 6.1 田徑隊阿凱 (PU 跑道外側分道逆時針慢跑繞圈；200m 對決由他上場，見 CampusSportsCrew)
   {
     role: 'STUDENT',
@@ -183,6 +183,23 @@ const CAMPUS_NPC_DEFS: NPCSpawnDef[] = [
     style: 'CASUAL_WALK',
     look: 'PE',
     anchor: 'COURT'
+  },
+  // 6.16 & 6.17 操場球門前踢足球雙人組 (北端球門前草皮來回滾傳球、偶爾射門，球與動作見 CampusSoccerPair)
+  {
+    role: 'STUDENT',
+    pos: [-58, 0, 14],
+    waypoints: [[-58, 0, 14], [-56, 0, 20], [-60, 0, 18]],
+    style: 'CASUAL_WALK',
+    look: 'PE',
+    anchor: 'PITCH'
+  },
+  {
+    role: 'STUDENT',
+    pos: [-52, 0, 18],
+    waypoints: [[-52, 0, 18], [-50, 0, 13], [-54, 0, 22]],
+    style: 'CASUAL_WALK',
+    look: 'PE',
+    anchor: 'PITCH'
   },
   // 7. 高樓層師生 (敬業樓 A 棟 & 樂群樓 B 棟 2F/3F，含貫穿兩棟建築物 70m+ 的空中走廊天橋；學生 2F 4 名、3F 3 名)
   {

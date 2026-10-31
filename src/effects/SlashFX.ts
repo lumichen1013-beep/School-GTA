@@ -9,6 +9,8 @@ const KIND_FLASH = 0;
 const KIND_STREAK = 1;
 const KIND_RING = 2;
 const KIND_CHARGE = 3;
+const KIND_IMPACT = 4; // 命中徑向衝擊環 (面向鏡頭的粗環，向外擴張變細)
+const IMPACT_LIFE = 0.2;
 const FLASH_LIFE = 0.12;
 const FLASH_SIZE = 0.45;   // 命中閃光半邊長 (整體 0.9m)
 const STREAK_LIFE = 0.28;
@@ -20,6 +22,7 @@ const RING_LIFE = 0.4;
 const CHARGE_LIFE = 0.2;
 const CHARGE_RADIUS = 1.9;   // 蓄力光環起始半徑，向內收到約 0.35m
 const DASH_BAND_LIFE = 0.34;
+const THRUST_LIFE = 0.2;
 
 const VERT = /* glsl */`
 attribute vec4 aFx;
@@ -65,6 +68,13 @@ void main() {
     float prof = max(1.0 - abs(p.y) / max(w, 0.001), 0.0);
     a = prof * prof * along * 1.4;
     core = prof * prof * prof * along;
+  } else if (kind > 3.5) {
+    // 命中衝擊環：粗環由內向外擴張、越擴越細
+    float r = length(p);
+    float w = mix(0.24, 0.05, t);
+    float band = max(1.0 - abs(r - 0.82) / w, 0.0);
+    a = band * 1.3;
+    core = band * band * band;
   } else if (kind > 2.5) {
     // 蓄力光環：細亮環，隨進度由暗轉亮 (半徑縮小由實例矩陣負責)
     float r = length(p);
@@ -201,8 +211,13 @@ class SlashFXSystem {
   }
 
   // 命中閃光 (0.12s、約 0.9m 星芒)；池滿時略過
-  public hitFlash(x: number, y: number, z: number, color: number) {
-    this.spawn(KIND_FLASH, FLASH_LIFE, x, y, z, 0, Math.random() * 0.8, FLASH_SIZE, 1, color, false);
+  public hitFlash(x: number, y: number, z: number, color: number, scale: number = 1) {
+    this.spawn(KIND_FLASH, FLASH_LIFE, x, y, z, 0, Math.random() * 0.8, FLASH_SIZE * scale, 1, color, false);
+  }
+
+  // 命中徑向衝擊環 (0.2s，最終半徑約 size m)；池滿時略過
+  public hitRing(x: number, y: number, z: number, color: number, size: number) {
+    this.spawn(KIND_IMPACT, IMPACT_LIFE, x, y, z, 0, 0, size, 1, color, false);
   }
 
   // 交叉 X 光痕：以 (x, y, z) 為玩家位置，面向 yaw 前方 1.2m、離地 y；兩道 ±45° 刀光，各取左右拍主色
@@ -229,6 +244,18 @@ class SlashFXSystem {
     const len = Math.hypot(dx, dz);
     if (len < 0.3) return;
     this.spawn(KIND_STREAK, DASH_BAND_LIFE, (ox + ex) / 2, y, (oz + ez) / 2, Math.atan2(-dz, dx), 0, len / 2, 1, color, true, hw, true);
+  }
+
+  // 突刺刺芒 (玫瑰細劍)：自 (ox, oz) 沿水平方向刺到 (ex, ez)，離地 y；水平 + 垂直兩片交成十字截面的光矛 (任何視角都看得到)，
+  // 刀光頭由起點掃向劍尖 (頭亮尾細)。force：池滿時覆蓋最舊者 (終結技貫穿長光)
+  public thrust(ox: number, oz: number, ex: number, ez: number, y: number, hw: number, color: number, force: boolean = false) {
+    const dx = ex - ox;
+    const dz = ez - oz;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.3) return;
+    const cx = (ox + ex) / 2, cz = (oz + ez) / 2, yaw = Math.atan2(-dz, dx);
+    this.spawn(KIND_STREAK, THRUST_LIFE, cx, y, cz, yaw, 0, len / 2, 1, color, force, hw, true);
+    this.spawn(KIND_STREAK, THRUST_LIFE, cx, y, cz, yaw, 0, len / 2, 1, color, force, hw * 0.8, false);
   }
 
   // 水平斬痕環：圓心 (x, y, z)、半徑 radius，弧形刀光繞圈橫掃一周 (dir ±1 為旋向)
@@ -258,6 +285,9 @@ class SlashFXSystem {
         _q2.setFromAxisAngle(_zAxis, s.roll);
         _quat.copy(camera.quaternion).multiply(_q2);
         _matrix.compose(_pos, _quat, _scl.setScalar(s.size * (0.7 + 0.5 * t)));
+      } else if (s.kind === KIND_IMPACT) {
+        const e = 1 - (1 - t) * (1 - t);
+        _matrix.compose(_pos, camera.quaternion, _scl.setScalar(s.size * (0.3 + 0.75 * e)));
       } else if (s.kind === KIND_STREAK) {
         _quat.setFromAxisAngle(_yAxis, s.yaw);
         _q2.setFromAxisAngle(s.flat ? _xAxis : _zAxis, s.flat ? -Math.PI / 2 : s.roll);
@@ -273,7 +303,7 @@ class SlashFXSystem {
       }
       mesh.setMatrixAt(i, _matrix);
       // 閃光越晚越淡；刀光與環在後 30% 壽命淡出
-      const fade = s.kind === KIND_FLASH ? 1 - t * t : Math.min(1, (1 - t) / 0.3);
+      const fade = s.kind === KIND_FLASH ? 1 - t * t : s.kind === KIND_IMPACT ? 1 - t : Math.min(1, (1 - t) / 0.3);
       fx[i * 4] = s.kind; fx[i * 4 + 1] = t; fx[i * 4 + 2] = fade; fx[i * 4 + 3] = s.dir;
       // 自訂 shader 不做色彩空間轉換：直接寫入 sRGB 色值，畫面顏色即設定色
       col[i * 3] = ((s.color >> 16) & 255) / 255; col[i * 3 + 1] = ((s.color >> 8) & 255) / 255; col[i * 3 + 2] = (s.color & 255) / 255;

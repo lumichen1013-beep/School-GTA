@@ -6,7 +6,6 @@ import type { WeaponDefinition } from '../types';
 // 普通木質棒球棍；第二世界 (特訓院) 同一把武器改以特訓防暴警棍連段呈現 (終結技旋身橫打：腰高衝擊環)
 export const NORMAL_BAT: WeaponDefinition = {
   id: 'NORMAL_BAT',
-  release: 'released',
   slot: 2,
   icon: '🏏',
   name: '普通木質棒球棍',
@@ -15,9 +14,17 @@ export const NORMAL_BAT: WeaponDefinition = {
   combo: PLAYER_COMBOS.BAT,
   tempo: 1,
   fxStyle: 'BAT',
+  impactClass: 'HEAVY',
   model: { mount: 'R', build: buildNormalBat },
   anchors: { R: { base: 0.35, tip: 0.89 } },
-  sounds: { strike: (_i, pos) => soundManager.playBatHit(pos) },
+  // 命中才出聲 (木擊 + 木裂)，終結技疊低頻重擊；揮空破風由 impactClass 預設
+  sounds: {
+    strike: (_i, pos, fin, _s, landed) => {
+      if (!landed) return;
+      soundManager.playBatHit(pos);
+      if (fin) soundManager.playFinisherThump(pos, true);
+    }
+  },
   readyPose: 'WEAPON',
   unlock: {
     lockedHint: (p, world) => world === 'DETENTION'
@@ -26,6 +33,16 @@ export const NORMAL_BAT: WeaponDefinition = {
   },
   worlds: {
     CAMPUS: true,
-    DETENTION: { name: '特訓防暴警棍', combo: PLAYER_COMBOS.BATON, fxStyle: 'BATON', finisherFx: { waistY: 1.0 } }
+    // 警棍：金屬敲擊 + 電擊劈啪 (電弧藍主題)
+    DETENTION: {
+      name: '特訓防暴警棍', combo: PLAYER_COMBOS.BATON, fxStyle: 'BATON', finisherFx: { waistY: 1.0 },
+      sounds: {
+        strike: (_i, pos, fin, _s, landed) => {
+          if (!landed) return;
+          soundManager.playBatonHit(pos);
+          if (fin) soundManager.playFinisherThump(pos, true);
+        }
+      }
+    }
   }
 };

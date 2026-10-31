@@ -2,36 +2,62 @@ import * as THREE from 'three';
 import type { GameContext } from '../../game/GameContext';
 import type { KfMove } from '../../entities/shared/kungfu';
 import type { NPC } from '../../entities/NPC';
+import { soundManager } from '../../audio/SoundEffects';
+import { requestCameraShake } from '../../effects/cameraShake';
 import { comboFinisherFX } from '../../effects/ComboFinisherFX';
 import { impactDust } from '../../effects/ImpactDust';
+import { slashFX } from '../../effects/SlashFX';
+import { TRACER_KI } from '../../effects/TracerFX';
 import { getFxQuality } from '../../effects/fxQuality';
 import { WEAPON_FX_STYLES } from '../../effects/weaponFxStyle';
+import { createPlayerHitSpec } from '../../game/CombatSystem';
 import { getWeapon } from '../registry';
+import { impactFeedback, type ImpactFeedback } from '../impactClass';
 import {
-  createProjectileSpawnOpts, PFLAG_BOUNCE_FLOOR, PFLAG_BOUNCE_WALL, PFLAG_RETURN, PFLAG_TRACER, PROJ_BALL,
+  createProjectileSpawnOpts, PFLAG_RETURN, PFLAG_TRACER, PFLAG_TRACER_RETURN, PROJ_BALL,
   type ProjectileEvent, type ProjectileSpawnOpts
 } from '../projectiles/ProjectileSystem';
-import { BASKETBALL_SHOVE_DIST } from '../defs/basketball';
+import { BASKETBALL_BLAST_DMG, BASKETBALL_BLAST_MAX, BASKETBALL_BLAST_RADIUS, BASKETBALL_BLAST_SHOVE } from '../defs/basketball';
 import { PRE_INPUT_WINDOW, ScreenReticle } from '../rangedCommon';
 import {
-  AIM_DESKTOP_HALF_ANGLE, AIM_MAX_RANGE, AIM_TOUCH_HALF_ANGLE, aimHeight, defaultAimDistance, pickAimTarget, solveLaunch,
+  AIM_DESKTOP_HALF_ANGLE, AIM_MAX_RANGE, AIM_TOUCH_HALF_ANGLE, aimHeight, BALL_KI_GRAVITY, BALL_SPEED, defaultAimDistance, pickAimTarget, solveLaunch,
   type BallMoveKind, type LaunchVelocity
 } from './aim';
 
-// 籃球武器狀態機 (僅 DEV_WEAPONS_BUILD 的建置由 main.ts 建立；正式版整檔 tree-shake，頂層無副作用)。
+// 籃球氣功彈武器狀態機 (僅 devWeaponsMode 非 off 時由 main.ts 建立)。
+// 三投皆為 60 m/s 無重力直線光束 (TracerFX 彗星樣式 1 draw call + 高亮球本體)，命中出衝擊環 + 停格 + 鏡頭微震 (依段數遞增)，
+// 之後化光極速收回 (0.1~0.3 秒)；第 3 投 (終結) 聚氣較長、光束更粗更長、命中擊飛並以小範圍爆風推開近旁至多 2 人。
 //   READY  球在手上 (顯示)：按攻擊 → 起手；起手條件不足 (如收招中) → 進 0.25 秒預輸入緩衝
 //   WINDUP 投球動作的預備段 (已鎖攻擊)，到命中時間點 (球離手) 由 CombatSystem 呼叫 launch() 發射
 //   FLIGHT 球在外 (投射物池的球飛行 / 彈跳 / 回收；手上的球隱藏、攻擊鎖定)，被接住 (CATCH) 回到 READY
 // 換武器 / 上車 / 換世界 / 死亡 / 手持小遊戲籃球：cancel()，球立即消失並噴煙塵。
 export { PRE_INPUT_WINDOW };            // 預輸入緩衝 (秒)：接球前這段時間內按攻擊，接球後自動投出下一球 (共用常數見 rangedCommon)
-const FLIGHT_FAILSAFE = 5;             // 飛行 / 回收總秒數上限 (正常 2 秒保險 + 回收 <= 0.9，超過視為異常強制收回)
-const ORIGIN_CHEST = 1.25;             // 胸前 / 地板傳球出手高度 (高於腳底)
-const ORIGIN_LOB = 1.9;                // 高拋出手高度 (過頂)
+const FLIGHT_FAILSAFE = 2;             // 飛行 / 回收總秒數上限 (正常 0.35 秒保險 + 回收 <= 0.3，超過視為異常強制收回)
+const ORIGIN_CHEST = 1.25;             // 出手高度 (高於腳底)
 const ORIGIN_FORWARD = 0.5;            // 出手點前移距離
+// 出手點側移 (m，+ = 右手側)：第 1 投右掌、第 2 投左掌、終結段正中 (光束較粗)；避免第三人稱鏡頭下光束被角色身體完全擋住
+const ORIGIN_SIDE = [0.38, -0.38, 0] as const;
 const LOCK_WORLD_Y_MAX = 2.2;          // 準星高度偏移 (目標腳底上方)
-const SPIN_WAVE_RADIUS = 1.6;          // 第 3 投命中衝擊環半徑 (再乘 ringReach)
+const FLIGHT_LIFE = AIM_MAX_RANGE / BALL_SPEED + 0.05; // 光束飛行保險壽命 (飛完射程即收回)
+
+// 各段節拍 (索引 = 連段段數)：光束顏色 / 半寬 / 長度倍率、命中衝擊環半徑 (再乘 ringReach)
+// 命中停格 / 鏡頭震動依武器 impactClass 分級 (第 1、2 投讀表；第 3 投取 max(分級下限, 下方終結覆寫))
+const BEAM_COLOR = [0xff9a3a, 0xffb24e, 0xffd27a] as const;
+const BEAM_HALF_WIDTH = [0.45, 0.48, 0.7] as const;
+const BEAM_LEN_MUL = [0.85, 1.0, 1.45] as const;
+const BALL_FINISHER_FEEDBACK = { hitStop: 0.09, hitStopMulti: 0.09, shake: 0.45 } as const;
+const _ballFb: ImpactFeedback = { hitStop: 0, shake: 0 };
+// 第 k 投的命中停格 / 震動 (結果寫入共用暫存，需立即取用)
+function ballFeedback(m: KfMove): ImpactFeedback {
+  return impactFeedback(getWeapon('BASKETBALL').impactClass, m.finisher, false, false, 0, m.finisher ? BALL_FINISHER_FEEDBACK : null, false, _ballFb);
+}
+const WAVE_RADIUS = [0.8, 1.0, 1.7] as const;
+const MUZZLE_RING = 0.55;              // 終結段出手聚氣環半徑
+const WALL_WAVE = 0.5;                 // 撞牆 / 落地小衝擊環半徑
 
 const _dustNormal = new THREE.Vector3(0, 1, 0);
+const _blastSpec = createPlayerHitSpec();
+const _blasted: unknown[] = [];
 
 export class BallThrowController {
   public state: 'READY' | 'WINDUP' | 'FLIGHT' = 'READY';
@@ -63,11 +89,28 @@ export class BallThrowController {
       o.damage = this.stats.damage * m.dmg;
       o.knockback = this.stats.knockback * m.knock;
       o.maxRange = this.stats.reach;
-      o.maxLife = 2; // 保險：2 秒內未結束一律強制收回
-      o.mode = m.finisher ? 'LAUNCH' : 'SHOVE';
-      o.shoveDist = m.finisher ? 0 : BASKETBALL_SHOVE_DIST;
+      o.maxLife = FLIGHT_LIFE; // 飛完射程即收回
+      o.gravity = BALL_KI_GRAVITY;
+      // 第 1、2 投只扣血不位移 (全武器規則)，擊飛只在第 3 投
+      o.mode = m.finisher ? 'LAUNCH' : 'LIGHT';
+      o.shoveDist = 0;
       o.launchCap = m.finisher ? cap : null;
-      o.flags = PFLAG_TRACER | PFLAG_BOUNCE_FLOOR | PFLAG_BOUNCE_WALL | PFLAG_RETURN;
+      // 不反彈：撞牆 / 落地 / 命中即化光收回 (回程顯示細光痕)
+      o.flags = PFLAG_TRACER | PFLAG_TRACER_RETURN | PFLAG_RETURN;
+      o.reboundBack = 3;
+      o.reboundUp = 1.5;
+      o.reboundDelay = 0.04;
+      o.hitStop = ballFeedback(m).hitStop;
+      o.hitFlashColor = BEAM_COLOR[i];
+      o.tracerStyle = TRACER_KI;
+      o.tracerColor = BEAM_COLOR[i];
+      o.tracerHalfWidth = BEAM_HALF_WIDTH[i];
+      o.tracerLenMul = BEAM_LEN_MUL[i];
+      o.launchSound = 'kiShot';
+      o.hitSound = m.finisher ? null : 'kiImpact'; // 終結段改播重型衝擊 (handleEvent)
+      o.wallSound = 'kiImpact';
+      o.floorSound = 'kiImpact';
+      o.catchSound = 'ballCatch';
       o.returnTarget = this.returnTarget;
       o.onEvent = this.onEvent;
       this.opts.push(o);
@@ -124,14 +167,26 @@ export class BallThrowController {
     if (idx < 0) { this.finishWindup(); return; }
     this.aim();
     const kindName = move.projectile as BallMoveKind;
-    const originH = kindName === 'BALL_LOB' ? ORIGIN_LOB : ORIGIN_CHEST;
+    const originH = ORIGIN_CHEST;
     const t = this.aimTarget;
-    let dist = t ? Math.hypot(t.position.x - player.position.x, t.position.z - player.position.z) - ORIGIN_FORWARD : defaultAimDistance(kindName);
+    // 出手點：前移 + 側移 (右向量 = (-dz, 0, dx))；有目標時水平方向改由出手點指向目標 (側移後仍正中目標)
+    const side = ORIGIN_SIDE[idx] ?? 0;
+    this.origin.set(
+      player.position.x + this.dir.x * ORIGIN_FORWARD - this.dir.z * side,
+      player.position.y + originH,
+      player.position.z + this.dir.z * ORIGIN_FORWARD + this.dir.x * side
+    );
+    this.tmp.copy(this.dir);
+    let dist = defaultAimDistance(kindName);
+    if (t) {
+      this.tmp.set(t.position.x - this.origin.x, 0, t.position.z - this.origin.z);
+      dist = this.tmp.length();
+      if (dist > 1e-3) this.tmp.multiplyScalar(1 / dist); else this.tmp.copy(this.dir);
+    }
     dist = Math.min(AIM_MAX_RANGE, Math.max(1.2, dist));
-    const aimH = t ? t.position.y - player.position.y + aimHeight(t.role) : originH - 0.1;
+    const aimH = t ? t.position.y - player.position.y + aimHeight(t.role) : originH;
     solveLaunch(kindName, dist, originH, aimH, this.launchV);
-    this.origin.set(player.position.x + this.dir.x * ORIGIN_FORWARD, player.position.y + originH, player.position.z + this.dir.z * ORIGIN_FORWARD);
-    this.vel.set(this.dir.x * this.launchV.h, this.launchV.vy, this.dir.z * this.launchV.h);
+    this.vel.set(this.tmp.x * this.launchV.h, this.launchV.vy, this.tmp.z * this.launchV.h);
     const opts = this.opts[idx];
     opts.serial = player.moveSerial; // 一發只報一次通緝
     const slot = projectiles.spawn(PROJ_BALL, this.origin, this.vel, opts);
@@ -142,6 +197,12 @@ export class BallThrowController {
     this.state = 'FLIGHT';
     this.lastPos.copy(this.origin);
     this.setHeld(true);
+    // 出手聚氣閃光 (終結段另加一圈聚氣環)
+    slashFX.hitFlash(this.origin.x, this.origin.y, this.origin.z, BEAM_COLOR[idx]);
+    if (move.finisher) {
+      comboFinisherFX.spinWave(this.origin, MUZZLE_RING * getFxQuality().ringReach, this.origin.y, WEAPON_FX_STYLES.BALL, 0, 0, 0);
+      requestCameraShake(0.12);
+    }
   }
 
   private finishWindup() {
@@ -152,13 +213,28 @@ export class BallThrowController {
   private handleEvent(ev: ProjectileEvent) {
     if (ev.slot !== this.slot) return;
     switch (ev.type) {
-      case 'NPC':
+      case 'NPC': {
         if (ev.result === 'BLOCKED' || !ev.applied) {
-          this.ctx.projectiles.recall(ev.slot); // 被擋 (閃身 / 格擋 / 護盾)：直接回彈
-        } else if (this.combo[this.kind].finisher) {
-          const q = getFxQuality();
-          comboFinisherFX.spinWave(ev.point, SPIN_WAVE_RADIUS * q.ringReach, ev.point.y, WEAPON_FX_STYLES.BALL, 0, 0, 0);
+          this.ctx.projectiles.recall(ev.slot); // 被擋 (閃身 / 格擋 / 護盾)：直接收回
+          break;
         }
+        // 命中衝擊波：命中高度的擴散環 (段數越後越大) + 鏡頭微震 (停格由投射物系統依段數請求)
+        const k = this.kind;
+        const q = getFxQuality();
+        comboFinisherFX.spinWave(ev.point, WAVE_RADIUS[k] * q.ringReach, ev.point.y, WEAPON_FX_STYLES.BALL, 0, 0, 0);
+        requestCameraShake(ballFeedback(this.combo[k]).shake);
+        if (this.combo[k].finisher && ev.target) {
+          soundManager.playKiImpact(ev.point, true);
+          const ty = ev.target.position.y;
+          // 爆風地面環 (半徑 = 判定半徑)
+          comboFinisherFX.spinWave(ev.point, BASKETBALL_BLAST_RADIUS * q.ringReach, ty + 0.08, WEAPON_FX_STYLES.BALL, 0, 0, 0);
+          this.blast(ev.point, ev.target as unknown as NPC, ev.serial);
+        }
+        break;
+      }
+      case 'WALL':
+      case 'FLOOR':
+        comboFinisherFX.spinWave(ev.point, WALL_WAVE * getFxQuality().ringReach, ev.point.y, WEAPON_FX_STYLES.BALL, 0, 0, 0);
         break;
       case 'CATCH':
         this.onCatch();
@@ -166,6 +242,56 @@ export class BallThrowController {
       default:
         break;
     }
+  }
+
+  // 終結段爆風：命中點水平 BLAST_RADIUS 內、主目標以外最近的至多 BLAST_MAX 人，主擊傷害 × BLAST_DMG 並向外推開 (不擊飛)
+  private blast(center: THREE.Vector3, main: NPC, serial: number) {
+    const { npcs, combat } = this.ctx;
+    const m = this.combo[this.kind];
+    let done = 0;
+    _blasted.length = 0;
+    const r2 = BASKETBALL_BLAST_RADIUS * BASKETBALL_BLAST_RADIUS;
+    for (let n = 0; n < BASKETBALL_BLAST_MAX; n++) {
+      // 每輪挑最近者 (人數極少，O(n × BLAST_MAX)，零配置)
+      let best: NPC | null = null;
+      let bestD = r2;
+      for (let i = 0; i < npcs.length; i++) {
+        const npc = npcs[i];
+        if (npc === main || npc.isKnockedDown || npc.isPermanentlyKnockedOut || _blasted.includes(npc)) continue;
+        const dx = npc.position.x - center.x, dz = npc.position.z - center.z;
+        const dy = npc.position.y - center.y;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= bestD || dy > 2 || dy < -2.5) continue;
+        best = npc; bestD = d2;
+      }
+      if (!best) break;
+      _blasted.push(best);
+      const s = _blastSpec;
+      s.src.copy(center);
+      s.dir.set(best.position.x - center.x, 0, best.position.z - center.z);
+      if (s.dir.lengthSq() < 1e-6) s.dir.set(this.dir.x, 0, this.dir.z);
+      s.dir.normalize();
+      s.useAttackDir = true; s.attackDirX = s.dir.x; s.attackDirZ = s.dir.z;
+      s.damage = this.stats.damage * m.dmg;
+      s.dmgMul = BASKETBALL_BLAST_DMG;
+      s.knockback = this.stats.knockback * 0.6;
+      s.mode = 'SHOVE';
+      s.shoveDist = BASKETBALL_BLAST_SHOVE;
+      s.serial = serial;
+      s.launchCap = null;
+      s.ignoreCooldown = true;
+      s.fightNoise = false;
+      s.deferFrontal = false;
+      s.reportCrime = true;
+      s.move = null;
+      s.strikeIndex = 0;
+      s.feedback = 'NONE';
+      if (combat.applyPlayerHitToNpc(best, s)) {
+        slashFX.hitFlash(best.position.x, best.position.y + 1.0, best.position.z, BEAM_COLOR[2]);
+        done++;
+      }
+    }
+    return done;
   }
 
   private onCatch() {

@@ -34,11 +34,11 @@ export const CAMPUS_GUARD_HOUSE = { x: 15, z: 105, w: 7, d: 7 };
 
 // 興趣點 (大地圖圖示 / 任務目標位置，地圖與任務清單共用)
 // 座標與遊戲內實體一致：合作社櫃台 = CampusWorld.commissaryPos、食人花王 = EcologicalGarden.boss.position、
-// 許願池 = EcologicalGarden.pondPos、大如老師 / 閃身步老師 = NPCSpawner 生成點
+// 許願池 = EcologicalGarden.pondPos、大如老師 / 閃身步老師 = NPCSpawner 生成點、太陽花 = fencerRules FENCER.CENTER
 // icon 為空字串者只在成為下一目標時以脈衝環標示 (已由建築色塊標出)
 export type CampusPoiId =
   | 'commissary' | 'badminton' | 'plant' | 'pond' | 'dodgeTeacher' | 'gate'
-  | 'bikeShed' | 'basketball' | 'track' | 'pool';
+  | 'bikeShed' | 'basketball' | 'track' | 'pool' | 'sunflower';
 export interface CampusPoi {
   id: CampusPoiId;
   icon: string;
@@ -53,6 +53,7 @@ export const CAMPUS_POIS: readonly CampusPoi[] = [
   { id: 'pond', icon: '⛲', label: '生態園區 許願池', x: -55, z: -86 },
   { id: 'dodgeTeacher', icon: '🥋', label: '敬業樓 A 棟 閃身步老師', x: 32, z: 18 },
   { id: 'gate', icon: '🚪', label: '校門', x: 0, z: 105 },
+  { id: 'sunflower', icon: '🌻', label: '操場中央 太陽花', x: -55, z: 34 },
   { id: 'bikeShed', icon: '', label: '自行車棚', x: -55, z: -65 },
   { id: 'basketball', icon: '', label: '籃球場', x: 30, z: -45 },
   { id: 'track', icon: '', label: '操場跑道', x: -55, z: 30 },

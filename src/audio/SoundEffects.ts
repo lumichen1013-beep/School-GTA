@@ -250,6 +250,56 @@ export class SoundEffects {
     this.osc('triangle', [['set', 1420, now], ['exp', 710, now + 0.12]], now, now + 0.2, gain);
   }
 
+  // 足球踢球悶響 (Soccer Kick)：低頻下滑 + 短促低通雜訊，音量柔和
+  public playSoccerKick(pos: Vec3Like) {
+    if (!this.gate('soccerKick', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 190, now], ['exp', 70, now + 0.1]], [['set', 0.3, now], ['exp', 0.001, now + 0.12]], now, now + 0.13);
+    this.noise(now, 0.06, { type: 'lowpass', freq: [['set', 700, now]], q: 0.7 }, [['set', 0.12, now], ['exp', 0.001, now + 0.06]]);
+  }
+
+  // 細劍突刺：高頻金屬破空 (帶通雜訊快速上掃) + 短促金屬鳴 (花劍客 S1 / 細劍武器共用)
+  public playRapierThrust(pos: Vec3Like) {
+    if (!this.gate('rapierThrust', pos)) return;
+    const now = this.audio().currentTime;
+    this.noise(now, 0.16, { type: 'bandpass', freq: [['set', 1800, now], ['exp', 5200, now + 0.12]], q: 2.5 },
+      [['set', 0.0001, now], ['lin', 0.22, now + 0.02], ['exp', 0.0001, now + 0.16]]);
+    this.tone('triangle', [['set', 2350, now + 0.03], ['exp', 1900, now + 0.18]], [['set', 0.0001, now + 0.03], ['lin', 0.07, now + 0.04], ['exp', 0.0001, now + 0.2]], now + 0.03, now + 0.21);
+  }
+
+  // 高帽迴旋：低通雜訊呼呼聲 (飛行中約 0.4 秒一次)
+  public playHatSpin(pos: Vec3Like) {
+    if (!this.gate('hatSpin', pos)) return;
+    const now = this.audio().currentTime;
+    this.noise(now, 0.32, { type: 'bandpass', freq: [['set', 500, now], ['exp', 900, now + 0.16], ['exp', 500, now + 0.32]], q: 1.4 },
+      [['set', 0.0001, now], ['lin', 0.12, now + 0.12], ['exp', 0.0001, now + 0.32]]);
+  }
+
+  // 花瓣綻放：柔和上行雙音 + 輕雜訊 (S3 綻放圈爆開)
+  public playPetalBloom(pos: Vec3Like) {
+    if (!this.gate('petalBloom', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 660, now], ['exp', 990, now + 0.18]], [['set', 0.0001, now], ['lin', 0.12, now + 0.02], ['exp', 0.0001, now + 0.3]], now, now + 0.31);
+    this.noise(now, 0.2, { type: 'highpass', freq: [['set', 2500, now]], q: 0.7 }, [['set', 0.06, now], ['exp', 0.001, now + 0.2]]);
+  }
+
+  // 終幕：低頻衝擊 + 鐘聲泛音
+  public playFinaleChime(pos: Vec3Like) {
+    if (!this.gate('finaleChime', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 120, now], ['exp', 45, now + 0.4]], [['set', 0.35, now], ['exp', 0.001, now + 0.45]], now, now + 0.46);
+    this.tone('sine', [['set', 1046.5, now]], [['set', 0.0001, now], ['lin', 0.12, now + 0.01], ['exp', 0.0001, now + 1.2]], now, now + 1.21);
+    this.tone('sine', [['set', 1568, now + 0.02]], [['set', 0.0001, now + 0.02], ['lin', 0.06, now + 0.03], ['exp', 0.0001, now + 0.9]], now + 0.02, now + 0.91);
+  }
+
+  // 結界升起：低頻嗡鳴 (約 1.5 秒)
+  public playBarrierHum(pos: Vec3Like) {
+    if (!this.gate('barrierHum', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sawtooth', [['set', 55, now], ['exp', 82, now + 1.4]], [['set', 0.0001, now], ['lin', 0.09, now + 0.3], ['exp', 0.0001, now + 1.6]], now, now + 1.62);
+    this.tone('sine', [['set', 110, now], ['exp', 164, now + 1.4]], [['set', 0.0001, now], ['lin', 0.12, now + 0.3], ['exp', 0.0001, now + 1.6]], now, now + 1.62);
+  }
+
   // 籃球運球落地拍球聲 (Dribble Bounce)
   public playDribble(pos: Vec3Like) {
     if (!this.gate('dribble', pos)) return;
@@ -351,6 +401,28 @@ export class SoundEffects {
     this.tone('sine', [['set', 1975.5, now + 0.05]], [['set', 0.0001, now + 0.05], ['lin', 0.08, now + 0.056], ['exp', 0.0001, now + 0.26]], now + 0.05, now + 0.27);
   }
 
+  // 籃球氣功彈出手「啾」：低通 2.4k 的正弦快速上滑後回落 (能量射出) + 帶通 1.5k→3k 的細噪音上掃 (破風)，
+  // 起音 5ms、0.13 秒內收尾，量小柔和不刺耳
+  public playKiShot(pos: Vec3Like) {
+    if (!this.gate('kiShot', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('sine', [['set', 520, now], ['exp', 1500, now + 0.045], ['exp', 900, now + 0.12]],
+      [['set', 0.0001, now], ['lin', 0.15, now + 0.005], ['exp', 0.0001, now + 0.13]], now, now + 0.14, 2400);
+    this.noise(now, 0.09, { type: 'bandpass', freq: [['set', 1500, now], ['exp', 3000, now + 0.09]], q: 1.0 },
+      [['set', 0.0001, now], ['lin', 0.045, now + 0.01], ['exp', 0.0001, now + 0.09]]);
+  }
+
+  // 氣功彈命中衝擊波：低頻正弦重擊下滑 (身體受衝擊) + 低通 900Hz 噪音「轟」的短擴散，起音 6ms 避免喀聲；終結段 (heavy) 更低更長
+  public playKiImpact(pos: Vec3Like, heavy = false) {
+    if (!this.gate('kiImpact', pos)) return;
+    const now = this.audio().currentTime;
+    const len = heavy ? 0.3 : 0.17;
+    this.tone('sine', [['set', heavy ? 150 : 210, now], ['exp', heavy ? 42 : 70, now + len]],
+      [['set', 0.0001, now], ['lin', heavy ? 0.36 : 0.28, now + 0.006], ['exp', 0.0001, now + len]], now, now + len + 0.01);
+    this.noise(now, len, { type: 'lowpass', freq: [['set', heavy ? 1100 : 900, now], ['exp', 250, now + len]], q: 0.7 },
+      [['set', 0.0001, now], ['lin', heavy ? 0.16 : 0.1, now + 0.008], ['exp', 0.0001, now + len]]);
+  }
+
   // 接球：手掌包住球的輕拍 — 低通 700Hz 的正弦下滑 + 帶通 900Hz 的極短噪音，量小
   public playBallCatch(pos: Vec3Like) {
     if (!this.gate('ballCatch', pos)) return;
@@ -385,6 +457,76 @@ export class SoundEffects {
     if (!this.gate('batHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 520, now], ['exp', 140, now + 0.12]], [['set', 0.42, now], ['exp', 0.001, now + 0.16]], now, now + 0.17);
+    // 木頭爆裂：帶通 900Hz 短噪音 (木屑感)
+    this.noise(now, 0.07, { type: 'bandpass', freq: [['set', 1100, now], ['exp', 500, now + 0.07]], q: 0.8 },
+      [['set', 0.0001, now], ['lin', 0.16, now + 0.003], ['exp', 0.0001, now + 0.07]]);
+  }
+
+  // ===== 近戰打擊分級 (impactClass) =====
+  // 揮空破風：帶通噪音由低往高掃過中心頻率 hz (越重越低、越長)，加一層低通正弦下滑作手臂揮動的「呼」；終結技 (heavy) 更低更長
+  public playSwingWhoosh(pos: Vec3Like, hz: number, len: number, heavy: boolean) {
+    if (!this.gate('swingWhoosh', pos)) return;
+    const now = this.audio().currentTime;
+    const f = heavy ? hz * 0.75 : hz;
+    const l = heavy ? len * 1.35 : len;
+    this.noise(now, l, { type: 'bandpass', freq: [['set', f * 0.55, now], ['exp', f * 1.4, now + l * 0.55], ['exp', f * 0.7, now + l]], q: 1.1 },
+      [['set', 0.0001, now], ['lin', heavy ? 0.2 : 0.14, now + l * 0.35], ['exp', 0.0001, now + l]]);
+    this.softTone('sine', [['set', f * 0.42, now], ['exp', f * 0.18, now + l]],
+      [['set', 0.0001, now], ['lin', heavy ? 0.12 : 0.07, now + l * 0.3], ['exp', 0.0001, now + l]], now, now + l + 0.01, 1200);
+  }
+
+  // 拳擊命中「啪」：低頻正弦下滑 (打到肉) + 帶通 1.4k 極短噪音 (拍擊)
+  public playFistHit(pos: Vec3Like) {
+    if (!this.gate('punch', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 190, now], ['exp', 62, now + 0.1]], [['set', 0.0001, now], ['lin', 0.32, now + 0.004], ['exp', 0.0001, now + 0.12]], now, now + 0.13);
+    this.noise(now, 0.05, { type: 'bandpass', freq: [['set', 1400, now], ['exp', 700, now + 0.05]], q: 0.9 },
+      [['set', 0.0001, now], ['lin', 0.2, now + 0.003], ['exp', 0.0001, now + 0.05]]);
+  }
+
+  // 腿擊命中「嘭」：比拳更低更厚 (三角波低通 + 低通噪音掃尾)，與拳音區隔
+  public playKickHit(pos: Vec3Like) {
+    if (!this.gate('kickHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 135, now], ['exp', 45, now + 0.16]], [['set', 0.0001, now], ['lin', 0.36, now + 0.005], ['exp', 0.0001, now + 0.18]], now, now + 0.19);
+    this.softTone('triangle', [['set', 380, now], ['exp', 120, now + 0.08]],
+      [['set', 0.0001, now], ['lin', 0.14, now + 0.004], ['exp', 0.0001, now + 0.09]], now, now + 0.1, 900);
+    this.noise(now, 0.1, { type: 'lowpass', freq: [['set', 1200, now], ['exp', 300, now + 0.1]], q: 0.7 },
+      [['set', 0.0001, now], ['lin', 0.12, now + 0.005], ['exp', 0.0001, now + 0.1]]);
+  }
+
+  // 終結技低頻重擊層 (疊在各武器打擊音下)：次低音正弦長下滑 + 低通噪音轟鳴；heavy (重 / 金) 更低更長
+  public playFinisherThump(pos: Vec3Like, heavy: boolean) {
+    if (!this.gate('finisherThump', pos)) return;
+    const now = this.audio().currentTime;
+    const len = heavy ? 0.42 : 0.3;
+    this.tone('sine', [['set', heavy ? 95 : 120, now], ['exp', heavy ? 30 : 40, now + len]],
+      [['set', 0.0001, now], ['lin', heavy ? 0.42 : 0.34, now + 0.008], ['exp', 0.0001, now + len]], now, now + len + 0.01);
+    this.noise(now, len * 0.8, { type: 'lowpass', freq: [['set', heavy ? 900 : 700, now], ['exp', 150, now + len * 0.8]], q: 0.6 },
+      [['set', 0.0001, now], ['lin', heavy ? 0.2 : 0.14, now + 0.01], ['exp', 0.0001, now + len * 0.8]]);
+  }
+
+  // 雷電劈啪：高通噪音短促爆裂 2 下 + 方波低通快速顫動 (電流聲)，量小不刺耳
+  public playZap(pos: Vec3Like) {
+    if (!this.gate('zap', pos)) return;
+    const now = this.audio().currentTime;
+    for (const d of [0, 0.035]) {
+      this.noise(now + d, 0.05, { type: 'bandpass', freq: [['set', 3200, now + d], ['exp', 1800, now + d + 0.05]], q: 1.4 },
+        [['set', 0.0001, now + d], ['lin', 0.13, now + d + 0.003], ['exp', 0.0001, now + d + 0.05]]);
+    }
+    this.softTone('square', [['set', 95, now], ['lin', 140, now + 0.06], ['lin', 80, now + 0.12]],
+      [['set', 0.0001, now], ['lin', 0.07, now + 0.005], ['exp', 0.0001, now + 0.13]], now, now + 0.14, 1600);
+  }
+
+  // 防暴警棍命中：金屬棍敲擊 (三角波高頻快速下滑) + 電擊短劈啪
+  public playBatonHit(pos: Vec3Like) {
+    if (!this.gate('batonHit', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 980, now], ['exp', 330, now + 0.09]],
+      [['set', 0.0001, now], ['lin', 0.28, now + 0.003], ['exp', 0.0001, now + 0.12]], now, now + 0.13, 2600);
+    this.tone('sine', [['set', 170, now], ['exp', 60, now + 0.1]], [['set', 0.0001, now], ['lin', 0.25, now + 0.004], ['exp', 0.0001, now + 0.12]], now, now + 0.13);
+    this.noise(now + 0.01, 0.05, { type: 'bandpass', freq: [['set', 3000, now], ['exp', 1700, now + 0.06]], q: 1.4 },
+      [['set', 0.0001, now + 0.01], ['lin', 0.08, now + 0.014], ['exp', 0.0001, now + 0.06]]);
   }
 
   // 特殊黃金神級棒球棍雷霆轟擊聲 (Golden Bat Thunder Whoosh)

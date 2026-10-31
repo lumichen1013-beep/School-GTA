@@ -3,10 +3,11 @@ import type { KfMove } from '../entities/shared/kungfu';
 import type { WeaponFxId } from '../effects/weaponFxStyle';
 import type { LaunchCap } from './launch';
 import type { Vec3Like } from '../audio/spatialAudio';
+import type { ImpactClass } from './impactClass';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')
-export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
+// BOOK_WHIP / BASKETBALL / SLINGSHOT 由小遊戲 / 比賽成績解鎖；RAPIER 為花劍客首勝獎勵 (與 Boss 同步正式上線)
+export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'RAPIER' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
 export type WeaponWorld = 'CAMPUS' | 'DETENTION';
@@ -35,10 +36,11 @@ export interface WeaponFinisherFx {
   readonly landRadius?: number;
 }
 
-// 音效：strike 於每次命中時間點呼叫 (strikeIndex 0 = 主擊，之後依招式 extraStrikes 順序遞增)；start 於起手呼叫
+// 音效：strike 於每次命中時間點 (判定結算後) 呼叫；start 於起手呼叫 (未設時依 impactClass 播揮空破風音，發射型招式除外)
+// strike 參數：strikeIndex 0 = 主擊、之後依招式 extraStrikes 順序遞增；pos = 發聲者 (持武器者) 位置 (空間音效距離衰減)；
+// isFinisher = 終結技主擊；step = 連段第幾段 (0..2)；landed = 本擊是否打中目標 (揮空時多數武器不出打擊聲)
 export interface WeaponSounds {
-  // pos：發聲者 (持武器者) 位置，供空間音效距離衰減
-  readonly strike?: (strikeIndex: number, pos: Vec3Like) => void;
+  readonly strike?: (strikeIndex: number, pos: Vec3Like, isFinisher: boolean, step: number, landed: boolean) => void;
   readonly start?: (pos: Vec3Like) => void;
 }
 
@@ -46,7 +48,8 @@ export interface WeaponSounds {
 export type WeaponFxSpec = WeaponFxId | { readonly R: WeaponFxId; readonly L?: WeaponFxId };
 
 // SLING_AIM：待命同 WEAPON，蓄力時右臂前舉 / 左臂拉弦依蓄力比例插值 (Player.aimCharge)
-export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM';
+// FENCE：擊劍架勢 (右臂前伸劍尖斜上、左臂高舉)，出招時腕角轉為劍身順著手臂 (見 Player.applyHeldStance)
+export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM' | 'FENCE';
 
 // 預建模型 (建構時一次建立，執行期只切換 visible / scale / 材質數值)
 export interface WeaponModelHandle {
@@ -72,6 +75,7 @@ export interface WeaponVariant {
   readonly tempo?: number;
   readonly finisherFx?: WeaponFinisherFx;
   readonly launchCap?: LaunchCap;
+  readonly sounds?: WeaponSounds; // 變體專屬音效 (如警棍金屬電擊聲)；未設沿用定義本身
 }
 
 // 進度查詢介面 (由 Progression 提供，提示文字取解鎖進度)
@@ -83,6 +87,7 @@ export interface WeaponUnlockProgress {
   readonly basketballMade: number; // 小遊戲投籃累計進球 (BasketballGame.totalMade；武器投出的球不計)
   readonly swimWon: boolean;       // 是否贏過游泳 (小魚)
   readonly trackWon: boolean;      // 是否贏過跑操場 (阿凱)
+  readonly fencerDefeated: boolean; // 是否擊敗過世界 Boss 花劍客 (首勝)
 }
 
 // 實際揮擊時生效的套組共通欄位 (武器定義與場景覆寫共用)
@@ -91,6 +96,8 @@ interface WeaponLoadoutFields {
   readonly combo: readonly KfMove[];
   readonly tempo: number; // 出招時間縮放 (> 1 較慢)
   readonly fxStyle: WeaponFxSpec;
+  // 命中回饋分級 (停格 / 震動 / 星芒 / 碎片 / 揮空音高)，見 impactClass.ts
+  readonly impactClass: ImpactClass;
   readonly finisherFx?: WeaponFinisherFx;
   // 玩家終結技擊飛初速度上限 (未設 = NPC.ts 預設 10 / 7)；飛行距離 = h × 2v / 26
   readonly launchCap?: LaunchCap;
@@ -115,8 +122,6 @@ export interface WeaponRanged {
 
 export interface WeaponDefinition extends WeaponLoadoutFields {
   readonly id: WeaponId;
-  // 'dev' = 開發中武器，僅 DEV_WEAPONS_BUILD 的建置且 devWeaponsMode 非 off 時啟用 (見 featureFlags.ts)
-  readonly release: 'released' | 'dev';
   readonly slot: number;
   readonly icon: string;
   readonly banner: { readonly campus: string; readonly detention: string };
@@ -149,6 +154,7 @@ export interface ResolvedWeapon {
   readonly combo: readonly KfMove[];
   readonly tempo: number;
   readonly fx: { readonly R: WeaponFxId; readonly L: WeaponFxId };
+  readonly impactClass: ImpactClass;
   readonly finisherFx: WeaponFinisherFx;
   readonly launchCap: LaunchCap | null;
   readonly chainWindow: number; // 連段接續窗 (秒)

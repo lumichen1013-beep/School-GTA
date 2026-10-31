@@ -29,10 +29,11 @@ export type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
 
 // 揮擊拖尾錨點：W 手持武器 (右手)、WL 左手武器 (雙持)、RA 右拳、RL 右腿、LL 左腿
 export type TrailLimb = 'W' | 'WL' | 'RA' | 'RL' | 'LL';
-// 終結技特效類型：SLAM 下劈地裂、SPIN 旋身衝擊環、DASH 突進斬 (終點雙圈環 + 羽毛，路徑斬痕由戰鬥系統另出)
-export type FinisherFx = 'SLAM' | 'SPIN' | 'DASH';
-// 命中斬痕特效類型 (由斬痕特效系統實作)：LINE 單道光痕、X 交叉光痕
-export type SlashFx = 'LINE' | 'X';
+// 終結技特效類型：SLAM 下劈地裂、SPIN 旋身衝擊環、DASH 突進斬 (終點雙圈環 + 羽毛，路徑斬痕由戰鬥系統另出)、
+// PIERCE 突刺貫穿 (突進光帶 + 自突進起點貫穿到劍尖前方的一線長光、劍尖處綻放環與花瓣)
+export type FinisherFx = 'SLAM' | 'SPIN' | 'DASH' | 'PIERCE';
+// 命中斬痕特效類型 (由斬痕特效系統實作)：LINE 單道光痕、X 交叉光痕、THRUST 突刺刺芒 (每擊沿面向一道十字截面光矛，高度見 thrustY)
+export type SlashFx = 'LINE' | 'X' | 'THRUST';
 
 // 招式突進：出招進度 from → to (占全長比例) 期間沿面向等速前衝 dist 公尺 (位移交由一般碰撞處理，遇牆即停)
 export interface KfLunge {
@@ -44,7 +45,8 @@ export interface KfLunge {
 // 群攻範圍 (終結技或帶 aoe 的非終結技)：offset / radius / len / halfWidth 皆為攻擊距離 (getWeaponReach) 倍率
 // shape：未設或 'CIRCLE' 為圓形 (center 決定圓心)；'PATH' 為沿本招突進路徑 (突進起點 → 目前位置) 的矩形 / 膠囊，
 // radius 為半寬 (攻擊距離倍率)、長度取實際突進距離 (撞牆時較短)，center / offset 不使用；
-// 'FAN' 為以 center 為頂點、沿面向的扇形 (radius + halfAngle)；'LINE' 為自玩家位置沿面向的長條 (len + halfWidth，center / offset 不使用)
+// 'FAN' 為以 center 為頂點、沿面向的扇形 (radius + halfAngle)；'LINE' 為自玩家位置沿面向的長條 (len + halfWidth，center / offset 不使用)；
+// LINE 設 fromDash 時起點改為本招突進起點、長度 = 實際突進距離 + len (撞牆時較短；見 lineAoeSpan)
 export type AoeShape = 'CIRCLE' | 'PATH' | 'FAN' | 'LINE';
 export interface FinisherAoe {
   readonly shape?: AoeShape;
@@ -54,6 +56,7 @@ export interface FinisherAoe {
   readonly halfAngle?: number; // FAN 半角 (弧度)
   readonly len?: number; // LINE 長度 (攻擊距離倍率)
   readonly halfWidth?: number; // LINE 半寬 (攻擊距離倍率)
+  readonly fromDash?: boolean; // LINE 自突進起點起算 (涵蓋突進穿過的人 + 劍尖前方)
   readonly max: number; // 最多命中人數 (上限 8)
   readonly falloff: number; // 擊退距離衰減：× (1 − falloff · d / radius)
   readonly shake: number; // 命中鏡頭震動
@@ -67,8 +70,8 @@ export interface FinisherAoe {
 }
 
 // 發射型招式 (遠程回收武器，如籃球)：命中時間點不做近戰判定而是發射彈體
-// BALL_CHEST 胸前推傳 (直線)、BALL_BOUNCE 地板反彈傳球 (目標前方彈一下)、BALL_LOB 高拋灌籃 (終結技)、SLING 彈弓放弦 (石子)
-export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_BOUNCE' | 'BALL_LOB' | 'SLING';
+// 籃球氣功彈 (皆為直線高速光束)：BALL_CHEST 雙掌推傳、BALL_SNAP 單掌快傳、BALL_BLAST 灌籃氣功砲 (終結技)；SLING 彈弓放弦 (石子)
+export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_SNAP' | 'BALL_BLAST' | 'SLING';
 
 export interface KfMove {
   readonly name: string;
@@ -95,6 +98,7 @@ export interface KfMove {
   readonly charge: readonly [number, number] | null;
   readonly hitShake: number; // 一般命中鏡頭震動 (0 不震；終結技主擊另有固定震動)
   readonly slashFx: SlashFx | null;
+  readonly thrustY: readonly number[]; // THRUST 刺芒離地高度 (依命中序號；未設 = 胸口 1.2m)
   readonly aoe: FinisherAoe | null; // 終結技群攻 (null 為單體判定)
   readonly fx: FinisherFx | null;
   readonly projectile: ProjectileMoveKind | null; // 發射型招式 (非 null 時命中時間點改為發射彈體)
@@ -105,7 +109,7 @@ export interface KfMove {
 export interface MoveOpts {
   dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
   trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
-  trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx;
+  trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx; thrustY?: readonly number[];
   projectile?: ProjectileMoveKind;
 }
 
@@ -158,6 +162,7 @@ export function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]):
     charge: o.charge ?? null,
     hitShake: o.hitShake ?? 0,
     slashFx: o.slashFx ?? null,
+    thrustY: o.thrustY ?? [],
     aoe: o.aoe ?? null,
     fx: o.fx ?? null,
     projectile: o.projectile ?? null,
@@ -186,6 +191,7 @@ const FIST_2 = defineMove('轉身鞭腿', { dur: 0.48, strike: 0.42, cancel: 0.6
 // 3 騰空旋風腿：下沉蓄勢 → 騰空 360° 旋身甩腿 → 落地馬步亮相 (終結技)
 const FIST_3 = defineMove('騰空旋風腿', {
   dur: 0.72, strike: 0.46, cancel: 0.74, reach: 1.2, arc: -1, dmg: 1.25, knock: 1.6, finisher: true, trailLimb: 'RL', trail: [0.3, 0.62], fx: 'SPIN',
+  charge: [0.02, 0.18], // 下沉蓄勢：聚氣光環 (純視覺，不影響節奏)
   aoe: { center: 'SELF', offset: 0, radius: 1.3, max: 5, falloff: 0.35, shake: 0.4, hitStop: 0.08, hitStopMulti: 0.08, missShake: 0 }
 }, [
   [0.16, E_SMOOTH, { tw: -0.55, ln: 0.14, h: -0.17, la: [0.75, 0, -0.15], ra: [0.75, 0, 0.15], ll: [-0.35, 0, -0.08], rr: [0.3, 0, 0.08] }],
@@ -214,6 +220,7 @@ const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62,
 // 3 躍起下劈：屈膝起跳、雙手舉棒過頂 → 落地沉身全力下劈 (終結技)
 const BAT_3 = defineMove('躍起下劈', {
   dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.36, 0.56], fx: 'SLAM',
+  charge: [0.16, 0.36], // 起跳舉棒：聚氣光環 + 棒身蓄能發光 (純視覺)
   aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 7, shakeGold: 0.8, hitStopGold: 0.11 }
 }, [
   [0.18, E_SMOOTH, { ln: 0.1, h: -0.15, la: [0.55, 0, -0.1], ra: [0.55, 0, 0.1], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
@@ -241,6 +248,7 @@ const BATON_2 = defineMove('轉腕回挑', { dur: 0.42, strike: 0.42, cancel: 0.
 // 3 旋身橫打：蓄勢後旋身一圈，警棍平舉橫打 (終結技)
 const BATON_3 = defineMove('旋身橫打', {
   dur: 0.66, strike: 0.5, cancel: 1, reach: 1.1, arc: -1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.2, 0.72], fx: 'SPIN',
+  charge: [0.02, 0.18], // 蓄勢：電弧聚氣光環 (純視覺)
   aoe: { center: 'SELF', offset: 0, radius: 1.12, max: 6, falloff: 0.35, shake: 0.45, hitStop: 0.09, hitStopMulti: 0.09, missShake: 0 }
 }, [
   [0.2, E_SMOOTH, { tw: 0.8, ln: -0.04, h: -0.1, la: [-1.1, 0, 0.2], ra: [-0.2, 0, 1.2], ll: [-0.35, 0, -0.15], rr: [0.3, 0, 0.15] }],
@@ -298,67 +306,128 @@ const DUAL_3 = defineMove('鬼斬', {
   [1, E_SMOOTH, { tw: TWO_PI }]
 ]);
 
-// ───────────── 玩家：綁帶捆書 (長鞭型，dev 武器；第 1、2 段 FAN / LINE 群攻 + 推擊，第 3 段旋鞭擊飛) ─────────────
-// 1 甩書橫掃：右手持鞭拉到身體右後方 (0.2) → 擰腰自右向左大幅橫甩 (0.4 命中，扇形 ±70°、4.2m) → 鞭身甩過頭收到左側
+// ───────────── 玩家：綁帶捆書 (溜溜球式長鞭，dev 武器；第 1、2 段 FAN / LINE 群攻只扣血，第 3 段旋鞭擊飛) ─────────────
+// 每段：蓄 (腳步 + 轉腰帶肩，手臂落後一拍) → 爆發 (鬆手甩出書，約 0.06 秒甩到最外側 = 命中) → 收 (綁帶收回、手在胸前接書) → 回勢。
+// 書在外 / 回收期間有明顯空檔 (敵人可趁隙近身)，第 3 段蓄勢較長再爆發旋身形成高潮。
+// 模型以拖尾區段進度驅動書的甩出 / 收回：拖尾區段起點 = 鬆手、中點 = strike (書在最外側)、終點起開始收回 (見 bookWhipModel)。
+// 1 甩書橫掃：左腳上步、腰往右擰把書拉到右後方 (0.12) → 腰先轉、手臂落後 (0.2 鬆手) → 手臂橫甩、書沿弧線甩出 (0.3 命中，扇形 ±70°、4.2m)
+//   → 隨勢甩過左側 (0.42) → 收綁帶、雙手胸前接書 (0.62) → 回勢
 const WHIP_1 = defineMove('甩書橫掃', {
-  dur: 0.36, strike: 0.4, cancel: 0.6, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, trailLimb: 'W', trail: [0.2, 0.62], slashFx: 'LINE',
-  aoe: { shape: 'FAN', center: 'SELF', offset: 0, radius: 1.0, halfAngle: 70 * Math.PI / 180, max: 4, falloff: 0, shake: 0.12, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+  dur: 0.6, strike: 0.3, cancel: 0.85, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, trailLimb: 'W', trail: [0.2, 0.4], slashFx: 'LINE',
+  aoe: { shape: 'FAN', center: 'SELF', offset: 0, radius: 1.0, halfAngle: 70 * Math.PI / 180, max: 4, falloff: 0, shake: 0.14, hitStop: 0.035, hitStopMulti: 0.04, missShake: 0 }
 }, [
-  [0.2, E_SMOOTH, { tw: 1.55, ln: -0.08, rl: -0.1, h: -0.06, la: [-1.0, 0, -0.35], ra: [-0.35, 0.2, 1.55], ll: [-0.4, 0, -0.12], rr: [0.35, 0, 0.12] }],
-  [0.4, E_IN, { tw: -1.0, ln: 0.14, rl: 0.1, h: -0.1, la: [0.55, 0, -0.7], ra: [-0.45, -0.4, 1.4], ll: [-0.55, 0, -0.18], rr: [0.45, 0, 0.18] }],
-  [0.65, E_OUT, { tw: -1.55, ln: 0.1, rl: 0.14, h: -0.08, la: [0.6, 0, -0.85], ra: [-0.55, -0.7, 1.1], ll: [-0.5, 0, -0.18], rr: [0.42, 0, 0.18] }],
-  [1, E_SMOOTH, { tw: -0.2, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.12] }]
+  [0.12, E_SMOOTH, { tw: 0.95, ln: -0.04, rl: -0.06, h: -0.06, la: [-0.9, 0, -0.35], ra: [0.15, 0.2, 1.3], ll: [-0.4, 0, -0.1], rr: [0.3, 0, 0.1] }],
+  [0.2, E_SMOOTH, { tw: 0.45, ln: 0.04, rl: -0.02, h: -0.08, la: [-0.6, 0, -0.5], ra: [0.05, 0.2, 1.45], ll: [-0.5, 0, -0.12], rr: [0.4, 0, 0.12] }],
+  [0.3, E_IN, { tw: -0.75, ln: 0.14, rl: 0.08, h: -0.1, la: [0.4, 0, -0.6], ra: [-1.4, -0.25, 0.55], ll: [-0.6, 0, -0.16], rr: [0.5, 0, 0.16] }],
+  [0.42, E_OUT, { tw: -1.1, ln: 0.12, rl: 0.1, h: -0.09, la: [0.45, 0, -0.7], ra: [-1.35, -0.4, 0.05], ll: [-0.55, 0, -0.16], rr: [0.45, 0, 0.16] }],
+  [0.62, E_SMOOTH, { tw: -0.35, ln: 0.06, h: -0.05, la: [-1.0, 0, -0.35], ra: [-1.15, 0, 0.12], ll: [-0.3, 0, -0.08], rr: [0.25, 0, 0.08] }],
+  [1, E_SMOOTH, { tw: -0.05, la: [-0.2, 0, 0], ra: [-0.3, 0, 0.1] }]
 ]);
-// 2 回手抽擊：鞭高舉過頂蓄勢 (0.2) → 自上而下直線抽出 (0.4 命中，前方長條 4.8m × 1.2m) → 手腕一抖回彈 (0.6 追擊，傷害 ×0.5)
+// 2 回手抽擊：上身後仰、書高舉過頂 (0.12) → 前傾帶肩、手臂仍在頂上 (0.2 鬆手) → 弓步向下直線抽出 (0.32 命中，前方長條 4.8m × 1.2m)
+//   → 手腕一抖回彈 (0.42 追擊，傷害 ×0.5) → 收綁帶、胸前接書 (0.66) → 回勢
 const WHIP_2 = defineMove('回手抽擊', {
-  dur: 0.36, strike: 0.4, cancel: 0.62, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, extraStrikes: [0.6], extraDmg: [0.5],
-  trailLimb: 'W', trail: [0.2, 0.7], slashFx: 'LINE',
-  aoe: { shape: 'LINE', center: 'SELF', offset: 0, radius: 1.0, len: 4.8 / 4.2, halfWidth: 0.6 / 4.2, max: 4, falloff: 0, shake: 0.12, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+  dur: 0.62, strike: 0.32, cancel: 0.85, reach: 1.0, arc: -0.3, dmg: 1.0, knock: 0.35, extraStrikes: [0.42], extraDmg: [0.5],
+  trailLimb: 'W', trail: [0.2, 0.44], slashFx: 'LINE',
+  aoe: { shape: 'LINE', center: 'SELF', offset: 0, radius: 1.0, len: 4.8 / 4.2, halfWidth: 0.6 / 4.2, max: 4, falloff: 0, shake: 0.18, hitStop: 0.045, hitStopMulti: 0.05, missShake: 0 }
 }, [
-  [0.2, E_SMOOTH, { tw: -0.5, ln: -0.3, h: 0.06, la: [-1.2, 0, 0.35], ra: [-2.95, 0.3, 0.45], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
-  [0.4, E_IN, { tw: 0.3, ln: 0.34, h: -0.14, la: [0.6, 0, -0.5], ra: [-1.45, 0, 0.1], ll: [-0.7, 0, -0.1], rr: [0.6, 0, 0.1] }],
-  [0.6, E_IN, { tw: 0.15, ln: 0.06, h: 0.0, la: [0.3, 0, -0.5], ra: [-2.2, 0.1, 0.3], ll: [-0.45, 0, -0.1], rr: [0.4, 0, 0.1] }],
-  [0.8, E_OUT, { tw: 0.2, ln: 0.12, h: -0.04, la: [0.3, 0, -0.5], ra: [-1.6, 0, 0.25], ll: [-0.4, 0, -0.1], rr: [0.35, 0, 0.1] }],
-  [1, E_SMOOTH, REST]
+  [0.12, E_SMOOTH, { tw: -0.35, ln: -0.26, h: 0.04, la: [-1.0, 0, 0.3], ra: [-2.9, 0.3, 0.4], ll: [-0.25, 0, -0.08], rr: [0.25, 0, 0.08] }],
+  [0.2, E_SMOOTH, { tw: -0.15, ln: -0.04, h: 0.0, la: [-0.6, 0, 0.1], ra: [-2.75, 0.2, 0.35], ll: [-0.45, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [0.32, E_IN, { tw: 0.02, ln: 0.32, h: -0.13, la: [0.5, 0, -0.45], ra: [-1.35, 0, 0.1], ll: [-0.7, 0, -0.1], rr: [0.6, 0, 0.1] }],
+  [0.42, E_OUT, { tw: -0.06, ln: 0.2, h: -0.1, la: [0.4, 0, -0.45], ra: [-1.75, 0.1, 0.2], ll: [-0.65, 0, -0.1], rr: [0.55, 0, 0.1] }],
+  [0.66, E_SMOOTH, { tw: 0.05, ln: 0.08, h: -0.05, la: [-1.0, 0, -0.35], ra: [-1.15, 0, 0.12], ll: [-0.35, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [1, E_SMOOTH, { la: [-0.2, 0, 0], ra: [-0.3, 0, 0.1] }]
 ]);
-// 3 旋鞭橫掃 (終結技)：蓄勢 (0.18) → 原地旋身一圈、鞭身平舉掃出 4.2m 圓 (0.5 命中，擊飛主目標) → 收鞭亮相
+// 3 旋鞭橫掃 (終結技，慢招重擊飛)：沉腰擰身、書拉到身後 (0.26) → 繃緊停頓 (0.38) → 爆發旋身一圈、0.42 鬆手、手臂平伸把書繞身拉成大圓
+//   (0.52 命中 4.2m，擊飛約 3.5 ~ 4m) → 甩過 (0.62) → 收綁帶、胸前接書 (0.76) → 0.79 可動 (命中後僵直約 0.25 秒，短於被擊飛敵人跑回所需時間)
 const WHIP_3 = defineMove('旋鞭橫掃', {
-  dur: 0.6, strike: 0.5, cancel: 0.75, reach: 1.0, arc: -1, dmg: 1.3, knock: 1.3, finisher: true, trailLimb: 'W', trail: [0.18, 0.74], fx: 'SPIN', slashFx: 'LINE',
-  aoe: { center: 'SELF', offset: 0, radius: 1.0, max: 6, falloff: 0.15, shake: 0.4, hitStop: 0.03, hitStopMulti: 0.03, missShake: 0 }
+  dur: 0.92, strike: 0.52, cancel: 0.79, reach: 1.0, arc: -1, dmg: 1.3, knock: 1.3, finisher: true, trailLimb: 'W', trail: [0.42, 0.62], fx: 'SPIN', slashFx: 'LINE',
+  aoe: { center: 'SELF', offset: 0, radius: 1.0, max: 6, falloff: 0.15, shake: 0.55, hitStop: 0.07, hitStopMulti: 0.085, missShake: 0.15 }
 }, [
-  [0.18, E_SMOOTH, { tw: 0.9, ln: 0.08, rl: -0.1, h: -0.18, la: [-1.1, 0, -0.3], ra: [-0.4, 0, 1.45], ll: [-0.4, 0, -0.15], rr: [0.35, 0, 0.15] }],
-  [0.5, E_IN, { tw: -TWO_PI - 0.3, ln: 0.06, rl: 0.1, h: 0.08, la: [0.3, 0, -1.25], ra: [-0.25, -0.2, 1.55], ll: [-0.35, 0, -0.22], rr: [0.3, 0, 0.22] }],
-  [0.74, E_OUT, { tw: -TWO_PI - 0.95, ln: 0.08, rl: 0.14, h: -0.1, la: [0.35, 0, -1.1], ra: [-0.3, -0.35, 1.3], ll: [-0.45, 0, -0.25], rr: [0.4, 0, 0.25] }],
-  [1, E_SMOOTH, { tw: -TWO_PI, la: [-0.1, 0, 0], ra: [-0.2, 0, 0.1] }]
+  [0.26, E_SMOOTH, { tw: 1.2, ln: 0.1, rl: -0.1, h: -0.2, la: [-1.1, 0, -0.3], ra: [0.1, 0, 1.3], ll: [-0.45, 0, -0.18], rr: [0.4, 0, 0.18] }],
+  [0.38, E_LINEAR, { tw: 1.35, ln: 0.12, rl: -0.12, h: -0.22, la: [-1.15, 0, -0.3], ra: [0.15, 0, 1.4], ll: [-0.45, 0, -0.2], rr: [0.42, 0, 0.2] }],
+  [0.52, E_IN, { tw: -TWO_PI - 0.2, ln: 0.06, rl: 0.1, h: 0.06, la: [0.3, 0, -1.2], ra: [-0.3, -0.2, 1.55], ll: [-0.35, 0, -0.22], rr: [0.3, 0, 0.22] }],
+  [0.62, E_OUT, { tw: -TWO_PI - 0.75, ln: 0.08, rl: 0.12, h: -0.08, la: [0.35, 0, -1.05], ra: [-0.5, -0.4, 1.2], ll: [-0.45, 0, -0.24], rr: [0.4, 0, 0.24] }],
+  [0.76, E_SMOOTH, { tw: -TWO_PI - 0.4, ln: 0.06, h: -0.05, la: [-1.0, 0, -0.35], ra: [-1.15, 0, 0.15], ll: [-0.3, 0, -0.1], rr: [0.25, 0, 0.1] }],
+  [1, E_SMOOTH, { tw: -TWO_PI, la: [-0.2, 0, 0], ra: [-0.3, 0, 0.1] }]
 ]);
 
-// ───────────── 玩家：籃球 (遠程回收型，dev 武器；三投各自發射彈體，命中時間點 = 球離手) ─────────────
-// 1 胸前推傳：雙手抱球收到胸口 (0.25) → 雙臂向前一推球離手 (0.5，直線)，身體微前傾
-const BALL_1 = defineMove('胸前推傳', {
-  dur: 0.4, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_CHEST'
+// ───────────── 玩家：籃球氣功彈 (遠程回收型，dev 武器；三投各自發射光束彈，命中時間點 = 球離手) ─────────────
+// 節奏：聚氣 (極短) → 出手 (瞬間) → 收招 (短)；第 1、2 投前搖約 0.1 秒、0.38 秒可接下一投，第 3 投聚氣 0.28 秒形成高潮、出手後 0.22 秒即可移動 / 閃身
+// 1 氣勁推傳：雙掌抱球收胸 (0.12) → 雙掌猛推 (0.25 出手) → 前推定住 (0.5) → 收勢
+const BALL_1 = defineMove('氣勁推傳', {
+  dur: 0.42, strike: 0.25, cancel: 0.9, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_CHEST'
 }, [
-  [0.25, E_SMOOTH, { tw: 0.08, ln: -0.06, h: -0.04, la: [-1.0, 0, 0.5], ra: [-1.0, 0, -0.5], ll: [-0.2, 0, -0.05], rr: [0.2, 0, 0.05] }],
-  [0.5, E_IN, { tw: -0.05, ln: 0.14, h: -0.05, la: [-1.5, 0, 0.12], ra: [-1.5, 0, -0.12], ll: [-0.4, 0, -0.08], rr: [0.35, 0, 0.08] }],
-  [0.75, E_OUT, { tw: 0, ln: 0.1, h: -0.03, la: [-1.4, 0, 0.1], ra: [-1.4, 0, -0.1], ll: [-0.3, 0, -0.06], rr: [0.25, 0, 0.06] }],
+  [0.12, E_SMOOTH, { tw: 0.12, ln: -0.06, h: -0.05, la: [-1.0, 0, 0.5], ra: [-1.0, 0, -0.5], ll: [-0.2, 0, -0.05], rr: [0.2, 0, 0.05] }],
+  [0.25, E_IN, { tw: -0.06, ln: 0.16, h: -0.06, la: [-1.55, 0, 0.1], ra: [-1.55, 0, -0.1], ll: [-0.42, 0, -0.08], rr: [0.36, 0, 0.08] }],
+  [0.5, E_OUT, { tw: -0.02, ln: 0.12, h: -0.04, la: [-1.45, 0, 0.1], ra: [-1.45, 0, -0.1], ll: [-0.32, 0, -0.06], rr: [0.26, 0, 0.06] }],
   [1, E_SMOOTH, REST]
 ]);
-// 2 地板彈傳：抱球收胸 (0.25) → 屈膝前傾、雙臂斜下推出，球砸向目標前方地面 (0.5)
-const BALL_2 = defineMove('地板彈傳', {
-  dur: 0.42, strike: 0.5, cancel: 0.7, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_BOUNCE'
+// 2 迴旋快傳：反向扭身右手後拉 (0.12) → 轉腰單掌甩出 (0.25 出手，左手護胸) → 收勢
+const BALL_2 = defineMove('迴旋快傳', {
+  dur: 0.42, strike: 0.25, cancel: 0.9, reach: 1.0, arc: -1, dmg: 1.0, knock: 1.0, projectile: 'BALL_SNAP'
 }, [
-  [0.25, E_SMOOTH, { tw: -0.08, ln: 0.02, h: -0.08, la: [-0.9, 0, 0.45], ra: [-0.9, 0, -0.45], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
-  [0.5, E_IN, { tw: 0.06, ln: 0.4, h: -0.2, la: [-0.55, 0, 0.1], ra: [-0.55, 0, -0.1], ll: [-0.6, 0, -0.12], rr: [0.5, 0, 0.12] }],
-  [0.75, E_OUT, { tw: 0, ln: 0.34, h: -0.16, la: [-0.45, 0, 0.1], ra: [-0.45, 0, -0.1], ll: [-0.5, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [0.12, E_SMOOTH, { tw: 0.32, ln: 0.02, h: -0.06, la: [-0.9, 0, 0.45], ra: [-0.4, 0, -0.9], ll: [-0.3, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [0.25, E_IN, { tw: -0.28, ln: 0.18, h: -0.08, la: [-0.8, 0, 0.6], ra: [-1.6, 0, 0.05], ll: [-0.5, 0, -0.1], rr: [0.4, 0, 0.1] }],
+  [0.5, E_OUT, { tw: -0.18, ln: 0.12, h: -0.05, la: [-0.7, 0, 0.5], ra: [-1.45, 0, 0.0], ll: [-0.38, 0, -0.08], rr: [0.3, 0, 0.08] }],
   [1, E_SMOOTH, REST]
 ]);
-// 3 高拋灌籃 (終結技)：蹲低把球收到腰側蓄勢 (0.3) → 起身躍起、雙臂高舉過頂將球高拋 (0.55，擊飛) → 落地收勢
-const BALL_3 = defineMove('高拋灌籃', {
-  dur: 0.6, strike: 0.55, cancel: 0.75, reach: 1.0, arc: -1, dmg: 1.2, knock: 1.0, finisher: true, projectile: 'BALL_LOB'
+// 3 灌籃氣功砲 (終結技)：沉腰把球收到腰側聚氣 (0.38) → 雙掌合推爆發 (0.45 出手，擊飛 + 小範圍爆風) → 前推定住 → 收勢
+const BALL_3 = defineMove('灌籃氣功砲', {
+  dur: 0.62, strike: 0.45, cancel: 0.8, reach: 1.0, arc: -1, dmg: 1.7, knock: 1.0, finisher: true, projectile: 'BALL_BLAST',
+  charge: [0.05, 0.38] // 沉腰聚氣：聚氣光環 (純視覺，節奏不變)
 }, [
-  [0.3, E_SMOOTH, { tw: 0.1, ln: 0.18, h: -0.22, la: [-0.5, 0, 0.35], ra: [-0.5, 0, -0.35], ll: [-0.55, 0, -0.12], rr: [0.5, 0, 0.12] }],
-  [0.55, E_IN, { tw: -0.05, ln: -0.12, h: 0.1, la: [-2.9, 0, 0.15], ra: [-2.9, 0, -0.15], ll: [-0.2, 0, -0.06], rr: [0.15, 0, 0.06] }],
-  [0.8, E_OUT, { tw: 0, ln: 0.05, h: 0.0, la: [-2.3, 0, 0.2], ra: [-2.3, 0, -0.2], ll: [-0.25, 0, -0.06], rr: [0.2, 0, 0.06] }],
+  [0.38, E_SMOOTH, { tw: 0.35, ln: 0.12, h: -0.24, la: [-0.5, 0, 0.35], ra: [-0.6, 0, -0.35], ll: [-0.55, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.45, E_IN, { tw: -0.05, ln: 0.2, h: -0.12, la: [-1.6, 0, 0.05], ra: [-1.6, 0, -0.05], ll: [-0.6, 0, -0.12], rr: [0.5, 0, 0.12] }],
+  [0.72, E_OUT, { tw: 0, ln: 0.14, h: -0.08, la: [-1.5, 0, 0.08], ra: [-1.5, 0, -0.08], ll: [-0.45, 0, -0.1], rr: [0.38, 0, 0.1] }],
   [1, E_SMOOTH, REST]
+]);
+
+// ───────────── 玩家：玫瑰細劍 (花劍客首勝獎勵；快、準、遠的突刺，第 1、2 段單體只扣血，第 3 段突進一線貫穿擊飛) ─────────────
+// 持劍架勢 FENCE：右腳在前、右臂前伸劍尖斜上、左臂高舉 (擊劍剪影)；每刺「蓄 (後坐) → 爆 (弓步送肩直刺) → 收 (半收劍)」。
+// 劍身於出招中順著手臂 (腕角見 Player FENCE_STANCE.attackWrist)，突刺高度由手臂俯仰 + 前傾 + 沉身決定 (低刺靠沉身壓低，劍尖仍離地)
+// 1 含苞點刺：後坐蓄勢 (0.18) → 前腳墊步弓步直刺 (0.34) → 半收 (0.45) → 手腕一抖再刺 (0.56) → 定住 (0.72) → 回架勢
+const RAPIER_1 = defineMove('含苞點刺', {
+  dur: 0.36, strike: 0.34, cancel: 0.68, reach: 1.2, arc: 0.7, dmg: 0.75, knock: 0.3, extraStrikes: [0.56], extraDmg: [0.75],
+  trailLimb: 'W', trail: [0.2, 0.7], slashFx: 'THRUST', thrustY: [1.35, 1.2], lunge: { dist: 0.5, from: 0.18, to: 0.34 }
+}, [
+  [0.18, E_SMOOTH, { tw: 0.22, ln: -0.03, h: -0.07, la: [-2.55, 0, -0.75], ra: [-1.2, 0.12, 0.28], ll: [0.28, 0, -0.06], rr: [-0.22, 0, 0.06] }],
+  [0.34, E_IN, { tw: -0.45, ln: 0.18, h: -0.15, la: [-2.1, 0, -1.05], ra: [-1.64, -0.12, -0.04], ll: [0.55, 0, -0.06], rr: [-0.72, 0, 0.06] }],
+  [0.45, E_OUT, { tw: -0.18, ln: 0.1, h: -0.12, la: [-2.35, 0, -0.9], ra: [-1.36, 0.12, 0.16], ll: [0.45, 0, -0.06], rr: [-0.55, 0, 0.06] }],
+  [0.56, E_IN, { tw: -0.5, ln: 0.2, h: -0.16, la: [-2.1, 0, -1.05], ra: [-1.58, -0.14, -0.04], ll: [0.58, 0, -0.06], rr: [-0.75, 0, 0.06] }],
+  [0.72, E_OUT, { tw: -0.42, ln: 0.16, h: -0.14, la: [-2.2, 0, -1.0], ra: [-1.54, -0.1, 0], ll: [0.55, 0, -0.06], rr: [-0.7, 0, 0.06] }],
+  [1, E_SMOOTH, { tw: -0.1, ln: 0.03, h: -0.04, la: [-2.5, 0, -0.8], ra: [-0.95, 0, 0.15], ll: [0.15, 0, -0.04], rr: [-0.15, 0, 0.04] }]
+]);
+// 2 薔薇三重奏：手腕畫小圓，上 (0.22)、中 (0.38)、下 (0.54) 三段連刺，最後一刺壓低重心全身送出 (×0.8) → 定住 → 回架勢
+const RAPIER_2 = defineMove('薔薇三重奏', {
+  dur: 0.6, strike: 0.22, cancel: 0.7, reach: 1.2, arc: 0.7, dmg: 0.6, knock: 0.3, extraStrikes: [0.38, 0.54], extraDmg: [0.6, 0.8],
+  trailLimb: 'W', trail: [0.12, 0.74], slashFx: 'THRUST', thrustY: [1.6, 1.25, 0.95], lunge: { dist: 0.6, from: 0.44, to: 0.54 }
+}, [
+  [0.1, E_SMOOTH, { tw: 0.26, ln: 0, h: -0.07, la: [-2.55, 0, -0.75], ra: [-1.3, 0.16, 0.3], ll: [0.3, 0, -0.06], rr: [-0.3, 0, 0.06] }],
+  [0.22, E_IN, { tw: -0.35, ln: 0.08, h: -0.09, la: [-2.2, 0, -1.0], ra: [-1.98, -0.1, -0.04], ll: [0.45, 0, -0.06], rr: [-0.55, 0, 0.06] }],
+  [0.3, E_OUT, { tw: -0.1, ln: 0.06, h: -0.1, la: [-2.4, 0, -0.85], ra: [-1.48, 0.16, 0.22], ll: [0.42, 0, -0.06], rr: [-0.5, 0, 0.06] }],
+  [0.38, E_IN, { tw: -0.42, ln: 0.15, h: -0.13, la: [-2.15, 0, -1.0], ra: [-1.62, -0.12, -0.04], ll: [0.5, 0, -0.06], rr: [-0.62, 0, 0.06] }],
+  [0.46, E_OUT, { tw: -0.15, ln: 0.12, h: -0.15, la: [-2.35, 0, -0.9], ra: [-1.35, 0.16, 0.2], ll: [0.5, 0, -0.06], rr: [-0.6, 0, 0.06] }],
+  [0.54, E_IN, { tw: -0.62, ln: 0.24, h: -0.24, la: [-1.85, 0, -1.25], ra: [-1.58, -0.14, -0.04], ll: [0.72, 0, -0.06], rr: [-0.88, 0, 0.06] }],
+  [0.74, E_OUT, { tw: -0.52, ln: 0.2, h: -0.21, la: [-1.95, 0, -1.2], ra: [-1.58, -0.1, 0], ll: [0.68, 0, -0.06], rr: [-0.82, 0, 0.06] }],
+  [1, E_SMOOTH, { tw: -0.1, ln: 0.03, h: -0.04, la: [-2.5, 0, -0.8], ra: [-0.95, 0, 0.15], ll: [0.15, 0, -0.04], rr: [-0.15, 0, 0.04] }]
+]);
+// 3 謝幕禮・千瓣綻放 (終結技)：沉身側擰、劍高舉過頂後拉、左手前指瞄準 (0.04 → 0.22 聚氣，劍身轉玫瑰紅；手臂自上方落下，劍尖不掃地) →
+// 貼地飛刺突進 3.2m (0.22 → 0.34；0.30 穿過的人只扣血) → 手臂伸到最長主擊 (0.42，一線擊飛約 6m) →
+// 定住 (0.55) → 劍禮：劍豎臉前 (0.76) → 往斜下一甩 (0.88) → 回架勢；0.64 可取消 (命中後僵直約 0.21 秒)
+const RAPIER_3 = defineMove('謝幕禮・千瓣綻放', {
+  dur: 0.95, strike: 0.42, cancel: 0.64, reach: 1.0, arc: -1, dmg: 1.9, knock: 1.5, finisher: true,
+  extraStrikes: [0.3], extraDmg: [0.5], trailLimb: 'W', trail: [0.22, 0.6], fx: 'PIERCE', slashFx: 'THRUST', thrustY: [1.2, 1.15],
+  lunge: { dist: 3.2, from: 0.22, to: 0.34 }, charge: [0.04, 0.22],
+  aoe: { shape: 'LINE', fromDash: true, center: 'SELF', offset: 0, radius: 1.0, len: 1.0, halfWidth: 0.15, max: 4, falloff: 0.2, shake: 0.65, hitStop: 0.1, hitStopMulti: 0.12, missShake: 0.25 }
+}, [
+  [0.04, E_OUT, { tw: 0.7, ln: 0.06, h: -0.16, la: [-1.45, 0, 0.12], ra: [-3.05, 0.2, 0.35], ll: [-0.45, 0, -0.08], rr: [0.3, 0, 0.08] }],
+  [0.22, E_LINEAR, { tw: 0.95, ln: 0.14, h: -0.27, la: [-1.55, 0, 0.18], ra: [-3.35, 0.2, 0.42], ll: [-0.6, 0, -0.1], rr: [0.45, 0, 0.1] }],
+  [0.34, E_IN, { tw: -0.3, ln: 0.5, h: -0.28, la: [0.9, 0, -0.35], ra: [-1.6, 0, 0.02], ll: [0.8, 0, -0.08], rr: [-0.9, 0, 0.08] }],
+  [0.42, E_OUT, { tw: -0.55, ln: 0.4, h: -0.26, la: [1.0, 0, -0.5], ra: [-1.66, -0.1, -0.04], ll: [0.85, 0, -0.08], rr: [-0.95, 0, 0.08] }],
+  [0.55, E_OUT, { tw: -0.5, ln: 0.34, h: -0.23, la: [0.95, 0, -0.5], ra: [-1.62, -0.08, -0.02], ll: [0.8, 0, -0.08], rr: [-0.9, 0, 0.08] }],
+  [0.76, E_SMOOTH, { tw: 0.05, ln: -0.04, h: -0.02, la: [0.35, 0, -0.12], ra: [-2.35, 0, -0.38], ll: [0.1, 0, -0.04], rr: [-0.1, 0, 0.04] }],
+  [0.88, E_IN, { tw: -0.12, ln: 0.04, h: -0.04, la: [0.3, 0, -0.15], ra: [-0.85, -0.2, 0.55], ll: [0.12, 0, -0.04], rr: [-0.12, 0, 0.04] }],
+  [1, E_SMOOTH, { tw: -0.1, ln: 0.03, h: -0.04, la: [-2.5, 0, -0.8], ra: [-0.95, 0, 0.15], ll: [0.15, 0, -0.04], rr: [-0.15, 0, 0.04] }]
 ]);
 
 export const PLAYER_COMBOS = {
@@ -368,7 +437,8 @@ export const PLAYER_COMBOS = {
   RACKET: [RACKET],
   DUAL: [DUAL_1, DUAL_2, DUAL_3],
   WHIP: [WHIP_1, WHIP_2, WHIP_3],
-  BALL: [BALL_1, BALL_2, BALL_3]
+  BALL: [BALL_1, BALL_2, BALL_3],
+  RAPIER: [RAPIER_1, RAPIER_2, RAPIER_3]
 } as const;
 export type PlayerComboSet = keyof typeof PLAYER_COMBOS;
 
@@ -609,6 +679,19 @@ export function probeLine(ox: number, oz: number, fx: number, fz: number, len: n
   const lateral = probePath(ox, oz, ox + fx * len, oz + fz * len, px, pz, out);
   if (lateral > halfWidth) return -1;
   return out[2] * len;
+}
+
+// LINE 群攻的起點與長度：fromDash 且本招已突進 (dashed) → 起點 = 突進起點 (ox, oz)、長度 = 實際突進距離 + baseLen
+// (撞牆時突進較短，長條跟著縮短)；否則起點 = 目前位置 (px, pz)、長度 = baseLen。起點寫入 out[0] / out[1]，回傳長度
+export function lineAoeSpan(fromDash: boolean, dashed: boolean, ox: number, oz: number, px: number, pz: number, baseLen: number, out: Float32Array | number[]): number {
+  if (fromDash && dashed) {
+    out[0] = ox;
+    out[1] = oz;
+    return Math.hypot(px - ox, pz - oz) + baseLen;
+  }
+  out[0] = px;
+  out[1] = pz;
+  return baseLen;
 }
 
 // 本幀跨過的額外命中時間點 (位元 i = 第 i 擊)；prevT / nowT 為圖層時間 (秒)，dur 為含節奏縮放的整招秒數

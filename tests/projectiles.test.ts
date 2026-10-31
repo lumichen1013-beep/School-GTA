@@ -97,9 +97,11 @@ describe('地板與回收時間', () => {
     expect(segmentFloorT(5, 1, 0.1, 2)).toBeCloseTo(2.9 / 4, 5); // 樓板高 2
     expect(segmentFloorT(5, 4, 0.1, 0)).toBe(-1);
   });
-  it('T = clamp(d / 20, 0.35, 0.9)', () => {
+  it('T = clamp(d / 60, 0.1, 0.3)', () => {
+    expect(RETURN_T_MIN).toBe(0.1);
+    expect(RETURN_T_MAX).toBe(0.3);
     expect(returnDuration(2)).toBe(RETURN_T_MIN);
-    expect(returnDuration(10)).toBeCloseTo(0.5);
+    expect(returnDuration(12)).toBeCloseTo(0.2);
     expect(returnDuration(40)).toBe(RETURN_T_MAX);
   });
 });
@@ -296,7 +298,7 @@ describe('物理：命中 NPC', () => {
 });
 
 describe('物理：回收 (RETURN)', () => {
-  it('二次貝茲：T = clamp(d/20)，終點每幀追蹤移動中的目標，到時接住', () => {
+  it('二次貝茲：T = clamp(d/60)，終點每幀追蹤移動中的目標，到時接住', () => {
     const { host } = makeHost();
     const sys = new ProjectileSystem(host);
     const ev = recordEvents();
@@ -317,9 +319,9 @@ describe('物理：回收 (RETURN)', () => {
     }
     const c = ev.list.find(e => e.type === 'CATCH')!;
     expect(c).toBeDefined();
-    // d = 10 → T = 0.5s；距目標 0.6m 內提前接住
-    expect(t).toBeLessThanOrEqual(0.5 + 1e-6);
-    expect(t).toBeGreaterThan(0.4);
+    // d = 10 → T = 1/6 s；距目標 0.6m 內提前接住
+    expect(t).toBeLessThanOrEqual(10 / 60 + 0.01 + 1e-6);
+    expect(t).toBeGreaterThan(0.12);
     expect(c.point.distanceTo(target)).toBeLessThan(0.6);
   });
   it('彈地 2 次後開始回收；保險壽命到期也回收', () => {

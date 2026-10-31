@@ -8,9 +8,21 @@ const sfx = vi.hoisted(() => ({
   playBadmintonWhoosh: vi.fn(),
   playBadmintonHit: vi.fn(),
   playWhipCrack: vi.fn(),
-  playBookThud: vi.fn()
+  playBookThud: vi.fn(),
+  playThrowWhoosh: vi.fn(),
+  playFistHit: vi.fn(),
+  playKickHit: vi.fn(),
+  playFinisherThump: vi.fn(),
+  playZap: vi.fn(),
+  playBatonHit: vi.fn(),
+  playSwingWhoosh: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
+// 拖尾條帶材質需要 canvas (document)：測試環境改用一般材質
+vi.mock('../src/effects/SwingTrail', async (orig) => {
+  const { MeshBasicMaterial } = await import('three');
+  return { ...(await orig<typeof import('../src/effects/SwingTrail')>()), createTrailMaterial: () => new MeshBasicMaterial() };
+});
 
 import { PLAYER_COMBOS } from '../src/entities/shared/kungfu';
 import { getWeapon, getWeaponBySlot, resolveLoadout, WEAPONS } from '../src/weapons/registry';
@@ -29,6 +41,7 @@ type SfxName = keyof typeof sfx;
 //  拖尾樣式   resolveWeaponFxId(comboSet, currentWeapon === 'SPECIAL_BAT')
 //  錨點       sampleSwingAnchors 'W'：羽球拍 0.66/0.98、黃金棒 0.4/1.02、普通棒 0.35/0.89 (拳無可見武器 → 不取樣)
 //  打擊音效   playStrikeSound：羽球拍無、黃金棒 playSpecialBatHit、普通棒 playBatHit、拳 playPunch；羽球拍起手 playBadmintonWhoosh
+//             (武器特效統一後：打中才出聲、取第一層主音；拳 → playFistHit (腿 playKickHit)、警棍 → playBatonHit、羽球拍 → playBadmintonHit)
 //  待機姿勢   applyCrouchReadyPose：拳且未持拍 → READY_RIGHT_FIST
 //  終結特效   CombatSystem.onFinisherImpact：SLAM gold 參數 = 持黃金棒；SPIN 拳 腰高 0.9 + 落地環 1.1、警棍 腰高 1.0
 //  群攻覆寫   resolveFinisherAoe：持黃金棒改讀招式上的 maxGold / shakeGold / hitStopGold
@@ -65,14 +78,14 @@ const DUAL_COMBO = { combo: PLAYER_COMBOS.DUAL, comboNames: ['二刀・快斬', 
 
 const BOOK_WHIP_COMBO = { combo: PLAYER_COMBOS.WHIP, comboNames: ['甩書橫掃', '回手抽擊', '旋鞭橫掃'] };
 
-const BASKETBALL_COMBO = { combo: PLAYER_COMBOS.BALL, comboNames: ['胸前推傳', '地板彈傳', '高拋灌籃'] };
+const BASKETBALL_COMBO = { combo: PLAYER_COMBOS.BALL, comboNames: ['氣勁推傳', '迴旋快傳', '灌籃氣功砲'] };
 
 // 彈弓放手招式「放弦」(單發，招式組在武器定義內，非 PLAYER_COMBOS)
 const SLINGSHOT_COMBO = { combo: getWeapon('SLINGSHOT').combo, comboNames: ['放弦'] };
 
 const BASELINE = {
   FIST: {
-    ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playPunch', start: null,
+    ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playFistHit', start: null,
     readyPose: 'FIST', slamBolt: false, spinWaistY: 0.9, spinLandRadius: 1.1, goldAoe: false
   },
   NORMAL_BAT_CAMPUS: {
@@ -80,7 +93,7 @@ const BASELINE = {
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   },
   NORMAL_BAT_DETENTION: {
-    ...STATS.NORMAL_BAT, ...BATON_COMBO, tempo: 1, fxId: 'BATON', anchors: { base: 0.35, tip: 0.89 }, strike: 'playBatHit', start: null,
+    ...STATS.NORMAL_BAT, ...BATON_COMBO, tempo: 1, fxId: 'BATON', anchors: { base: 0.35, tip: 0.89 }, strike: 'playBatonHit', start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
   SPECIAL_BAT: {
@@ -92,17 +105,17 @@ const BASELINE = {
     ...STATS.DUAL_RACKET, ...DUAL_COMBO, tempo: 1, fxId: 'DUAL_R', anchors: { base: 0.5, tip: 1.0 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
     readyPose: 'DUAL', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
-  // 綁帶捆書 (開發中武器；本測試環境 DEV_WEAPONS_BUILD 為 true、模式預設 unlocked)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 綁帶捆書 (群攻長鞭)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BOOK_WHIP: {
-    damage: 14, reach: 4.2, knock: 6.0, ...BOOK_WHIP_COMBO, tempo: 0.9, fxId: 'BOOK', anchors: { base: 0.3, tip: 1.5 }, strike: 'playWhipCrack', start: null,
+    damage: 30, reach: 4.2, knock: 7.5, ...BOOK_WHIP_COMBO, tempo: 1, fxId: 'BOOK', anchors: null, strike: 'playWhipCrack', start: 'playThrowWhoosh',
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
-  // 籃球 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 籃球氣功彈 (遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BASKETBALL: {
-    damage: 45, reach: 18, knock: 9.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
+    damage: 45, reach: 18, knock: 11.0, ...BASKETBALL_COMBO, tempo: 1, fxId: 'BALL', anchors: null, strike: null, start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   },
-  // 彈弓 (開發中遠程狙擊武器；放弦招式無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
+  // 彈弓 (遠程狙擊武器；放弦招式無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   SLINGSHOT: {
     damage: 60, reach: 50, knock: 0, ...SLINGSHOT_COMBO, tempo: 1, fxId: 'STONE', anchors: null, strike: null, start: null,
     readyPose: 'SLING_AIM', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
@@ -111,7 +124,7 @@ const BASELINE = {
 
 // 羽球拍覆寫：招式 / 樣式 / 錨點 / 音效取自羽球拍，數值與群攻覆寫仍取目前武器
 const racketBaseline = (current: WeaponId): Snapshot => ({
-  ...STATS[current], ...RACKET_COMBO, tempo: 1, fxId: 'RACKET', anchors: { base: 0.66, tip: 0.98 }, strike: null, start: 'playBadmintonWhoosh',
+  ...STATS[current], ...RACKET_COMBO, tempo: 1, fxId: 'RACKET', anchors: { base: 0.66, tip: 0.98 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
   readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: current === 'SPECIAL_BAT'
 });
 
@@ -122,9 +135,11 @@ function snapshot(current: WeaponId, override: WeaponOverrideId | null, world: W
   const callSfx = (fn: ((...args: any[]) => void) | undefined): SfxName | null => {
     for (const k of Object.keys(sfx) as SfxName[]) sfx[k].mockClear();
     if (!fn) return null;
-    fn(0, { x: 0, y: 0, z: 0 });
-    const called = (Object.keys(sfx) as SfxName[]).filter((k) => sfx[k].mock.calls.length > 0);
-    expect(called.length).toBe(1);
+    // 第 1 段主擊、打中 (非終結技)；多層音效時取第一個播放的主音
+    fn(0, { x: 0, y: 0, z: 0 }, false, 0, true);
+    const called = (Object.keys(sfx) as SfxName[]).filter((k) => sfx[k].mock.calls.length > 0)
+      .sort((a, b) => sfx[a].mock.invocationCallOrder[0] - sfx[b].mock.invocationCallOrder[0]);
+    expect(called.length).toBeGreaterThanOrEqual(1);
     return called[0];
   };
   return {
@@ -181,31 +196,29 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expectSame(snapshot('DUAL_RACKET', null, 'DETENTION'), BASELINE.DUAL_RACKET);
   });
 
-  it('BOOK_WHIP (開發中，兩個世界套組相同；額外擊改播書堆悶響)', () => {
+  it('BOOK_WHIP (兩個世界套組相同；額外擊改播書堆悶響)', () => {
     expectSame(snapshot('BOOK_WHIP', null, 'CAMPUS'), BASELINE.BOOK_WHIP);
     expectSame(snapshot('BOOK_WHIP', null, 'DETENTION'), BASELINE.BOOK_WHIP);
     const def = getWeapon('BOOK_WHIP');
-    expect(def.release).toBe('dev');
-    expect(def.lightPush).toBe(0.5);
-    expect(def.launchCap).toEqual({ h: 8, v: 4.6 });
+    expect(def.lightPush ?? 0).toBe(0);
+    expect(def.launchCap).toEqual({ h: 9.4, v: 5.5 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
     sfx.playBookThud.mockClear();
-    def.sounds.strike!(1, { x: 1, y: 2, z: 3 });
+    def.sounds.strike!(1, { x: 1, y: 2, z: 3 }, false, 1, true);
     expect(sfx.playBookThud).toHaveBeenCalledWith({ x: 1, y: 2, z: 3 });
     expect(def.unlock?.lockedHint({ swimWon: false } as never, 'DETENTION')).toBe('⚠️ 特訓院管制區：器材已遭沒收！');
     expect(def.unlock?.lockedHint({ swimWon: false } as never, 'CAMPUS')).toContain('游泳比賽');
     expect(def.unlock?.steps?.({ swimWon: true } as never)).toEqual([{ label: '游泳比賽獲勝', cur: 1, max: 1 }]);
   });
 
-  it('BASKETBALL (開發中，兩個世界套組相同；既有武器期望值不變)', () => {
+  it('BASKETBALL (兩個世界套組相同；既有武器期望值不變)', () => {
     expectSame(snapshot('BASKETBALL', null, 'CAMPUS'), BASELINE.BASKETBALL);
     expectSame(snapshot('BASKETBALL', null, 'DETENTION'), BASELINE.BASKETBALL);
     const def = getWeapon('BASKETBALL');
-    expect(def.release).toBe('dev');
     expect(def.slot).toBe(6);
-    expect(def.launchCap).toEqual({ h: 9, v: 5 });
+    expect(def.launchCap).toEqual({ h: 11.5, v: 6.2 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
-    expect(def.banner.campus).toBe('🏀 切換武器：籃球 (ATK 45 遠程三連投，開發中)');
+    expect(def.banner.campus).toBe('🏀 切換武器：籃球氣功彈 (ATK 45 遠程光束三連投)');
     expect(resolveLoadout('BASKETBALL', null, 'CAMPUS').chainWindow).toBe(0.8);
     // 既有武器連段接續窗維持 0.6
     for (const id of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'BOOK_WHIP', 'SLINGSHOT'] as const) {
@@ -214,11 +227,10 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expect(resolveLoadout('FIST', 'RACKET', 'CAMPUS').chainWindow).toBe(0.6);
   });
 
-  it('SLINGSHOT (開發中，兩個世界套組相同；單發放弦)', () => {
+  it('SLINGSHOT (兩個世界套組相同；單發放弦)', () => {
     expectSame(snapshot('SLINGSHOT', null, 'CAMPUS'), BASELINE.SLINGSHOT);
     expectSame(snapshot('SLINGSHOT', null, 'DETENTION'), BASELINE.SLINGSHOT);
     const def = getWeapon('SLINGSHOT');
-    expect(def.release).toBe('dev');
     expect(def.slot).toBe(7);
     expect(def.combo).toHaveLength(1);
     expect(def.combo[0]).toMatchObject({ name: '放弦', dur: 0.3, strike: 0.05, projectile: 'SLING', knock: 0 });
@@ -236,13 +248,13 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
   });
 
   it('武器槽順序與切換提示', () => {
-    expect(WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
+    expect(WEAPONS.map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'RAPIER', 'BOOK_WHIP', 'BASKETBALL', 'SLINGSHOT']);
     expect(getWeaponBySlot(1)?.id).toBe('FIST');
     expect(getWeaponBySlot(2)?.id).toBe('NORMAL_BAT');
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');
     expect(getWeaponBySlot(4)?.id).toBe('DUAL_RACKET');
-    expect(getWeaponBySlot(5)?.release).toBe('dev'); // 槽 5 為開發中的綁帶捆書 (見下方 BOOK_WHIP 快照)
-    expect(getWeaponBySlot(6)?.id).toBe('BASKETBALL'); // 槽 6 為開發中的籃球
+    expect(getWeaponBySlot(5)?.id).toBe('BOOK_WHIP'); // 槽 5 為綁帶捆書 (見下方 BOOK_WHIP 快照)
+    expect(getWeaponBySlot(6)?.id).toBe('BASKETBALL'); // 槽 6 為籃球
     expect(getWeapon('FIST').banner).toEqual({ campus: '🥊 切換武器：徒手拳擊 (ATK 25)', detention: '🥊 切換模式：徒手潛入 (支援背後暗殺)' });
     expect(getWeapon('NORMAL_BAT').banner).toEqual({ campus: '🏏 切換武器：普通木質棒球棍 (ATK 35)', detention: '🏏 切換裝備：特訓防暴警棍 (ATK 35)' });
     expect(getWeapon('SPECIAL_BAT').banner).toEqual({ campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' });
@@ -299,31 +311,42 @@ describe('武器模型 (mesh 數不變 → draw call 不變；發光基準值還
     expect(h.glow).toBeNull();
   });
 
-  it('綁帶捆書：握把 + 綁帶合併 1 mesh、書堆 1 mesh (共 2 mesh、約 100 三角形)、不投影，glow 的 k 驅動綁帶甩長並可還原', () => {
+  it('綁帶捆書：綁帶 + 書堆 1 mesh、書軌跡拖尾 1 mesh (閒置隱藏)、不投影；平常書在手上，出招甩出到 3m 以外，結束後收回手上', () => {
     const h = buildBookWhip();
     const root = h.parts.R!;
     expect(h.parts.L).toBeUndefined();
     expect(meshCount(root)).toBe(2);
-    let tris = 0;
-    root.traverse((c) => {
-      const m = c as THREE.Mesh;
-      if (!m.isMesh) return;
-      expect(m.castShadow).toBe(false);
-      expect(m.geometry.getAttribute('color')).toBeTruthy();
-      tris += (m.geometry.index ? m.geometry.index.count : m.geometry.getAttribute('position').count) / 3;
-    });
-    expect(tris).toBeGreaterThanOrEqual(90);
-    expect(tris).toBeLessThanOrEqual(110);
+    const [whip, trail] = root.children as THREE.Mesh[];
+    for (const m of [whip, trail]) expect(m.castShadow).toBe(false);
+    expect(whip.geometry.getAttribute('color').itemSize).toBe(3);
+    expect(trail.geometry.getAttribute('color').itemSize).toBe(4); // 與 SwingTrail 共用 program 須為 4 分量
+    expect(trail.visible).toBe(false);
     expect(root.visible).toBe(false);
     expect(root.position.toArray()).toEqual([0, -0.28, 0.12]);
-    const [body, books] = root.children as THREE.Mesh[];
-    const rest = books.position.y;
-    h.glow!(1, 0, 0xffffff);
-    expect(body.scale.y).toBeGreaterThan(1.2);
-    expect(books.position.y).toBeGreaterThan(rest);
+    const tris = whip.geometry.index!.count / 3;
+    expect(tris).toBeLessThanOrEqual(300);
+
+    let now = 1000;
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    root.visible = true;
+    const pos = whip.geometry.getAttribute('position');
+    const last = pos.count - 1; // 書堆頂點
+    const bookDist = () => {
+      root.updateMatrixWorld(true);
+      return Math.hypot(pos.getX(last), pos.getY(last) + 0.28, pos.getZ(last) - 0.12);
+    };
+    const step = (n: number, k?: (i: number) => number, peak = 1) => {
+      for (let i = 0; i < n; i++) { now += 1000 / 60; if (k) h.glow!(k(i), peak, 0xffffff); bookDist(); }
+    };
+    step(5);
+    expect(bookDist()).toBeLessThan(0.45); // 書在手上
+    step(6, (i) => Math.sin(Math.PI * (i + 1) / 12));
+    expect(bookDist()).toBeGreaterThan(3); // 甩出
+    expect(trail.visible).toBe(true);
     h.resetGlow();
-    expect(body.scale.y).toBe(1);
-    expect(books.position.y).toBe(rest);
+    step(20);
+    expect(bookDist()).toBeLessThan(0.45); // 收回
+    spy.mockRestore();
   });
 
   it('雙燕羽刃：每支 握把+中桿+拍框+網線烘焙頂點色 共 1 mesh，掛點同其他武器，各以自己的拍框色發光', () => {

@@ -5,10 +5,14 @@ import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { getWeaponSummary, type WeaponSummary } from './weaponStats';
+import { RAPIER_UNLOCK_TEXT } from '../weapons/defs/rapier';
 
-// 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與閃身步被動自動發動機率 (被敵人攻擊命中瞬間)
+// 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與被動自動閃避機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
 const AUTO_DODGE_CHANCE = 0.2;
+const AUTO_DODGE_CHANCE_BOSS = 0.3; // 花劍客 Boss 戰期間
+// 被動自動閃避獨立冷卻 (秒)，與主動技能冷卻分開計時，避免連續觸發
+const AUTO_DODGE_COOLDOWN = 1.0;
 // 學習閃身步 (等級 1) / 狗熊哆嗦毛 (等級 2) 的學費
 const DODGE_SKILL_FEES = [1000, 2000] as const;
 
@@ -74,7 +78,6 @@ export interface WeaponEquipEntry {
   reach: number;
   knockback: number;
   status: WeaponEquipStatus;
-  dev: boolean; // 開發中武器 (裝備頁標「🧪 開發中」)
   hint: string;
   summary: WeaponSummary; // 本世界連段估算 (秒傷 / 總傷 / 各招)
   unlockSteps: WeaponUnlockStep[]; // 解鎖進度 (徒手為空)
@@ -93,6 +96,7 @@ export interface FullMapStatus {
   dodgeCooldown: number;
   dodgeCooldownMax: number;
   autoDodgeChance: number;
+  autoDodgeChanceBoss: number;
   dodgeNextFee: number; // 0 = 已精通
   // 特訓院戰績
   takedowns: number;
@@ -119,9 +123,14 @@ export class Progression {
   public hasEscapedDog: boolean = false;
   public hasWishedPond: boolean = false;
   public hasTastedHotFood: boolean = false;
+  // 世界 Boss【花劍客】：首勝旗標 (任務 / 大地圖完成、細劍解鎖點) 與勝場數
+  public fencerDefeated: boolean = false;
+  public fencerWins: number = 0;
+  private fencerSeenUndefeated = false; // 本次遊玩曾看過「未首勝」(區分當場打贏 vs 讀檔即已首勝)
   // 身法技能系統 (閃身步 / 狗熊哆嗦毛，冷卻皆 1s)
   public dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
   public dodgeCooldownTimer: number = 0;
+  public autoDodgeCooldownTimer: number = 0; // 被動自動閃避專用冷卻，不影響主動技能
 
   constructor(private readonly ctx: GameContext) {}
 
@@ -219,6 +228,18 @@ export class Progression {
     });
   }
 
+  // 花劍客首勝 → 玫瑰細劍 (每次更新任務看板時輪詢；已解鎖時立即返回)。fightActive = Boss 戰 / 過場進行中 → 延後到戰後恢復校園才解鎖，
+  // 避免結界 / 首勝過場中被自動換武器打斷。啟動時就已首勝 (花劍客存檔讀回) → 靜默解鎖 (不重播橫幅 / 不自動裝備)
+  public checkRapierUnlock(fightActive: boolean) {
+    if (!this.fencerDefeated) { this.fencerSeenUndefeated = true; return; }
+    if (fightActive || !isWeaponEnabled('RAPIER') || this.ctx.player.isWeaponUnlocked('RAPIER')) return;
+    if (this.fencerSeenUndefeated) {
+      this.unlockWeapon('RAPIER', { text: RAPIER_UNLOCK_TEXT, duration: 7000, sfx: () => soundManager.playFanfare() });
+    } else {
+      this.ctx.player.setWeaponUnlocked('RAPIER', true);
+    }
+  }
+
   // 解鎖武器並自動裝備 (banner.autoEquip 為 false 時不裝備)、顯示橫幅與音效；未啟用 (dev 武器且開關關閉) 或已解鎖者直接返回，不設旗標 / 不橫幅 / 不裝備
   public unlockWeapon(id: WeaponId, banner: WeaponUnlockBanner): boolean {
     if (!isWeaponEnabled(id)) return false;
@@ -258,7 +279,6 @@ export class Progression {
         : !this.ctx.player.isWeaponUnlocked(def.id) ? 'locked'
         : 'unlocked';
       return {
-        dev: def.release === 'dev',
         id: def.id,
         icon: def.icon,
         name: resolveVariant(def.id, world).name,
@@ -286,14 +306,14 @@ export class Progression {
         step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
       ];
       case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
-      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id
+      // BOOK_WHIP / BASKETBALL / SLINGSHOT 等的步驟寫在武器定義 unlock.steps
       default: return (getWeapon(id).unlock?.steps?.(this) ?? []).map((s) => step(s.label, s.cur, s.max));
     }
   }
 
   private readonly fullMapStatus: FullMapStatus = {
     hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, cash: 0, stars: 0, wantedTitle: '',
-    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, dodgeNextFee: 0,
+    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, autoDodgeChanceBoss: AUTO_DODGE_CHANCE_BOSS, dodgeNextFee: 0,
     takedowns: 0, frontalKos: 0, alerts: 0, escapeSeconds: 0
   };
 
@@ -367,7 +387,7 @@ export class Progression {
       this.dodgeSkillLevel = 1;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！冷卻時間 1 秒，且被攻擊時有機率自動施放，按 [Q] 鍵或點擊 [閃] 按鈕即可規避敵人攻擊！', 5000);
+      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！按 [Q] 鍵（手機點擊技能圖示）手動施放，冷卻 1 秒；被攻擊命中時另有 20% 機率自動閃避（花劍客戰 30%）！', 5000);
     } else if (targetLevel === 2) {
       if (this.dodgeSkillLevel < 1) {
         wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
@@ -381,7 +401,7 @@ export class Progression {
       this.dodgeSkillLevel = 2;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！連續瞬移神速規避，需手動按 [Q] 鍵施放！', 5000);
+      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！按 [Q] 鍵（手機點擊技能圖示）手動施放連續瞬移；被攻擊命中時仍有 20% 機率自動閃避（花劍客戰 30%）！', 5000);
     }
   };
 
@@ -422,18 +442,27 @@ export class Progression {
     );
   };
 
-  // 被動自動閃身：僅閃身步 (level 1) 且冷卻完畢時，被敵人攻擊命中瞬間有 AUTO_DODGE_CHANCE 機率自動施放
-  // (位移沿用手動閃身步：隨機左右橫閃)；成功回傳 true，呼叫端應視為完全閃掉此次攻擊
+  // 被動自動閃避 (升級獎勵，與主動技能分開)：已習得閃身步/狗熊哆嗦毛 (level >= 1) 時，被敵人攻擊命中瞬間
+  // 有 AUTO_DODGE_CHANCE (花劍客戰 AUTO_DODGE_CHANCE_BOSS) 機率自動施放對應等級的位移；使用獨立冷卻，不檢查也不消耗主動技能冷卻
+  // 成功回傳 true，呼叫端應視為完全閃掉此次攻擊
   public readonly tryAutoDodge = (): boolean => {
     const { player, wantedSystem } = this.ctx;
-    if (this.dodgeSkillLevel !== 1 || this.dodgeCooldownTimer > 0) return false;
+    if (this.dodgeSkillLevel < 1 || this.autoDodgeCooldownTimer > 0) return false;
     if (player.isDead || player.isCinematicLocked || player.isDodging || player.hitCooldown > 0) return false;
     if (this.ctx.currentRidingBike || player.isRidingVehicle || player.isSwimming || player.knockdownTimer > 0) return false;
-    if (Math.random() >= AUTO_DODGE_CHANCE) return false;
-    this.dodgeCooldownTimer = DODGE_SKILL_COOLDOWN;
-    // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行閃身步位移，避免中斷招式
-    if (!player.isLunging) player.performFlashStep();
-    wantedSystem.showBanner('💨 閃身步自動發動！左右破空閃身規避！(CD 1s)', 1600);
+    const chance = this.ctx.fencerBossFight?.isActive ? AUTO_DODGE_CHANCE_BOSS : AUTO_DODGE_CHANCE;
+    if (Math.random() >= chance) return false;
+    this.autoDodgeCooldownTimer = AUTO_DODGE_COOLDOWN;
+    const isAdvanced = this.dodgeSkillLevel === 2;
+    // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行位移，避免中斷招式
+    if (!player.isLunging) {
+      if (isAdvanced) player.performBearShake(this.ctx.activeColliders);
+      else player.performFlashStep();
+    }
+    wantedSystem.showBanner(
+      isAdvanced ? '🐻 狗熊哆嗦毛自動發動！連續瞬移規避攻擊！' : '💨 閃身步自動發動！左右破空閃身規避！',
+      1600
+    );
     return true;
   };
 
@@ -444,6 +473,9 @@ export class Progression {
 
   // 每幀：技能冷卻計時與 HUD 更新
   public updateSkillCooldown(delta: number) {
+    if (this.autoDodgeCooldownTimer > 0) {
+      this.autoDodgeCooldownTimer = Math.max(0, this.autoDodgeCooldownTimer - delta);
+    }
     if (this.dodgeCooldownTimer > 0) {
       this.dodgeCooldownTimer = Math.max(0, this.dodgeCooldownTimer - delta);
     }

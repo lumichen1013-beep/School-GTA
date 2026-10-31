@@ -7,7 +7,6 @@ import type { WeaponDefinition } from '../types';
 // 終結技「鬼斬」突進穿過敵群後收刀爆開，只有主擊擊飛。左手持械不撐傘，只限校園，擊敗羽球大如老師解鎖
 export const DUAL_RACKET: WeaponDefinition = {
   id: 'DUAL_RACKET',
-  release: 'released',
   slot: 4,
   icon: '🏸🏸',
   name: '雙燕羽刃',
@@ -17,10 +16,18 @@ export const DUAL_RACKET: WeaponDefinition = {
   combo: PLAYER_COMBOS.DUAL,
   tempo: 1,
   fxStyle: { R: 'DUAL_R', L: 'DUAL_L' },
+  impactClass: 'MEDIUM',
   finisherFx: { waistY: 1.0, feathers: true },
   model: { mount: 'BOTH', build: buildDualRackets },
   anchors: { R: { base: 0.5, tip: 1.0 }, L: { base: 0.5, tip: 1.0 } },
-  sounds: { start: (pos) => soundManager.playBadmintonWhoosh(pos), strike: (_i, pos) => soundManager.playBadmintonHit(pos) },
+  sounds: {
+    start: (pos) => soundManager.playBadmintonWhoosh(pos),
+    strike: (_i, pos, fin, _s, landed) => {
+      if (!landed) return;
+      soundManager.playBadmintonHit(pos);
+      if (fin) soundManager.playFinisherThump(pos, false);
+    }
+  },
   readyPose: 'DUAL',
   suppressUmbrella: true,
   unlock: {

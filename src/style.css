@@ -61,6 +61,35 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   touch-action: none;
 }
 
+/* 大型 UI 容器常駐合成層：過場 / 雷達暫停時只切 opacity (見 ui/uiConceal.ts)，
+   不切 visibility / display，避免 GPU 執行緒重新配置圖層貼圖造成 30~60ms 卡頓。只加在少數大型容器上。 */
+#hud-overlay,
+#mobile-controls-container,
+#minimap-wrapper,
+#cutscene-overlay,
+#pursuit-vignette,
+#poison-vignette,
+#cinema-flash {
+  will-change: opacity;
+}
+
+/* 隱藏狀態：透明且自身與所有子孫皆不可點擊 (子元素自設 pointer-events:auto 亦無效；另以 inert 阻擋焦點) */
+.ui-concealed {
+  opacity: 0 !important;
+  transition: none !important;
+}
+/* 過場期間短暫隱藏的 HUD / 觸控按鍵：opacity 剛好為 0 時合成器會丟棄子圖層貼圖，顯示當下重新配置仍會卡頓；
+   保留肉眼不可見的 0.004 (< 1/255 色階) 讓貼圖常駐 (平板實測：0 → 顯示時偶發 50~83ms，0.004 → 無)。
+   長時間隱藏的字幕遮罩 / 雷達維持 0，不在平時多合成一層。 */
+#hud-overlay.ui-concealed,
+#mobile-controls-container.ui-concealed {
+  opacity: 0.004 !important;
+}
+.ui-concealed,
+.ui-concealed * {
+  pointer-events: none !important;
+}
+
 /* HUD UI Overlay */
 #hud-overlay {
   position: absolute;
@@ -242,6 +271,28 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   stroke: #e74c3c;
   filter: drop-shadow(0 0 4px rgba(231, 76, 60, 0.9));
   animation: hp-ring-pulse 0.9s ease-in-out infinite alternate;
+}
+/* 花劍客戰：脫戰快速回血 (綠色呼吸) / 被打斷閃紅 */
+.hp-ring.hp-ring--regen .hp-ring-fill {
+  stroke: #4ade80;
+  filter: drop-shadow(0 0 5px rgba(74, 222, 128, 0.95));
+  animation: hp-ring-regen 1s ease-in-out infinite alternate;
+}
+@keyframes hp-ring-regen {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+.hp-ring.hp-ring--interrupt .hp-ring-track {
+  animation: hp-ring-interrupt 0.45s ease-out 1;
+}
+@keyframes hp-ring-interrupt {
+  0% { stroke: rgba(239, 68, 68, 0.95); }
+  100% { stroke: rgba(8, 12, 20, 0.72); }
+}
+.hp-ring-regen-tag {
+  margin-left: 3px;
+  color: #4ade80;
+  font-size: 11px;
 }
 @keyframes hp-ring-pulse {
   from { opacity: 1; }
@@ -1535,6 +1586,35 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   animation: bossHudGlow 2s infinite alternate;
 }
 
+/* 花劍客 Boss 戰精簡 HUD：隱藏與戰鬥無關的面板 (校園歷練 / 地點資訊 / 零用錢 / 校規處分) */
+body.boss-fight-hud :is(.hud-info-group, .cash-badge, .demerit-container) { display: none !important; }
+
+/* 花劍客血條：單條無文字，兩條分隔線標示三管，顏色隨管數變化，換管閃光 */
+#boss-hud.boss-hud-fencer { width: min(440px, calc(100vw - 24px)); padding: 6px 10px; }
+#boss-hud.boss-hud-fencer .boss-title-row { display: none; }
+#boss-hud.boss-hud-fencer .boss-bar-track { position: relative; height: 12px; }
+#boss-hud:not(.boss-hud-fencer) .boss-bar-div { display: none; }
+.boss-bar-div { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(0, 0, 0, 0.85); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); z-index: 1; }
+#boss-hud.boss-hud-fencer[data-bar="0"] .boss-bar-fill { background: linear-gradient(90deg, #ff7aa8, #ff4d79); }
+#boss-hud.boss-hud-fencer[data-bar="1"] .boss-bar-fill { background: linear-gradient(90deg, #ffb347, #ff8a3d); }
+#boss-hud.boss-hud-fencer[data-bar="2"] .boss-bar-fill { background: linear-gradient(90deg, #ffe066, #f5c518); }
+/* 直屏：血條置於頂部雷達 (左) 與設定鈕 (右) 之間的細長列，避開雷達 / 畫外箭頭 / 頭頂對話框 */
+@media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
+  #boss-hud.boss-hud-fencer {
+    top: calc(env(safe-area-inset-top, 0px) + 22px) !important;
+    left: 140px !important;
+    right: 62px !important;
+    width: auto !important;
+    transform: none !important;
+    padding: 4px 8px !important;
+  }
+}
+#boss-hud.boss-hud-fencer.bar-flash { animation: bossHudGlow 2s infinite alternate, bossBarFlash 0.6s ease-out 1; }
+@keyframes bossBarFlash {
+  0% { filter: brightness(2.2) drop-shadow(0 0 10px #fff); }
+  100% { filter: none; }
+}
+
 @keyframes bossHudGlow {
   from { box-shadow: 0 0 15px rgba(142, 68, 173, 0.4); }
   to { box-shadow: 0 0 28px rgba(231, 76, 60, 0.7); }
@@ -2051,6 +2131,8 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   bottom: calc(8.5vh + 20px);
   left: 50%;
   transform: translateX(-50%);
+  /* max-content：避免 left:50% 讓縮放寬度只剩半個畫面 (手機直屏一行僅 8 字) */
+  width: max-content;
   max-width: 85%;
   text-align: center;
   z-index: calc(var(--z-cutscene) + 15);
@@ -2465,11 +2547,6 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .gear-card.is-unlocked .gear-status { background: rgba(34, 197, 94, 0.25); color: #4ade80; }
 .gear-card.is-locked .gear-status { background: rgba(245, 158, 11, 0.22); color: #fbbf24; }
 .gear-card.is-unavailable .gear-status { background: rgba(239, 68, 68, 0.22); color: #f87171; }
-.gear-dev {
-  color: #c084fc;
-  font-size: 12px;
-  font-weight: 800;
-}
 .gear-hint {
   grid-column: 1 / -1;
   font-size: 12px;
@@ -4650,4 +4727,43 @@ body.touch-controls-hidden #mobile-controls-container {
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
   }
+}
+
+/* 花劍客 Boss 戰：畫外方向箭頭 (指向右的三角形，JS 設定位置與旋轉；大招預警時閃爍) */
+#boss-offscreen-arrow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-top: 13px solid transparent;
+  border-bottom: 13px solid transparent;
+  border-left: 24px solid rgba(255, 92, 138, 0.92);
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+  z-index: var(--z-hud-widget);
+  display: none;
+}
+#boss-offscreen-arrow.flash {
+  animation: bossArrowFlash 0.32s steps(2, jump-none) infinite alternate;
+}
+@keyframes bossArrowFlash {
+  from { border-left-color: rgba(255, 92, 138, 0.95); }
+  to { border-left-color: rgba(255, 236, 120, 1); }
+}
+
+/* 花劍客 Boss 戰：手機鏡頭距離鈕 (近 / 標準 / 遠)，位於右側按鈕群上方 */
+#boss-cam-zoom-btn {
+  display: none;
+  right: max(24px, env(safe-area-inset-right, 24px));
+  bottom: calc(max(18px, env(safe-area-inset-bottom, 18px)) + 200px);
+  width: 54px;
+  height: 54px;
+  font-size: 14px;
+  white-space: nowrap;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(13, 19, 33, 0.6);
+  color: #fff;
 }

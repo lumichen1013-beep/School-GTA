@@ -41,10 +41,14 @@ export interface WeaponSummary {
 export const GROUP_TARGETS = 3;
 
 // 逐擊 Math.round(基礎攻擊 × 倍率)；耗時 = Σ(cancel × dur × tempo)
-// 一套連段於目標距離 d (m) 的耗時：Σ(前搖 strike × dur × tempo + 去程 d / 初速 + 回程 returnDuration(d) + 接後緩衝)
+// 一套連段於目標距離 d (m) 的耗時：Σ max(收招可取消 cancel × dur × tempo, 前搖 strike × dur × tempo + 去程 d / 初速 + 回程 returnDuration(d) + 接後緩衝)
+// (下一投須同時「球已接回」與「本招已過可取消點」；近距離時由可取消點決定節奏，與近戰口徑一致)
 export function rangedSeconds(combo: readonly KfMove[], tempo: number, ranged: WeaponRanged, d: number): number {
   let seconds = 0;
-  for (const m of combo) seconds += m.strike * m.dur * tempo + d / ranged.speed + returnDuration(d) + ranged.catchDelay;
+  for (const m of combo) {
+    const flight = m.strike * m.dur * tempo + d / ranged.speed + returnDuration(d) + ranged.catchDelay;
+    seconds += Math.max(m.cancel * m.dur * tempo, flight);
+  }
   return seconds;
 }
 

@@ -22,6 +22,7 @@ import type { CombatSystem } from './CombatSystem';
 import type { ProjectileSystem } from '../weapons/projectiles/ProjectileSystem';
 import type { BallThrowController } from '../weapons/basketball/BallThrowController';
 import type { SlingshotController } from '../weapons/slingshot/SlingshotController';
+import type { FencerBossFight } from './fencer/FencerBossFight';
 
 export type WorldType = 'CAMPUS' | 'DETENTION';
 
@@ -52,10 +53,12 @@ export interface GameContext {
   readonly combat: CombatSystem;
   /** 共用投射物池 (球 / 石子) */
   readonly projectiles: ProjectileSystem;
-  /** 籃球武器狀態機 (僅開發中武器建置才建立；正式版為 null) */
+  /** 籃球武器狀態機 */
   readonly ballThrow: BallThrowController | null;
-  /** 彈弓武器狀態機 (僅開發中武器建置才建立；正式版為 null) */
+  /** 彈弓武器狀態機 */
   readonly slingshot: SlingshotController | null;
+  /** 世界 Boss【花劍客】總控 (太陽花、結界戰、戰後恢復) */
+  readonly fencerBossFight: FencerBossFight;
 
   readonly currentWorldType: WorldType;
   readonly activeColliders: CollidableBox[];

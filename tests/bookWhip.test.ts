@@ -10,7 +10,6 @@ import { getWeaponSummary, summarizeCombo } from '../src/game/weaponStats';
 import { getWeapon } from '../src/weapons/registry';
 import { launchDistance } from '../src/weapons/launch';
 import { SOUND_RANGE, soundGain } from '../src/audio/spatialAudio';
-import type { DevWeaponsMode } from '../src/weapons/featureFlags';
 
 const [W1, W2, W3] = PLAYER_COMBOS.WHIP;
 const DEF = getWeapon('BOOK_WHIP');
@@ -20,13 +19,34 @@ const DEG = Math.PI / 180;
 describe('綁帶捆書：招式資料', () => {
   it('名稱 / 時長 / 命中 / 接續點', () => {
     expect([W1, W2, W3].map((m) => m.name)).toEqual(['甩書橫掃', '回手抽擊', '旋鞭橫掃']);
-    expect([W1, W2, W3].map((m) => m.dur)).toEqual([0.36, 0.36, 0.6]);
-    expect([W1, W2, W3].map((m) => m.strike)).toEqual([0.4, 0.4, 0.5]);
-    expect([W1.cancel, W3.cancel]).toEqual([0.6, 0.75]);
-    expect(W2.extraStrikes).toEqual([0.6]);
+    expect([W1, W2, W3].map((m) => m.dur)).toEqual([0.6, 0.62, 0.92]);
+    expect([W1, W2, W3].map((m) => m.strike)).toEqual([0.3, 0.32, 0.52]);
+    expect([W1.cancel, W2.cancel, W3.cancel]).toEqual([0.85, 0.85, 0.79]);
+    expect(DEF.tempo).toBe(1);
+    expect(W2.extraStrikes).toEqual([0.42]);
     expect(W2.extraDmg).toEqual([0.5]);
     expect(W2.cancel).toBeGreaterThan(W2.extraStrikes[0]); // 追擊必在可接續點之前送出
     expect([W1.finisher, W2.finisher, W3.finisher]).toEqual([false, false, true]);
+    // 模型以拖尾區段驅動書的甩出：區段中點 = 命中時間點 (書在最外側)；回彈追擊時書仍在外
+    for (const m of [W1, W2, W3]) expect((m.trail[0] + m.trail[1]) / 2).toBeCloseTo(m.strike);
+    expect(W2.trail[1]).toBeGreaterThanOrEqual(W2.extraStrikes[0]);
+  });
+
+  it('節奏：第 1、2 段只扣血不踉蹌，相鄰兩甩間隔 ≥ 0.4 秒 (> 敵人自 4.2m 追到 1.8m 出手距離的 0.24 秒)，不形成壓制', () => {
+    const t = DEF.tempo;
+    const strikes: number[] = [];
+    let start = 0;
+    for (let lap = 0; lap < 2; lap++) {
+      for (const m of [W1, W2, W3]) {
+        strikes.push(start + m.strike * m.dur * t);
+        start += m.cancel * m.dur * t;
+      }
+    }
+    const approach = (4.2 - 1.8) / 10;
+    for (let i = 1; i < strikes.length; i++) {
+      expect(strikes[i] - strikes[i - 1]).toBeGreaterThanOrEqual(0.4);
+      expect(strikes[i] - strikes[i - 1]).toBeGreaterThan(approach);
+    }
   });
 
   it('範圍換算：FAN 半徑 4.2m 半角 70°；LINE 長 4.8m 寬 1.2m；SELF 圓 4.2m；人數上限 4 / 4 / 6', () => {
@@ -43,19 +63,20 @@ describe('綁帶捆書：招式資料', () => {
     expect(a3.center).toBe('SELF');
     expect(a3.radius * REACH).toBeCloseTo(4.2);
     expect([a1.max, a2.max, a3.max]).toEqual([4, 4, 6]);
-    // 停格每招只設一次：三段皆 0.03s
-    for (const a of [a1, a2, a3]) { expect(a.hitStop).toBe(0.03); expect(a.hitStopMulti).toBe(0.03); }
+    // 停格 / 震動逐段加重 (節拍感)：0.035 → 0.045 → 0.07
+    expect([a1.hitStop, a2.hitStop, a3.hitStop]).toEqual([0.035, 0.045, 0.07]);
+    expect([a1.shake, a2.shake, a3.shake]).toEqual([0.14, 0.18, 0.55]);
   });
 
-  it('route 與 mode：第 1、2 段 (含追擊) 為 SHOVE，第 3 段主擊 LAUNCH', () => {
-    const push = DEF.lightPush!;
-    expect(push).toBe(0.5);
+  it('route 與 mode：第 1、2 段 (含追擊) 只扣血 LIGHT (不設 lightPush)，第 3 段主擊 LAUNCH', () => {
+    const push = DEF.lightPush ?? 0;
+    expect(push).toBe(0);
     expect(strikeRoute(W1, 0)).toBe('AOE');
-    expect(strikeHitMode(W1, 0, push)).toBe('SHOVE');
+    expect(strikeHitMode(W1, 0, push)).toBe('LIGHT');
     expect(strikeRoute(W2, 0)).toBe('AOE');
-    expect(strikeHitMode(W2, 0, push)).toBe('SHOVE');
+    expect(strikeHitMode(W2, 0, push)).toBe('LIGHT');
     expect(strikeRoute(W2, 1)).toBe('AOE_LIGHT');
-    expect(strikeHitMode(W2, 1, push)).toBe('SHOVE');
+    expect(strikeHitMode(W2, 1, push)).toBe('LIGHT');
     expect(strikeRoute(W3, 0)).toBe('AOE');
     expect(strikeHitMode(W3, 0, push)).toBe('LAUNCH');
     expect(strikeCanLaunch(W1, 0)).toBe(false);
@@ -63,10 +84,19 @@ describe('綁帶捆書：招式資料', () => {
     expect(strikeCanLaunch(W3, 0)).toBe(true);
   });
 
-  it('終結技擊飛：主目標約 2.8m (launchCap 8 / 4.6)，近距離滿力時 ≥ 2.6m', () => {
-    const force = DEF.stats.knockback * W3.knock * (1 - W3.aoe!.falloff * (1 / 4.2));
-    expect(launchDistance(force, DEF.launchCap!)).toBeGreaterThan(2.6);
-    expect(launchDistance(force, DEF.launchCap!)).toBeLessThanOrEqual(2.9);
+  it('終結技 (慢招) 擊飛 3.4 ~ 4m；被擊飛敵人滯空 + 跑回出手距離 (1.8m，追擊 14.8m/s) ≥ 命中後僵直 + 0.3 秒反應餘裕', () => {
+    const cap = DEF.launchCap!;
+    const recovery = (W3.cancel - W3.strike) * W3.dur * DEF.tempo;
+    expect(recovery).toBeLessThanOrEqual(0.26);
+    for (const d of [0.6, 2, 4.2]) {
+      const force = DEF.stats.knockback * W3.knock * (1 - W3.aoe!.falloff * (d / 4.2));
+      const dist = launchDistance(force, cap);
+      expect(dist).toBeGreaterThan(3.4);
+      expect(dist).toBeLessThanOrEqual(4.0);
+      const air = 2 * Math.min(Math.max(force * 0.6, 2), cap.v) / 26;
+      const back = air + (d + dist - 1.8) / 14.8;
+      expect(back).toBeGreaterThanOrEqual(recovery + 0.3);
+    }
   });
 });
 
@@ -107,17 +137,20 @@ describe('綁帶捆書：FAN / LINE 判定與人數上限', () => {
 });
 
 describe('綁帶捆書：裝備頁秒傷', () => {
-  it('單體秒傷約 67/s (±2)，一套 14 + 21 + 18 = 53', () => {
+  it('單體秒傷約 64.6/s (不高於改版前 66.2/s，且為近戰最低)，一套 30 + 45 + 39 = 114', () => {
     const s = getWeaponSummary('BOOK_WHIP', 'CAMPUS');
-    expect(s.totalDamage).toBe(53);
-    expect(Math.abs(s.dps - 67)).toBeLessThanOrEqual(2);
-    expect(s.moves.map((m) => m.damage)).toEqual([14, 21, 18]);
+    expect(s.totalDamage).toBe(114);
+    expect(s.dps).toBeCloseTo(64.6, 1);
+    expect(s.dps).toBeLessThanOrEqual(66.2);
+    expect(s.moves.map((m) => m.damage)).toEqual([30, 45, 39]);
+    for (const id of ['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET'] as const) expect(s.dps).toBeLessThan(getWeaponSummary(id, 'CAMPUS').dps);
   });
 
-  it('群攻 3 人秒傷約 175/s (逐人取整，次目標 ×0.8；容許 ±6)，且大於單體 2.4 倍', () => {
+  it('群攻 3 人秒傷約 168/s (逐人取整，次目標 ×0.8；不高於改版前 173.7/s)，且大於單體 2.4 倍', () => {
     const s = getWeaponSummary('BOOK_WHIP', 'CAMPUS');
     expect(s.groupTargets).toBe(3);
-    expect(Math.abs(s.groupDps! - 175)).toBeLessThanOrEqual(6);
+    expect(s.groupDps!).toBeCloseTo(167.8, 0);
+    expect(s.groupDps!).toBeLessThanOrEqual(173.7);
     expect(s.groupDps! / s.dps).toBeGreaterThan(2.4);
     expect(AOE_SECONDARY_DMG).toBe(0.8);
   });
@@ -135,10 +168,8 @@ describe('綁帶捆書：裝備頁秒傷', () => {
 });
 
 // 解鎖：CampusMode.updateMissionTracker 每幀檢查 racingGame.bestSwimTime
-async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
+async function makeCampus(bestSwimTime: number | null) {
   vi.resetModules();
-  const flags = await import('../src/weapons/featureFlags');
-  flags.__setDevWeaponsMode(mode);
   const registry = await import('../src/weapons/registry');
   const { Progression } = await import('../src/game/Progression');
   const { CampusMode } = await import('../src/game/CampusMode');
@@ -151,7 +182,6 @@ async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
     isWeaponUnlocked(id: string) {
       if (!registry.isWeaponEnabled(id as never)) return false;
       const def = registry.getWeapon(id as never);
-      if (def.release === 'dev' && flags.devWeaponsMode === 'unlocked') return true;
       return def.unlock === null || unlocked.has(id);
     },
     setWeaponUnlocked(id: string, v: boolean) { if (v) unlocked.add(id); else unlocked.delete(id); },
@@ -172,8 +202,8 @@ async function makeCampus(mode: DevWeaponsMode, bestSwimTime: number | null) {
 }
 
 describe('綁帶捆書：游泳比賽獲勝解鎖', () => {
-  it('locked：尚未贏游泳不解鎖；bestSwimTime 有值後解鎖、跳橫幅並自動裝備，之後不重複', async () => {
-    const t = await makeCampus('locked', null);
+  it('尚未贏游泳不解鎖；bestSwimTime 有值後解鎖、跳橫幅並自動裝備，之後不重複', async () => {
+    const t = await makeCampus(null);
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
     expect(t.progression.swimWon).toBe(false);
@@ -190,22 +220,6 @@ describe('綁帶捆書：游泳比賽獲勝解鎖', () => {
     t.showBanner.mockClear();
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
-  });
-
-  it('off：bestSwimTime 有值也不觸發 (無橫幅、無旗標、不裝備)，武器不在武器槽', async () => {
-    const t = await makeCampus('off', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.unlocked.has('BOOK_WHIP')).toBe(false);
-    expect(t.state.current).toBe('FIST');
-    expect(t.registry.WEAPONS.map((w) => w.id)).not.toContain('BOOK_WHIP');
-  });
-
-  it('unlocked：視為已解鎖，不跳橫幅', async () => {
-    const t = await makeCampus('unlocked', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.state.current).toBe('FIST');
   });
 });
 
@@ -224,7 +238,7 @@ describe('綁帶捆書：音效距離衰減', () => {
   });
 });
 
-describe('綁帶捆書：持羽球拍時不推擊', () => {
+describe('綁帶捆書：持羽球拍時只扣血', () => {
   async function swing(holdingRacket: boolean) {
     const { CombatSystem } = await import('../src/game/CombatSystem');
     const THREE = await import('three');
@@ -233,7 +247,7 @@ describe('綁帶捆書：持羽球拍時不推擊', () => {
       currentWorldType: 'CAMPUS', npcs: [npc],
       player: {
         isDead: false, position: new THREE.Vector3(), rotationY: 0, moveSerial: 1, isHoldingRacket: holdingRacket,
-        weaponDef: DEF, activeWeapon: { launchCap: null },
+        weaponDef: DEF, activeWeapon: { launchCap: null, impactClass: 'MEDIUM', sounds: {} }, comboStep: 0,
         strikeMove: holdingRacket ? PLAYER_COMBOS.RACKET[0] : W1, strikeIndex: 0,
         getWeaponReach: () => REACH, getWeaponDamage: () => DEF.stats.damage, getWeaponKnockback: () => DEF.stats.knockback
       },
@@ -246,7 +260,7 @@ describe('綁帶捆書：持羽球拍時不推擊', () => {
     return modes;
   }
 
-  it('裝備綁帶捆書但持羽球拍揮拍：只扣血 (LIGHT)，不套用 lightPush', async () => {
+  it('裝備綁帶捆書但持羽球拍揮拍：只扣血 (LIGHT)，不推擊', async () => {
     expect(await swing(true)).toEqual(['LIGHT']);
   });
 });

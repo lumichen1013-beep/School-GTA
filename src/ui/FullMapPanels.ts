@@ -15,8 +15,6 @@ const STATUS_LABELS: Record<WeaponEquipEntry['status'], string> = {
   equipped: '✅ 已裝備', unlocked: '🟢 已解鎖', locked: '🔒 未解鎖', unavailable: '🚫 本世界不可用'
 };
 
-const DEV_LABEL = '🧪 開發中';
-
 function make(tag: string, cls: string, text?: string): HTMLElement {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
@@ -192,7 +190,6 @@ export class FullMapPanels {
       card.dataset.weaponId = w.id;
       card.setAttribute('aria-pressed', w.id === sel.id ? 'true' : 'false');
       const nameEl = make('span', 'gear-name', w.name);
-      if (w.dev) nameEl.append(make('small', 'gear-dev', ` ${DEV_LABEL}`));
       card.append(make('span', 'gear-icon', w.icon), nameEl, make('span', 'gear-status', STATUS_LABELS[w.status]));
       return card;
     }));
@@ -205,7 +202,6 @@ export class FullMapPanels {
     const title = make('div', 'gear-detail-title');
     title.append(make('div', 'gear-detail-name', w.name));
     if (w.name !== w.baseName) title.append(make('div', 'gear-detail-sub', `本名：${w.baseName}`));
-    if (w.dev) title.append(make('div', 'gear-detail-sub gear-dev', DEV_LABEL));
     head.append(make('span', 'gear-detail-icon', w.icon), title, make('span', `gear-status gear-status-${w.status}`, STATUS_LABELS[w.status]));
 
     const stat = (label: string, value: string, note?: string) => {
@@ -284,12 +280,12 @@ export class FullMapPanels {
     } else if (st.dodgeLevel === 1) {
       name = '閃身步';
       lines.push(`冷卻 ${st.dodgeCooldownMax} 秒　按 [Q] 手動施放`);
-      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動發動 (僅閃身步)`);
+      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動閃避（花劍客戰 ${Math.round(st.autoDodgeChanceBoss * 100)}%）`);
       lines.push(`進階【狗熊哆嗦毛】學費 NT$ ${st.dodgeNextFee}`);
     } else {
       name = '狗熊哆嗦毛　已精通 🌟';
       lines.push(`冷卻 ${st.dodgeCooldownMax} 秒　按 [Q] 連續瞬移規避`);
-      lines.push('需手動施放，不會自動發動');
+      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動閃避（花劍客戰 ${Math.round(st.autoDodgeChanceBoss * 100)}%）`);
     }
     box.replaceChildren(
       make('div', 'fm-block-title', '🥋 身法技能'),

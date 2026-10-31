@@ -6,19 +6,15 @@ import { OVERRIDE_RACKET } from './defs/racket';
 import { createBookWhip } from './defs/bookWhip';
 import { createBasketball } from './defs/basketball';
 import { createSlingshot } from './defs/slingshot';
-import { DEV_WEAPONS_BUILD, devWeaponsMode } from './featureFlags';
+import { createRapier } from './defs/rapier';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
 } from './types';
 
-const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET];
-// 開發中武器：非 DEV_WEAPONS_BUILD 的建置為空陣列，defs / models 因而被 tree-shake
-const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = DEV_WEAPONS_BUILD ? [createBookWhip(), createBasketball(), createSlingshot()] : [];
-
-// 全部已定義的武器 (含未啟用的 dev 武器)；一般邏輯請用 WEAPONS
-export const ALL_WEAPONS: readonly WeaponDefinition[] = [...RELEASED_WEAPONS, ...DEV_WEAPON_DEFS];
-// 武器槽順序 (循環切換依此順序)：released + 開關開啟的 dev。模組載入時決定，切換模式需重整
-export const WEAPONS: readonly WeaponDefinition[] = ALL_WEAPONS.filter((w) => w.release === 'released' || devWeaponsMode !== 'off');
+// 武器槽順序 (循環切換依此順序)；玫瑰細劍與世界 Boss 花劍客同步上線
+export const WEAPONS: readonly WeaponDefinition[] = [
+  FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET, createRapier(), createBookWhip(), createBasketball(), createSlingshot()
+];
 export const WEAPON_OVERRIDES: Readonly<Record<WeaponOverrideId, WeaponOverrideDefinition>> = { RACKET: OVERRIDE_RACKET };
 
 const BY_ID: Partial<Record<WeaponId, WeaponDefinition>> = {};
@@ -52,11 +48,12 @@ function buildResolved(def: WeaponDefinition | WeaponOverrideDefinition, variant
     combo: variant ? variant.combo : def.combo,
     tempo: variant?.tempo ?? def.tempo,
     fx: normalizeFx(variant ? variant.fxStyle : def.fxStyle),
+    impactClass: def.impactClass,
     finisherFx: variant?.finisherFx ?? def.finisherFx ?? {},
     launchCap: variant?.launchCap ?? def.launchCap ?? null,
     chainWindow: def.chainWindow ?? 0.6,
     anchors: def.anchors,
-    sounds: def.sounds,
+    sounds: variant?.sounds ?? def.sounds,
     readyPose: def.readyPose
   };
 }

@@ -25,7 +25,9 @@ import { isTouchDevice } from '../core/device';
 import { qualityManager } from '../core/QualityManager';
 import { QUALITY_PRESETS } from '../core/quality';
 import { getDiagFlags } from '../core/diagFlags';
-import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
+import { fencerQuestText } from '../game/fencer/fencerStory';
+import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
+import { setConcealedById } from './uiConceal';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -115,6 +117,12 @@ export interface MissionTrackerData {
   hasWishedPond: boolean;
   hasTastedHotFood: boolean;
   dodgeSkillLevel: number;
+  fencerDefeated: boolean;
+  /** 花劍客任務揭露段：0 未知 (操場中央的怪花)、1 已遭遇、2 完成 */
+  fencerStage: number;
+  /** 已發現怪苗 (發現前任務看板 / 大地圖不顯示) 與成長階段 0~10 */
+  fencerDiscovered: boolean;
+  fencerGrowth: number;
 }
 
 export interface DetentionRadarData {
@@ -227,6 +235,7 @@ export class HUD {
   private lastBossHp: number = -2;
   private lastBossMaxHp: number = -1;
   private lastBossName: string | undefined = undefined;
+  private lastBossBar: number = -1;
   // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
@@ -583,6 +592,11 @@ export class HUD {
 
     this.qPlantItem = document.getElementById('q-plant-item');
     this.qPlantStatus = document.getElementById('q-plant-status');
+    this.qFencerItem = document.getElementById('q-fencer-item');
+    this.qFencerStatus = document.getElementById('q-fencer-status');
+    this.qFencerIcon = document.getElementById('q-fencer-icon');
+    this.qFencerName = document.getElementById('q-fencer-name');
+    this.qFencerDesc = document.getElementById('q-fencer-desc');
 
     this.qInspectorItem = document.getElementById('q-inspector-item');
     this.qInspectorProg = document.getElementById('q-inspector-prog');
@@ -675,6 +689,11 @@ export class HUD {
 
   private qPlantItem: HTMLElement | null;
   private qPlantStatus: HTMLElement | null;
+  private qFencerItem: HTMLElement | null;
+  private qFencerStatus: HTMLElement | null;
+  private qFencerIcon: HTMLElement | null;
+  private qFencerName: HTMLElement | null;
+  private qFencerDesc: HTMLElement | null;
 
   private qInspectorItem: HTMLElement | null;
   private qInspectorProg: HTMLElement | null;
@@ -714,6 +733,10 @@ export class HUD {
   private lastWeaponAtk = -1;
   private lastHp: number = -1;
   private lastHpLevel: string = '';
+  // 花劍客戰：雷達暫停 (隱藏小地圖、不重繪) 與血量環脫戰回血狀態
+  private radarSuspended = false;
+  private hpRegenOn = false;
+  private hpRegenTag: HTMLElement | null = null;
   private lastStamina: number = -1;
   private staminaRingVisible: boolean = false;
   private staminaFullTimer: number = 0;
@@ -1013,6 +1036,8 @@ export class HUD {
     this.lastBossHp = hpKey;
     this.lastBossMaxHp = maxHp;
     this.lastBossName = bossName;
+    this.lastBossBar = -1;
+    this.bossHudEl.classList.remove('boss-hud-fencer', 'bar-flash');
 
     if (!shown) {
       this.bossHudEl.style.display = 'none';
@@ -1029,6 +1054,45 @@ export class HUD {
     const pct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
     this.bossBarFillEl.style.width = `${pct}%`;
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
+  }
+
+  /**
+   * 花劍客 Boss 血條：同一條血條呈現三管 (無文字)。fill = 整場剩餘 / 總量，兩條細分隔線標示三段，
+   * 顏色隨管數 (bar 0~2) 變化，換管時閃光一次。僅寫 class / width，並做髒檢查。
+   */
+  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+    if (!this.bossHudEl || !this.bossBarFillEl) return;
+    const shown = visible && totalHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : -1;
+    if (shown === this.lastBossShown && pct === this.lastBossHp && bar === this.lastBossBar && this.lastBossName === '__fencer') return;
+    const barChanged = bar !== this.lastBossBar;
+    this.lastBossShown = shown;
+    this.lastBossHp = pct;
+    this.lastBossBar = bar;
+    this.lastBossMaxHp = totalMax;
+    this.lastBossName = '__fencer';
+    const el = this.bossHudEl;
+    if (!shown) {
+      el.style.display = 'none';
+      el.classList.remove('boss-hud-fencer');
+      this.lastBossBar = -1;
+      return;
+    }
+    el.style.display = 'block';
+    el.classList.add('boss-hud-fencer');
+    el.dataset.bar = String(bar);
+    this.bossBarFillEl.style.width = `${pct}%`;
+    if (barChanged) {
+      el.classList.remove('bar-flash');
+      void el.offsetWidth;
+      el.classList.add('bar-flash');
+    }
+  }
+
+  /** 花劍客戰鬥中精簡 HUD：只切 body class (CSS 隱藏校園歷練 / 地點資訊 / 零用錢 / 校規處分) */
+  public setBossFightHud(on: boolean) {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('boss-fight-hud', on);
   }
 
   // 任務清單已整合進大地圖【任務】分頁：開啟 / 關閉 / 切換 (J 鍵開地圖分頁；任務小介面直達任務分頁)
@@ -1107,7 +1171,11 @@ export class HUD {
       last.hasEscapedDog === data.hasEscapedDog &&
       last.hasWishedPond === data.hasWishedPond &&
       last.hasTastedHotFood === data.hasTastedHotFood &&
-      last.dodgeSkillLevel === data.dodgeSkillLevel
+      last.dodgeSkillLevel === data.dodgeSkillLevel &&
+      last.fencerDefeated === data.fencerDefeated &&
+      last.fencerStage === data.fencerStage &&
+      last.fencerDiscovered === data.fencerDiscovered &&
+      last.fencerGrowth === data.fencerGrowth
     ) {
       return;
     }
@@ -1180,13 +1248,22 @@ export class HUD {
     }
     this.setQuestState(this.qDodgeItem, this.qDodgeStatus, dodgeDone, dodgeLvl >= 2 ? '大成 🌟' : '閃身步 ✅', '未習得');
 
+    // 13. 世界 Boss：擊敗操場花劍客
+    const fencerDone = data.fencerDefeated;
+    const fencerText = fencerQuestText(data.fencerStage, data.fencerGrowth);
+    if (this.qFencerItem) this.qFencerItem.style.display = data.fencerDiscovered ? '' : 'none';
+    if (this.qFencerIcon) this.qFencerIcon.textContent = fencerText.goalIcon;
+    if (this.qFencerName) this.qFencerName.textContent = fencerText.name;
+    if (this.qFencerDesc) this.qFencerDesc.textContent = fencerText.desc;
+    this.setQuestState(this.qFencerItem, this.qFencerStatus, fencerDone);
+
     const completedCount = [
       batDone, specialDone, peDone, plantDone, inspectorDone, bballDone, trackDone,
-      swimDone, bikeDone, dogDone, pondDone, hotfoodDone, dodgeDone
+      swimDone, bikeDone, dogDone, pondDone, hotfoodDone, dodgeDone, fencerDone
     ].filter(Boolean).length;
 
     // 更新總進度與進度條 (任務小介面與大地圖側欄同步)
-    this.setQuestSummary('📜 校園歷練', completedCount, 13);
+    this.setQuestSummary('📜 校園歷練', completedCount, data.fencerDiscovered ? 14 : 13);
   }
 
   // 合作社 (熱食補血部) 彈出式選單
@@ -1281,7 +1358,8 @@ export class HUD {
   }
 
   // 閃身步老師 (教學大樓身法教練) 對話視窗控制
-  public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void) {
+  // egg：首勝花劍客後句末接上的彩蛋台詞 (閃身步源自爵士老師的西洋劍步法)
+  public openDodgeDialog(cash: number, skillLevel: number, onLearn: (targetLevel: number) => void, egg?: string) {
     if (!this.dodgeTeacherModalEl) return;
     this.isDodgeDialogOpen = true;
 
@@ -1336,6 +1414,7 @@ export class HUD {
       this.dodgeLearnBtnEl.textContent = '✨ 技能已臻化境 (已完全精通)';
       this.dodgeLearnBtnEl.onclick = null;
     }
+    if (egg) this.dodgeDialogTextEl.textContent += egg;
 
     this.dodgeTeacherModalEl.style.display = 'flex';
   }
@@ -1602,6 +1681,40 @@ export class HUD {
     }
   }
 
+  // 雷達暫停：隱藏小地圖畫布並停止重繪 (血量環照常)；恢復時下一幀立即重繪
+  public setRadarSuspended(suspended: boolean) {
+    if (this.radarSuspended === suspended) return;
+    this.radarSuspended = suspended;
+    // 只切 opacity + 不可點擊 (容器常駐合成層)，不切 visibility，避免 GPU 執行緒重新配置圖層貼圖
+    setConcealedById('minimap-wrapper', suspended);
+    if (!suspended) this.minimapDeltaAccumulator = 999;
+  }
+
+  // 血量環脫戰快速回血：綠色呼吸 + 「+12/s」標籤 (狀態切換時才改 class)
+  public setHpRegen(on: boolean, label: string = '+12/s') {
+    if (this.hpRegenOn === on) return;
+    this.hpRegenOn = on;
+    this.hpRingEl?.classList.toggle('hp-ring--regen', on);
+    if (!this.hpRegenTag) {
+      const host = this.hpRingNumEl?.parentElement;
+      if (!host) return;
+      this.hpRegenTag = document.createElement('span');
+      this.hpRegenTag.className = 'hp-ring-regen-tag';
+      host.appendChild(this.hpRegenTag);
+    }
+    this.hpRegenTag.textContent = label;
+    this.hpRegenTag.style.display = on ? '' : 'none';
+  }
+
+  // 脫戰被打斷：血量環閃紅一次
+  public flashHpRingInterrupt() {
+    const el = this.hpRingEl as HTMLElement | SVGElement | null;
+    if (!el) return;
+    el.classList.remove('hp-ring--interrupt');
+    void (el as SVGElement).getBoundingClientRect();
+    el.classList.add('hp-ring--interrupt');
+  }
+
   private renderMinimap(
     playerPos: THREE.Vector3,
     playerRotY: number,
@@ -1611,7 +1724,7 @@ export class HUD {
     currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
     detentionData?: DetentionRadarData
   ) {
-    if (getDiagFlags().map === false) return; // ?diag=&map=0：停止小地圖重繪
+    if (getDiagFlags().map === false || this.radarSuspended) return; // ?diag=&map=0 / 花劍客戰：停止小地圖重繪
     const now = performance.now();
     const dt = delta !== undefined ? delta : (this.lastMinimapTime > 0 ? (now - this.lastMinimapTime) / 1000 : 0.04);
     this.lastMinimapTime = now;
@@ -2774,7 +2887,7 @@ export class HUD {
         ctx.font = this.fmFont(10);
         ctx.textAlign = 'center';
         // 建築內含興趣點圖示時，標籤改貼建築下緣避開圖示
-        const hasPoi = CAMPUS_POIS.some((p) => p.icon && Math.abs(p.x - bx) <= bw / 2 && Math.abs(p.z - bz) <= bd / 2);
+        const hasPoi = CAMPUS_POIS.some((p) => p.icon && !isCampusPoiHidden(poiDoneMask, p.id) && Math.abs(p.x - bx) <= bw / 2 && Math.abs(p.z - bz) <= bd / 2);
         this.fmText(ctx, label, toScreenX(bx), hasPoi ? toScreenY(bz + bd / 2) - 3 : toScreenY(bz) + 3);
       }
     };
@@ -2817,7 +2930,7 @@ export class HUD {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const poi of CAMPUS_POIS) {
-      if (!poi.icon) continue;
+      if (!poi.icon || isCampusPoiHidden(poiDoneMask, poi.id)) continue;
       const done = isCampusPoiDone(poiDoneMask, poi.id);
       const px0 = toScreenX(poi.x);
       const py0 = toScreenY(poi.z);

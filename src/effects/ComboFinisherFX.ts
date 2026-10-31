@@ -19,7 +19,10 @@ const BOLT_LIFE = 0.4;
 const BOLT_REVEAL = 0.1;      // 雷電由地面向上竄起所需秒數
 const BOLT_JITTER_INTERVAL = 0.04; // 雷電折線重新抖動間隔
 const BOLT_HEIGHT = 9;
-const BOLT_THICKNESS = 0.07;
+const BOLT_THICKNESS = 0.1;  // 終結落雷加粗 (原 0.07)
+const BOLT_SPREAD = 1.3;     // 分支落點距衝擊點 (原 0.9)
+const MINI_SEGS = 4;         // 小雷電 / 電弧每條段數
+const MINI_JITTER = 0.03;    // 小雷電重新抖動間隔
 const GOLD_BOLT_A = 0xfff27a;
 const GOLD_BOLT_B = 0x8fd3ff;
 const BOLT_CORE = 0xffffff;
@@ -188,6 +191,7 @@ function flushFx(mesh: THREE.InstancedMesh) {
 interface Crack { life: number; max: number; x: number; y: number; z: number; rot: number; size: number; color: number; core: number; layers: number }
 interface Ring { life: number; delay: number; x: number; y: number; z: number; radius: number; color: number }
 interface Puff { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; size: number }
+interface MiniBolt { life: number; max: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; jitter: number; width: number; amp: number; color: number; core: number }
 interface Feather { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; sx: number; sy: number; sz: number; phase: number; color: number }
 
 class ComboFinisherFXSystem {
@@ -214,6 +218,13 @@ class ComboFinisherFXSystem {
   private boltX = 0; private boltY = 0; private boltZ = 0;
   private strands = 0;
   private segments = 0;
+  // 小雷電 / 電弧 (黃金棒每擊落雷、棒身電弧、警棍電弧)：與終結落雷共用同一個 InstancedMesh，實例接在落雷之後
+  private minis: MiniBolt[] = [];
+  private miniPts!: Float32Array;
+  private miniBase = 0;
+  private nextMini = 0;
+  private miniActive = 0;
+  private nextFeather = 0;
 
   // 初始化並加入場景 (閒置時皆 visible=false，不產生 draw call)
   public init(scene: THREE.Object3D) {
@@ -244,8 +255,11 @@ class ComboFinisherFXSystem {
 
     // 雷電實例依最多條數 × 最多段數預建；實際條數 / 段數於 spawnBolt 時取目前檔位
     const boltGeo = new THREE.BoxGeometry(BOLT_THICKNESS, 1, BOLT_THICKNESS);
-    this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), P.lightningStrands * P.lightningSegments, 5, true);
+    this.miniBase = P.lightningStrands * P.lightningSegments;
+    this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), this.miniBase + P.miniBolts * MINI_SEGS, 5, true);
     this.boltPts = new Float32Array(P.lightningStrands * (P.lightningSegments + 1) * 3);
+    this.miniPts = new Float32Array(P.miniBolts * (MINI_SEGS + 1) * 3);
+    for (let i = 0; i < P.miniBolts; i++) this.minis.push({ life: 0, max: 1, ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, jitter: 0, width: 1, amp: 0.2, color: 0xffffff, core: 0xffffff });
 
     // 羽毛 (雙燕羽刃終結技)：葉形薄片，白 / 青 / 粉 instanceColor
     const leaf = new THREE.Shape();
@@ -279,7 +293,8 @@ class ComboFinisherFXSystem {
     for (const r of this.rings) { r.life = 0; r.delay = 0; }
     for (const p of this.puffs) p.life = 0;
     for (const f of this.feathers) f.life = 0;
-    this.crackActive = this.ringActive = this.puffActive = this.featherActive = 0;
+    for (const m of this.minis) m.life = 0;
+    this.crackActive = this.ringActive = this.puffActive = this.featherActive = this.miniActive = 0;
     this.boltLife = 0;
     const meshes = [this.crackMesh, this.ringMesh, this.boltMesh, this.featherMesh];
     for (const m of meshes) {
@@ -330,17 +345,21 @@ class ComboFinisherFXSystem {
   }
 
   // 羽毛噴發：自 center (胸口高度) 放射向上、重力飄落旋轉；整池一次噴發。palette 依序輪流上色 (預設白 / 青 / 粉 = 雙燕羽刃；綁帶捆書傳書頁色)
-  public featherBurst(center: THREE.Vector3, palette: readonly number[] = FEATHER_COLORS) {
+  // count：本次片數 (未設 = 整池；命中小噴發傳少量，輪替使用池內槽位不打斷進行中的羽毛)、speed：放射速度倍率
+  public featherBurst(center: THREE.Vector3, palette: readonly number[] = FEATHER_COLORS, count?: number, speed: number = 1) {
     const mesh = this.featherMesh;
     if (!mesh) return;
-    const n = Math.min(this.feathers.length, getFxQuality().featherPool);
+    const pool = Math.min(this.feathers.length, getFxQuality().featherPool);
+    const n = Math.min(pool, count ?? pool);
     if (n <= 0) return;
-    for (let i = 0; i < n; i++) {
+    for (let k = 0; k < n; k++) {
+      if (this.nextFeather >= pool) this.nextFeather = 0;
+      const i = this.nextFeather++;
       const f = this.feathers[i];
-      const a = (i / n) * Math.PI * 2 + Math.random() * 0.6;
-      const sp = 3.2 + Math.random() * 3.2;
+      const a = (k / n) * Math.PI * 2 + Math.random() * 0.6;
+      const sp = (3.2 + Math.random() * 3.2) * speed;
       f.life = FEATHER_LIFE * (0.8 + Math.random() * 0.2);
-      f.color = palette[i % palette.length];
+      f.color = palette[k % palette.length];
       f.x = center.x + Math.cos(a) * 0.3; f.y = center.y; f.z = center.z + Math.sin(a) * 0.3;
       f.vx = Math.cos(a) * sp; f.vz = Math.sin(a) * sp; f.vy = 2.2 + Math.random() * 3.6;
       f.rx = Math.random() * 6.28; f.ry = Math.random() * 6.28; f.rz = Math.random() * 6.28;
@@ -348,6 +367,20 @@ class ComboFinisherFXSystem {
       f.phase = Math.random() * 6.28;
     }
     this.featherActive = Math.max(this.featherActive, n);
+    mesh.visible = true;
+  }
+
+  // 小雷電 / 電弧：a → b 之間的抖動折線 (life 秒、粗細倍率 width、橫向抖動幅度 amp 公尺)；池滿時覆蓋最舊者
+  public arcBolt(a: THREE.Vector3, b: THREE.Vector3, color: number, life: number, width: number, amp: number) {
+    const mesh = this.boltMesh;
+    if (!mesh) return;
+    const pool = Math.max(1, Math.min(this.minis.length, getFxQuality().miniBolts));
+    if (this.nextMini >= pool) this.nextMini = 0;
+    const m = this.minis[this.nextMini++];
+    if (m.life <= 0) this.miniActive++;
+    m.life = m.max = life;
+    m.ax = a.x; m.ay = a.y; m.az = a.z; m.bx = b.x; m.by = b.y; m.bz = b.z;
+    m.jitter = 0; m.width = width; m.amp = amp; m.color = color; m.core = mixWhite(color, 0.75);
     mesh.visible = true;
   }
 
@@ -387,7 +420,7 @@ class ComboFinisherFXSystem {
     // 條數 / 段數取目前檔位 (不超過預建容量)；佈局可能改變，先清空全部實例
     this.strands = Math.max(1, Math.min(FX_POOL_MAX.lightningStrands, q.lightningStrands));
     this.segments = Math.max(1, Math.min(FX_POOL_MAX.lightningSegments, q.lightningSegments));
-    for (let i = 0; i < mesh.count; i++) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, 0xffffff, 0); }
+    for (let i = 0; i < this.miniBase; i++) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, 0xffffff, 0); }
     this.boltX = point.x; this.boltY = point.y; this.boltZ = point.z;
     this.boltLife = BOLT_LIFE;
     this.boltJitter = 0;
@@ -400,6 +433,7 @@ class ComboFinisherFXSystem {
     if (this.ringActive > 0) this.updateRings(delta);
     if (this.puffActive > 0) this.updateDust(delta, camera);
     if (this.boltLife > 0) this.updateBolt(delta);
+    if (this.miniActive > 0) this.updateMinis(delta);
     if (this.featherActive > 0) this.updateFeathers(delta);
   }
 
@@ -520,9 +554,9 @@ class ComboFinisherFXSystem {
     this.boltLife -= delta;
     if (this.boltLife <= 0) {
       this.boltLife = 0;
-      for (let i = 0; i < mesh.count; i++) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, 0xffffff, 0); }
+      for (let i = 0; i < this.miniBase; i++) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, 0xffffff, 0); }
       flushFx(mesh);
-      mesh.visible = false;
+      if (this.miniActive === 0) mesh.visible = false;
       return;
     }
     this.boltJitter -= delta;
@@ -532,7 +566,7 @@ class ComboFinisherFXSystem {
       for (let s = 0; s < S; s++) {
         // 起點高空散布、終點圍繞衝擊點
         const sa = (s / S) * Math.PI * 2 + Math.random();
-        const tx = this.boltX + Math.cos(sa) * 0.9 * (s > 0 ? 1 : 0), tz = this.boltZ + Math.sin(sa) * 0.9 * (s > 0 ? 1 : 0);
+        const tx = this.boltX + Math.cos(sa) * BOLT_SPREAD * (s > 0 ? 1 : 0), tz = this.boltZ + Math.sin(sa) * BOLT_SPREAD * (s > 0 ? 1 : 0);
         const hx = tx + (Math.random() - 0.5) * 3.4, hz = tz + (Math.random() - 0.5) * 3.4;
         for (let k = 0; k <= G; k++) {
           const u = k / G;
@@ -555,13 +589,59 @@ class ComboFinisherFXSystem {
         const len = _dir.length();
         _pos.set((pts[a] + pts[b]) / 2, (pts[a + 1] + pts[b + 1]) / 2, (pts[a + 2] + pts[b + 2]) / 2);
         _quat.setFromUnitVectors(_up, _dir.multiplyScalar(1 / (len || 1)));
-        const w = (1 + fade * 0.8) * (s === 0 ? 1.5 : 1); // 主幹最粗
+        const w = (1 + fade * 0.8) * (s === 0 ? 1.8 : 1); // 主幹最粗
         _matrix.compose(_pos, _quat, _scl.set(w, len, w));
         mesh.setMatrixAt(idx, _matrix);
         setFx(mesh, idx, s === 0 ? BOLT_CORE : s % 2 === 0 ? GOLD_BOLT_A : GOLD_BOLT_B, Math.min(1, fade * 1.5));
       }
     }
     flushFx(mesh);
+  }
+
+  // 小雷電：每 MINI_JITTER 秒重新抖動折線 (兩端固定、中段偏移)，隨壽命變細淡出；奇數段用核心白色
+  private updateMinis(delta: number) {
+    const mesh = this.boltMesh!;
+    const G = MINI_SEGS, pts = this.miniPts;
+    let alive = 0;
+    for (let i = 0; i < this.minis.length; i++) {
+      const m = this.minis[i];
+      const i0 = this.miniBase + i * G;
+      if (m.life <= 0) continue;
+      m.life -= delta;
+      if (m.life <= 0) {
+        for (let g = 0; g < G; g++) { mesh.setMatrixAt(i0 + g, _zeroMatrix); setFx(mesh, i0 + g, 0xffffff, 0); }
+        continue;
+      }
+      alive++;
+      const o0 = i * (G + 1) * 3;
+      m.jitter -= delta;
+      if (m.jitter <= 0) {
+        m.jitter = MINI_JITTER;
+        for (let k = 0; k <= G; k++) {
+          const u = k / G;
+          const env = k === 0 || k === G ? 0 : m.amp;
+          const o = o0 + k * 3;
+          pts[o] = m.ax + (m.bx - m.ax) * u + (Math.random() - 0.5) * 2 * env;
+          pts[o + 1] = m.ay + (m.by - m.ay) * u + (Math.random() - 0.5) * 2 * env;
+          pts[o + 2] = m.az + (m.bz - m.az) * u + (Math.random() - 0.5) * 2 * env;
+        }
+      }
+      const fade = m.life / m.max;
+      for (let g = 0; g < G; g++) {
+        const a = o0 + g * 3, b = a + 3;
+        _dir.set(pts[b] - pts[a], pts[b + 1] - pts[a + 1], pts[b + 2] - pts[a + 2]);
+        const len = _dir.length();
+        _pos.set((pts[a] + pts[b]) / 2, (pts[a + 1] + pts[b + 1]) / 2, (pts[a + 2] + pts[b + 2]) / 2);
+        _quat.setFromUnitVectors(_up, _dir.multiplyScalar(1 / (len || 1)));
+        const w = m.width * (0.5 + 0.5 * fade);
+        _matrix.compose(_pos, _quat, _scl.set(w, len, w));
+        mesh.setMatrixAt(i0 + g, _matrix);
+        setFx(mesh, i0 + g, g % 2 === 1 ? m.core : m.color, Math.min(1, fade * 1.6));
+      }
+    }
+    flushFx(mesh);
+    this.miniActive = alive;
+    if (alive === 0 && this.boltLife <= 0) mesh.visible = false;
   }
 }
 

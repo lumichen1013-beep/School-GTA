@@ -27,7 +27,6 @@ import { buildSlingshot } from '../src/weapons/models/slingshotModel';
 import { createSlingRelease } from '../src/weapons/slingshot/releaseMove';
 import { ThirdPersonCamera } from '../src/camera/ThirdPersonCamera';
 import type { GameContext } from '../src/game/GameContext';
-import type { DevWeaponsMode } from '../src/weapons/featureFlags';
 
 // 準星為 DOM：以最小 stub 取代 (記錄掛上 body 的元素)
 const els: Record<string, { style: Record<string, string>; className: string; id: string }> = {};
@@ -47,8 +46,7 @@ const DT = 1 / 60;
 const deg = (d: number) => d * Math.PI / 180;
 
 describe('彈弓：武器定義', () => {
-  it('數值：ATK 60、射程 50、不擊退、dev、只限校園、單發放弦 (0.3 秒 / 離弦 0.05)', () => {
-    expect(DEF.release).toBe('dev');
+  it('數值：ATK 60、射程 50、不擊退、只限校園、單發放弦 (0.3 秒 / 離弦 0.05)', () => {
     expect(DEF.stats).toEqual({ damage: 60, reach: 50, knockback: 0 });
     expect(DEF.worlds).toEqual({ CAMPUS: true, DETENTION: false });
     expect(DEF.readyPose).toBe('SLING_AIM');
@@ -832,7 +830,7 @@ describe('彈弓：開鏡鏡頭 (ThirdPersonCamera.aimZoom)', () => {
     expect(Math.abs(cam.yaw - y1)).toBeCloseTo(base / 1.5, 6);
   });
 
-  it('過肩偏移 0.6：鏡頭位置朝鏡頭右方偏移，視線同向平移', () => {
+  it('過肩偏移 1.0：鏡頭位置朝鏡頭右方偏移，視線同向平移', () => {
     const cam = makeCam();
     cam.yaw = 0;
     run(cam, OUT, 2);
@@ -840,7 +838,7 @@ describe('彈弓：開鏡鏡頭 (ThirdPersonCamera.aimZoom)', () => {
     cam.aimZoomFactor = 2;
     cam.aimZoom = 1;
     run(cam, OUT, 2);
-    expect(cam.camera.position.x - x0).toBeCloseTo(0.6, 1); // yaw = 0：鏡頭右方 = +X
+    expect(cam.camera.position.x - x0).toBeCloseTo(1.0, 1); // yaw = 0：鏡頭右方 = +X
   });
 
   it('室內遵守距離上限 (2.8m 以內)、不穿過牆：開鏡距離 ≤ 2.2 且鏡頭不進入碰撞盒', () => {
@@ -871,10 +869,8 @@ describe('彈弓：開鏡鏡頭 (ThirdPersonCamera.aimZoom)', () => {
 });
 
 describe('彈弓：解鎖 (跑操場)', () => {
-  async function makeCampus(mode: DevWeaponsMode, bestTrackTime: number | null) {
+  async function makeCampus(bestTrackTime: number | null) {
     vi.resetModules();
-    const flags = await import('../src/weapons/featureFlags');
-    flags.__setDevWeaponsMode(mode);
     const registry = await import('../src/weapons/registry');
     const { Progression } = await import('../src/game/Progression');
     const { CampusMode } = await import('../src/game/CampusMode');
@@ -885,7 +881,6 @@ describe('彈弓：解鎖 (跑操場)', () => {
       isWeaponUnlocked(id: string) {
         if (!registry.isWeaponEnabled(id as never)) return false;
         const def = registry.getWeapon(id as never);
-        if (def.release === 'dev' && flags.devWeaponsMode === 'unlocked') return true;
         return def.unlock === null || unlocked.has(id);
       },
       setWeaponUnlocked(id: string, v: boolean) { if (v) unlocked.add(id); else unlocked.delete(id); },
@@ -905,8 +900,8 @@ describe('彈弓：解鎖 (跑操場)', () => {
   }
   const BANNER = '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)';
 
-  it('locked：沒贏不解鎖；贏阿凱 (bestTrackTime 有值) 跳橫幅、解鎖並自動裝備，之後不重複；裝備頁進度條接上 trackWon', async () => {
-    const t = await makeCampus('locked', null);
+  it('沒贏不解鎖；贏阿凱 (bestTrackTime 有值) 跳橫幅、解鎖並自動裝備，之後不重複；裝備頁進度條接上 trackWon', async () => {
+    const t = await makeCampus(null);
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
     expect(t.progression.trackWon).toBe(false);
@@ -922,22 +917,6 @@ describe('彈弓：解鎖 (跑操場)', () => {
     t.showBanner.mockClear();
     t.campus.updateMissionTracker();
     expect(t.showBanner).not.toHaveBeenCalled();
-  });
-
-  it('off：贏了也不觸發 (無橫幅、無旗標)，武器不在武器槽、getWeapon 退回徒手', async () => {
-    const t = await makeCampus('off', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.unlocked.has('SLINGSHOT')).toBe(false);
-    expect(t.registry.WEAPONS.map((w) => w.id)).not.toContain('SLINGSHOT');
-    expect(t.registry.getWeapon('SLINGSHOT').id).toBe('FIST');
-  });
-
-  it('unlocked：視為已解鎖，不跳橫幅', async () => {
-    const t = await makeCampus('unlocked', 30);
-    t.campus.updateMissionTracker();
-    expect(t.showBanner).not.toHaveBeenCalled();
-    expect(t.state.current).toBe('FIST');
   });
 });
 

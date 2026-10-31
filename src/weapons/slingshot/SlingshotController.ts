@@ -13,7 +13,7 @@ import {
 } from './aim';
 import { SLING, canRelease, chargeDamageFrac, chargeRatio, chargeSpeed, solvePitch } from './ballistics';
 
-// 彈弓武器狀態機 (僅 DEV_WEAPONS_BUILD 的建置由 main.ts 建立；正式版整檔 tree-shake，頂層無副作用)。
+// 彈弓武器狀態機 (僅 devWeaponsMode 非 off 時由 main.ts 建立)。
 // 與籃球共用：預輸入緩衝 (rangedCommon.PRE_INPUT_WINDOW)、DOM 準星 (ScreenReticle)、投射物池 / 命中結算 (ProjectileSystem)、
 // Player.attackLock、目標選擇與瞄準模組 (basketball/aim 的 AimCandidate 與 slingshot/aim)。
 //   IDLE     持弓待命：按住攻擊鍵 (左鍵 / F / 手機攻擊鍵) → CHARGING

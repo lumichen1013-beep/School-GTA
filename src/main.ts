@@ -19,6 +19,8 @@ import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
 import { comboFinisherFX } from './effects/ComboFinisherFX';
 import { slashFX } from './effects/SlashFX';
+import { hitSparkFX } from './effects/HitSparkFX';
+import { npcHitFlash } from './effects/npcHitFlash';
 import { impactDust } from './effects/ImpactDust';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
@@ -46,9 +48,12 @@ import { InteractionSystem } from './game/InteractionSystem';
 import { ProjectileSystem } from './weapons/projectiles/ProjectileSystem';
 import { createProjectileHost } from './weapons/projectiles/gameHost';
 import { installProjectileDebug } from './weapons/projectiles/devProjectileDebug';
-import { DEV_WEAPONS_BUILD, devWeaponsMode } from './weapons/featureFlags';
 import { BallThrowController } from './weapons/basketball/BallThrowController';
 import { SlingshotController } from './weapons/slingshot/SlingshotController';
+import { FencerBossFight } from './game/fencer/FencerBossFight';
+import { BossCameraLink } from './game/fencer/BossCameraLink';
+import { RESPAWN_HEART_DELAY_MS } from './game/fencer/fencerStory';
+import { showCutsceneOverlay } from './ui/uiConceal';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -113,9 +118,12 @@ class SchoolGTASandbox implements GameContext {
   private readonly sportsCrew: CampusSportsCrew = new CampusSportsCrew(this);
   public readonly combat: CombatSystem = new CombatSystem(this);
   public projectiles!: ProjectileSystem; // 共用投射物池 (於初始化時建立)
-  public ballThrow: BallThrowController | null = null; // 籃球武器狀態機 (僅開發中武器建置且開關未關閉)
-  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機 (同上)
+  public ballThrow: BallThrowController | null = null; // 籃球武器狀態機
+  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機
   private readonly interaction = new InteractionSystem(this);
+  // 世界 Boss【花劍客】(操場太陽花、開戰過場、結界戰、戰後恢復)
+  public readonly fencerBossFight: FencerBossFight = new FencerBossFight(this);
+  private bossCameraLink: BossCameraLink | null = null;
 
   private isGameRunning: boolean = false;
   private isHandlingDeath: boolean = false;
@@ -143,10 +151,13 @@ class SchoolGTASandbox implements GameContext {
       if (this.detentionCutscene.isActive) {
         this.detentionCutscene.skip();
       }
+      this.fencerBossFight.skipIntro();
     }
   });
 
   public get activeColliders(): CollidableBox[] {
+    // 花劍客結界戰：校園已卸載，結界內無障礙物 (邊界由圓形夾回)
+    if (this.fencerBossFight.isBattleMode) return this.fencerBossFight.battleColliders;
     return this.currentWorldType === 'CAMPUS' ? this.world.colliders : this.detentionWorld.colliders;
   }
 
@@ -193,8 +204,7 @@ class SchoolGTASandbox implements GameContext {
       if (subEl) subEl.textContent = sub;
     };
     this.detentionCutscene.onComplete = () => {
-      const cutsceneOverlay = document.getElementById('cutscene-overlay');
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
       this.weatherSystem.setWeather('SUNNY', true, false);
       this.detention.startEscape();
       this.wantedSystem.showBanner('🛡️【特訓院潛入開始】5 秒內守衛暫不發動攻擊！配備特訓防暴棒，體能提升至 150 HP！', 4500);
@@ -209,12 +219,11 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.init(this.engine.scene);
     comboFinisherFX.init(this.engine.scene);
     slashFX.init(this.engine.scene);
+    hitSparkFX.init(this.engine.scene);
     this.projectiles = new ProjectileSystem(createProjectileHost(this));
     this.projectiles.init(this.engine.scene);
-    if (DEV_WEAPONS_BUILD && devWeaponsMode !== 'off') {
-      this.ballThrow = new BallThrowController(this);
-      this.slingshot = new SlingshotController(this);
-    }
+    this.ballThrow = new BallThrowController(this);
+    this.slingshot = new SlingshotController(this);
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
     this.prewarmFx();
     // 畫質切換開關陰影後材質會重新編譯：立即重新預熱，避免之後首次施放特效時才卡頓
@@ -255,6 +264,13 @@ class SchoolGTASandbox implements GameContext {
     this.dodgeTeacherNpc = this.campusNPCs.find(n => n.role === 'DODGE_TEACHER');
     this.campusDogNpc = this.campusNPCs.find(n => n.role === 'DOG');
     this.wardenBossNpc = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
+    this.fencerBossFight.init({
+      // 戰鬥模式：NPC 名單換成空陣列 (AI / 命中 / 雷達自然略過)，戰後指回當前世界名單
+      setNpcsSuspended: (suspended) => {
+        this.npcs = suspended ? [] : (this.currentWorldType === 'CAMPUS' ? this.campusNPCs : this.detentionNPCs);
+      }
+    });
+    this.bossCameraLink = new BossCameraLink(this.cameraCtrl, this.fencerBossFight, () => this.input.isTouchDevice);
     this.wantedSystem = new WantedSystem();
     qualityManager.onNotify = (text) => this.wantedSystem.showBanner(`🎨 ${text}`, 2500);
     this.wantedSystem.onWantedCleared = () => {
@@ -296,8 +312,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
-    // 開發驗證用測試彈 (僅 dev 武器建置；正式版整段 tree-shake)
-    if (DEV_WEAPONS_BUILD) installProjectileDebug(this, () => this.isGameRunning);
+    // 開發驗證用測試彈 (正式建置時 installProjectileDebug 內直接略過)
+    installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
       onDodge: this.progression.triggerDodgeSkill
@@ -361,14 +377,19 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.prewarm(compile);
     comboFinisherFX.prewarm(compile);
     slashFX.prewarm(compile);
+    hitSparkFX.prewarm(compile);
     impactDust.prewarm(this.engine.scene, compile);
     this.waterSplashVFX.prewarm(compile);
     this.projectiles.prewarm(compile);
     this.slingshot?.prewarm(compile);
+    this.fencerBossFight.prewarm(compile);
   }
 
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
+    // 花劍客戰 (含過場) 中切換世界：同一幀還原覺醒 / 體力上限與校園，再照常切換
+    this.fencerBossFight.abort();
     this.forceDismount();
+    qualityManager.noteSceneTransition();
 
     this.wantedSystem.clearWanted(); // onWantedCleared 會一併重置所有 NPC 仇恨
     this.campus.resetTransientState();
@@ -378,6 +399,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.reset();
     comboFinisherFX.reset();
     slashFX.reset();
+    hitSparkFX.reset();
+    npcHitFlash.reset();
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
@@ -394,13 +417,12 @@ class SchoolGTASandbox implements GameContext {
     if (this.tennisGame.tennisState !== 'IDLE') {
       this.tennisGame.resetMatch(this.engine.scene, this.player);
     }
-    const cutsceneOverlay = document.getElementById('cutscene-overlay');
 
     if (targetWorld === 'CAMPUS') {
       if (this.detentionCutscene.isActive) {
         this.detentionCutscene.skip();
       }
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
 
       // 離開特訓院時收起 MGS 警戒列 (避免警戒中切換世界殘留於校園畫面)
       this.hud.updateMgsAlert('NORMAL', 0);
@@ -465,11 +487,11 @@ class SchoolGTASandbox implements GameContext {
     this.detention.reset();
 
     if (!skipCutscene) {
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'flex';
+      showCutsceneOverlay(true);
       this.weatherSystem.setWeather('THUNDERSTORM', false, false);
       this.detentionCutscene.start(this.cameraCtrl, this.player);
     } else {
-      if (cutsceneOverlay) cutsceneOverlay.style.display = 'none';
+      showCutsceneOverlay(false);
       this.weatherSystem.setWeather('SUNNY', false, false);
       // 與開場結束相同：開局面向東方 (A 區長廊)，鏡頭置於身後
       this.player.position.copy(this.detentionWorld.spawnPos);
@@ -514,6 +536,7 @@ class SchoolGTASandbox implements GameContext {
     // E 鍵互動：依互動表優先順序執行 (與每幀互動提示共用同一張表)
     this.input.onInteract(() => {
       if (!this.isGameRunning || this.combat.isExecutionActive) return;
+      if (this.fencerBossFight.isActive) return; // 花劍客戰鬥中隱藏所有校園互動
       this.interaction.interact();
     });
 
@@ -564,6 +587,8 @@ class SchoolGTASandbox implements GameContext {
   public handlePlayerDeath(reason: string) {
     if (this.isHandlingDeath) return;
     this.isHandlingDeath = true;
+    // 花劍客戰敗：立即還原覺醒與體力上限 (respawn 會補滿到上限，必須先還原)，Boss 收劍鞠躬後恢復校園
+    this.fencerBossFight.onPlayerDeath();
 
     this.forceDismount();
     if (this.basketballGame.isHolding) {
@@ -581,6 +606,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.reset();
     comboFinisherFX.reset();
     slashFX.reset();
+    hitSparkFX.reset();
+    npcHitFlash.reset();
     this.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
     this.slingshot?.cancel(); // 取消蓄力 / 開鏡
     this.projectiles.reset();
@@ -591,10 +618,13 @@ class SchoolGTASandbox implements GameContext {
     setTimeout(() => {
       // 復活點於復活當下依所在世界計算 (死亡 3 秒內切換世界時避免在另一世界的座標重生)
       const respawnPos = this.currentWorldType === 'CAMPUS' ? _campusRespawnPos : this.detentionWorld.spawnPos;
+      this.fencerBossFight.beforeRespawn(); // 保險：上限與校園未還原時立即完成
       this.player.respawn(respawnPos);
       swingTrail.reset();
       comboFinisherFX.reset();
       slashFX.reset();
+      hitSparkFX.reset();
+      npcHitFlash.reset();
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
@@ -606,6 +636,9 @@ class SchoolGTASandbox implements GameContext {
         ? '已在保健室休養恢復，全校警報全面解除'
         : `🛡️ 已在【${this.detentionWorld.currentCheckpointName}】復甦！獲得 5 秒隱蔽保護，守衛警戒已重置！`;
       this.wantedSystem.showBanner(recoverMsg, 4000);
+      // 剛輸給花劍客：復活 1 秒後向陽之心打氣
+      const fencerNote = this.fencerBossFight.consumeDefeatNotice();
+      if (fencerNote) setTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
     }, 3000);
   }
 
@@ -681,12 +714,12 @@ class SchoolGTASandbox implements GameContext {
   // 繪製一幀；?diag= 時量測邏輯 ms (本幀起點到此) 與 render 呼叫 ms，render=0 跳過繪製
   private renderFrame() {
     if (!perfProbe.enabled) {
-      if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+      if (this.diag.render !== false) this.engine.render(this.cameraCtrl.camera);
       return;
     }
     const t1 = performance.now();
     perfProbe.logic.push(t1, t1 - this.frameStartMs);
-    if (this.diag.render !== false) this.engine.renderer.render(this.engine.scene, this.cameraCtrl.camera);
+    if (this.diag.render !== false) this.engine.render(this.cameraCtrl.camera);
     const t2 = performance.now();
     perfProbe.render.push(t2, t2 - t1);
   }
@@ -705,6 +738,7 @@ class SchoolGTASandbox implements GameContext {
     if (diagOn) perfProbe.onRaf(now);
     if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
     this.lastRunAt = now;
+    qualityManager.onFrame(now, this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
     if (diagOn) {
       perfProbe.onFrameRun(now);
       this.frameStartMs = performance.now();
@@ -727,6 +761,22 @@ class SchoolGTASandbox implements GameContext {
       }
     }
 
+    // -0.8 花劍客開戰過場 (清場 / 結界 / 亮相 / 向陽覺醒)：第二次起可按空白鍵跳過
+    if (this.fencerBossFight.isCutscene) {
+      this.input.consumeMouseDelta();
+      this.bossCameraLink?.update(); // 過場中立即還原一般鏡頭 FOV (不干擾過場運鏡)
+      if (this.input.jump && this.fencerBossFight.canSkip) {
+        this.input.consumeJump();
+        this.fencerBossFight.skipIntro();
+      } else {
+        if (this.input.jump) this.input.consumeJump();
+        this.fencerBossFight.updateCutscene(rawDelta);
+        this.engine.updateShadowFocus(this.player.position);
+        this.renderFrame();
+        return;
+      }
+    }
+
     // -0.5 主畫面/世界選單狀態：尚未進入遊戲時僅渲染背景天氣，嚴禁背景運算與操控天天國中
     if (!this.isGameRunning) {
       this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
@@ -736,6 +786,9 @@ class SchoolGTASandbox implements GameContext {
 
     const isCampus = this.currentWorldType === 'CAMPUS';
     const colliders = this.activeColliders;
+    // 花劍客結界戰：校園已卸載，NPC / 腳踏車 / 小遊戲 / 校園生活 / 天氣 / 互動 / 生態園 / 室內剔除停止更新
+    const battle = this.fencerBossFight.isBattleMode;
+    const campusLive = isCampus && !battle;
 
     // 0. 電梯過場動畫與自動走出 (僅限天天國中)
     if (isCampus) this.campus.updateElevator(delta);
@@ -776,7 +829,7 @@ class SchoolGTASandbox implements GameContext {
       this.lastBikeYaw = playerRotY;
 
       // 更新非騎乘中之所有單車 (套用重力與貼地，防止懸空)
-      if (isCampus) {
+      if (campusLive) {
         for (let i = 0; i < this.bicycles.length; i++) {
           const bike = this.bicycles[i];
           if (bike !== ridingBike) bike.update(delta, this.input, colliders);
@@ -789,7 +842,7 @@ class SchoolGTASandbox implements GameContext {
       NPC.playerBikeSpeed = 0;
       NPC.playerBikeTurnTime = 0;
       // 玩家步行時，更新場景中所有閒置單車 (套用重力與貼地，防止懸空)
-      if (isCampus) {
+      if (campusLive) {
         for (let i = 0; i < this.bicycles.length; i++) {
           this.bicycles[i].update(delta, this.input, colliders);
         }
@@ -816,11 +869,14 @@ class SchoolGTASandbox implements GameContext {
       }
     }
 
-    // 3. 模組小遊戲更新 (僅天天國中)
-    if (isCampus) this.campus.updateMinigames(delta, targetPosition);
+    // 2.5 花劍客結界：玩家夾回圓形邊界、與 Boss 推擠
+    this.fencerBossFight.constrainPlayer();
 
-    // 6. 更新互動提示
-    this.interaction.updatePrompt(targetPosition);
+    // 3. 模組小遊戲更新 (僅天天國中)
+    if (campusLive) this.campus.updateMinigames(delta, targetPosition);
+
+    // 6. 更新互動提示 (花劍客戰鬥中不顯示)
+    if (!this.fencerBossFight.isActive) this.interaction.updatePrompt(targetPosition);
 
     // 6.5 刺客教條草堆匿蹤檢測 與 少年院動態探照燈掃視警戒
     if (isCampus) {
@@ -840,7 +896,12 @@ class SchoolGTASandbox implements GameContext {
     const isSpawnGraceActive = !isCampus && this.detention.updateSpawnGrace(delta);
 
     // 8. NPC AI 更新
-    this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
+    if (battle) {
+      this.isAnyChasing = false;
+      this.isHighDanger = false;
+    } else {
+      this.updateNpcs(delta, targetPosition, isRaining, isThunderstorm, isSpawnGraceActive);
+    }
     // 8.1 少年院全域警戒階段：依本幀守衛實際目擊結果推進 (須在 NPC AI 更新之後)
     if (!isCampus) {
       this.detention.updateAlertPhase(delta, targetPosition);
@@ -848,15 +909,15 @@ class SchoolGTASandbox implements GameContext {
     }
 
     // 8.2 校園執法者包夾、連殺觸發暴怒與傳送追捕
-    if (isCampus) this.campus.updateEnforcers(delta, targetPosition);
+    if (campusLive) this.campus.updateEnforcers(delta, targetPosition);
 
     // 校園生活 (地點活動、小團體、對玩家的反應、角色事件)
-    if (isCampus && this.diag.npc !== false) this.campusLife.update(delta, targetPosition);
+    if (campusLive && this.diag.npc !== false) this.campusLife.update(delta, targetPosition);
     // 固定駐點同學 (泳池小魚、操場阿凱、籃球場鬥牛)
-    if (isCampus && this.diag.npc !== false) this.sportsCrew.update(delta, targetPosition);
+    if (campusLive && this.diag.npc !== false) this.sportsCrew.update(delta, targetPosition);
 
     // 校犬脫逃判定
-    if (isCampus) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
+    if (campusLive) this.campus.updateDogEscape(this.campusDogNpc, targetPosition);
 
     // 玩家招式命中結算與 NPC 攻擊玩家判定
     this.combat.updatePlayerStrike();
@@ -867,7 +928,11 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);
     slashFX.update(delta, this.cameraCtrl.camera);
+    hitSparkFX.update(delta);
+    npcHitFlash.update(delta);
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
+    // 花劍客 (太陽花待機 / Boss AI 與招式 / 結界 / 回血 / 勝敗收尾)
+    this.fencerBossFight.update(delta);
 
     // 9. 角色推擠排除
     this.combat.resolveCharacterSeparation();
@@ -880,14 +945,15 @@ class SchoolGTASandbox implements GameContext {
     this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
     this.combat.updateExecution(rawDelta);
     this.cameraCtrl.dashPull = this.player.isDashMove ? DASH_CAMERA_PULL : 0;
+    this.bossCameraLink?.update(); // 花劍客戰鬥中：Boss 戰遠景 / soft lock / 畫外箭頭
     this.cameraCtrl.update(targetPosition, rawDelta, colliders);
 
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條
-    if (isCampus) {
+    if (campusLive) {
       this.campus.updateGardenAndEffects(delta, targetPosition);
       // 建築室內渲染剔除 (鏡頭已於本幀更新；狀態改變時才切換群組顯示)
       this.world.updateInteriorCulling(this.cameraCtrl.camera.position, targetPosition);
-    } else {
+    } else if (!isCampus) {
       const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {
         this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true, '總教官 Boss：鐵面總長', '🎖️');
@@ -897,8 +963,9 @@ class SchoolGTASandbox implements GameContext {
     }
 
     // 15. 更新 HUD 介面與任務看板
-    const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0);
-    const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4;
+    const bossFight = this.fencerBossFight.phase === 'FIGHT';
+    const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0 || bossFight);
+    const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4 || bossFight;
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);
@@ -949,7 +1016,7 @@ class SchoolGTASandbox implements GameContext {
     this.hud.updateStaminaRing(staminaX, staminaY, staminaAllowed, rawDelta);
 
     // 15.5 更新校園動態天氣系統 (雨滴粒子、雷鳴閃電與光照平滑漸變)
-    this.weatherSystem.update(rawDelta, targetPosition);
+    if (!battle) this.weatherSystem.update(rawDelta, targetPosition);
 
     // 16. 渲染畫面 (陽光陰影跟隨玩家)
     this.engine.updateShadowFocus(targetPosition);

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
-import { DEV_WEAPONS_BUILD } from '../weapons/featureFlags';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
+import { BROADCAST } from './fencer/fencerStory';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { BASKETBALL_UNLOCK_GOAL } from '../weapons/defs/basketball';
@@ -84,7 +84,11 @@ export class CampusMode {
     hasEscapedDog: false,
     hasWishedPond: false,
     hasTastedHotFood: false,
-    dodgeSkillLevel: 0
+    dodgeSkillLevel: 0,
+    fencerDefeated: false,
+    fencerStage: 0,
+    fencerDiscovered: false,
+    fencerGrowth: 0
   };
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
@@ -310,7 +314,9 @@ export class CampusMode {
     if (this.broadcastCooldown <= 0) {
       this.broadcastCooldown = 15.0;
       soundManager.playBroadcastChime(this.ctx.player.position);
-      wantedSystem.showBanner(this.announcements.next(), 6000);
+      // 首勝花劍客後偶爾插播太陽花鞠躬的後日談廣播
+      const afterWin = this.ctx.progression.fencerDefeated && Math.random() < BROADCAST.afterWinChance;
+      wantedSystem.showBanner(afterWin ? BROADCAST.afterWin : this.announcements.next(), 6000);
       for (const npc of this.ctx.npcs) {
         npc.freeze(4.0);
       }
@@ -552,22 +558,24 @@ export class CampusMode {
       this.lastTrackRecord = racingGame.bestTrackTime;
       tracker.trackRecordText = racingGame.bestTrackTime ? `${racingGame.bestTrackTime.toFixed(1)}s` : '未完成';
     }
-    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖開發中武器綁帶捆書。DEV_WEAPONS_BUILD 為 false 的正式版整段被移除；
+    // 游泳比賽獲勝 (小魚；輸不寫最佳成績) → 解鎖武器綁帶捆書。
     // 開關 off / unlocked 時 unlockWeapon 不會觸發 (off 直接略過，unlocked 視為已解鎖)
     progression.swimWon = racingGame.bestSwimTime !== null;
-    if (DEV_WEAPONS_BUILD && progression.swimWon) {
+    if (progression.swimWon) {
       progression.unlockWeapon('BOOK_WHIP', { text: '🌊 游泳比賽冠軍！解鎖【綁帶捆書】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
-    // 小遊戲投籃累計進 10 球 → 解鎖開發中武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)。正式版整段被移除
+    // 小遊戲投籃累計進 10 球 → 解鎖武器籃球 (不自動裝備：手持小遊戲籃球時武器球互斥)
     progression.basketballMade = basketballGame.totalMade;
-    if (DEV_WEAPONS_BUILD && basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
+    if (basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
       progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
     }
-    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓。正式版整段被移除
+    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖武器彈弓
     progression.trackWon = racingGame.bestTrackTime !== null;
-    if (DEV_WEAPONS_BUILD && racingGame.bestTrackTime) {
+    if (racingGame.bestTrackTime) {
       progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
+    // 花劍客首勝 → 玫瑰細劍 (戰鬥 / 首勝過場結束、校園恢復後才解鎖並自動裝備；讀檔即已首勝則靜默解鎖)
+    progression.checkRapierUnlock(this.ctx.fencerBossFight?.isActive ?? false);
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;
       tracker.swimRecordText = racingGame.bestSwimTime ? `${racingGame.bestSwimTime.toFixed(1)}s` : '未完成';
@@ -579,6 +587,10 @@ export class CampusMode {
     tracker.hasWishedPond = progression.hasWishedPond;
     tracker.hasTastedHotFood = progression.hasTastedHotFood;
     tracker.dodgeSkillLevel = progression.dodgeSkillLevel;
+    tracker.fencerDefeated = !!progression.fencerDefeated;
+    tracker.fencerStage = this.ctx.fencerBossFight?.questStage ?? 0; // 測試替身可能未提供
+    tracker.fencerDiscovered = this.ctx.fencerBossFight?.discovered ?? false;
+    tracker.fencerGrowth = this.ctx.fencerBossFight?.growthStage ?? 0;
     this.ctx.hud.updateMissionTracker(tracker);
   }
 }

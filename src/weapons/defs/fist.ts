@@ -5,7 +5,6 @@ import type { WeaponDefinition } from '../types';
 // 徒手拳擊：無手持模型，連段為拳腳 (終結技騰空旋風腿：腰高衝擊環 + 著地補環)
 export const FIST: WeaponDefinition = {
   id: 'FIST',
-  release: 'released',
   slot: 1,
   icon: '🥊',
   name: '徒手拳擊',
@@ -15,9 +14,17 @@ export const FIST: WeaponDefinition = {
   combo: PLAYER_COMBOS.FIST,
   tempo: 1,
   fxStyle: 'FIST',
+  impactClass: 'MEDIUM',
   finisherFx: { waistY: 0.9, landRadius: 1.1 },
   anchors: {},
-  sounds: { strike: (_i, pos) => soundManager.playPunch(pos) },
+  // 命中才出聲：第 1 段拳「啪」、第 2 / 3 段腿「嘭」(與 NPC 出拳的 playPunch 區隔)，終結技疊低頻重擊；揮空破風由 impactClass 預設
+  sounds: {
+    strike: (_i, pos, fin, step, landed) => {
+      if (!landed) return;
+      if (step === 0) soundManager.playFistHit(pos); else soundManager.playKickHit(pos);
+      if (fin) soundManager.playFinisherThump(pos, false);
+    }
+  },
   readyPose: 'FIST',
   unlock: null,
   worlds: { CAMPUS: true, DETENTION: true }

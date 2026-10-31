@@ -28,7 +28,7 @@ export class BasketballGame {
   public currentActiveHotspot: ShootingHotspot | null = null;
   public scoreStreak: number = 0;
   public bestStreak: number = 0;
-  public totalMade: number = 0; // 累計進球數 (PERFECT / GOOD 入網；解鎖開發中武器用，只計小遊戲籃球)
+  public totalMade: number = 0; // 累計進球數 (PERFECT / GOOD 入網；解鎖籃球武器用，只計小遊戲籃球)
 
   private ballVelocity: THREE.Vector3 = new THREE.Vector3();
   private ballResetTimer: number = 0;
