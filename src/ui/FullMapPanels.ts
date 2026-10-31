@@ -284,12 +284,12 @@ export class FullMapPanels {
     } else if (st.dodgeLevel === 1) {
       name = '閃身步';
       lines.push(`冷卻 ${st.dodgeCooldownMax} 秒　按 [Q] 手動施放`);
-      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動發動 (僅閃身步)`);
+      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動閃避`);
       lines.push(`進階【狗熊哆嗦毛】學費 NT$ ${st.dodgeNextFee}`);
     } else {
       name = '狗熊哆嗦毛　已精通 🌟';
       lines.push(`冷卻 ${st.dodgeCooldownMax} 秒　按 [Q] 連續瞬移規避`);
-      lines.push('需手動施放，不會自動發動');
+      lines.push(`被攻擊命中時有 ${Math.round(st.autoDodgeChance * 100)}% 機率自動閃避`);
     }
     box.replaceChildren(
       make('div', 'fm-block-title', '🥋 身法技能'),
