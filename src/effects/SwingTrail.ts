@@ -47,6 +47,27 @@ function createSoftEdgeTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+let _softEdgeTex: THREE.CanvasTexture | null = null;
+
+// 拖尾條帶材質 (預乘 alpha、柔邊、雙面單趟)：program 快取鍵固定，其他條帶 (如綁帶捆書鞭梢拖尾) 共用時沿用本系統 prewarm 編好的 shader。
+// 幾何需帶 position / uv / 4 分量 color 才會對上同一 program
+export function createTrailMaterial(): THREE.MeshBasicMaterial {
+  if (!_softEdgeTex) _softEdgeTex = createSoftEdgeTexture();
+  const mat = new THREE.MeshBasicMaterial({
+    map: _softEdgeTex, vertexColors: true, transparent: true,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation,
+    depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false,
+  });
+  // 貼圖只取 alpha 作柔邊並預乘進 rgb
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
+      'float edgeA = texture2D(map, vMapUv).a;\ndiffuseColor.rgb *= edgeA;\ndiffuseColor.a *= edgeA;');
+  };
+  mat.customProgramCacheKey = () => 'swingTrailPremul';
+  mat.forceSinglePass = true; // 雙面透明預設分兩趟繪製，強制單趟以維持 1 draw call
+  return mat;
+}
+
 class SwingTrailSystem {
   private mesh: THREE.Mesh | null = null;
   private positions!: Float32Array;
@@ -94,18 +115,7 @@ class SwingTrailSystem {
     geo.setAttribute('color', this.colAttr);
     geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
-    const mat = new THREE.MeshBasicMaterial({
-      map: createSoftEdgeTexture(), vertexColors: true, transparent: true,
-      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation,
-      depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false,
-    });
-    // 貼圖只取 alpha 作柔邊並預乘進 rgb
-    mat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
-        'float edgeA = texture2D(map, vMapUv).a;\ndiffuseColor.rgb *= edgeA;\ndiffuseColor.a *= edgeA;');
-    };
-    mat.customProgramCacheKey = () => 'swingTrailPremul';
-    mat.forceSinglePass = true; // 雙面透明預設分兩趟繪製，強制單趟以維持 1 draw call
+    const mat = createTrailMaterial();
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false; // 頂點每幀改動，略過包圍球剔除
     this.mesh.castShadow = false;

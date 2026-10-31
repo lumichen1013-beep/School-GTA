@@ -8,9 +8,15 @@ const sfx = vi.hoisted(() => ({
   playBadmintonWhoosh: vi.fn(),
   playBadmintonHit: vi.fn(),
   playWhipCrack: vi.fn(),
-  playBookThud: vi.fn()
+  playBookThud: vi.fn(),
+  playThrowWhoosh: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
+// 拖尾條帶材質需要 canvas (document)：測試環境改用一般材質
+vi.mock('../src/effects/SwingTrail', async (orig) => {
+  const { MeshBasicMaterial } = await import('three');
+  return { ...(await orig<typeof import('../src/effects/SwingTrail')>()), createTrailMaterial: () => new MeshBasicMaterial() };
+});
 
 import { PLAYER_COMBOS } from '../src/entities/shared/kungfu';
 import { getWeapon, getWeaponBySlot, resolveLoadout, WEAPONS } from '../src/weapons/registry';
@@ -94,7 +100,7 @@ const BASELINE = {
   },
   // 綁帶捆書 (開發中武器；本測試環境 DEV_WEAPONS_BUILD 為 true、模式預設 unlocked)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
   BOOK_WHIP: {
-    damage: 14, reach: 4.2, knock: 6.0, ...BOOK_WHIP_COMBO, tempo: 0.9, fxId: 'BOOK', anchors: { base: 0.3, tip: 1.5 }, strike: 'playWhipCrack', start: null,
+    damage: 30, reach: 4.2, knock: 7.5, ...BOOK_WHIP_COMBO, tempo: 1, fxId: 'BOOK', anchors: null, strike: 'playWhipCrack', start: 'playThrowWhoosh',
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
   // 籃球 (開發中遠程武器；球不揮拖尾 / 無打擊音效，音效由投射物系統播放)，兩個世界套組相同 (特訓院由 worlds 限制不可用)
@@ -186,8 +192,8 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     expectSame(snapshot('BOOK_WHIP', null, 'DETENTION'), BASELINE.BOOK_WHIP);
     const def = getWeapon('BOOK_WHIP');
     expect(def.release).toBe('dev');
-    expect(def.lightPush).toBe(0.5);
-    expect(def.launchCap).toEqual({ h: 8, v: 4.6 });
+    expect(def.lightPush ?? 0).toBe(0);
+    expect(def.launchCap).toEqual({ h: 9.5, v: 5.4 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
     sfx.playBookThud.mockClear();
     def.sounds.strike!(1, { x: 1, y: 2, z: 3 });
@@ -299,31 +305,42 @@ describe('武器模型 (mesh 數不變 → draw call 不變；發光基準值還
     expect(h.glow).toBeNull();
   });
 
-  it('綁帶捆書：握把 + 綁帶合併 1 mesh、書堆 1 mesh (共 2 mesh、約 100 三角形)、不投影，glow 的 k 驅動綁帶甩長並可還原', () => {
+  it('綁帶捆書：綁帶 + 書堆 1 mesh、書軌跡拖尾 1 mesh (閒置隱藏)、不投影；平常書在手上，出招甩出到 3m 以外，結束後收回手上', () => {
     const h = buildBookWhip();
     const root = h.parts.R!;
     expect(h.parts.L).toBeUndefined();
     expect(meshCount(root)).toBe(2);
-    let tris = 0;
-    root.traverse((c) => {
-      const m = c as THREE.Mesh;
-      if (!m.isMesh) return;
-      expect(m.castShadow).toBe(false);
-      expect(m.geometry.getAttribute('color')).toBeTruthy();
-      tris += (m.geometry.index ? m.geometry.index.count : m.geometry.getAttribute('position').count) / 3;
-    });
-    expect(tris).toBeGreaterThanOrEqual(90);
-    expect(tris).toBeLessThanOrEqual(110);
+    const [whip, trail] = root.children as THREE.Mesh[];
+    for (const m of [whip, trail]) expect(m.castShadow).toBe(false);
+    expect(whip.geometry.getAttribute('color').itemSize).toBe(3);
+    expect(trail.geometry.getAttribute('color').itemSize).toBe(4); // 與 SwingTrail 共用 program 須為 4 分量
+    expect(trail.visible).toBe(false);
     expect(root.visible).toBe(false);
     expect(root.position.toArray()).toEqual([0, -0.28, 0.12]);
-    const [body, books] = root.children as THREE.Mesh[];
-    const rest = books.position.y;
-    h.glow!(1, 0, 0xffffff);
-    expect(body.scale.y).toBeGreaterThan(1.2);
-    expect(books.position.y).toBeGreaterThan(rest);
+    const tris = whip.geometry.index!.count / 3;
+    expect(tris).toBeLessThanOrEqual(300);
+
+    let now = 1000;
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    root.visible = true;
+    const pos = whip.geometry.getAttribute('position');
+    const last = pos.count - 1; // 書堆頂點
+    const bookDist = () => {
+      root.updateMatrixWorld(true);
+      return Math.hypot(pos.getX(last), pos.getY(last) + 0.28, pos.getZ(last) - 0.12);
+    };
+    const step = (n: number, k?: (i: number) => number, peak = 1) => {
+      for (let i = 0; i < n; i++) { now += 1000 / 60; if (k) h.glow!(k(i), peak, 0xffffff); bookDist(); }
+    };
+    step(5);
+    expect(bookDist()).toBeLessThan(0.45); // 書在手上
+    step(6, (i) => Math.sin(Math.PI * (i + 1) / 12));
+    expect(bookDist()).toBeGreaterThan(3); // 甩出
+    expect(trail.visible).toBe(true);
     h.resetGlow();
-    expect(body.scale.y).toBe(1);
-    expect(books.position.y).toBe(rest);
+    step(20);
+    expect(bookDist()).toBeLessThan(0.45); // 收回
+    spy.mockRestore();
   });
 
   it('雙燕羽刃：每支 握把+中桿+拍框+網線烘焙頂點色 共 1 mesh，掛點同其他武器，各以自己的拍框色發光', () => {
