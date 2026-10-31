@@ -24,6 +24,8 @@ export interface FxQuality {
   tracerPool: number;       // 投射物光痕槽數 (TracerFX；0 = 關閉)
   tracerLife: number;       // 光痕長度對應的秒數 (光痕長 = 彈速 × 此值)
   kiBeamLife: number;       // 籃球氣功彈光束殘影長度對應的秒數 (TracerFX 彗星樣式；低檔仍保留短光束)
+  awakenMotes: number;      // 玩家向陽覺醒環身花瓣光點數 (不透明剪影，不混合)
+  awakenPillar: boolean;    // 覺醒過場光柱 + 地面環 (加法混色，只在過場)
 }
 
 export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
@@ -33,6 +35,7 @@ export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
     lightningStrands: 5, lightningSegments: 6,
     slashPool: 20, flashPerStrike: 3, featherPool: 24,
     tracerPool: 8, tracerLife: 0.12, kiBeamLife: 0.11,
+    awakenMotes: 16, awakenPillar: true,
   },
   medium: {
     chargeRingDouble: true, trailPoints: 14, trailSubdiv: 1,
@@ -40,6 +43,7 @@ export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
     lightningStrands: 4, lightningSegments: 6,
     slashPool: 14, flashPerStrike: 2, featherPool: 16,
     tracerPool: 8, tracerLife: 0.06, kiBeamLife: 0.075,
+    awakenMotes: 12, awakenPillar: true,
   },
   low: {
     chargeRingDouble: false, trailPoints: 14, trailSubdiv: 0,
@@ -47,12 +51,13 @@ export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
     lightningStrands: 3, lightningSegments: 6,
     slashPool: 10, flashPerStrike: 1, featherPool: 10,
     tracerPool: 0, tracerLife: 0, kiBeamLife: 0.045,
+    awakenMotes: 6, awakenPillar: false,
   },
 };
 
 // 預建池容量：各數量欄位取所有檔位的最大值
-type PoolField = 'trailPoints' | 'trailSubdiv' | 'crackPool' | 'crackLayers' | 'ringPool' | 'dustPool' | 'lightningStrands' | 'lightningSegments' | 'slashPool' | 'featherPool' | 'tracerPool';
-const POOL_FIELDS: PoolField[] = ['trailPoints', 'trailSubdiv', 'crackPool', 'crackLayers', 'ringPool', 'dustPool', 'lightningStrands', 'lightningSegments', 'slashPool', 'featherPool', 'tracerPool'];
+type PoolField = 'trailPoints' | 'trailSubdiv' | 'crackPool' | 'crackLayers' | 'ringPool' | 'dustPool' | 'lightningStrands' | 'lightningSegments' | 'slashPool' | 'featherPool' | 'tracerPool' | 'awakenMotes';
+const POOL_FIELDS: PoolField[] = ['trailPoints', 'trailSubdiv', 'crackPool', 'crackLayers', 'ringPool', 'dustPool', 'lightningStrands', 'lightningSegments', 'slashPool', 'featherPool', 'tracerPool', 'awakenMotes'];
 
 export function computeFxPoolMax(presets: Readonly<Record<FxTier, Readonly<FxQuality>>>): Record<PoolField, number> {
   const out = {} as Record<PoolField, number>;

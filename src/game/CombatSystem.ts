@@ -6,7 +6,7 @@ import { comboFinisherFX } from '../effects/ComboFinisherFX';
 import { slashFX } from '../effects/SlashFX';
 import { impactDust } from '../effects/ImpactDust';
 import { getFxQuality } from '../effects/fxQuality';
-import { WEAPON_FX_STYLES } from '../effects/weaponFxStyle';
+import { weaponFxStyle } from '../effects/weaponFxStyle';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
 import { AOE_SECONDARY_DMG, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, probeFan, probeLine, probePath, strikeDmg, strikeHitMode, strikeRoute, wrapAngle, type KfMove, type PlayerHitMode } from '../entities/shared/kungfu';
@@ -828,8 +828,8 @@ export class CombatSystem {
     if (!move.slashFx) return;
     const { player } = this.ctx;
     const weapon = player.activeWeapon;
-    const colorR = WEAPON_FX_STYLES[weapon.fx.R].color;
-    const colorL = WEAPON_FX_STYLES[weapon.fx.L].color;
+    const colorR = weaponFxStyle(weapon.fx.R).color;
+    const colorL = weaponFxStyle(weapon.fx.L).color;
     const pos = player.position;
     if (move.slashFx === 'X' && strikeIndex === 1) {
       slashFX.crossSlash(pos.x, pos.y + SLASH_X_HEIGHT, pos.z, player.rotationY, colorR, colorL);
@@ -857,7 +857,7 @@ export class CombatSystem {
     this.slashFlashes++;
     const weapon = this.ctx.player.activeWeapon;
     slashFX.hitFlash(npc.position.x, npc.position.y + HIT_FLASH_HEIGHT, npc.position.z,
-      WEAPON_FX_STYLES[strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R].color);
+      weaponFxStyle(strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R).color);
   }
 
   // 突進斬收刀爆點：每個命中者身上爆出 X 字斬痕 (數量依品質上限，與命中閃光共用上限)
@@ -866,7 +866,7 @@ export class CombatSystem {
     this.slashCrosses++;
     const weapon = this.ctx.player.activeWeapon;
     slashFX.crossAt(npc.position.x, npc.position.y + HIT_FLASH_HEIGHT, npc.position.z, this.ctx.player.rotationY, ENEMY_CROSS_HALF_LEN,
-      WEAPON_FX_STYLES[weapon.fx.R].color, WEAPON_FX_STYLES[weapon.fx.L].color);
+      weaponFxStyle(weapon.fx.R).color, weaponFxStyle(weapon.fx.L).color);
   }
 
   // 一般招式：只結算第一個命中者
@@ -1027,7 +1027,7 @@ export class CombatSystem {
     const radius = move.aoe.radius * player.getWeaponReach();
     // 本招生效的武器套組決定特效樣式 (球棒 / 黃金棒 / 拳 / 警棍)
     const weapon = player.activeWeapon;
-    const style = WEAPON_FX_STYLES[weapon.fx.R];
+    const style = weaponFxStyle(weapon.fx.R);
     const isCampus = this.ctx.currentWorldType === 'CAMPUS';
     const inPond = isCampus && ecologicalGarden.isInsideWishingPond(p);
     const inPool = isCampus && world.isInsideSwimmingPool(p);

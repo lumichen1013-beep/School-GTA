@@ -31,3 +31,20 @@ export const WEAPON_FX_STYLES: Record<WeaponFxId, WeaponFxStyle> = {
 export const TRAIL_WIDTH = 1.6;
 // 第三段 (終結技) 加強倍率
 export const FINISHER_FX_BOOST = { width: 2.0, life: 1.9, brightness: 1.5, glow: 2 } as const;
+
+// 取色單一入口：一般直接查 WEAPON_FX_STYLES；覺醒等暫時狀態可登記覆寫 (玩家向陽覺醒改朝陽配色)，清除後回原表
+export type WeaponFxOverride = (id: WeaponFxId, base: WeaponFxStyle) => WeaponFxStyle;
+let fxOverride: WeaponFxOverride | null = null;
+
+export function weaponFxStyle(id: WeaponFxId): WeaponFxStyle {
+  const base = WEAPON_FX_STYLES[id];
+  return fxOverride ? fxOverride(id, base) : base;
+}
+
+export function setWeaponFxOverride(fn: WeaponFxOverride | null) {
+  fxOverride = fn;
+}
+
+export function hasWeaponFxOverride(): boolean {
+  return fxOverride !== null;
+}

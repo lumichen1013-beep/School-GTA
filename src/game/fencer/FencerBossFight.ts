@@ -112,7 +112,7 @@ export class FencerBossFight {
     this.arena = new BossArena(FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R);
     this.fx = new BossFX();
     this.boss = new FencerBoss(this.bossHost, this.fx);
-    this.awakening = new PlayerAwakening(engine.scene);
+    this.awakening = new PlayerAwakening(engine.scene, player);
     engine.scene.add(this.arena.group, this.boss.container, this.fx.group);
     this.battle = new BattleModeSwitch({
       actorsDetach: () => [ecologicalGarden.group, ...this.ctx.campusNPCs.map((n) => n.mesh)],
@@ -408,6 +408,7 @@ export class FencerBossFight {
       if (this.ctx.currentWorldType === 'CAMPUS') this.sunflower.update(delta);
       if (this.arena.anim !== 'DOWN') this.arena.update(delta);
       if (this.fx.group.visible) this.fx.update(delta);
+      if (this.awakening.isOn) this.awakening.update(delta, this.ctx.player.position, this.ctx.player.isDead); // 勝利還原收尾
       return;
     }
     if (this.phase === 'INTRO') return;

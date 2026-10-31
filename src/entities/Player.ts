@@ -12,7 +12,7 @@ import { soundManager } from '../audio/SoundEffects';
 import { IndoorManager } from '../systems/IndoorManager';
 import { swingTrail } from '../effects/SwingTrail';
 import { slashFX } from '../effects/SlashFX';
-import { WEAPON_FX_STYLES, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
+import { weaponFxStyle, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
 import { WeaponRig } from '../weapons/WeaponRig';
 import { getWeapon, isWeaponEnabled, resolveLoadout, resolveVariant } from '../weapons/registry';
 import { devWeaponsMode } from '../weapons/featureFlags';
@@ -75,31 +75,58 @@ const OUTFIT = {
   mouth: 0x9c4a3a
 };
 
-type OutfitLayer = 'base' | 'gear' | 'swim';
+type OutfitLayer = 'base' | 'gear' | 'swim' | 'awake';
+type OutfitBuild = 'land' | 'swim' | 'awake';
 interface OutfitPart {
   w: number; h: number; d: number;
   color: number;
   x: number; y: number; z: number;
   rx: number; ry: number; rz: number;
+  glow: number;        // 覺醒造型發光：0 = 不亮、1 = 依底色混朝陽金、2 = 晨白 (只寫入 awake 幾何)
+  awakeColor: number;  // 覺醒造型中的頂點色 (預設同 color)
+  landOnly: boolean;   // 覺醒造型中移除 (被 awake 層零件取代，例如閃電徽章、原本的髮刺)
+}
+
+// 覺醒造型 (向陽覺醒・朝陽花冠) 配色與頂點 aGlow 屬性：x = 發光種類、y = 由腳往頭點亮的高度序 (0..1)、z = 日輪花瓣編號 (身體 0)
+const AWAKE_GOLD = 0xffc83a;
+const AWAKE_WHITE = 0xfff6d8;
+const AWAKE_SKY = 0x7fd8ff;
+const AWAKE_REVEAL_HEIGHT = 2.15; // 腳底 0 → 髮梢約 2.1m
+
+// 標記零件於覺醒造型中發光 (glow 2 = 晨白)
+function lit(p: OutfitPart, color: number = AWAKE_GOLD, glow: number = 1): OutfitPart {
+  p.glow = glow;
+  p.awakeColor = color;
+  return p;
 }
 
 // 方塊零件收集器：base = 常駐 (身體、T 恤、髮型)，gear = 陸上服裝 (外套、背包、長褲、球鞋、耳機)，
-// swim = 僅游泳時出現 (泳褲、短袖)。被陸上服裝包覆的零件不可放在 base，否則表面過近會產生 Z-fighting 閃爍
+// swim = 僅游泳時出現 (泳褲、短袖)，awake = 僅覺醒造型 (加長髮刺、太陽紋章、胸徽)。被陸上服裝包覆的零件不可放在 base，否則表面過近會產生 Z-fighting 閃爍
 class OutfitBuilder {
-  private parts: Record<OutfitLayer, OutfitPart[]> = { base: [], gear: [], swim: [] };
+  private parts: Record<OutfitLayer, OutfitPart[]> = { base: [], gear: [], swim: [], awake: [] };
 
   public box(layer: OutfitLayer, w: number, h: number, d: number, color: number,
-    x: number, y: number, z: number, rx: number = 0, ry: number = 0, rz: number = 0) {
-    this.parts[layer].push({ w, h, d, color, x, y, z, rx, ry, rz });
+    x: number, y: number, z: number, rx: number = 0, ry: number = 0, rz: number = 0): OutfitPart {
+    const part = { w, h, d, color, x, y, z, rx, ry, rz, glow: 0, awakeColor: color, landOnly: false };
+    this.parts[layer].push(part);
+    return part;
   }
 
   public get hasGear(): boolean {
     return this.parts.gear.length > 0 || this.parts.swim.length > 0;
   }
 
-  // 烘焙為單一頂點色幾何體 (非索引、position/normal/color)
-  public build(includeGear: boolean): THREE.BufferGeometry {
-    const list = includeGear ? [...this.parts.base, ...this.parts.gear] : [...this.parts.base, ...this.parts.swim];
+  public get hasAwake(): boolean {
+    return this.parts.awake.length > 0 || [...this.parts.base, ...this.parts.gear].some((p) => p.glow > 0 || p.landOnly);
+  }
+
+  // 烘焙為單一頂點色幾何體 (非索引、position/normal/color/aGlow)；nodeY = 節點離地高度 (點亮高度序用)
+  public build(kind: OutfitBuild, nodeY: number = 0): THREE.BufferGeometry {
+    const p = this.parts;
+    const list = kind === 'land' ? [...p.base, ...p.gear]
+      : kind === 'swim' ? [...p.base, ...p.swim]
+        : [...p.base, ...p.gear].filter((q) => !q.landOnly).concat(p.awake);
+    const awake = kind === 'awake';
     const euler = new THREE.Euler();
     const quat = new THREE.Quaternion();
     const pos = new THREE.Vector3();
@@ -111,15 +138,22 @@ class OutfitBuilder {
       geo.deleteAttribute('uv');
       matrix.compose(pos.set(p.x, p.y, p.z), quat.setFromEuler(euler.set(p.rx, p.ry, p.rz)), scale);
       geo.applyMatrix4(matrix);
-      color.setHex(p.color);
+      color.setHex(awake ? p.awakeColor : p.color);
       const count = geo.attributes.position.count;
       const colors = new Float32Array(count * 3);
+      const glow = new Float32Array(count * 3);
+      const ys = geo.attributes.position.array;
       for (let i = 0; i < count; i++) {
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;
+        if (awake && p.glow > 0) {
+          glow[i * 3] = p.glow;
+          glow[i * 3 + 1] = Math.min(1, Math.max(0, (nodeY + ys[i * 3 + 1]) / AWAKE_REVEAL_HEIGHT));
+        }
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.setAttribute('aGlow', new THREE.BufferAttribute(glow, 3));
       return geo;
     });
     const merged = mergeGeometries(geos, false)!;
@@ -140,10 +174,10 @@ function buildTorsoParts(b: OutfitBuilder) {
   for (const s of [-1, 1]) {
     b.box('gear', 0.04, 0.72, 0.39, c.jacket, s * 0.345, -0.005, 0);
     b.box('gear', 0.2, 0.72, 0.04, c.jacket, s * 0.245, -0.005, 0.185);
-    b.box('gear', 0.02, 0.72, 0.046, c.trim, s * 0.15, -0.005, 0.186);
-    b.box('gear', 0.2, 0.05, 0.045, c.cream, s * 0.245, -0.33, 0.186);
+    lit(b.box('gear', 0.02, 0.72, 0.046, c.trim, s * 0.15, -0.005, 0.186));
+    lit(b.box('gear', 0.2, 0.05, 0.045, c.cream, s * 0.245, -0.33, 0.186));
   }
-  b.box('gear', 0.69, 0.05, 0.045, c.cream, 0, -0.33, -0.186);
+  lit(b.box('gear', 0.69, 0.05, 0.045, c.cream, 0, -0.33, -0.186));
   b.box('gear', 0.56, 0.07, 0.4, c.trim, 0, 0.365, 0);
 
   // 霧金黃後背包：主體、頂蓋、前袋與拉鍊、反光底條、灰藍閃電徽章 (背影辨識重點)
@@ -151,10 +185,19 @@ function buildTorsoParts(b: OutfitBuilder) {
   b.box('gear', 0.46, 0.06, 0.2, c.packDark, 0, 0.28, -0.31);
   b.box('gear', 0.38, 0.2, 0.06, c.packDark, 0, -0.12, -0.445);
   b.box('gear', 0.34, 0.02, 0.065, c.dark, 0, -0.04, -0.447);
-  b.box('gear', 0.5, 0.03, 0.225, c.cream, 0, -0.235, -0.31);
-  b.box('gear', 0.06, 0.14, 0.012, c.badge, 0.025, 0.16, -0.426, 0, 0, -0.45);
-  b.box('gear', 0.13, 0.04, 0.012, c.badge, 0, 0.1, -0.426);
-  b.box('gear', 0.06, 0.14, 0.012, c.badge, -0.025, 0.04, -0.426, 0, 0, -0.45);
+  lit(b.box('gear', 0.5, 0.03, 0.225, c.cream, 0, -0.235, -0.31));
+  b.box('gear', 0.06, 0.14, 0.012, c.badge, 0.025, 0.16, -0.426, 0, 0, -0.45).landOnly = true;
+  b.box('gear', 0.13, 0.04, 0.012, c.badge, 0, 0.1, -0.426).landOnly = true;
+  b.box('gear', 0.06, 0.14, 0.012, c.badge, -0.025, 0.04, -0.426, 0, 0, -0.45).landOnly = true;
+
+  // 覺醒：閃電徽章換成金色太陽紋章 (晨白日心 + 8 道放射)、右胸接住的「向陽之心」花瓣徽
+  lit(b.box('awake', 0.07, 0.07, 0.014, AWAKE_WHITE, 0, 0.1, -0.427, 0, 0, Math.PI / 4), AWAKE_WHITE, 2);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    lit(b.box('awake', 0.022, i % 2 ? 0.05 : 0.075, 0.012, AWAKE_GOLD, Math.sin(a) * 0.085, 0.1 + Math.cos(a) * 0.085, -0.426, 0, 0, -a));
+  }
+  lit(b.box('awake', 0.06, 0.06, 0.02, AWAKE_GOLD, 0.2, 0.17, 0.212, 0, 0, Math.PI / 4));
+  lit(b.box('awake', 0.03, 0.03, 0.022, AWAKE_WHITE, 0.2, 0.17, 0.214, 0, 0, Math.PI / 4), AWAKE_WHITE, 2);
 
   // 背包肩帶 (跨肩 + 胸前垂帶)
   for (const s of [-1, 1]) {
@@ -174,7 +217,7 @@ function buildHeadParts(b: OutfitBuilder) {
   const c = OUTFIT;
   b.box('base', 0.38, 0.4, 0.38, c.skin, 0, 0, 0);
   for (const s of [-1, 1]) {
-    b.box('base', 0.06, 0.065, 0.02, c.eye, s * 0.085, 0.02, 0.19);
+    lit(b.box('base', 0.06, 0.065, 0.02, c.eye, s * 0.085, 0.02, 0.19), AWAKE_WHITE, 2);
     b.box('base', 0.11, 0.03, 0.02, c.hair, s * 0.09, 0.1, 0.192, 0, 0, s * 0.2);
     b.box('base', 0.04, 0.09, 0.06, c.skin, s * 0.2, 0, 0);
     b.box('base', 0.04, 0.16, 0.32, c.hair, s * 0.205, 0.12, -0.03);
@@ -186,14 +229,36 @@ function buildHeadParts(b: OutfitBuilder) {
   b.box('base', 0.42, 0.26, 0.07, c.hair, 0, 0.06, -0.19);
   b.box('base', 0.4, 0.07, 0.06, c.hair, 0, 0.165, 0.19);
 
-  // 刺蝟尖刺 (向外斜翹)
-  b.box('base', 0.12, 0.17, 0.12, c.hair, 0, 0.3, -0.06, -0.35, 0, 0);
-  b.box('base', 0.12, 0.17, 0.12, c.hair, -0.13, 0.29, 0.02, 0, 0, 0.55);
-  b.box('base', 0.12, 0.17, 0.12, c.hair, 0.13, 0.29, 0.02, 0, 0, -0.55);
-  b.box('base', 0.12, 0.17, 0.12, c.hair, -0.1, 0.27, -0.15, -0.6, 0, 0.35);
-  b.box('base', 0.12, 0.17, 0.12, c.hair, 0.1, 0.27, -0.15, -0.6, 0, -0.35);
-  b.box('base', 0.11, 0.16, 0.11, c.hair, 0.08, 0.29, 0.11, 0.55, 0, -0.2);
-  b.box('base', 0.11, 0.16, 0.11, c.hair, -0.06, 0.29, 0.12, 0.55, 0, 0.15);
+  // 刺蝟尖刺 (向外斜翹)；覺醒造型換成加長 30%、往上翹、尖端燃金的版本，並多 2 根上翹瀏海
+  const spikes: [number, number, number, number, number, number, number][] = [
+    [0.12, 0.17, 0, 0.3, -0.06, -0.35, 0],
+    [0.12, 0.17, -0.13, 0.29, 0.02, 0, 0.55],
+    [0.12, 0.17, 0.13, 0.29, 0.02, 0, -0.55],
+    [0.12, 0.17, -0.1, 0.27, -0.15, -0.6, 0.35],
+    [0.12, 0.17, 0.1, 0.27, -0.15, -0.6, -0.35],
+    [0.11, 0.16, 0.08, 0.29, 0.11, 0.55, -0.2],
+    [0.11, 0.16, -0.06, 0.29, 0.12, 0.55, 0.15]
+  ];
+  for (const [w, h, x, y, z, rx, rz] of spikes) {
+    b.box('base', w, h, w, c.hair, x, y, z, rx, 0, rz).landOnly = true;
+    awakeSpike(b, w, h * 1.3, x, y + 0.02, z, rx * 0.65, rz * 0.65);
+  }
+  awakeSpike(b, 0.09, 0.15, -0.12, 0.25, 0.17, 0.85, 0.35);
+  awakeSpike(b, 0.09, 0.15, 0.13, 0.25, 0.16, 0.85, -0.4);
+}
+
+// 覺醒髮刺：髮根深棕 + 尖端 40% 朝陽金發光段 (以髮刺自身方向往外接)
+const _spikeEuler = new THREE.Euler();
+const _spikeDir = new THREE.Vector3();
+function awakeSpike(b: OutfitBuilder, w: number, h: number, x: number, y: number, z: number, rx: number, rz: number) {
+  const root = h * 0.62;
+  const tip = h * 0.4;
+  _spikeEuler.set(rx, 0, rz);
+  _spikeDir.set(0, 1, 0).applyEuler(_spikeEuler);
+  const r0 = -h / 2 + root / 2;
+  const t0 = h / 2 - tip / 2;
+  b.box('awake', w, root, w, OUTFIT.hair, x + _spikeDir.x * r0, y + _spikeDir.y * r0, z + _spikeDir.z * r0, rx, 0, rz);
+  lit(b.box('awake', w * 0.78, tip, w * 0.78, AWAKE_GOLD, x + _spikeDir.x * t0, y + _spikeDir.y * t0, z + _spikeDir.z * t0, rx, 0, rz));
 }
 
 // 手臂 (節點原點為手臂中心，手掌在 -Y 端)；side = -1 左 / 1 右
@@ -206,7 +271,7 @@ function buildArmParts(b: OutfitBuilder, side: number) {
   // 灰藍外套袖、深灰與米白羅紋袖口
   b.box('gear', 0.21, 0.5, 0.21, c.jacket, 0, 0.085, 0);
   b.box('gear', 0.215, 0.025, 0.215, c.dark, 0, -0.115, 0);
-  b.box('gear', 0.22, 0.06, 0.22, c.cream, 0, -0.15, 0);
+  lit(b.box('gear', 0.22, 0.06, 0.22, c.cream, 0, -0.15, 0));
   // 左手腕黑色護腕
   if (side < 0) b.box('gear', 0.2, 0.05, 0.2, c.dark, 0, -0.22, 0);
 }
@@ -221,10 +286,10 @@ function buildLegParts(b: OutfitBuilder, side: number) {
 
   // 炭灰長褲與反摺褲管
   b.box('gear', 0.26, 0.58, 0.26, c.pants, 0, 0.06, 0);
-  b.box('gear', 0.28, 0.07, 0.28, c.cuff, 0, -0.215, 0);
+  lit(b.box('gear', 0.28, 0.07, 0.28, c.cuff, 0, -0.215, 0));
   // 灰白球鞋：鞋身、深灰鞋底
   b.box('gear', 0.27, 0.11, 0.36, c.shoe, 0, -0.29, 0.05);
-  b.box('gear', 0.28, 0.035, 0.37, c.dark, 0, -0.35, 0.05);
+  lit(b.box('gear', 0.28, 0.035, 0.37, c.dark, 0, -0.35, 0.05), AWAKE_SKY);
 }
 
 export class Player {
@@ -337,8 +402,19 @@ export class Player {
 
   // 主角造型：所有骨架節點共用一個頂點色材質 (玩家專屬，閃爍半透明特效改其 opacity 不影響 NPC)
   private outfitMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
-  private outfitNodes: { mesh: THREE.Mesh; land: THREE.BufferGeometry; swim: THREE.BufferGeometry }[] = [];
+  private outfitNodes: { mesh: THREE.Mesh; land: THREE.BufferGeometry; swim: THREE.BufferGeometry; awake: THREE.BufferGeometry }[] = [];
   private isSwimOutfit: boolean = false;
+  // 向陽覺醒外觀 (花劍客戰；由 PlayerAwakening 驅動)：換 awake 幾何 + outfitMaterial 的發光 uniform (只改值、不重編譯)
+  private isAwakenOutfit: boolean = false;
+  public readonly awakenUniforms = {
+    uReveal: { value: 0 },     // 紋路由腳往頭點亮進度 (0..1)
+    uGlowK: { value: 0 },      // 紋路發光強度 (呼吸 / 受擊閃白 / 日蝕心跳)
+    uGlowColor: { value: new THREE.Color(AWAKE_GOLD) },
+    uPetalLit: { value: 12 },  // 日輪亮起的花瓣數 (可帶小數，逐片淡入淡出)
+    uEclipse: { value: 0 }     // 日蝕 (日輪中心轉黑、外圈晨白日冕)
+  };
+  // 殘影顏色覆寫 (覺醒中為朝陽金；null = 閃身步原本的青色)
+  public afterimageTint: number | null = null;
   // 半透明淡化特效 (閃身、狗熊哆嗦毛、草堆匿蹤) 作用的材質清單與原始不透明度/透明旗標 (建構後快取一次)
   private fadeMaterials: { mat: THREE.Material; baseOpacity: number; baseTransparent: boolean }[] = [];
   private currentFade: number = 1;
@@ -409,6 +485,7 @@ export class Player {
     this.leftLeg = this.createOutfitNode((b) => buildLegParts(b, -1), -0.18, 0.35, 0);
     this.rightLeg = this.createOutfitNode((b) => buildLegParts(b, 1), 0.18, 0.35, 0);
 
+    this.installAwakenShader();
     scene.add(this.mesh);
     this.collectFadeMaterials();
 
@@ -416,26 +493,85 @@ export class Player {
     this.afterimagePool = new AfterimagePool(scene, 8);
   }
 
-  // 建立單一骨架節點：零件烘焙為「陸上 (含外套/背包/長褲/球鞋)」與「游泳 (泳裝)」兩份幾何體
+  // 建立單一骨架節點：零件烘焙為「陸上 (含外套/背包/長褲/球鞋)」、「游泳 (泳裝)」與「覺醒 (發光紋路)」三份幾何體
   private createOutfitNode(build: (b: OutfitBuilder) => void, x: number, y: number, z: number): THREE.Mesh {
     const builder = new OutfitBuilder();
     build(builder);
-    const land = builder.build(true);
-    const swim = builder.hasGear ? builder.build(false) : land;
+    const land = builder.build('land', y);
+    const swim = builder.hasGear ? builder.build('swim', y) : land;
+    const awake = builder.hasAwake ? builder.build('awake', y) : land;
     const node = new THREE.Mesh(land, this.outfitMaterial);
     node.position.set(x, y, z);
     node.castShadow = true;
     this.mesh.add(node);
-    this.outfitNodes.push({ mesh: node, land, swim });
+    this.outfitNodes.push({ mesh: node, land, swim, awake });
     return node;
   }
 
   // 入水換上泳裝 (隱藏外套、背包、長褲與球鞋)，上岸恢復；僅切換幾何體參考，無額外 Draw Call
   private setSwimOutfit(swimming: boolean) {
     this.isSwimOutfit = swimming;
+    this.applyOutfitGeometry();
+  }
+
+  // 依狀態選幾何 (泳裝優先 > 覺醒 > 陸上)
+  private applyOutfitGeometry() {
     for (const node of this.outfitNodes) {
-      node.mesh.geometry = swimming ? node.swim : node.land;
+      node.mesh.geometry = this.isSwimOutfit ? node.swim : this.isAwakenOutfit ? node.awake : node.land;
     }
+  }
+
+  // ===== 向陽覺醒外觀 (花劍客戰；PlayerAwakening 呼叫) =====
+
+  // 換上 / 換回覺醒造型 (只換幾何參考，0 額外 draw call)
+  public setAwakenOutfit(on: boolean) {
+    if (this.isAwakenOutfit === on) return;
+    this.isAwakenOutfit = on;
+    this.applyOutfitGeometry();
+  }
+
+  public get isAwakenOutfitOn(): boolean {
+    return this.isAwakenOutfit;
+  }
+
+  // 日輪花冠等附件掛點 (軀幹節點) 與其共用材質 (同一 shader program，閃身淡化自動跟上)
+  public get awakenAnchor(): THREE.Object3D {
+    return this.bodyMesh;
+  }
+
+  public get awakenMaterial(): THREE.Material {
+    return this.outfitMaterial;
+  }
+
+  /** 目前節點掛的幾何 (測試 / 還原檢查用) */
+  public outfitGeometryKinds(): ('land' | 'swim' | 'awake')[] {
+    return this.outfitNodes.map((n) => n.mesh.geometry === n.awake && n.awake !== n.land ? 'awake' : n.mesh.geometry === n.swim && n.swim !== n.land ? 'swim' : 'land');
+  }
+
+  // outfitMaterial 加上覺醒發光 (頂點 aGlow：x 種類、y 點亮高度序、z 日輪花瓣編號 1..12 / 日心 13 / 日冕環 14)。
+  // 建構時就掛上，首幀即編譯同一 program；陸上 / 泳裝幾何 aGlow 全 0，平常輸出與原本相同
+  private installAwakenShader() {
+    const u = this.awakenUniforms;
+    this.outfitMaterial.customProgramCacheKey = () => 'player-awaken-glow-v1';
+    this.outfitMaterial.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, u);
+      shader.vertexShader = 'attribute vec3 aGlow;\nvarying vec3 vGlow;\n' + shader.vertexShader.replace(
+        '#include <begin_vertex>', '#include <begin_vertex>\n\tvGlow = aGlow;');
+      shader.fragmentShader = 'uniform float uReveal;\nuniform float uGlowK;\nuniform vec3 uGlowColor;\nuniform float uPetalLit;\nuniform float uEclipse;\nvarying vec3 vGlow;\n'
+        + shader.fragmentShader
+          .replace('#include <color_fragment>', `#include <color_fragment>
+	float awPetal = step(0.5, vGlow.z) * step(vGlow.z, 12.5);
+	float awLit = mix(1.0, clamp(uPetalLit - vGlow.z + 1.0, 0.0, 1.0), awPetal);
+	float awCore = step(12.5, vGlow.z) * step(vGlow.z, 13.5);
+	float awRing = step(13.5, vGlow.z);
+	diffuseColor.rgb *= mix(0.28, 1.0, awLit);
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012), awCore * uEclipse);`)
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	float awOn = smoothstep(vGlow.y - 0.05, vGlow.y, uReveal);
+	float awEdge = awOn * (1.0 - smoothstep(0.0, 0.12, uReveal - vGlow.y)) * step(uReveal, 0.995);
+	vec3 awTint = mix(mix(vColor.rgb, uGlowColor, 0.7) * mix(0.8, 0.5, step(0.5, vGlow.z)), vec3(1.0, 0.965, 0.85), max(step(1.5, vGlow.x), awRing * uEclipse));
+	totalEmissiveRadiance += awTint * min(vGlow.x, 1.0) * awLit * (1.0 - awCore * uEclipse) * (awOn * uGlowK * (1.0 + awRing * uEclipse) + awEdge * 1.6);`);
+    };
   }
 
   // 敵人攻擊命中前呼叫一次：成功自動閃身步則呼叫端應完全略過此次傷害與擊飛
@@ -531,7 +667,7 @@ export class Player {
     soundManager.playDodge(false, this.position);
 
     // 初始位置產生第 1 道破空殘影 (青色微光)
-    this.spawnAfterimage(0x38bdf8, 0.28);
+    this.spawnAfterimage(this.afterimageTint ?? 0x38bdf8, 0.28);
   }
 
   // 施展技能：狗熊哆嗦毛 (4 個身位半徑內連續瞬移 3 次，間隔 0.5s，紫色暗芒殘影，100% 障礙物安全)
@@ -633,7 +769,7 @@ export class Player {
     this.afterimageSpawnTimer -= delta;
     if (this.afterimageSpawnTimer <= 0) {
       this.afterimageSpawnTimer = 0.05;
-      this.afterimagePool.spawn(0x38bdf8, 0.28, this.mesh.position, this.mesh.rotation, this.headMesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+      this.afterimagePool.spawn(this.afterimageTint ?? 0x38bdf8, 0.28, this.mesh.position, this.mesh.rotation, this.headMesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     }
   }
 
@@ -954,7 +1090,7 @@ export class Player {
       const hand = left ? 1 : 0;
       this.trailFlip[hand] ^= 1;
       this.trailSlot[lane] = hand * 2 + this.trailFlip[hand];
-      swingTrail.begin(this.trailSlot[lane], WEAPON_FX_STYLES[left ? this.activeLoadout.fx.L : this.activeLoadout.fx.R], move.finisher);
+      swingTrail.begin(this.trailSlot[lane], weaponFxStyle(left ? this.activeLoadout.fx.L : this.activeLoadout.fx.R), move.finisher);
       this.trailActive[lane] = true;
       this.trailMove[lane] = move;
     }
@@ -991,9 +1127,9 @@ export class Player {
       if (this.chargeSerial !== this.moveSerial) {
         this.chargeSerial = this.moveSerial;
         const lo = this.activeLoadout.fx;
-        slashFX.chargeRing(this.position.x, this.position.y + 0.9, this.position.z, WEAPON_FX_STYLES[lo.R].color, WEAPON_FX_STYLES[lo.L].color);
+        slashFX.chargeRing(this.position.x, this.position.y + 0.9, this.position.z, weaponFxStyle(lo.R).color, weaponFxStyle(lo.L).color);
       }
-      const style = WEAPON_FX_STYLES[this.activeLoadout.fx.R];
+      const style = weaponFxStyle(this.activeLoadout.fx.R);
       this.setWeaponGlow((p - charge[0]) / (charge[1] - charge[0]), style.glow * FINISHER_FX_BOOST.glow * 1.6, style.color);
     }
     if (!this.updateTrailLane(0, move, p, move.trail, move.trailLimb)) {
@@ -1003,7 +1139,7 @@ export class Player {
     const [from, to] = move.trail;
     // 手持武器招式：顯示中的武器模型可發光時才做 emissive 脈衝 (羽球拍不發光)；有蓄力的招式衝刺時由蓄滿逐漸退光
     if ((move.trailLimb === 'W' || move.trailLimb === 'WL') && this.weaponRig.canGlow(this.displayWeaponId)) {
-      const style = WEAPON_FX_STYLES[move.trailLimb === 'W' ? this.activeLoadout.fx.R : this.activeLoadout.fx.L];
+      const style = weaponFxStyle(move.trailLimb === 'W' ? this.activeLoadout.fx.R : this.activeLoadout.fx.L);
       const u = (p - from) / (to - from);
       const k = move.charge ? 1 - u : Math.sin(Math.PI * u);
       this.setWeaponGlow(k, style.glow * (move.finisher ? FINISHER_FX_BOOST.glow : 1) * (move.charge ? 1.6 : 1), style.color);
@@ -1387,7 +1523,7 @@ export class Player {
           this.afterimageSpawnTimer -= delta;
           if (this.afterimageSpawnTimer <= 0) {
             this.afterimageSpawnTimer = 0.05;
-            this.spawnAfterimage(0x38bdf8, 0.28);
+            this.spawnAfterimage(this.afterimageTint ?? 0x38bdf8, 0.28);
           }
 
           // 閃身側向微傾斜動畫
@@ -2052,6 +2188,7 @@ export class Player {
     for (const node of this.outfitNodes) {
       if (node.mesh.geometry !== node.land) node.land.dispose();
       if (node.mesh.geometry !== node.swim) node.swim.dispose();
+      if (node.mesh.geometry !== node.awake) node.awake.dispose();
     }
     this.mesh.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
