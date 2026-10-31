@@ -49,22 +49,35 @@ export const AWAKEN_WHITE = 0xfff6d8;
 export const AWAKEN_SKY = 0x7fd8ff;
 export const AWAKEN_PALETTE: readonly number[] = [AWAKEN_GOLD, AWAKEN_WHITE, AWAKEN_SKY, AWAKEN_GOLD];
 
-// 覺醒中的武器特效配色 (拖尾握把金 → 尖端晨白、壽命 ×1.15、衝擊環金；雙燕羽刃保留左右不同色：右金、左天空藍)
+// 覺醒中的武器特效配色 = 「疊色」而非覆蓋：保留每把武器自身主色 / 元素 / 外延 / 衝擊環色 (結界中仍一眼認得是哪把武器)，
+// 只疊上朝陽金：亮核心 (tipColor) 往晨白金混合 AWAKEN_CORE_MIX、尾端改朝陽金 (主色本身已是金色系者保留原尾端，避免整條變單色)、
+// 覆蓋率 +0.15 (上限 1.5)、壽命 ×1.15、會發光的武器發光 +0.3 (不發光者維持不發光)
+export const AWAKEN_CORE_MIX = 0.6;
+const GOLD_HUE_NEAR = 10 / 360; // 主色色相距朝陽金 < 10° 視為金色系
+const _hslA = { h: 0, s: 0, l: 0 };
+const _hslB = { h: 0, s: 0, l: 0 };
+const _mixA = new THREE.Color();
+const _mixB = new THREE.Color();
+export function isGoldHue(hex: number): boolean {
+  _mixA.setHex(hex).getHSL(_hslA);
+  _mixB.setHex(AWAKEN_GOLD).getHSL(_hslB);
+  const d = Math.abs(_hslA.h - _hslB.h);
+  return Math.min(d, 1 - d) < GOLD_HUE_NEAR && _hslA.s > 0.5;
+}
+function mixHex(a: number, b: number, t: number): number {
+  return _mixA.setHex(a).lerp(_mixB.setHex(b), t).getHex();
+}
 const awakenStyleCache = new Map<WeaponFxId, WeaponFxStyle>();
 export function awakenFxStyle(id: WeaponFxId, base: WeaponFxStyle): WeaponFxStyle {
   let s = awakenStyleCache.get(id);
   if (!s) {
-    const left = id === 'DUAL_L';
-    // 沿用原樣式的形狀 / 元素欄位 (拖尾外延 tipExt、命中元素 element)，只換配色；尾端色改朝陽系
     s = {
       ...base,
-      color: left ? AWAKEN_SKY : AWAKEN_GOLD,
-      tipColor: AWAKEN_WHITE,
-      tail: left ? AWAKEN_GOLD : AWAKEN_SKY,
-      intensity: Math.max(base.intensity, 1.25),
+      tipColor: mixHex(base.tipColor, AWAKEN_WHITE, AWAKEN_CORE_MIX),
+      tail: isGoldHue(base.color) ? base.tail : AWAKEN_GOLD,
+      intensity: Math.min(1.5, base.intensity + 0.15),
       life: base.life * 1.15,
-      glow: base.glow,
-      impact: left ? AWAKEN_SKY : AWAKEN_GOLD
+      glow: base.glow > 0 ? base.glow + 0.3 : 0
     };
     awakenStyleCache.set(id, s);
   }

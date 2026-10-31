@@ -13,7 +13,7 @@ vi.stubGlobal('document', {
 
 import { Player } from '../src/entities/Player';
 import {
-  PlayerAwakening, AWAKEN_INTRO_SEC, AWAKEN_OUTRO_SEC, AWAKEN_GOLD, AWAKEN_SKY, SUN_PETALS, ECLIPSE_RATIO, litPetalCount, buildSunWheelGeometry
+  PlayerAwakening, AWAKEN_INTRO_SEC, AWAKEN_OUTRO_SEC, AWAKEN_GOLD, SUN_PETALS, ECLIPSE_RATIO, litPetalCount, buildSunWheelGeometry
 } from '../src/game/fencer/PlayerAwakening';
 import { WEAPON_FX_STYLES, weaponFxStyle, hasWeaponFxOverride } from '../src/effects/weaponFxStyle';
 
@@ -104,15 +104,31 @@ describe('玩家向陽覺醒外觀 (完整版)', () => {
     }
   });
 
-  it('覺醒中：換上覺醒幾何、日輪顯示、拖尾改朝陽配色 (雙燕左拍天空藍)、殘影改金', () => {
+  it('覺醒中：換上覺醒幾何、日輪顯示、拖尾疊上朝陽金 (保留武器主色 / 元素)、殘影改金', () => {
     const { player, a } = setup();
     a.applyInstant();
     run(a, player, 0.2);
     expect(player.outfitGeometryKinds()).toEqual(['awake', 'awake', 'awake', 'awake', 'awake', 'awake']);
     expect(a.wheel.parent!.visible).toBe(true);
     expect(a.wheel.material).toBe(player.awakenMaterial);
-    expect(weaponFxStyle('BAT').color).toBe(AWAKEN_GOLD);
-    expect(weaponFxStyle('DUAL_L').color).toBe(AWAKEN_SKY);
+    // 疊色：主色 / 元素 / 外延 / 衝擊環色不變，尾端改朝陽金、亮核心偏晨白金、覆蓋率提升
+    for (const id of ['BAT', 'DUAL_R', 'DUAL_L', 'FIST', 'RAPIER', 'BATON'] as const) {
+      const base = WEAPON_FX_STYLES[id], s = weaponFxStyle(id);
+      expect(s.color).toBe(base.color);
+      expect(s.element).toBe(base.element);
+      expect(s.tipExt).toBe(base.tipExt);
+      expect(s.impact).toBe(base.impact);
+      expect(s.tail).toBe(AWAKEN_GOLD);
+      expect(s.tipColor).not.toBe(base.tipColor);
+      expect(s.intensity).toBeGreaterThan(base.intensity);
+    }
+    expect(weaponFxStyle('DUAL_L').color).not.toBe(weaponFxStyle('DUAL_R').color); // 雙拍左右仍不同色
+    // 主色本身已是金色系 (黃金棒 / 細劍金擊)：保留原尾端色 (金 → 電光藍 / 金 → 玫瑰紅)，不變成整條單色
+    expect(weaponFxStyle('GOLD').tail).toBe(WEAPON_FX_STYLES.GOLD.tail);
+    expect(weaponFxStyle('RAPIER_GOLD').tail).toBe(WEAPON_FX_STYLES.RAPIER_GOLD.tail);
+    // 各近戰武器主色在覺醒中仍兩兩不同 (結界中可辨識)
+    const mains = (['FIST', 'BAT', 'GOLD', 'DUAL_R', 'DUAL_L', 'BOOK', 'RAPIER'] as const).map((id) => weaponFxStyle(id).color);
+    expect(new Set(mains).size).toBe(mains.length);
     expect(weaponFxStyle('BAT').life).toBeCloseTo(WEAPON_FX_STYLES.BAT.life * 1.15);
     expect(weaponFxStyle('RACKET').glow).toBe(WEAPON_FX_STYLES.RACKET.glow); // 不會發光的模型維持不發光
     expect(player.afterimageTint).toBe(AWAKEN_GOLD);

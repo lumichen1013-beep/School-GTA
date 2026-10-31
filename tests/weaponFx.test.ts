@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 const sfx = vi.hoisted(() => ({
   playBatHit: vi.fn(), playSpecialBatHit: vi.fn(), playZap: vi.fn(), playFinisherThump: vi.fn(), playBatonHit: vi.fn(),
   playFistHit: vi.fn(), playKickHit: vi.fn(), playPunch: vi.fn(), playBadmintonHit: vi.fn(), playBadmintonWhoosh: vi.fn(),
-  playWhipCrack: vi.fn(), playBookThud: vi.fn(), playThrowWhoosh: vi.fn()
+  playWhipCrack: vi.fn(), playBookThud: vi.fn(), playThrowWhoosh: vi.fn(),
+  playRapierThrust: vi.fn(), playPetalBloom: vi.fn(), playBanditSlash: vi.fn(), playSwingWhoosh: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
 vi.mock('../src/effects/SwingTrail', async (orig) => {
@@ -26,7 +27,7 @@ describe('impactClass 分級', () => {
   it('每把武器 (含場景覆寫) 都有分級，對應表固定', () => {
     const map: Record<string, ImpactClass> = {};
     for (const w of WEAPONS) map[w.id] = w.impactClass;
-    expect(map).toMatchObject({ FIST: 'MEDIUM', NORMAL_BAT: 'HEAVY', SPECIAL_BAT: 'GOLD', DUAL_RACKET: 'MEDIUM', BOOK_WHIP: 'MEDIUM', BASKETBALL: 'MEDIUM', SLINGSHOT: 'LIGHT' });
+    expect(map).toMatchObject({ FIST: 'MEDIUM', NORMAL_BAT: 'HEAVY', SPECIAL_BAT: 'GOLD', DUAL_RACKET: 'MEDIUM', BOOK_WHIP: 'MEDIUM', BASKETBALL: 'MEDIUM', SLINGSHOT: 'LIGHT', RAPIER: 'HEAVY' });
     expect(WEAPON_OVERRIDES.RACKET.impactClass).toBe('LIGHT');
     expect(resolveVariant('NORMAL_BAT', 'DETENTION').impactClass).toBe('HEAVY'); // 警棍沿用定義
   });
@@ -86,7 +87,11 @@ function finisherCheck(id: WeaponId, world: WeaponWorld) {
   const recovery = (fin.cancel - fin.strike) * fin.dur * lo.tempo;
   const cap = lo.launchCap ?? DEFAULT_CAP;
   const reach = def.stats.reach;
-  const range = fin.aoe ? (fin.aoe.shape === 'PATH' ? 4.5 : fin.aoe.radius * reach + (fin.aoe.center === 'FRONT' ? fin.aoe.offset * reach : 0)) : 1;
+  // 群攻外緣：PATH = 突進距離；LINE = 長度 (fromDash 加上突進距離)；圓形 = 半徑 (+ FRONT 前移)
+  const range = !fin.aoe ? 1
+    : fin.aoe.shape === 'PATH' ? 4.5
+    : fin.aoe.shape === 'LINE' ? (fin.aoe.len ?? 0) * reach + (fin.aoe.fromDash && fin.lunge ? fin.lunge.dist : 0)
+    : fin.aoe.radius * reach + (fin.aoe.center === 'FRONT' ? fin.aoe.offset * reach : 0);
   let minBack = Infinity, minDist = Infinity;
   for (let d = 0.6; d <= Math.max(0.6, range) + 1e-6; d += 0.2) {
     const fall = fin.aoe ? fin.aoe.falloff * Math.min(1, d / Math.max(range, 0.001)) : 0;
@@ -102,7 +107,7 @@ function finisherCheck(id: WeaponId, world: WeaponWorld) {
 describe('終結技驗算：擊退覆蓋收招僵直 (+0.3 秒反應)', () => {
   const cases: [WeaponId, WeaponWorld][] = [
     ['FIST', 'CAMPUS'], ['NORMAL_BAT', 'CAMPUS'], ['NORMAL_BAT', 'DETENTION'], ['SPECIAL_BAT', 'CAMPUS'],
-    ['DUAL_RACKET', 'CAMPUS'], ['BOOK_WHIP', 'CAMPUS'], ['BASKETBALL', 'CAMPUS']
+    ['DUAL_RACKET', 'CAMPUS'], ['BOOK_WHIP', 'CAMPUS'], ['BASKETBALL', 'CAMPUS'], ['RAPIER', 'CAMPUS']
   ];
   for (const [id, world] of cases) {
     it(`${id} / ${world}`, () => {
@@ -114,10 +119,10 @@ describe('終結技驗算：擊退覆蓋收招僵直 (+0.3 秒反應)', () => {
 
 describe('拖尾外延：誇大揮擊範圍感，但外緣不超過判定距離', () => {
   // 實測揮擊中武器尖端離玩家中心的最大水平距離 (dev server 取樣，棒長已含 batModels 加長倍率)
-  const TIP_RADIUS = { NORMAL_BAT: 1.17, SPECIAL_BAT: 1.3, DUAL_RACKET: 1.5, FIST: 0.92 } as const;
+  const TIP_RADIUS = { NORMAL_BAT: 1.17, SPECIAL_BAT: 1.3, DUAL_RACKET: 1.5, FIST: 0.92, RAPIER: 2.12 } as const;
   const NPC_RADIUS = 0.35;
   const GRACE = 0.3; // resolveSingleHit 判定寬容
-  for (const [id, fx] of [['NORMAL_BAT', 'BAT'], ['SPECIAL_BAT', 'GOLD'], ['DUAL_RACKET', 'DUAL_R'], ['FIST', 'FIST']] as const) {
+  for (const [id, fx] of [['NORMAL_BAT', 'BAT'], ['SPECIAL_BAT', 'GOLD'], ['DUAL_RACKET', 'DUAL_R'], ['FIST', 'FIST'], ['RAPIER', 'RAPIER']] as const) {
     it(`${id}：尖端 + tipExt ≤ 判定外緣，棒類 ≥ 判定外緣 80%`, () => {
       const lo = resolveLoadout(id, null, 'CAMPUS');
       const moveReach = Math.min(...lo.combo.filter((m) => !m.finisher).map((m) => m.reach));
@@ -129,7 +134,7 @@ describe('拖尾外延：誇大揮擊範圍感，但外緣不超過判定距離'
   }
 
   it('配色：近戰武器拖尾三色 (核心 / 主色 / 尾端) 互不相同，且主色非白', () => {
-    for (const k of ['FIST', 'BAT', 'GOLD', 'BATON', 'RACKET', 'DUAL_R', 'DUAL_L'] as const) {
+    for (const k of ['FIST', 'BAT', 'GOLD', 'BATON', 'RACKET', 'DUAL_R', 'DUAL_L', 'RAPIER', 'RAPIER_GOLD'] as const) {
       const s = WEAPON_FX_STYLES[k];
       expect(new Set([s.color, s.tipColor, s.tail]).size).toBe(3);
       const r = (s.color >> 16) & 255, g = (s.color >> 8) & 255, b = s.color & 255;

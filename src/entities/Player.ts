@@ -48,6 +48,14 @@ const DUAL_STANCE = {
   leftArm: { x: -0.3, y: -0.5, z: -0.6 }
 };
 const RACKET_MOUNT_X = Math.PI / 3;
+// 玫瑰細劍擊劍架勢 (readyPose 'FENCE')：右臂前伸、劍尖斜上約眼睛高度 (En garde)，左臂高舉外張 (擊劍經典剪影)；
+// 出招時腕角轉為 attackWrist (劍身幾乎順著手臂，突刺平直)，跑步只小幅晃動；蹲姿淡出，撐傘時不改左臂
+const FENCE_STANCE = {
+  wrist: 1.85,
+  attackWrist: 3.0,
+  rightArm: { x: -0.95, y: 0, z: 0.15 },
+  leftArm: { x: -2.55, y: 0, z: -0.8 }
+};
 // 手機虛擬搖桿潛行範圍：推桿半徑比例 ≤ 0.9 視為潛行 (特訓院)
 export const JOYSTICK_SNEAK_RADIUS = 0.9;
 const _safeTeleportResult = new THREE.Vector3();
@@ -460,6 +468,9 @@ export class Player {
   // 雙持持拍架勢比例 (0 = 一般姿勢、1 = 倒提雙拍架勢)
   private dualRatio = 0;
   private dualWrist = 0; // 持拍腕角比例：架勢 1、出招 0 (拍子回到出招用的上仰角)
+  // 擊劍架勢比例 (0 = 一般姿勢、1 = FENCE 架勢) 與目前腕角 (架勢 ↔ 出招平滑過渡)
+  private fenceRatio = 0;
+  private fenceWrist = RACKET_MOUNT_X;
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
@@ -2056,6 +2067,7 @@ export class Player {
     }
 
     this.applyDualStance(delta);
+    this.applyFenceStance(delta);
     this.applyAimStance(delta);
     this.applyCrouchReadyPose(isMoving);
   }
@@ -2113,6 +2125,37 @@ export class Player {
     );
   }
 
+  // 擊劍架勢 (readyPose 'FENCE')：待機 / 行走 / 跑步維持右臂前伸持劍、左臂高舉 (只隨步伐小幅晃動)，雙腿照常；
+  // 腕角：架勢 wrist (劍尖斜上) ↔ 出招 attackWrist (劍身順著手臂) 平滑過渡，出招中手臂由招式圖層接手。蹲姿淡出、撐傘不改左臂
+  private applyFenceStance(delta: number) {
+    const wants = this.displayLoadout.readyPose === 'FENCE' && !this.isDead;
+    const target = wants ? 1 - this.crouchRatio : 0;
+    this.fenceRatio = THREE.MathUtils.lerp(this.fenceRatio, target, Math.min(delta * 10, 1));
+    if (target === 0 && this.fenceRatio < 0.002) this.fenceRatio = 0;
+    const d = this.fenceRatio;
+    const S = FENCE_STANCE;
+    const sword = this.weaponRig.part('RAPIER', 'R');
+    const goal = this.kf.engaged ? S.attackWrist : THREE.MathUtils.lerp(RACKET_MOUNT_X, S.wrist, d);
+    this.fenceWrist = THREE.MathUtils.lerp(this.fenceWrist, goal, Math.min(delta * 14, 1));
+    if (sword) sword.rotation.x = this.fenceWrist;
+    if (d === 0) return;
+    const sway = this.isSprinting ? 0.05 : 0.03;
+    const bob = Math.sin(this.animTimer) * (this.isMoving ? sway : 0.01);
+    const ra = this.rightArm.rotation;
+    ra.set(
+      THREE.MathUtils.lerp(ra.x, S.rightArm.x + bob, d),
+      THREE.MathUtils.lerp(ra.y, S.rightArm.y, d),
+      THREE.MathUtils.lerp(ra.z, S.rightArm.z, d)
+    );
+    if (this.isHoldingUmbrella) return;
+    const la = this.leftArm.rotation;
+    la.set(
+      THREE.MathUtils.lerp(la.x, S.leftArm.x - bob, d),
+      THREE.MathUtils.lerp(la.y, S.leftArm.y, d),
+      THREE.MathUtils.lerp(la.z, S.leftArm.z, d)
+    );
+  }
+
   // 潛行姿勢 A「持棍戒備」：依蹲姿比例混合雙臂姿勢 (右手持武器斜擋身前 / 徒手握拳、左臂半舉前伸平衡，移動時小幅擺動)、
   // 雙腳略為外開，並讓雙臂肩部隨身體下沉、手臂縮短
   private applyCrouchReadyPose(isMoving: boolean) {
@@ -2137,7 +2180,7 @@ export class Player {
       this.leftLeg.rotation.z = -0.07 * c;
       this.rightLeg.rotation.z = 0.07 * c;
     }
-    this.updateArmRig(c, Math.max(c, this.dualRatio, this.aimRatio));
+    this.updateArmRig(c, Math.max(c, this.dualRatio, this.fenceRatio, this.aimRatio));
   }
 
   // 雙臂骨架：縮放、肩部基準位置 (站立維持原本以手臂中心為軸；蹲姿以肩為軸) 並同步給出招圖層

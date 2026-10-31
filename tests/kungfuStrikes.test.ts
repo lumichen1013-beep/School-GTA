@@ -16,7 +16,7 @@ const DEBUG_LIGHT: KfMove = {
 const DEBUG_FINISHER: KfMove = { ...BAT_3, name: '測試終結', extraStrikes: [0.2, 0.35], extraDmg: [0.5, 0.5] };
 
 // 既有武器招式 (雙燕羽刃為多段招式，另有專屬測試 tests/dualRacket.test.ts；綁帶捆書見 tests/bookWhip.test.ts)
-const ALL_PLAYER_MOVES = Object.entries(PLAYER_COMBOS).filter(([k]) => k !== 'DUAL' && k !== 'WHIP').flatMap(([, v]) => [...v]);
+const ALL_PLAYER_MOVES = Object.entries(PLAYER_COMBOS).filter(([k]) => k !== 'DUAL' && k !== 'WHIP' && k !== 'RAPIER').flatMap(([, v]) => [...v]);
 
 // 以固定幀長推進整招，回傳各幀送出的 strikeIndex 與送出時的圖層時間
 function runMove(move: KfMove, tempo: number, frames: readonly number[]) {

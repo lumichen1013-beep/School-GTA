@@ -22,6 +22,7 @@ const RING_LIFE = 0.4;
 const CHARGE_LIFE = 0.2;
 const CHARGE_RADIUS = 1.9;   // 蓄力光環起始半徑，向內收到約 0.35m
 const DASH_BAND_LIFE = 0.34;
+const THRUST_LIFE = 0.2;
 
 const VERT = /* glsl */`
 attribute vec4 aFx;
@@ -243,6 +244,18 @@ class SlashFXSystem {
     const len = Math.hypot(dx, dz);
     if (len < 0.3) return;
     this.spawn(KIND_STREAK, DASH_BAND_LIFE, (ox + ex) / 2, y, (oz + ez) / 2, Math.atan2(-dz, dx), 0, len / 2, 1, color, true, hw, true);
+  }
+
+  // 突刺刺芒 (玫瑰細劍)：自 (ox, oz) 沿水平方向刺到 (ex, ez)，離地 y；水平 + 垂直兩片交成十字截面的光矛 (任何視角都看得到)，
+  // 刀光頭由起點掃向劍尖 (頭亮尾細)。force：池滿時覆蓋最舊者 (終結技貫穿長光)
+  public thrust(ox: number, oz: number, ex: number, ez: number, y: number, hw: number, color: number, force: boolean = false) {
+    const dx = ex - ox;
+    const dz = ez - oz;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.3) return;
+    const cx = (ox + ex) / 2, cz = (oz + ez) / 2, yaw = Math.atan2(-dz, dx);
+    this.spawn(KIND_STREAK, THRUST_LIFE, cx, y, cz, yaw, 0, len / 2, 1, color, force, hw, true);
+    this.spawn(KIND_STREAK, THRUST_LIFE, cx, y, cz, yaw, 0, len / 2, 1, color, force, hw * 0.8, false);
   }
 
   // 水平斬痕環：圓心 (x, y, z)、半徑 radius，弧形刀光繞圈橫掃一周 (dir ±1 為旋向)

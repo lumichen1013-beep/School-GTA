@@ -568,6 +568,8 @@ export class CampusMode {
     if (racingGame.bestTrackTime) {
       progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
+    // 花劍客首勝 → 玫瑰細劍 (戰鬥 / 首勝過場結束、校園恢復後才解鎖並自動裝備；讀檔即已首勝則靜默解鎖)
+    progression.checkRapierUnlock(this.ctx.fencerBossFight?.isActive ?? false);
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;
       tracker.swimRecordText = racingGame.bestSwimTime ? `${racingGame.bestSwimTime.toFixed(1)}s` : '未完成';

@@ -5,6 +5,7 @@ import type { NPCRole } from '../entities/NPC';
 import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { getWeaponSummary, type WeaponSummary } from './weaponStats';
+import { RAPIER_UNLOCK_TEXT } from '../weapons/defs/rapier';
 
 // 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與被動自動閃避機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
@@ -124,6 +125,7 @@ export class Progression {
   // 世界 Boss【花劍客】：首勝旗標 (任務 / 大地圖完成、細劍解鎖點) 與勝場數
   public fencerDefeated: boolean = false;
   public fencerWins: number = 0;
+  private fencerSeenUndefeated = false; // 本次遊玩曾看過「未首勝」(區分當場打贏 vs 讀檔即已首勝)
   // 身法技能系統 (閃身步 / 狗熊哆嗦毛，冷卻皆 1s)
   public dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
   public dodgeCooldownTimer: number = 0;
@@ -223,6 +225,18 @@ export class Progression {
       duration: 7000,
       sfx: () => soundManager.playFanfare()
     });
+  }
+
+  // 花劍客首勝 → 玫瑰細劍 (每次更新任務看板時輪詢；已解鎖時立即返回)。fightActive = Boss 戰 / 過場進行中 → 延後到戰後恢復校園才解鎖，
+  // 避免結界 / 首勝過場中被自動換武器打斷。啟動時就已首勝 (花劍客存檔讀回) → 靜默解鎖 (不重播橫幅 / 不自動裝備)
+  public checkRapierUnlock(fightActive: boolean) {
+    if (!this.fencerDefeated) { this.fencerSeenUndefeated = true; return; }
+    if (fightActive || !isWeaponEnabled('RAPIER') || this.ctx.player.isWeaponUnlocked('RAPIER')) return;
+    if (this.fencerSeenUndefeated) {
+      this.unlockWeapon('RAPIER', { text: RAPIER_UNLOCK_TEXT, duration: 7000, sfx: () => soundManager.playFanfare() });
+    } else {
+      this.ctx.player.setWeaponUnlocked('RAPIER', true);
+    }
   }
 
   // 解鎖武器並自動裝備 (banner.autoEquip 為 false 時不裝備)、顯示橫幅與音效；未啟用 (dev 武器且開關關閉) 或已解鎖者直接返回，不設旗標 / 不橫幅 / 不裝備

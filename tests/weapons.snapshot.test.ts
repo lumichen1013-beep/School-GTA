@@ -251,7 +251,7 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
   });
 
   it('武器槽順序與切換提示', () => {
-    expect(WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
+    expect(WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'RAPIER']);
     expect(getWeaponBySlot(1)?.id).toBe('FIST');
     expect(getWeaponBySlot(2)?.id).toBe('NORMAL_BAT');
     expect(getWeaponBySlot(3)?.id).toBe('SPECIAL_BAT');

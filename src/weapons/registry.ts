@@ -6,12 +6,14 @@ import { OVERRIDE_RACKET } from './defs/racket';
 import { createBookWhip } from './defs/bookWhip';
 import { createBasketball } from './defs/basketball';
 import { createSlingshot } from './defs/slingshot';
+import { createRapier } from './defs/rapier';
 import { devWeaponsMode } from './featureFlags';
 import type {
   ResolvedWeapon, WeaponDefinition, WeaponFxSpec, WeaponId, WeaponOverrideDefinition, WeaponOverrideId, WeaponVariant, WeaponWorld
 } from './types';
 
-const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET];
+// 玫瑰細劍與世界 Boss 花劍客同步上線 (Boss 對所有玩家開放 → 正式)
+const RELEASED_WEAPONS: readonly WeaponDefinition[] = [FIST, NORMAL_BAT, SPECIAL_BAT, DUAL_RACKET, createRapier()];
 // 開發中武器：所有建置都打包，是否進武器槽由 devWeaponsMode 決定 (off 時 WEAPONS 不含)
 const DEV_WEAPON_DEFS: readonly WeaponDefinition[] = [createBookWhip(), createBasketball(), createSlingshot()];
 

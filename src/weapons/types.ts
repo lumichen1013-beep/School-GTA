@@ -6,8 +6,8 @@ import type { Vec3Like } from '../audio/spatialAudio';
 import type { ImpactClass } from './impactClass';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')
-export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
+// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')；RAPIER 為花劍客首勝獎勵 (與 Boss 同步正式上線)
+export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'RAPIER' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
 export type WeaponWorld = 'CAMPUS' | 'DETENTION';
@@ -48,7 +48,8 @@ export interface WeaponSounds {
 export type WeaponFxSpec = WeaponFxId | { readonly R: WeaponFxId; readonly L?: WeaponFxId };
 
 // SLING_AIM：待命同 WEAPON，蓄力時右臂前舉 / 左臂拉弦依蓄力比例插值 (Player.aimCharge)
-export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM';
+// FENCE：擊劍架勢 (右臂前伸劍尖斜上、左臂高舉)，出招時腕角轉為劍身順著手臂 (見 Player.applyHeldStance)
+export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM' | 'FENCE';
 
 // 預建模型 (建構時一次建立，執行期只切換 visible / scale / 材質數值)
 export interface WeaponModelHandle {
@@ -86,6 +87,7 @@ export interface WeaponUnlockProgress {
   readonly basketballMade: number; // 小遊戲投籃累計進球 (BasketballGame.totalMade；武器投出的球不計)
   readonly swimWon: boolean;       // 是否贏過游泳 (小魚)
   readonly trackWon: boolean;      // 是否贏過跑操場 (阿凱)
+  readonly fencerDefeated: boolean; // 是否擊敗過世界 Boss 花劍客 (首勝)
 }
 
 // 實際揮擊時生效的套組共通欄位 (武器定義與場景覆寫共用)

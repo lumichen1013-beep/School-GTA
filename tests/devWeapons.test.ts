@@ -105,7 +105,7 @@ describe('開發中武器開關', () => {
   it('released 武器在三種模式下都在 WEAPONS，順序固定', async () => {
     for (const mode of ['off', 'unlocked', 'locked'] as const) {
       const { registry } = await load(mode);
-      expect(registry.WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET']);
+      expect(registry.WEAPONS.filter((w) => w.release === 'released').map((w) => w.id)).toEqual(['FIST', 'NORMAL_BAT', 'SPECIAL_BAT', 'DUAL_RACKET', 'RAPIER']);
     }
   });
 });

@@ -12,7 +12,7 @@ import { npcHitFlash } from '../effects/npcHitFlash';
 import { impactFeedback, type ImpactFeedback } from '../weapons/impactClass';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
-import { AOE_SECONDARY_DMG, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, probeFan, probeLine, probePath, strikeDmg, strikeHitMode, strikeRoute, wrapAngle, type KfMove, type PlayerHitMode } from '../entities/shared/kungfu';
+import { AOE_SECONDARY_DMG, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, lineAoeSpan, probeFan, probeLine, probePath, strikeDmg, strikeFrac, strikeHitMode, strikeRoute, wrapAngle, type KfMove, type PlayerHitMode } from '../entities/shared/kungfu';
 import type { GameContext } from './GameContext';
 import { PlantAoeShape, type PlantHitResult } from '../world/EcologicalGarden';
 import { isAttackFromBehind, isBehindNpc, isBossStunOpening } from './DetentionMode';
@@ -43,6 +43,12 @@ const PATH_FORWARD_PUSH = 0.6; // 突進斬擊退方向：往兩側外推 + 沿�
 const DASH_BAND_REMAIN = 1.0; // 突進光帶終點 = 目前位置 + 剩餘突進距離 × 此倍率
 const ENEMY_CROSS_HALF_LEN = 0.75; // 突進斬命中者身上的 X 字斬痕單臂半長
 const DASH_RING_RADIUS = 1.5; // 突進斬終點雙圈衝擊環半徑
+const THRUST_FROM = 0.5;      // 突刺刺芒起點：自玩家位置沿面向前移 (m)
+const THRUST_HW = 0.17;       // 突刺刺芒半寬 (Roblox 風粗光矛；低檔由 slashWidthScale 縮)
+const THRUST_Y_DEFAULT = 1.2; // 刺芒預設高度 (胸口)
+const PIERCE_TIP = 1.3;       // 突刺貫穿 (PIERCE) 特效衝擊點：玩家位置沿面向前移 (劍尖水平位置；收勢姿勢下劍尖不在前方，不取模型)
+const PIERCE_RING_RADIUS = 1.2; // 千瓣綻放衝擊環半徑
+const _lineOrigin = new Float32Array(2);
 const _pathProbe = new Float32Array(3);
 const _impactFb: ImpactFeedback = { hitStop: 0, shake: 0 };
 const _fxBossDir = new THREE.Vector3();
@@ -848,6 +854,20 @@ export class CombatSystem {
     if (move.slashFx === 'X' && strikeIndex === 1) {
       slashFX.crossSlash(pos.x, pos.y + SLASH_X_HEIGHT, pos.z, player.rotationY, colorR, colorL);
     }
+    if (move.fx === 'PIERCE' && move.lunge) {
+      this.spawnPierceFx(move, strikeIndex, colorR, colorL);
+      return;
+    }
+    if (move.slashFx === 'THRUST') {
+      // 突刺刺芒：每刺沿面向一道十字截面光矛 (自身前 0.5m 到判定外緣)，奇偶擊紅 / 金交替，劍尖處星芒
+      const fx = Math.sin(player.rotationY), fz = Math.cos(player.rotationY);
+      const len = player.getWeaponReach() * move.reach;
+      const y = pos.y + (move.thrustY[strikeIndex] ?? THRUST_Y_DEFAULT);
+      const color = strikeIndex % 2 === 1 ? colorL : colorR;
+      slashFX.thrust(pos.x + fx * THRUST_FROM, pos.z + fz * THRUST_FROM, pos.x + fx * len, pos.z + fz * len, y, THRUST_HW, color);
+      slashFX.hitFlash(pos.x + fx * len, y, pos.z + fz * len, weaponFxStyle(strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R).tipColor, 0.8);
+      return;
+    }
     if (move.fx !== 'DASH' || !move.lunge) return;
     const o = player.dashSerial === player.moveSerial ? player.dashOrigin : pos;
     if (strikeIndex === move.extraStrikes.length) {
@@ -863,6 +883,30 @@ export class CombatSystem {
       const len = Math.hypot(pos.x - o.x, pos.z - o.z);
       slashFX.crossAt((pos.x + o.x) / 2, pos.y + 1.1, (pos.z + o.z) / 2, player.rotationY, Math.min(2.2, 0.9 + len * 0.3), colorR, colorL);
     }
+  }
+
+  // 突刺貫穿 (fx 'PIERCE')：突進中的小擊 → 突進光帶 (玫瑰紅胸口光帶 + 金色地面風痕)；
+  // 主擊 → 自突進起點貫穿到劍尖前方 len 的一線長光 (十字截面、池滿時強制覆蓋) + 劍尖白熱星芒
+  private spawnPierceFx(move: KfMove, strikeIndex: number, colorR: number, colorL: number) {
+    const { player } = this.ctx;
+    const lunge = move.lunge!;
+    const pos = player.position;
+    const fx = Math.sin(player.rotationY), fz = Math.cos(player.rotationY);
+    const o = player.dashSerial === player.moveSerial ? player.dashOrigin : pos;
+    if (strikeIndex > 0) {
+      const frac = Math.min(1, Math.max(0, (lunge.to - strikeFrac(move, strikeIndex)) / (lunge.to - lunge.from)));
+      const ex = pos.x + fx * lunge.dist * frac * DASH_BAND_REMAIN;
+      const ez = pos.z + fz * lunge.dist * frac * DASH_BAND_REMAIN;
+      slashFX.dashBand(o.x, o.z, ex, ez, pos.y + (move.thrustY[strikeIndex] ?? THRUST_Y_DEFAULT), 0.22, colorR);
+      slashFX.dashBand(o.x, o.z, ex, ez, pos.y + 0.05, 0.6, colorL);
+      return;
+    }
+    const len = (move.aoe?.len ?? 1) * player.getWeaponReach();
+    const ex = pos.x + fx * len, ez = pos.z + fz * len;
+    const y = pos.y + (move.thrustY[0] ?? THRUST_Y_DEFAULT);
+    slashFX.thrust(o.x, o.z, ex, ez, y, THRUST_HW * 1.9, colorR, true);
+    slashFX.dashBand(o.x, o.z, ex, ez, pos.y + 0.05, 0.55, colorL);
+    slashFX.hitFlash(ex, y, ez, weaponFxStyle(player.activeWeapon.fx.R).tipColor, 1.6);
   }
 
   // 命中特效 (全武器)：受擊目標胸口出星芒 + 塊狀碎片 + 元素附加層 (見 effects/meleeHitFx)；每擊出特效的目標數依品質上限，
@@ -1089,9 +1133,9 @@ export class CombatSystem {
     const fx = weapon.finisherFx;
     if (fx.feathers) comboFinisherFX.featherBurst(_fxFeatherPoint.set(p.x, p.y + FEATHER_HEIGHT, p.z), fx.featherColors);
     if (inPond || inPool) return;
-    comboFinisherFX.spinWave(p, move.fx === 'DASH' ? DASH_RING_RADIUS : radius, p.y + (fx.waistY ?? 0), style,
-      grounded ? fx.landRadius ?? 0 : 0, p.y, FX_FIST_LAND_DELAY);
-    if (move.fx === 'SPIN') spawnFinisherExtras(p, radius, style, weapon.impactClass, 'SPIN', p.y + (fx.waistY ?? 0.9));
+    const ringR = move.fx === 'DASH' ? DASH_RING_RADIUS : move.fx === 'PIERCE' ? PIERCE_RING_RADIUS : radius;
+    comboFinisherFX.spinWave(p, ringR, p.y + (fx.waistY ?? 0), style, grounded ? fx.landRadius ?? 0 : 0, p.y, FX_FIST_LAND_DELAY);
+    if (move.fx === 'SPIN' || move.fx === 'PIERCE') spawnFinisherExtras(p, ringR, style, weapon.impactClass, move.fx, p.y + (fx.waistY ?? 0.9));
   }
 
   // 取 (x, z) 腳下地面高度：與玩家落腳邏輯一致 (不高於 refY + 容許高度的最高水平面 / 坡道，預設 0)
@@ -1139,11 +1183,14 @@ export class CombatSystem {
     const pathO = player.dashSerial === player.moveSerial ? player.dashOrigin : player.position;
     const pathLen = isPath ? Math.hypot(player.position.x - pathO.x, player.position.z - pathO.z) : 0;
     if (isPath) center.set((player.position.x + pathO.x) / 2, player.position.y, (player.position.z + pathO.z) / 2);
-    // LINE：自玩家位置沿面向的長條 (長 len、半寬 halfWidth)；圓心取長條中點供生態園圓形判定
+    // LINE：自玩家位置沿面向的長條 (長 len、半寬 halfWidth)；fromDash 時自本招突進起點起算、長度加上實際突進距離
+    // (涵蓋突進穿過的人 + 劍尖前方)；圓心取長條中點供生態園 / Boss 圓形粗篩
     const isLine = aoe.shape === 'LINE';
-    const lineLen = isLine ? (aoe.len ?? 0) * weaponReach : 0;
+    const lineLen = isLine ? lineAoeSpan(aoe.fromDash === true, player.dashSerial === player.moveSerial, player.dashOrigin.x, player.dashOrigin.z,
+      player.position.x, player.position.z, (aoe.len ?? 0) * weaponReach, _lineOrigin) : 0;
+    const lineOx = _lineOrigin[0], lineOz = _lineOrigin[1];
     const lineHalfW = isLine ? (aoe.halfWidth ?? 0) * weaponReach : 0;
-    if (isLine) center.set(player.position.x + fwd.x * lineLen / 2, player.position.y, player.position.z + fwd.z * lineLen / 2);
+    if (isLine) center.set(lineOx + fwd.x * lineLen / 2, player.position.y, lineOz + fwd.z * lineLen / 2);
     // FAN：以 center 為頂點沿面向的扇形 (半徑 radius、半角 halfAngle)
     const isFan = aoe.shape === 'FAN';
     const fanCos = isFan ? Math.cos(aoe.halfAngle ?? Math.PI) : -1;
@@ -1152,6 +1199,7 @@ export class CombatSystem {
     if (fx) {
       const point = _scratchFinisherPoint;
       if (move.fx === 'SLAM') player.getBatTipWorld(point).setY(player.position.y);
+      else if (move.fx === 'PIERCE') point.copy(player.position).addScaledVector(fwd, PIERCE_TIP);
       else point.copy(player.position);
       this.onFinisherImpact(move, point, player.isGrounded);
     }
@@ -1161,7 +1209,7 @@ export class CombatSystem {
     // FAN / LINE：生態園生物改用同形狀判定 (圓形粗篩 + 扇形 / 長條精篩)
     let plantShape: PlantAoeShape | null = null;
     if (isFan) plantShape = _plantShape.set(0, player.position.x, player.position.z, fwd.x, fwd.z, fanCos, 0, 0);
-    else if (isLine) plantShape = _plantShape.set(1, player.position.x, player.position.z, fwd.x, fwd.z, 0, lineLen, lineHalfW);
+    else if (isLine) plantShape = _plantShape.set(1, lineOx, lineOz, fwd.x, fwd.z, 0, lineLen, lineHalfW);
     // 0. 世界 Boss 花劍客：與生態園相同的形狀判定 (圓 / 扇形 / 長條，LINE 起點可為突進起點)，佔一個命中名額
     const bossHits = this.ctx.fencerBossFight?.tryHitAoe(center, plantRadius, damage, plantShape) ? 1 : 0;
     if (bossHits > 0) this.spawnBossHitFx(move, opts ? opts.index : 0, fx);
@@ -1202,7 +1250,7 @@ export class CombatSystem {
           d = probePath(pathO.x, pathO.z, player.position.x, player.position.z, npc.position.x, npc.position.z, _pathProbe);
           if (d > radius + AOE_REACH_GRACE) continue;
         } else if (isLine) {
-          d = probeLine(player.position.x, player.position.z, fwd.x, fwd.z, lineLen, lineHalfW + AOE_REACH_GRACE, npc.position.x, npc.position.z, _pathProbe);
+          d = probeLine(lineOx, lineOz, fwd.x, fwd.z, lineLen, lineHalfW + AOE_REACH_GRACE, npc.position.x, npc.position.z, _pathProbe);
           if (d < 0) continue;
         } else if (isFan) {
           d = probeFan(center.x, center.z, fwd.x, fwd.z, radius + AOE_REACH_GRACE, fanCos, npc.position.x, npc.position.z);

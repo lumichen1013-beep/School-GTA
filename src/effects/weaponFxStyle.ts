@@ -1,10 +1,10 @@
 // 武器連段特效樣式表 (拖尾與武器發光共用；地裂特效可沿用 color)；各武器 / 世界變體使用哪一組見 src/weapons/defs
-export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET' | 'DUAL_R' | 'DUAL_L' | 'BOOK' | 'BALL' | 'STONE';
+export type WeaponFxId = 'FIST' | 'BAT' | 'GOLD' | 'BATON' | 'RACKET' | 'DUAL_R' | 'DUAL_L' | 'BOOK' | 'BALL' | 'STONE' | 'RAPIER' | 'RAPIER_GOLD';
 
 // 元素主題：決定命中特效的附加層 (見 effects/meleeHitFx)
 // IMPACT 氣勁 (拳)、WOOD 木屑重擊塵 (普通棒)、THUNDER 落雷 (黃金棒)、ELECTRIC 電弧 (警棍)、WIND 羽毛風切 (羽球拍 / 雙燕)、
-// PAGE 書頁紛飛 (綁帶捆書)、KI 氣功波 (籃球)、STONE 石屑 (彈弓)
-export type FxElement = 'IMPACT' | 'WOOD' | 'THUNDER' | 'ELECTRIC' | 'WIND' | 'PAGE' | 'KI' | 'STONE';
+// PAGE 書頁紛飛 (綁帶捆書)、KI 氣功波 (籃球)、STONE 石屑 (彈弓)、PETAL 玫瑰花瓣 (玫瑰細劍)
+export type FxElement = 'IMPACT' | 'WOOD' | 'THUNDER' | 'ELECTRIC' | 'WIND' | 'PAGE' | 'KI' | 'STONE' | 'PETAL';
 
 // 拖尾三色漸層：tipColor = 亮核心 (外緣亮帶)、color = 主色外層、tail = 尾端變色 (殘影越舊越偏此色)。
 // 皆為高飽和色；拖尾以預乘 alpha 近乎不透明地蓋住背景，白地磚與暮紅結界下都看得到 (不靠加法發光)
@@ -40,6 +40,9 @@ export const WEAPON_FX_STYLES: Record<WeaponFxId, WeaponFxStyle> = {
   BALL:   { color: 0xff8a2a, tipColor: 0xffd0a0, tail: 0xff4d1a, intensity: 1.0,  life: 0.15, tipExt: 0,    glow: 0,   impact: 0xff8a2a, element: 'KI' },
   // 彈弓：淡金 / 米白 (蓄力光環 / 光痕 / 命中閃光)；不揮拖尾
   STONE:  { color: 0xffd98a, tipColor: 0xfff4d6, tail: 0xc9a25a, intensity: 1.0,  life: 0.15, tipExt: 0,    glow: 0,   impact: 0xffd98a, element: 'STONE' },
+  // 玫瑰細劍：玫瑰紅主色 + 奶金核心、尾端燃金 (與花劍客粉 / 洋紅 / 紫預警以「紅 → 金」漸層區隔)；RAPIER_GOLD 為奇數擊的金色命中 (金主色、尾端玫瑰紅)
+  RAPIER:      { color: 0xe8173a, tipColor: 0xfff1c9, tail: 0xffb81c, intensity: 1.35, life: 0.22, tipExt: 1.3, glow: 1.2, impact: 0xff2a3d, element: 'PETAL' },
+  RAPIER_GOLD: { color: 0xffb81c, tipColor: 0xfffbe6, tail: 0xe8173a, intensity: 1.35, life: 0.22, tipExt: 1.3, glow: 1.2, impact: 0xffb81c, element: 'PETAL' },
 };
 
 // 第三段 (終結技) 加強倍率：ext = 尖端外延長度、life = 拖尾壽命、brightness = 覆蓋率、glow = 武器發光

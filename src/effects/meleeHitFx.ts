@@ -13,6 +13,8 @@ import { IMPACT_PROFILES, type ImpactClass } from '../weapons/impactClass';
 const BOOK_PAGES = [0xf3efe2, 0xfaf7ee, 0x4f6fdc] as const;
 const WOOD_CHIPS = [0xc8873f, 0x8a5a2b, 0xffb35c, 0x6b4423] as const;
 const STONE_CHIPS = [0xb8b2a6, 0x8d877c, 0xffd98a] as const;
+// 玫瑰花瓣 (玫瑰細劍)：玫瑰紅 / 深酒紅 / 粉白 / 燃金 — 塊狀大片、慢落飄散
+export const ROSE_PETALS = [0xe8173a, 0x9e0f2c, 0xffd6df, 0xffb000] as const;
 // 星芒尺寸依重量 (終結技再 ×1.4)
 const FLASH_SCALE: Record<ImpactClass, number> = { LIGHT: 0.95, MEDIUM: 1.1, HEAVY: 1.3, GOLD: 1.45 };
 const RING_SIZE: Record<ImpactClass, number> = { LIGHT: 0.7, MEDIUM: 0.85, HEAVY: 1.05, GOLD: 1.2 };
@@ -35,6 +37,7 @@ function sparkOpts(el: FxElement, style: WeaponFxStyle, count: number, big: bool
     case 'WIND': o.speed = 5; o.up = 2.5; o.size = 0.09; o.gravity = 3; o.life = 0.35; break;
     case 'PAGE': o.colors = BOOK_PAGES; o.speed = 4.5; o.up = 3.5; o.size = 0.13; o.gravity = 6; o.life = 0.5; break;
     case 'STONE': o.colors = STONE_CHIPS; o.speed = 4; o.up = 3; o.size = 0.1; o.gravity = 14; o.life = 0.4; break;
+    case 'PETAL': o.colors = ROSE_PETALS; o.speed = 5; o.up = 3.2; o.size = 0.16; o.gravity = 3.5; o.life = 0.65; break;
     default: o.speed = 6.5; o.up = 3; o.size = 0.12; o.gravity = 9; o.life = 0.35; break;
   }
   if (big) { o.speed *= 1.5; o.up *= 1.4; o.size *= 1.25; o.life *= 1.3; }
@@ -78,6 +81,9 @@ export function spawnMeleeHitFx(x: number, y: number, z: number, dirX: number, d
     comboFinisherFX.featherBurst(_a.set(x, y, z), _palette, finisher ? 8 : 3, 0.6);
   } else if (el === 'PAGE') {
     comboFinisherFX.featherBurst(_a.set(x, y, z), BOOK_PAGES, finisher ? 10 : 6, 0.8);
+  } else if (el === 'PETAL') {
+    // 每刺炸出一小撮玫瑰花瓣 (終結技大把)；第二層金色星芒已由上方雙星芒處理
+    comboFinisherFX.featherBurst(_a.set(x, y, z), ROSE_PETALS, finisher ? 12 : 4, finisher ? 1.1 : 0.7);
   }
   return used;
 }
@@ -98,7 +104,7 @@ export function spawnWeaponArc(base: THREE.Vector3, tip: THREE.Vector3, style: W
 }
 
 // 終結技附加層 (在既有地裂 / 雙環 / 羽毛之上)：p 為衝擊點 (呼叫端已取地面高度)、radius 為群攻半徑
-export function spawnFinisherExtras(p: THREE.Vector3, radius: number, style: WeaponFxStyle, cls: ImpactClass, kind: 'SLAM' | 'SPIN' | 'DASH', waistY: number) {
+export function spawnFinisherExtras(p: THREE.Vector3, radius: number, style: WeaponFxStyle, cls: ImpactClass, kind: 'SLAM' | 'SPIN' | 'DASH' | 'PIERCE', waistY: number) {
   const prof = IMPACT_PROFILES[cls];
   const q = getFxQuality();
   const el = style.element ?? 'IMPACT';
@@ -124,5 +130,9 @@ export function spawnFinisherExtras(p: THREE.Vector3, radius: number, style: Wea
       _b.set(p.x + Math.cos(a + 1.2) * radius * 1.1, waistY + (Math.random() - 0.5) * 0.4, p.z + Math.sin(a + 1.2) * radius * 1.1);
       comboFinisherFX.arcBolt(_a, _b, k === 1 ? style.tail ?? style.color : style.color, 0.24, 1.0, 0.25);
     }
+  } else if (el === 'PETAL') {
+    // 千瓣綻放：劍尖處金色外環 + 大把玫瑰花瓣向四周炸開
+    slashFX.hitRing(p.x, y + 0.2, p.z, style.tail ?? style.color, Math.max(1.6, radius * 1.2));
+    comboFinisherFX.featherBurst(_a.set(p.x, y + 0.3, p.z), ROSE_PETALS, 18, 1.4);
   }
 }
