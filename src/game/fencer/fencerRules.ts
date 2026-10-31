@@ -280,6 +280,86 @@ export function segmentPointDistance(ax: number, az: number, bx: number, bz: num
   return Math.sqrt(dx * dx + dz * dz);
 }
 
+/** 自圓內一點 (ax, az) 沿單位方向 (dx, dz) 到圓周 (cx, cz, r) 的距離 (S4 荊棘臂長)；起點在圓外回傳 0 */
+export function rayCircleDistance(ax: number, az: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
+  const ox = ax - cx;
+  const oz = az - cz;
+  const b = ox * dx + oz * dz;
+  const c = ox * ox + oz * oz - r * r;
+  if (c > 0) return 0;
+  return -b + Math.sqrt(Math.max(0, b * b - c));
+}
+
+/** S4 十字第 k 臂的朝向 (yaw：方向 = (sin, cos))；四臂間隔 90° */
+export function thornArmYaw(baseYaw: number, k: number): number {
+  return baseYaw + k * Math.PI * 0.5;
+}
+
+/** S4 十字旋轉角：t 秒內由 baseYaw 線性轉 90° (dirSign = ±1)，t 超出範圍則夾住 */
+export function thornCrossYaw(baseYaw: number, dirSign: number, t: number, dur: number): number {
+  const k = dur > 0 ? Math.max(0, Math.min(1, t / dur)) : 1;
+  return baseYaw + dirSign * k * Math.PI * 0.5;
+}
+
+/**
+ * S4 玫瑰荊棘十字判定 (解析式)：以 (ax, az) 為中心、四臂各朝 yaw + k·90° 延伸到結界牆 (圓 cx, cz, r)，
+ * reach (0~1) 為荊棘生長比例；玩家 (px, pz) 到任一臂線段距離 ≤ halfW 時回傳臂索引 (0~3)，否則 -1。
+ */
+export function thornCrossHit(
+  ax: number, az: number, yaw: number, reach: number,
+  cx: number, cz: number, r: number,
+  px: number, pz: number, halfW: number
+): number {
+  for (let k = 0; k < 4; k++) {
+    const a = thornArmYaw(yaw, k);
+    const dx = Math.sin(a);
+    const dz = Math.cos(a);
+    const len = rayCircleDistance(ax, az, dx, dz, cx, cz, r) * reach;
+    if (len <= 0) continue;
+    if (segmentPointDistance(ax, az, ax + dx * len, az + dz * len, px, pz) <= halfW) return k;
+  }
+  return -1;
+}
+
+/**
+ * S5 花影雙人舞：分身站位 = 玩家位置 + (玩家→Boss 方向旋轉 ±angle) × dist，夾回圓內 (半徑 clampR)。
+ * angle 約 100°：兩條突刺線在玩家處交叉 (非共線)，玩家須沿夾角平分線外側閃出。
+ */
+export function pinchClonePos(
+  px: number, pz: number, bx: number, bz: number, sideSign: number, angle: number, dist: number,
+  cx: number, cz: number, clampR: number, out: { x: number; z: number }
+): { x: number; z: number } {
+  let dx = bx - px;
+  let dz = bz - pz;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-4) { dx = 0; dz = 1; } else { dx /= d; dz /= d; }
+  const a = angle * sideSign;
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  out.x = px + (dx * ca - dz * sa) * dist;
+  out.z = pz + (dx * sa + dz * ca) * dist;
+  const ox = out.x - cx;
+  const oz = out.z - cz;
+  const od = Math.hypot(ox, oz);
+  if (od > clampR) { out.x = cx + (ox / od) * clampR; out.z = cz + (oz / od) * clampR; }
+  return out;
+}
+
+/**
+ * S5 夾擊判定：本體突刺 (a→b) 與分身突刺 (c→e) 兩條膠囊 (半徑 r)，回傳位元 1 = 本體命中、2 = 分身命中 (0 = 閃過)。
+ * 呼叫端以「同一回合共用一次命中」處理：被夾住也只吃一次傷害。
+ */
+export function pinchHitMask(
+  ax: number, az: number, bx: number, bz: number,
+  cx: number, cz: number, ex: number, ez: number,
+  px: number, pz: number, r: number
+): number {
+  let m = 0;
+  if (segmentPointDistance(ax, az, bx, bz, px, pz) <= r) m |= 1;
+  if (segmentPointDistance(cx, cz, ex, ez, px, pz) <= r) m |= 2;
+  return m;
+}
+
 /** 自圓內一點出發的線段首次穿出圓 (半徑 r) 的參數 t (0~1)；未穿出回傳 -1 (投射物撞結界牆) */
 export function segmentExitCircleT(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, r: number): number {
   const bdx = bx - cx;

@@ -9,7 +9,8 @@ vi.mock('../src/effects/ComboFinisherFX', () => ({ comboFinisherFX: { groundSlam
 
 import {
   FENCER, SUNFLOWER_LINES, SunflowerTaunt, BossHealthBars, CombatRegen, canSkipIntro, victoryReward,
-  clampToCircle, segmentExitCircleT, segmentPointDistance, bossBarLabel, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS
+  clampToCircle, segmentExitCircleT, segmentPointDistance, bossBarLabel, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS,
+  rayCircleDistance, thornCrossYaw, thornCrossHit, pinchClonePos, pinchHitMask
 } from '../src/game/fencer/fencerRules';
 import { AwakeningStats, PlayerAwakening, AWAKEN_INTRO_SEC } from '../src/game/fencer/PlayerAwakening';
 import { BattleModeSwitch } from '../src/game/fencer/BattleMode';
@@ -303,8 +304,14 @@ describe('花劍客本體', () => {
     return { boss, host };
   }
 
-  it('招式插槽：S1~S3 已實作，S4 / S5 預留於第 2、3 管循環', () => {
-    expect([...IMPLEMENTED_ATTACKS]).toEqual(['S1', 'S2', 'S3']);
+  it('招式插槽：S1~S5 全部啟用，S4 於第 2、3 管、S5 於第 3 管循環', () => {
+    expect([...IMPLEMENTED_ATTACKS]).toEqual(['S1', 'S2', 'S3', 'S4', 'S5']);
+    expect(PHASES[0].rotation).not.toContain('S4');
+    expect(PHASES[1].rotation).not.toContain('S5');
+    expect(PHASES[2].rotation).toContain('S4');
+    // 終樂章：S5 每輪、S4 隔輪
+    expect(PHASES[2].rotation.filter((a) => a === 'S5').length).toBe(2);
+    expect(PHASES[2].rotation.filter((a) => a === 'S4').length).toBe(1);
     expect(PHASES[0].rotation).toEqual(['S1', 'S2', 'S1', 'S3']);
     expect(PHASES[1].rotation).toContain('S4');
     expect(PHASES[2].rotation).toContain('S5');
@@ -354,6 +361,150 @@ describe('花劍客本體', () => {
     }
     // 中立期結束後確實輪替出招 (不只開場第一招)
     expect(host.reasons.size).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
+  const cx = FENCER.CENTER_X;
+  const cz = FENCER.CENTER_Z;
+  const R = FENCER.ARENA_R;
+
+  it('荊棘臂長 = 插劍點到結界牆的距離', () => {
+    expect(rayCircleDistance(cx, cz, 0, 1, cx, cz, R)).toBeCloseTo(R);
+    expect(rayCircleDistance(cx, cz + 4, 0, 1, cx, cz, R)).toBeCloseTo(R - 4);
+    expect(rayCircleDistance(cx, cz + 4, 0, -1, cx, cz, R)).toBeCloseTo(R + 4);
+    expect(rayCircleDistance(cx, cz + 20, 0, 1, cx, cz, R)).toBe(0);
+  });
+
+  it('十字四臂命中、臂間安全，旋轉中途 45° 掃到原本的安全位置', () => {
+    // yaw 0：四臂沿 +Z / +X / -Z / -X
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx, cz + 6, 0.6)).toBe(0);
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx + 8, cz + 0.3, 0.6)).toBe(1);
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx - 5, cz, 0.6)).toBe(3);
+    const safeX = cx + 4 * Math.SQRT1_2;
+    const safeZ = cz + 4 * Math.SQRT1_2;
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, safeX, safeZ, 0.6)).toBe(-1);
+    // 旋轉一半 (2.5s 中的 1.25s) = 45°：原安全點被掃到
+    const mid = thornCrossYaw(0, 1, 1.25, 2.5);
+    expect(mid).toBeCloseTo(Math.PI / 4);
+    expect(thornCrossHit(cx, cz, mid, 1, cx, cz, R, safeX, safeZ, 0.6)).toBeGreaterThanOrEqual(0);
+    // 跟著轉 (角度同步 +45°) 的玩家仍在兩臂之間
+    const followX = cx + 4 * Math.sin(Math.PI / 4 + Math.PI / 4);
+    const followZ = cz + 4 * Math.cos(Math.PI / 4 + Math.PI / 4);
+    expect(thornCrossHit(cx, cz, mid, 1, cx, cz, R, followX, followZ, 0.6)).toBe(-1);
+    // 轉完 90° 十字與起始重合；超出時間夾住
+    expect(thornCrossYaw(0, -1, 9, 2.5)).toBeCloseTo(-Math.PI / 2);
+    // 生長中 (reach 0.5) 尚未長到 10m 外
+    expect(thornCrossHit(cx, cz, 0, 0.5, cx, cz, R, cx, cz + 10, 0.6)).toBe(-1);
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx, cz + 10, 0.6)).toBe(0);
+  });
+
+  it('夾擊：分身站在玩家另一側 100°、兩線交叉於玩家；共用位元遮罩判定', () => {
+    const out = { x: 0, z: 0 };
+    const px = cx, pz = cz;
+    pinchClonePos(px, pz, px, pz + 6, 1, (100 * Math.PI) / 180, 5, cx, cz, R - 0.8, out);
+    expect(Math.hypot(out.x - px, out.z - pz)).toBeCloseTo(5);
+    const cosAng = ((out.x - px) * 0 + (out.z - pz) * 1) / 5;
+    expect(Math.acos(cosAng)).toBeCloseTo((100 * Math.PI) / 180);
+    // 夾回結界內
+    pinchClonePos(cx + 14, cz, cx + 8, cz, 1, Math.PI, 5, cx, cz, R - 0.8, out);
+    expect(Math.hypot(out.x - cx, out.z - cz)).toBeLessThanOrEqual(R - 0.8 + 1e-6);
+    // 本體 (0,6)→(0,-2.5)、分身 out→穿過玩家
+    pinchClonePos(px, pz, px, pz + 6, -1, (100 * Math.PI) / 180, 5, cx, cz, R - 0.8, out);
+    const ex = px + (px - out.x) * 0.5, ez = pz + (pz - out.z) * 0.5;
+    expect(pinchHitMask(px, pz + 6, px, pz - 2.5, out.x, out.z, ex, ez, px, pz, 0.7)).toBe(3);
+    // 往兩線夾角外側閃 3m：兩邊都閃過
+    const bis = Math.atan2((0 + (out.x - px) / 5), (1 + (out.z - pz) / 5));
+    const dodgeX = px - Math.sin(bis) * 3, dodgeZ = pz - Math.cos(bis) * 3;
+    expect(pinchHitMask(px, pz + 6, px, pz - 2.5, out.x, out.z, ex, ez, dodgeX, dodgeZ, 0.7)).toBe(0);
+    // 只在本體線上
+    expect(pinchHitMask(px, pz + 6, px, pz - 2.5, out.x, out.z, ex, ez, px, pz + 4, 0.7)).toBe(1);
+  });
+
+  function makeBossAt(bar: number, playerPos: THREE.Vector3) {
+    const host: FencerBossHost & { damage: Array<[number, string]> } = {
+      playerPos, playerVel: new THREE.Vector3(), playerDead: false, isTouch: false, playerOutOfCombat: false,
+      damage: [],
+      damagePlayer(amount, _d, _h, _v, reason) { this.damage.push([amount, reason]); },
+      onBossDamaged: () => undefined, shake: () => undefined, hitStop: () => undefined
+    };
+    const fx = new BossFX();
+    const boss = new FencerBoss(host, fx);
+    boss.resetForFight(cx, cz);
+    boss.startFight(0);
+    (boss as unknown as { phase: number }).phase = bar;
+    return { boss, host, fx };
+  }
+
+  it('S4：靜止玩家被爆發 + 旋轉掃過各命中一次 (9)；跳起 (腳高 > 0.6m) 全程不受傷；收招後荊棘收起', () => {
+    const player = new THREE.Vector3(cx, 0, cz + 6);
+    const { boss, host, fx } = makeBossAt(1, player);
+    (boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S4', false);
+    let sawThorns = false;
+    for (let i = 0; i < 180 && boss.act === 'ATTACK'; i++) {
+      boss.update(1 / 30);
+      if ((fx as unknown as { thornMesh: THREE.Mesh }).thornMesh.visible) sawThorns = true;
+    }
+    expect(sawThorns).toBe(true);
+    expect(host.damage).toEqual([[9, '玫瑰荊棘十字'], [9, '玫瑰荊棘十字']]);
+    expect(boss.act).toBe('RECOVER');
+    expect((fx as unknown as { thornMesh: THREE.Mesh }).thornMesh.visible).toBe(false);
+
+    const jumper = new THREE.Vector3(cx, 1.0, cz + 6);
+    const b2 = makeBossAt(1, jumper);
+    (b2.boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S4', false);
+    for (let i = 0; i < 180; i++) b2.boss.update(1 / 30);
+    expect(b2.host.damage.length).toBe(0);
+  });
+
+  it('S4：跟著旋轉移動 (停在兩臂之間) 的玩家不受傷；插劍期間 Boss 可被打 (破綻)', () => {
+    const follower = new THREE.Vector3(cx, 0, cz + 6);
+    const f = makeBossAt(1, follower);
+    const fb = f.boss as unknown as { beginAttack(id: string, c: boolean): void; s4Yaw: number; s4Dir: number; s4Anchor: THREE.Vector3; atkStep: number; atkTimer: number };
+    fb.beginAttack('S4', false);
+    for (let i = 0; i < 180 && f.boss.act === 'ATTACK'; i++) {
+      // 插劍後站到兩臂中間 (半徑 5m)，旋轉中同步跟轉
+      if (fb.atkStep >= 1) {
+        const yaw = fb.atkStep === 3 ? thornCrossYaw(fb.s4Yaw, fb.s4Dir, fb.atkTimer, 2.5) : fb.atkStep >= 4 ? fb.s4Yaw + fb.s4Dir * Math.PI / 2 : fb.s4Yaw;
+        follower.set(fb.s4Anchor.x + Math.sin(yaw + Math.PI / 4) * 5, 0, fb.s4Anchor.z + Math.cos(yaw + Math.PI / 4) * 5);
+      }
+      f.boss.update(1 / 30);
+    }
+    expect(f.host.damage.length).toBe(0);
+
+    const player = new THREE.Vector3(cx + 1.4, 0, cz + 1.4);
+    const { boss } = makeBossAt(1, player);
+    (boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S4', false);
+    for (let i = 0; i < 45; i++) boss.update(1 / 30); // 已插劍、旋轉中
+    expect(boss.tryHitMelee(new THREE.Vector3(boss.position.x + 1, 0, boss.position.z), 1.2, 30)?.applied).toBe(30);
+  });
+
+  it('S5：靜止玩家兩回合各吃一次 8 (被夾也只算一次)；分身不可被攻擊、刺完即散', () => {
+    const player = new THREE.Vector3(cx, 0, cz + 2);
+    const { boss, host } = makeBossAt(2, player);
+    boss.position.set(cx, 0, cz + 8);
+    (boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S5', false);
+    expect(boss.clone.visible).toBe(true);
+    // 打分身位置：分身不是受擊體
+    const cp = boss.clone.position.clone().setY(1.2);
+    expect(Math.hypot(cp.x - boss.position.x, cp.z - boss.position.z)).toBeGreaterThan(2);
+    expect(boss.tryHitAtPoint(cp, 0.1, 50)).toBeNull();
+    for (let i = 0; i < 120 && boss.act === 'ATTACK'; i++) boss.update(1 / 30);
+    expect(host.damage).toEqual([[8, '花影雙人舞'], [8, '花影雙人舞']]);
+    for (let i = 0; i < 30; i++) boss.update(1 / 30);
+    expect(boss.clone.visible).toBe(false);
+  });
+
+  it('第 2、3 管 AI 循環確實放出 S4 / S5，Boss 待在結界內', () => {
+    for (const [bar, reason] of [[1, '玫瑰荊棘十字'], [2, '花影雙人舞']] as const) {
+      const player = new THREE.Vector3(cx + 0.5, 0, cz + 5);
+      const { boss, host } = makeBossAt(bar, player);
+      for (let i = 0; i < 30 * 60; i++) {
+        boss.update(1 / 30);
+        expect(Math.hypot(boss.position.x - cx, boss.position.z - cz)).toBeLessThanOrEqual(R - FENCER.BOSS_CLAMP_PAD + 1e-6);
+      }
+      expect(host.damage.some(([, r]) => r === reason)).toBe(true);
+    }
   });
 });
 

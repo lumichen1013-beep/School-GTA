@@ -1,21 +1,27 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getFxTier, type FxTier } from './fxQuality';
 
 // 花劍客 Boss 特效：每類 1 個 InstancedMesh (1 draw call)、依最高檔預建池、閒置 visible=false、執行期零配置。
 // 1. 地面預警 decal (長條 / 圓 / 虛線點 / 大圈 / 脫戰回血綠光圈)：程序化 shader，加法混色、貼地細長
 // 2. 花瓣粒子：剪裁 quad (discard，不透明、寫深度、無混合) → 數量大也幾乎不增加 overdraw
 // 3. 花瓣柱 (S3 綻放)：開口圓柱加法混色
+// 4. 荊棘十字 (S4)：塊狀荊棘節 (粗藤 + 三根尖刺)，不透明、寫深度、無混合 → 不增加 overdraw；四臂 × 每臂 N 節
+// 另提供 S5 花影分身的剪影材質 (不透明 + 塊狀 discard 溶解，無混合)，幾何由 Boss 端以本體零件合併
 // 數量依 getFxTier() 降級；碰撞與命中判定一律在呼叫端以解析式計算，本模組只負責畫面。
 
-interface BossFxTierSpec { decals: number; petals: number; pillarLayers: number; hatDots: number }
+interface BossFxTierSpec { decals: number; petals: number; pillarLayers: number; hatDots: number; thornSegs: number }
 export const BOSS_FX_TIERS: Readonly<Record<FxTier, BossFxTierSpec>> = {
-  high: { decals: 24, petals: 240, pillarLayers: 2, hatDots: 16 },
-  medium: { decals: 24, petals: 160, pillarLayers: 2, hatDots: 16 },
-  low: { decals: 16, petals: 80, pillarLayers: 1, hatDots: 8 }
+  high: { decals: 24, petals: 240, pillarLayers: 2, hatDots: 16, thornSegs: 12 },
+  medium: { decals: 24, petals: 160, pillarLayers: 2, hatDots: 16, thornSegs: 10 },
+  low: { decals: 16, petals: 80, pillarLayers: 1, hatDots: 8, thornSegs: 6 }
 };
 const MAX_DECALS = 24;
 const MAX_PETALS = 240;
 const MAX_PILLARS = 18;
+const THORN_ARMS = 4;
+const MAX_THORN_SEGS = 12;
+const MAX_THORNS = THORN_ARMS * MAX_THORN_SEGS;
 const REGEN_SLOT = 0; // 脫戰回血光圈固定佔用第 0 槽
 
 export const DECAL_LINE = 0;
@@ -123,6 +129,97 @@ void main() {
   gl_FragColor = vec4(col * a, a);
 }`;
 
+// 荊棘節：頂點色 (深紅藤 / 刺) + 依高度往亮粉刺尖漸層，假光照 (固定方向) + 生長爆發白熱 uHot
+const THORN_VERT = /* glsl */`
+attribute vec3 color;
+varying vec3 vCol;
+varying float vH;
+varying float vShade;
+void main() {
+  vCol = color;
+  vH = position.y;
+  vec3 n = normalize(mat3(instanceMatrix) * normal);
+  vShade = 0.55 + 0.45 * max(dot(n, normalize(vec3(0.35, 0.85, 0.4))), 0.0);
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}`;
+const THORN_FRAG = /* glsl */`
+uniform vec3 uTip;
+uniform float uHot;
+varying vec3 vCol;
+varying float vH;
+varying float vShade;
+void main() {
+  vec3 col = mix(vCol, uTip, smoothstep(0.3, 0.95, vH)) * vShade;
+  col = mix(col, vec3(1.0, 0.92, 0.96), uHot);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+// 花影分身剪影：深紫核心 + 亮洋紅邊緣光 (法線對視線)，uDissolve 以物件空間方塊雜湊 discard 溶解 (不混合)
+const SIL_VERT = /* glsl */`
+varying vec3 vN;
+varying vec3 vV;
+varying vec3 vP;
+void main() {
+  vP = position;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vN = normalize(normalMatrix * normal);
+  vV = -mv.xyz;
+  gl_Position = projectionMatrix * mv;
+}`;
+const SIL_FRAG = /* glsl */`
+uniform vec3 uCore;
+uniform vec3 uRim;
+uniform float uDissolve;
+uniform float uTime;
+varying vec3 vN;
+varying vec3 vV;
+varying vec3 vP;
+void main() {
+  float h = fract(sin(dot(floor(vP * 9.0), vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+  if (h < uDissolve) discard;
+  float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.6);
+  float band = 0.5 + 0.5 * sin(vP.y * 14.0 - uTime * 9.0);
+  vec3 col = mix(uCore, uRim, clamp(rim * 1.3 + band * 0.18, 0.0, 1.0));
+  col += uRim * step(h, uDissolve + 0.12) * step(0.001, uDissolve) * 1.2; // 溶解中：邊緣亮緣
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/** 荊棘節幾何：沿 +Z 長 1 的粗藤 + 中央高刺 + 左右斜刺 (塊狀、低多邊形)，頂點色 */
+function buildThornSegment(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const paint = (g: THREE.BufferGeometry, hex: number) => {
+    const c = new THREE.Color(hex);
+    const geo = g.index ? g.toNonIndexed() : g;
+    const n = geo.attributes.position.count;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    geo.deleteAttribute('uv');
+    parts.push(geo);
+  };
+  paint(new THREE.BoxGeometry(0.42, 0.26, 1.04).translate(0, 0.13, 0), 0x4a0a24);
+  paint(new THREE.BoxGeometry(0.3, 0.18, 0.5).rotateY(0.5).translate(0.06, 0.2, 0.12), 0x6e0f34);
+  paint(new THREE.ConeGeometry(0.2, 0.95, 4).rotateY(Math.PI / 4).rotateX(0.18).translate(0, 0.6, 0.05), 0x8a1240);
+  paint(new THREE.ConeGeometry(0.13, 0.6, 4).rotateZ(0.75).translate(-0.24, 0.4, -0.22), 0x8a1240);
+  paint(new THREE.ConeGeometry(0.13, 0.6, 4).rotateZ(-0.75).translate(0.24, 0.4, 0.3), 0x8a1240);
+  const merged = mergeGeometries(parts)!;
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
+/** 花影分身剪影材質 (不透明，Boss 端以本體零件合併的單一幾何使用) */
+export function createSilhouetteMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: SIL_VERT, fragmentShader: SIL_FRAG, fog: false,
+    uniforms: {
+      uCore: { value: new THREE.Color(0x3d0a52) },
+      uRim: { value: new THREE.Color(0xff3fd2) },
+      uDissolve: { value: 1 },
+      uTime: { value: 0 }
+    }
+  });
+}
+
 interface DecalSlot {
   life: number; max: number; kind: number;
   fillDur: number; // 填充時間 (秒；0 = 固定滿)
@@ -145,6 +242,7 @@ const _e = new THREE.Euler();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const _xAxis = new THREE.Vector3(1, 0, 0);
 const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+const easeOutBack = (t: number) => { const c = 2.2; const u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
 
 function writeColor(arr: Float32Array, i: number, hex: number) {
   arr[i * 3] = ((hex >> 16) & 255) / 255;
@@ -156,6 +254,10 @@ export const PETAL_PALETTE_ROSE: readonly number[] = [0xd61f4b, 0xf25c84, 0xb312
 export const PETAL_PALETTE_SUN: readonly number[] = [0xf6c21c, 0xffd95a, 0xe89a0c, 0xfff1a8];
 export const PETAL_PALETTE_LEAF: readonly number[] = [0x5fd47a, 0x8ef0a2, 0x3cb35a];
 export const PETAL_PALETTE_DUSK: readonly number[] = [0x7a1035, 0xc2185b, 0xff8a65, 0xffd54f];
+/** S4 荊棘碎片：深紅 / 熱粉 (避開回血淡綠與覺醒金) */
+export const PETAL_PALETTE_THORN: readonly number[] = [0xff1f6b, 0x8a0f3c, 0xff5fa2, 0x52082a];
+/** S5 花影：紫 / 洋紅 */
+export const PETAL_PALETTE_SHADOW: readonly number[] = [0xb03cff, 0xff3fd2, 0x5e1290, 0xff8ae6];
 
 export class BossFX {
   public readonly group = new THREE.Group();
@@ -171,6 +273,9 @@ export class BossFX {
   private readonly pillarFx: THREE.InstancedBufferAttribute;
   private readonly pillarCol: THREE.InstancedBufferAttribute;
   private readonly pillars: PillarSlot[] = [];
+  private readonly thornMesh: THREE.InstancedMesh;
+  private readonly thornMat: THREE.ShaderMaterial;
+  private thornHot = 0;
   private time = 0;
   private regenOn = false;
   private readonly regenPos = new THREE.Vector3();
@@ -233,7 +338,18 @@ export class BossFX {
     }
     this.pillarMesh.visible = false;
 
-    this.group.add(this.decalMesh, this.petalMesh, this.pillarMesh);
+    // 4. 荊棘十字
+    this.thornMat = new THREE.ShaderMaterial({
+      vertexShader: THORN_VERT, fragmentShader: THORN_FRAG, fog: false,
+      uniforms: { uTip: { value: new THREE.Color(0xff3d8b) }, uHot: { value: 0 } }
+    });
+    this.thornMesh = new THREE.InstancedMesh(buildThornSegment(), this.thornMat, MAX_THORNS);
+    this.thornMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.thornMesh.frustumCulled = false;
+    for (let i = 0; i < MAX_THORNS; i++) this.thornMesh.setMatrixAt(i, _zero);
+    this.thornMesh.visible = false;
+
+    this.group.add(this.decalMesh, this.petalMesh, this.pillarMesh, this.thornMesh);
   }
 
   private get tier(): BossFxTierSpec {
@@ -305,8 +421,8 @@ export class BossFX {
 
   // ===== 花瓣 =====
 
-  /** 花瓣爆散：自 (x, y, z) 向外拋射 count 片 */
-  public petalBurst(x: number, y: number, z: number, count: number, speed: number, palette: readonly number[], upward: number = 2.5) {
+  /** 花瓣爆散：自 (x, y, z) 向外拋射 count 片 (sizeMul > 1 = 塊狀碎片) */
+  public petalBurst(x: number, y: number, z: number, count: number, speed: number, palette: readonly number[], upward: number = 2.5, sizeMul: number = 1) {
     const n = Math.min(count, this.tier.petals);
     for (let k = 0; k < n; k++) {
       const p = this.allocPetal();
@@ -316,7 +432,7 @@ export class BossFX {
       p.vx = Math.cos(a) * s; p.vz = Math.sin(a) * s; p.vy = upward * (0.5 + Math.random());
       p.life = p.max = 1.1 + Math.random() * 0.8;
       p.rx = Math.random() * 6; p.ry = Math.random() * 6; p.spin = (Math.random() - 0.5) * 14;
-      p.size = 0.14 + Math.random() * 0.1;
+      p.size = (0.14 + Math.random() * 0.1) * sizeMul;
       p.color = palette[k % palette.length];
       p.swirl = 0;
     }
@@ -363,6 +479,58 @@ export class BossFX {
     this.pillarMesh.visible = true;
   }
 
+  // ===== 荊棘十字 (S4) =====
+
+  /** 每臂荊棘節數 (依畫質) */
+  public get thornSegments(): number {
+    return this.tier.thornSegs;
+  }
+
+  /**
+   * 擺放十字荊棘：中心 (ax, az)、第一臂朝 yaw (方向 = (sin, cos))，lens[k] 為第 k 臂到結界牆的長度；
+   * grow 0~1 為由中心往外的生長 (每節 easeOutBack 彈出)，sink 0~1 為整體縮回地面。每幀由 Boss 呼叫。
+   */
+  public setThornCross(ax: number, az: number, yaw: number, lens: ArrayLike<number>, grow: number, sink: number) {
+    const segs = this.tier.thornSegs;
+    this.thornMesh.visible = true;
+    for (let k = 0; k < THORN_ARMS; k++) {
+      const a = yaw + k * Math.PI * 0.5;
+      const dx = Math.sin(a);
+      const dz = Math.cos(a);
+      const len = lens[k];
+      const step = len / segs;
+      const front = len * grow;
+      for (let i = 0; i < MAX_THORN_SEGS; i++) {
+        const idx = k * MAX_THORN_SEGS + i;
+        const d = (i + 0.5) * step;
+        if (i >= segs || len <= 0.2 || d - step * 0.5 > front) { this.thornMesh.setMatrixAt(idx, _zero); continue; }
+        const pop = easeOutBack(Math.min(1, (front - (d - step * 0.5)) / 1.6));
+        // 節高度依索引交錯 (近大遠小) + 輕微搖擺
+        const hash = Math.sin(idx * 12.9898) * 43758.5453;
+        const jitter = hash - Math.floor(hash);
+        const hgt = (0.85 + 0.35 * jitter) * (1.15 - 0.35 * (i / segs)) * pop * (1 - sink);
+        _p.set(ax + dx * d, -0.05 - sink * 0.4, az + dz * d);
+        _q.setFromAxisAngle(_yAxis, a + (jitter - 0.5) * 0.35 + Math.sin(this.time * 7 + idx) * 0.04);
+        _m.compose(_p, _q, _s.set(1.0 + 0.25 * jitter, Math.max(0.001, hgt), step * 1.08));
+        this.thornMesh.setMatrixAt(idx, _m);
+      }
+    }
+    this.thornMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** 荊棘爆發瞬間白熱 (打擊幀) */
+  public thornFlash(amount: number = 1) {
+    this.thornHot = Math.max(this.thornHot, amount);
+  }
+
+  public hideThorns() {
+    if (!this.thornMesh.visible) return;
+    for (let i = 0; i < MAX_THORNS; i++) this.thornMesh.setMatrixAt(i, _zero);
+    this.thornMesh.instanceMatrix.needsUpdate = true;
+    this.thornMesh.visible = false;
+    this.thornHot = 0;
+  }
+
   // ===== 每幀 =====
 
   public update(dt: number) {
@@ -370,6 +538,8 @@ export class BossFX {
     this.updateDecals(dt);
     this.updatePetals(dt);
     this.updatePillars(dt);
+    if (this.thornHot > 0) this.thornHot = Math.max(0, this.thornHot - dt * 5);
+    this.thornMat.uniforms.uHot.value = this.thornHot * 0.85;
   }
 
   private updateDecals(dt: number) {
@@ -486,6 +656,7 @@ export class BossFX {
     for (const p of this.petals) p.life = 0;
     for (const s of this.pillars) s.life = 0;
     this.regenOn = false;
+    this.hideThorns();
     for (let i = 0; i < MAX_DECALS; i++) this.decalMesh.setMatrixAt(i, _zero);
     for (let i = 0; i < MAX_PETALS; i++) this.petalMesh.setMatrixAt(i, _zero);
     for (let i = 0; i < MAX_PILLARS; i++) this.pillarMesh.setMatrixAt(i, _zero);
@@ -499,11 +670,11 @@ export class BossFX {
     this.pillarMesh.visible = false;
   }
 
-  /** shader 預熱：三類 mesh 暫時顯示交給 compile 後還原 */
+  /** shader 預熱：四類 mesh 暫時顯示交給 compile 後還原 */
   public prewarm(compile: () => void) {
-    const v = [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible];
-    this.decalMesh.visible = this.petalMesh.visible = this.pillarMesh.visible = true;
+    const v = [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible];
+    this.decalMesh.visible = this.petalMesh.visible = this.pillarMesh.visible = this.thornMesh.visible = true;
     compile();
-    [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible] = v;
+    [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible] = v;
   }
 }
