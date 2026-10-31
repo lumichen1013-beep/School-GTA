@@ -146,7 +146,7 @@ export class DetentionMode {
   public setCheckpoint(pos: THREE.Vector3, name: string) {
     this.ctx.detentionWorld.setCheckpoint(pos, name);
     this.ctx.wantedSystem.showBanner(`🚩 存檔點已更新：【${name}】！死亡後將在此處重生。`, 3500);
-    soundManager.playBroadcastChime();
+    soundManager.playBroadcastChime(pos);
   }
 
   // 守衛全體回到初始崗位並清除警戒 (玩家倒地與復甦時)；已擊敗的總教官維持倒地，不因玩家死亡復活
@@ -196,7 +196,7 @@ export class DetentionMode {
     if (wardenBoss && !this.isBossDefeated && (wardenBoss.hp <= 0 || wardenBoss.isPermanentlyKnockedOut)) {
       if (this.onBossDefeated(wardenBoss)) {
         wantedSystem.showBanner('🏆 擊倒特訓總教官！掉落【萬能逃脫鑰匙卡】！快前往南大門！', 5000);
-        soundManager.playSchoolBell();
+        soundManager.playSchoolBell(wardenBoss.position);
       }
     }
 
@@ -223,7 +223,7 @@ export class DetentionMode {
         this.pendingSighting = true;
         if (!this.searchlightLocked) {
           this.searchlightLocked = true;
-          soundManager.playWhistle();
+          soundManager.playWhistle(player.position);
           if (wantedSystem.stars < 2) {
             wantedSystem.reportCrime(2, '探照燈高空鎖定！發布緊急圍剿警報！');
           }

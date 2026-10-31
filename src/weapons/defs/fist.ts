@@ -16,7 +16,7 @@ export const FIST: WeaponDefinition = {
   fxStyle: 'FIST',
   finisherFx: { waistY: 0.9, landRadius: 1.1 },
   anchors: {},
-  sounds: { strike: () => soundManager.playPunch() },
+  sounds: { strike: (_i, pos) => soundManager.playPunch(pos) },
   readyPose: 'FIST',
   unlock: null,
   worlds: { CAMPUS: true, DETENTION: true }

@@ -3,6 +3,7 @@ import { Player } from '../entities/Player';
 import { NPC } from '../entities/NPC';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { soundManager } from '../audio/SoundEffects';
+import { CAMPUS_CENTER } from '../audio/spatialAudio';
 import { INITIAL_SPAWN } from './DetentionWorld';
 
 // ==========================================================
@@ -261,7 +262,7 @@ export class DetentionCutscene {
       SPAWN_Z + Math.cos(yaw) * Math.cos(pitch) * dist
     );
 
-    soundManager.playThunder();
+    soundManager.playThunder(CAMPUS_CENTER);
     this.evaluate(0, 0);
   }
 
@@ -364,7 +365,7 @@ export class DetentionCutscene {
       this.setVanX(vanX);
       if (!this.brakePlayed && t > 0.75) {
         this.brakePlayed = true;
-        soundManager.playBanditSlash();
+        soundManager.playBanditSlash(this.vanGroup.position);
       }
       this._camPos.set(-63, 1.5, -86.5);
       this._camTarget.set(vanX, 1.3, VAN_Z);
@@ -431,7 +432,7 @@ export class DetentionCutscene {
         this.warden.setCutsceneRightArm(-1.25);
         if (!this.whistlePlayed) {
           this.whistlePlayed = true;
-          soundManager.playWhistle();
+          soundManager.playWhistle(this.warden.position);
         }
       }
 

@@ -238,7 +238,7 @@ export class CampusMode {
   // 搭乘演藝大樓直達電梯 (自動還原手持武器並中止羽球賽)
   public startElevator(toFourthFloor: boolean) {
     const { player, tennisGame, engine, wantedSystem } = this.ctx;
-    soundManager.playElevatorDing();
+    soundManager.playElevatorDing(player.position);
     // 突進斬中搭電梯：過場期間不更新玩家，出招會凍結於突進中 (持續略過推擠、鏡頭拉遠，並以傳送前的突進起點結算)，先中止
     if (player.isDashMove) player.cancelAttack();
     player.equipBadmintonRacket(false);
@@ -274,7 +274,7 @@ export class CampusMode {
       if (et.timer <= 0) {
         player.position.set(65.5, et.targetY, 43.5);
         player.mesh.position.set(65.5, et.targetY, 43.5);
-        soundManager.playElevatorDing();
+        soundManager.playElevatorDing(player.position);
         et.phase = 'OPENING';
         et.timer = 0.5;
       }
@@ -307,7 +307,7 @@ export class CampusMode {
     const { wantedSystem } = this.ctx;
     if (this.broadcastCooldown <= 0) {
       this.broadcastCooldown = 15.0;
-      soundManager.playBroadcastChime();
+      soundManager.playBroadcastChime(this.ctx.player.position);
       wantedSystem.showBanner(this.announcements.next(), 6000);
       for (const npc of this.ctx.npcs) {
         npc.freeze(4.0);
@@ -349,7 +349,7 @@ export class CampusMode {
 
   // 強行搶奪火柴人自行車騎士的單車 (常態騎乘、擊飛中或倒地時皆可)
   public hijackBike(npc: NPC) {
-    soundManager.playBikeHijack();
+    soundManager.playBikeHijack(npc.position);
     npc.loseBike();
 
     // 獲取地面真實支撐高度，杜絕浮空
@@ -441,7 +441,7 @@ export class CampusMode {
       if (player.isMoving) {
         this.swimSplashTimer -= delta;
         if (this.swimSplashTimer <= 0) {
-          soundManager.playWaterSplash();
+          soundManager.playWaterSplash(player.position);
           this.swimSplashTimer = player.isSprinting ? 0.35 : 0.38;
           // 水面高度沿用本幀游泳判定時已決定的水體
           waterSplashVFX.triggerSplashBurst(player.position, player.rotationY, player.isSprinting, player.swimSurfaceY);

@@ -612,7 +612,7 @@ export class CampusSportsCrew {
       // 刷網落下，朝球場內側滾出
       this.ballVel.set(this.courtDirX * (0.5 + Math.random() * 0.6) + (Math.random() - 0.5) * 0.6, -1.2,
         this.courtDirZ * (0.5 + Math.random() * 0.6) + (Math.random() - 0.5) * 0.6);
-      if (this.playerNear) soundManager.playSwish();
+      if (this.playerNear) soundManager.playSwish(this.hoop);
       if (this.phase === 'WATCH_SHOT') this.say(this.shooter, Math.random() < 0.5 ? '唰！空心！' : '進了！手感發燙！');
     } else {
       // 打框彈出
@@ -621,7 +621,7 @@ export class CampusSportsCrew {
       const ol = Math.hypot(ox, oz) || 1;
       const sp = 1.8 + Math.random() * 1.6;
       this.ballVel.set((ox / ol) * sp + (Math.random() - 0.5), 2.0 + Math.random() * 1.2, (oz / ol) * sp + (Math.random() - 0.5));
-      if (this.playerNear) soundManager.playRimHit();
+      if (this.playerNear) soundManager.playRimHit(this.hoop);
       if (this.phase === 'WATCH_SHOT') this.say(this.shooter, Math.random() < 0.5 ? '又打鐵了啦…' : '可惡，差一點！');
     }
     if (this.phase === 'WATCH_SHOT') {
@@ -652,7 +652,7 @@ export class CampusSportsCrew {
         const beat = Math.floor(this.dribbleT);
         if (beat !== this.lastDribbleBeat) {
           this.lastDribbleBeat = beat;
-          if (this.playerNear) soundManager.playDribble();
+          if (this.playerNear) soundManager.playDribble(this.ballPos);
         }
         const h = Math.abs(Math.sin(this.dribbleT * Math.PI));
         // NPC 本地 +X (右手) = (cos, -sin)
@@ -692,7 +692,7 @@ export class CampusSportsCrew {
           v.y = 0;
         } else {
           v.y = vy;
-          if (this.playerNear) soundManager.playDribble();
+          if (this.playerNear) soundManager.playDribble(this.ballPos);
         }
       }
     }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  NEAR_RADIUS, SOUND_COOLDOWN, SOUND_RANGE, cooldownReady, distanceBetween, distanceGain
+  NEAR_RADIUS, SOUND_COOLDOWN, SOUND_RANGE, cooldownReady, distanceBetween, distanceGain,
+  SOUND_VOLUME, soundGain
 } from '../src/audio/spatialAudio';
 
 describe('空間音效距離衰減', () => {
@@ -40,5 +41,20 @@ describe('全域冷卻', () => {
       expect(SOUND_COOLDOWN[id]).toBeGreaterThanOrEqual(1.5);
       expect(SOUND_COOLDOWN[id]).toBeLessThanOrEqual(3);
     }
+  });
+  it('閃身步老師演武：音量約實戰 55%、可聞距離較小，50m 外為 0', () => {
+    expect(SOUND_RANGE.dodgePractice).toBeLessThan(SOUND_RANGE.dodge);
+    expect(soundGain('dodgePractice', 0)).toBeCloseTo(SOUND_VOLUME.dodgePractice!, 5);
+    expect(soundGain('dodge', 0)).toBe(1);
+    expect(soundGain('dodgePractice', 8)).toBeGreaterThan(0);
+    expect(soundGain('dodgePractice', 8)).toBeLessThan(soundGain('dodge', 8));
+    expect(soundGain('dodgePractice', 50)).toBe(0);
+  });
+  it('所有音效 50m 外：小動作為 0，僅全校性事件仍可聞', () => {
+    for (const id of Object.keys(SOUND_RANGE) as (keyof typeof SOUND_RANGE)[]) {
+      if (SOUND_RANGE[id] <= 35) expect(soundGain(id, 50)).toBe(0);
+    }
+    expect(soundGain('schoolBell', 50)).toBeGreaterThan(0);
+    expect(soundGain('schoolBell', 120)).toBe(0);
   });
 });

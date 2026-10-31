@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getFxQuality } from './fxQuality';
+import { FX_POOL_MAX, getFxQuality } from './fxQuality';
 import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 
 // 斬痕特效 (雙燕羽刃)：命中閃光 / 交叉 X 光痕 / 蓄力收束光環 / 突進光帶與風痕，全部共用 1 個 InstancedMesh (1 draw call)。
@@ -123,16 +123,12 @@ class SlashFXSystem {
   private colAttr!: THREE.InstancedBufferAttribute;
   private slots: Slot[] = [];
   private active = 0;
-  private lenScale = 1;
-  private widthScale = 1;
 
   // 初始化並加入場景 (閒置時 visible=false，不產生 draw call)
   public init(scene: THREE.Object3D) {
     if (this.mesh) return;
-    const fq = getFxQuality();
-    const n = fq.slashPool;
-    this.lenScale = fq.slashLenScale;
-    this.widthScale = fq.slashWidthScale;
+    // 依最高檔容量預建；實際可用槽數由目前檔位的 slashPool 限制 (見 alloc)
+    const n = FX_POOL_MAX.slashPool;
     const geo = new THREE.PlaneGeometry(2, 2);
     this.fxAttr = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.colAttr = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
@@ -180,11 +176,13 @@ class SlashFXSystem {
     this.mesh.visible = false;
   }
 
-  // 取空槽；池滿時 force 者覆蓋剩餘壽命比例最小者，否則放棄 (回傳 null)
+  // 取空槽 (僅前 slashPool 個槽，依目前檔位)；池滿時 force 者覆蓋剩餘壽命比例最小者，否則放棄 (回傳 null)。
+  // 降檔後超出上限的槽若仍在播放，交由 update 自然播完歸零
   private alloc(force: boolean): Slot | null {
     let oldest = -1;
     let oldestRatio = Infinity;
-    for (let i = 0; i < this.slots.length; i++) {
+    const limit = Math.min(this.slots.length, getFxQuality().slashPool);
+    for (let i = 0; i < limit; i++) {
       const s = this.slots[i];
       if (s.life <= 0) { this.active++; return s; }
       const ratio = s.life / s.max;
@@ -196,7 +194,7 @@ class SlashFXSystem {
   private spawn(kind: number, life: number, x: number, y: number, z: number, yaw: number, roll: number, size: number, dir: number, color: number, force: boolean, hw: number = STREAK_HALF_WIDTH, flat: boolean = false) {
     const s = this.alloc(force);
     if (!s) return;
-    if (kind === KIND_STREAK) { size *= this.lenScale; hw *= this.widthScale; } // 手機縮短 / 變細長條斬痕
+    if (kind === KIND_STREAK) { const fq = getFxQuality(); size *= fq.slashLenScale; hw *= fq.slashWidthScale; } // 低檔縮短 / 變細長條斬痕
     s.kind = kind; s.life = s.max = life;
     s.x = x; s.y = y; s.z = z; s.yaw = yaw; s.roll = roll; s.size = size; s.dir = dir; s.color = color; s.hw = hw; s.flat = flat;
     this.mesh!.visible = true;
@@ -221,7 +219,7 @@ class SlashFXSystem {
   // 蓄力收束光環：自玩家身邊向內收的兩圈 (主色 / 副色)
   public chargeRing(x: number, y: number, z: number, colorA: number, colorB: number) {
     this.spawn(KIND_CHARGE, CHARGE_LIFE, x, y, z, 0, 0, CHARGE_RADIUS, 1, colorA, true);
-    if (!getFxQuality().mobile) this.spawn(KIND_CHARGE, CHARGE_LIFE, x, y + 0.35, z, 0, 0, CHARGE_RADIUS * 0.8, 1, colorB, true);
+    if (getFxQuality().chargeRingDouble) this.spawn(KIND_CHARGE, CHARGE_LIFE, x, y + 0.35, z, 0, 0, CHARGE_RADIUS * 0.8, 1, colorB, true);
   }
 
   // 突進光帶 / 風痕：自 (ox, oz) 沿水平方向橫掃到 (ex, ez)，躺平於離地 y、半寬 hw

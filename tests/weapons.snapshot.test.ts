@@ -94,10 +94,10 @@ const racketBaseline = (current: WeaponId): Snapshot => ({
 function snapshot(current: WeaponId, override: WeaponOverrideId | null, world: WeaponWorld): Snapshot {
   const def = getWeapon(current);
   const lo = resolveLoadout(current, override, world);
-  const callSfx = (fn: ((i: number) => void) | (() => void) | undefined): SfxName | null => {
+  const callSfx = (fn: ((...args: any[]) => void) | undefined): SfxName | null => {
     for (const k of Object.keys(sfx) as SfxName[]) sfx[k].mockClear();
     if (!fn) return null;
-    fn(0);
+    fn(0, { x: 0, y: 0, z: 0 });
     const called = (Object.keys(sfx) as SfxName[]).filter((k) => sfx[k].mock.calls.length > 0);
     expect(called.length).toBe(1);
     return called[0];

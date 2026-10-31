@@ -193,7 +193,7 @@ export class BasketballGame {
       _scratchLaunchHoriz.z * reqHorizSpeed
     );
 
-    soundManager.playPunch();
+    soundManager.playPunch(this.basketballMesh.position);
   }
 
   public update(
@@ -243,7 +243,7 @@ export class BasketballGame {
       if (input.forward || input.backward || input.left || input.right) {
         this.dribbleSoundTimer -= delta;
         if (this.dribbleSoundTimer <= 0) {
-          soundManager.playDribble();
+          soundManager.playDribble(this.basketballMesh.position);
           this.dribbleSoundTimer = 0.36;
         }
       }
@@ -275,7 +275,7 @@ export class BasketballGame {
             this.hasScoredThisShot = true;
 
             if (this.targetShotQuality === 'PERFECT') {
-              soundManager.playSwish();
+              soundManager.playSwish(this.basketballMesh.position);
               this.scoreStreak++;
               if (this.scoreStreak > this.bestStreak) {
                 this.bestStreak = this.scoreStreak;
@@ -286,8 +286,8 @@ export class BasketballGame {
               player.stamina = player.maxStamina;
               this.ballVelocity.set(this.ballVelocity.x * 0.1, -4.8, this.ballVelocity.z * 0.1);
             } else if (this.targetShotQuality === 'GOOD') {
-              soundManager.playRimHit();
-              setTimeout(() => soundManager.playSwish(), 180);
+              soundManager.playRimHit(this.basketballMesh.position);
+              setTimeout(() => soundManager.playSwish(this.basketballMesh.position), 180);
               this.scoreStreak++;
               if (this.scoreStreak > this.bestStreak) {
                 this.bestStreak = this.scoreStreak;
@@ -296,7 +296,7 @@ export class BasketballGame {
               wantedSystem.showBanner(`🏀【擦板彈框入網！】得分 +${basePts}！`, 3500);
               this.ballVelocity.set(this.ballVelocity.x * 0.25, -4.0, this.ballVelocity.z * 0.25);
             } else {
-              soundManager.playRimHit();
+              soundManager.playRimHit(this.basketballMesh.position);
               this.scoreStreak = 0;
               wantedSystem.showBanner('🏀【打鐵不進！】請抓準綠色完美出手時機！', 2500);
               this.ballVelocity.x *= -0.6;
@@ -318,7 +318,7 @@ export class BasketballGame {
           this.ballVelocity.y = Math.abs(this.ballVelocity.y) * 0.52;
           this.ballVelocity.x *= 0.68;
           this.ballVelocity.z *= 0.68;
-          soundManager.playDribble();
+          soundManager.playDribble(this.basketballMesh.position);
         } else {
           this.ballVelocity.set(0, 0, 0);
           this.isBallInAir = false;

@@ -1,3 +1,4 @@
+import { isTouchDevice } from './device';
 // 觸控落在這些 UI 上時不作為視角旋轉手指 (開始畫面、開場動畫、操作按鈕、搖桿與各面板)
 const TOUCH_LOOK_EXCLUDE_SELECTOR = [
   '#start-screen',
@@ -48,7 +49,7 @@ export class InputManager {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    this.isTouchDevice = isTouchDevice();
     this.initListeners();
     this.initTouchControls();
   }

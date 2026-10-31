@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Engine } from './core/Engine';
 import { InputManager } from './core/InputManager';
+import { qualityManager } from './core/QualityManager';
 import { ThirdPersonCamera } from './camera/ThirdPersonCamera';
 import { CampusWorld, CollidableBox } from './world/CampusWorld';
 import { DetentionWorld } from './world/DetentionWorld';
@@ -25,6 +26,8 @@ import { TennisGame } from './systems/TennisGame';
 import { WeatherSystem } from './systems/WeatherSystem';
 import { ColliderGrid } from './physics/ColliderGrid';
 import { StartScreen } from './ui/StartScreen';
+import { setupQualitySettings } from './ui/QualitySettings';
+import { setupDiagPanel } from './ui/DiagPanel';
 import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
@@ -121,6 +124,8 @@ class SchoolGTASandbox implements GameContext {
       this.isGameRunning = true;
       this.switchWorld(targetWorld, targetWorld === 'CAMPUS');
       this.prewarmFx();
+      // 自動畫質：進入世界並完成 shader 預熱後，延遲 1 秒開始實測 FPS (已有同裝置結果則略過)
+      qualityManager.startAutoProbeIfNeeded();
     },
     onSkipCutscene: () => {
       if (this.detentionCutscene.isActive) {
@@ -145,6 +150,9 @@ class SchoolGTASandbox implements GameContext {
     // 階段 0 (5%)：初始化 3D 圖形與音訊引擎核心
     progress(5, '正在啟動 3D 圖形與音訊引擎核心...');
     this.engine = new Engine();
+    // 套用畫質檔位 (手動設定 / 上次自動偵測結果 / 首次以中檔起跑)，須在任何 shader 編譯前
+    qualityManager.attach(this.engine);
+    setupDiagPanel();
     this.input = new InputManager(this.engine.canvas);
     this.cameraCtrl = new ThirdPersonCamera(65, window.innerWidth / window.innerHeight, 0.1, 350);
     await nextFrame();
@@ -187,6 +195,8 @@ class SchoolGTASandbox implements GameContext {
     slashFX.init(this.engine.scene);
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
     this.prewarmFx();
+    // 畫質切換開關陰影後材質會重新編譯：立即重新預熱，避免之後首次施放特效時才卡頓
+    qualityManager.onShaderStateChange = () => this.prewarmFx();
 
     this.player.autoDodgeHook = this.progression.tryAutoDodge;
 
@@ -224,6 +234,7 @@ class SchoolGTASandbox implements GameContext {
     this.campusDogNpc = this.campusNPCs.find(n => n.role === 'DOG');
     this.wardenBossNpc = this.detentionNPCs.find(n => n.role === 'DETENTION_BOSS');
     this.wantedSystem = new WantedSystem();
+    qualityManager.onNotify = (text) => this.wantedSystem.showBanner(`🎨 ${text}`, 2500);
     this.wantedSystem.onWantedCleared = () => {
       for (const n of this.npcs) {
         n.resetAggro();
@@ -259,6 +270,7 @@ class SchoolGTASandbox implements GameContext {
     this.hud.onEquipWeapon = this.progression.equipById;
     this.hud.getFullMapStatus = () => this.progression.getFullMapStatus();
     this.hud.updateWeatherHUD(this.weatherSystem.getCurrentPreset().badgeText);
+    setupQualitySettings();
 
     // 綁定按鍵互動與操作
     this.setupInputBindings();
@@ -275,6 +287,7 @@ class SchoolGTASandbox implements GameContext {
     // 視窗縮放/翻轉事件統一由 Engine 監聽，這裡只負責同步鏡頭比例 (updateAspect 內含投影矩陣更新)
     this.engine.onResizeCallback = (_w, _h, aspect) => {
       this.cameraCtrl.updateAspect(aspect);
+      qualityManager.onViewportChange();
     };
     this.engine.handleResize();
     setupFullscreenButton();
@@ -396,7 +409,7 @@ class SchoolGTASandbox implements GameContext {
       this.cameraCtrl.resetBehind(this.player.position, 0);
 
       this.weatherSystem.setWeather('SUNNY', false, false);
-      soundManager.playSchoolBell();
+      soundManager.playSchoolBell(this.player.position);
       this.hud.updateWorldHUD('🏫 天天國中');
       this.wantedSystem.showBanner('🏫 已傳送至【天天國中】！自由探索校園！', 3000);
       return;
@@ -580,7 +593,7 @@ class SchoolGTASandbox implements GameContext {
     if (player.poisonTickTimer >= 1.0) {
       player.poisonTickTimer -= 1.0;
       const died = player.takeDamage(3, '劇毒侵蝕');
-      soundManager.playPoisonTick();
+      soundManager.playPoisonTick(player.position);
       if (died) {
         this.handlePlayerDeath('體內毒素過深昏迷！');
       }

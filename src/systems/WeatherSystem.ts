@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Engine } from '../core/Engine';
 import { soundManager } from '../audio/SoundEffects';
+import { CAMPUS_CENTER } from '../audio/spatialAudio';
 import { IndoorManager } from './IndoorManager';
 
 export type WeatherType = 'SUNNY' | 'RAIN' | 'THUNDERSTORM' | 'FOG' | 'SUNSET';
@@ -408,7 +409,7 @@ export class WeatherSystem {
       if (this.thunderDelayTimer > 0) {
         this.thunderDelayTimer -= delta;
         if (this.thunderDelayTimer <= 0) {
-          soundManager.playThunder();
+          soundManager.playThunder(CAMPUS_CENTER);
         }
       }
     }

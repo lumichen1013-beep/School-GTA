@@ -1002,7 +1002,7 @@ export class EcologicalGarden {
       // 檢查命中玩家
       if (sp.position.distanceTo(playerPos) < 1.3 && !player.isDead) {
         onPlayerHit(5, '被變異食人花的劇毒孢子命中！');
-        soundManager.playPunch();
+        soundManager.playPunch(playerPos);
         this.scene.remove(sp.mesh);
         this.spores.splice(i, 1);
         continue;
@@ -1245,7 +1245,7 @@ export class EcologicalGarden {
 
   private hitBug(bug: GardenBug, damage: number): boolean {
     bug.hp -= damage;
-    soundManager.playPunch();
+    soundManager.playPunch(bug.position);
     if (bug.hp > 0) return false;
     bug.isDead = true;
     bug.mesh.visible = false;

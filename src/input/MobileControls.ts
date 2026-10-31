@@ -1,4 +1,5 @@
 import { InputManager } from '../core/InputManager';
+import { isTouchDevice } from '../core/device';
 import { JOYSTICK_SNEAK_RADIUS } from '../entities/Player';
 
 export interface MobileControlHandlers {
@@ -19,8 +20,7 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
   const btnInteract = document.getElementById('m-btn-interact');
   const skillHudCard = document.getElementById('skill-hud-card');
 
-  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  if (isTouchDevice && container) {
+  if (isTouchDevice() && container) {
     container.style.display = 'block';
     document.body.classList.add('touch-mode-active');
     if (toggleBtn) toggleBtn.textContent = '📱 隱藏手機鍵盤';

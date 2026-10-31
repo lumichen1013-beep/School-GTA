@@ -12,6 +12,6 @@ export const OVERRIDE_RACKET: WeaponOverrideDefinition = {
   fxStyle: 'RACKET',
   model: { mount: 'R', build: buildRacket },
   anchors: { R: { base: 0.66, tip: 0.98 } },
-  sounds: { start: () => soundManager.playBadmintonWhoosh() },
+  sounds: { start: (pos) => soundManager.playBadmintonWhoosh(pos) },
   readyPose: 'WEAPON'
 };

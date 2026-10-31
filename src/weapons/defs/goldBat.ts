@@ -12,7 +12,7 @@ export const SPECIAL_BAT: WeaponDefinition = {
   name: '黃金雷霆棒球棍',
   banner: { campus: '⚡ 切換神兵：黃金雷霆棒球棍 (ATK 68)', detention: '⚡ 切換神兵：黃金雷霆防暴棍 (ATK 68)' },
   stats: { damage: 68, reach: 3.8, knockback: 22.0 },
-  launchCap: { h: 13, v: 6.5 }, // 終結技主目標約飛 6.5m
+  launchCap: { h: 14, v: 6.5 }, // 終結技主目標約飛 7.0m
   combo: PLAYER_COMBOS.BAT,
   tempo: 1.14,
   fxStyle: 'GOLD',
@@ -20,7 +20,7 @@ export const SPECIAL_BAT: WeaponDefinition = {
   useGoldAoe: true,
   model: { mount: 'R', build: buildGoldBat },
   anchors: { R: { base: 0.4, tip: 1.02 } },
-  sounds: { strike: () => soundManager.playSpecialBatHit() },
+  sounds: { strike: (_i, pos) => soundManager.playSpecialBatHit(pos) },
   readyPose: 'WEAPON',
   unlock: {
     lockedHint: (p, world) => world === 'DETENTION'

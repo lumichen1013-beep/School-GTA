@@ -499,6 +499,8 @@ export class NPC {
   // 自主演練身法計時器 (每 8~14 秒演練一次)
   private dodgeTeacherPracticeTimer: number = 0;
   private dodgeTeacherNextPracticeTime: number = 10.0;
+  // 目前身法是否為老師自主演武：音效改用較小音量與可聞距離的 dodgePractice (實戰閃身不受影響)
+  private isPracticeMove: boolean = false;
 
   // 0-GC 殘影物件池
   private afterimagePool?: AfterimagePool;
@@ -2939,7 +2941,7 @@ export class NPC {
     this.showSkillBubble('💨 閃身步', false);
 
     // 疾風破空音效
-    soundManager.playDodge(false, this.position);
+    soundManager.playDodge(false, this.position, this.isPracticeMove);
 
     // 初始位置產生第 1 道破空殘影 (青色微光)
     this.spawnAfterimage(0x38bdf8, 0.28);
@@ -2981,7 +2983,7 @@ export class NPC {
     this.rotationY = Math.random() * Math.PI * 2;
     this.mesh.rotation.y = this.rotationY;
 
-    soundManager.playDodge(true, this.position);
+    soundManager.playDodge(true, this.position, this.isPracticeMove);
     this.bearBlinkCount++;
   }
 
@@ -3123,6 +3125,7 @@ export class NPC {
 
     // 閃身步老師 (DODGE_TEACHER) 演武計時；身法 (閃身步 / 狗熊哆嗦毛) 推進適用所有會施展身法的角色
     // (閃身步老師、鐵面總長、特訓資深 / 重裝守衛)
+    if (!this.isDodging && !this.isBearShaking) this.isPracticeMove = false;
     if (this.role === 'DODGE_TEACHER') {
       // 演武計時器 (若未倒地、未處於對話中、未在施展身法中，每 8~14 秒自主展示身法絕學)
       if (!this.isKnockedDown && !this.isConversing && !this.isDodging && !this.isBearShaking) {
@@ -3130,6 +3133,7 @@ export class NPC {
         if (this.dodgeTeacherPracticeTimer >= this.dodgeTeacherNextPracticeTime) {
           this.dodgeTeacherPracticeTimer = 0;
           this.dodgeTeacherNextPracticeTime = 8.0 + Math.random() * 6.0;
+          this.isPracticeMove = true;
           if (Math.random() < 0.5) {
             this.performFlashStep();
           } else {

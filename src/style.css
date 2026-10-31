@@ -2143,6 +2143,93 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
 .world-current {
   color: #38bdf8;
 }
+/* 畫質設定 (工具列第四項)：標題列 + 自動 / 高 / 中 / 低 分段鈕 + 重新偵測 */
+.fm-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  color: #ecf0f1;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+.fm-quality-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.fm-quality-title { white-space: nowrap; }
+.fm-quality-status {
+  color: #38bdf8;
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm-quality-seg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 4px;
+}
+.fm-quality-opt {
+  min-height: 32px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.fm-quality-opt:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #e2e8f0;
+}
+.fm-quality-opt.active {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+.fm-quality-redetect {
+  padding: 0 8px;
+  background: rgba(41, 128, 185, 0.25);
+  border-color: rgba(52, 152, 219, 0.55);
+  color: #ecf0f1;
+}
+.fm-quality-redetect:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+/* ?diag=1 診斷面板 (一般玩家不顯示) */
+#diag-panel {
+  position: fixed;
+  left: max(4px, env(safe-area-inset-left, 4px));
+  bottom: max(4px, env(safe-area-inset-bottom, 4px));
+  z-index: 100000;
+  max-width: min(92vw, 520px);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #a7f3d0;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  pointer-events: none;
+}
 /* 分頁列：地圖 / 裝備 / 任務 */
 .fullmap-tabs {
   flex: 0 0 auto;
@@ -3690,6 +3777,17 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
     font-size: 13px !important;
     transform: none !important;
   }
+  .fm-quality-opt {
+    min-height: 44px !important;
+    font-size: 13px !important;
+  }
+  /* 觸控：四個檔位一列 (每顆寬度足夠點按)，重新偵測獨佔下一列 */
+  .fm-quality-seg {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+  .fm-quality-redetect {
+    grid-column: 1 / -1;
+  }
   .hud-settings-menu .hud-pill-btn {
     min-height: 44px !important;
     box-sizing: border-box !important;
@@ -3868,10 +3966,8 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
   #start-screen .world-card-features {
     display: none;
   }
-  #start-screen   /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 */
-  #mobile-controls-container {
-    display: block !important;
-  }
+  /* 手機虛擬控制面板：左下搖桿與右下扇形按鍵各居其位 (容器顯示改由觸控偵測加上 body.touch-mode-active 控制，
+     不以視窗寬度強制顯示，避免窄視窗桌機出現虛擬按鍵) */
 
   /* 搖桿與按鍵避開底部 Home 指示條與左右瀏海安全區；--mc-bottom 為控制群離底距離 (搖桿、按鍵群、技能卡共用) */
   :root {
@@ -3986,6 +4082,10 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
   .fullmap-toolbar {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  /* 畫質設定獨佔一列 */
+  .fm-quality {
+    grid-column: 1 / -1 !important;
   }
   .fullmap-toolbar .bgm-badge, .fullmap-tool-btn {
     flex-direction: column !important;
@@ -4112,6 +4212,46 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
   .fm-idc-wanted { grid-column: auto !important; }
   .fm-goal-icon { font-size: 22px !important; }
   .fm-goal-title { font-size: 13px !important; }
+  /* 橫屏工具列：音樂 / 天氣 / 世界三鈕並排，畫質設定獨佔下一列並收緊間距，讓右欄放得下 */
+  .fullmap-toolbar {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .fullmap-toolbar .bgm-badge, .fullmap-tool-btn {
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    padding: 2px 2px !important;
+    font-size: 11px !important;
+    white-space: normal !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+  }
+  .fullmap-toolbar .bgm-badge #bgm-icon, .fullmap-tool-btn .world-current { display: none !important; }
+  .fm-quality {
+    grid-column: 1 / -1 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    padding: 6px 8px !important;
+    gap: 4px !important;
+  }
+  /* 第一列：狀態文字 + 重新偵測；第二列：自動 / 高 / 中 / 低 */
+  .fm-quality-head, .fm-quality-seg { display: contents !important; }
+  .fm-quality-title { display: none !important; }
+  .fm-quality-status {
+    grid-column: 1 / 4 !important;
+    grid-row: 1 !important;
+    align-self: center !important;
+  }
+  .fm-quality-redetect {
+    grid-column: 4 !important;
+    grid-row: 1 !important;
+    padding: 0 2px !important;
+    font-size: 11px !important;
+  }
+  .fm-quality-opt[data-quality] { grid-row: 2 !important; }
+  .fm-quality-status::before { content: '🎨 '; }
   .fullmap-pane-gear {
     grid-template-columns: 200px minmax(0, 1fr) !important;
   }

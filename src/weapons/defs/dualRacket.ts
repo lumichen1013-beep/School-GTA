@@ -19,7 +19,7 @@ export const DUAL_RACKET: WeaponDefinition = {
   finisherFx: { waistY: 1.0, feathers: true },
   model: { mount: 'BOTH', build: buildDualRackets },
   anchors: { R: { base: 0.5, tip: 1.0 }, L: { base: 0.5, tip: 1.0 } },
-  sounds: { start: () => soundManager.playBadmintonWhoosh(), strike: () => soundManager.playBadmintonHit() },
+  sounds: { start: (pos) => soundManager.playBadmintonWhoosh(pos), strike: (_i, pos) => soundManager.playBadmintonHit(pos) },
   readyPose: 'DUAL',
   suppressUmbrella: true,
   unlock: {

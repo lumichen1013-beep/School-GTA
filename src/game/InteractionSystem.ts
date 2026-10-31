@@ -106,7 +106,7 @@ export class InteractionSystem {
           dw().keycardAMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【藍色門禁卡 A】！可用於開啟管制閘門 1！', 4000);
           det().setCheckpoint(new THREE.Vector3(0, 0, -51), 'A區中央警衛室');
-          soundManager.playPunch();
+          soundManager.playPunch(ctx.player.position);
         }
       },
       {
@@ -119,7 +119,7 @@ export class InteractionSystem {
           dw().keycardBMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('💳 獲得【黃色門禁卡 B】！可用於開啟管制閘門 2！', 4000);
           det().setCheckpoint(new THREE.Vector3(61, 0, 4), 'B區器材庫');
-          soundManager.playPunch();
+          soundManager.playPunch(ctx.player.position);
         }
       },
       {
@@ -135,7 +135,7 @@ export class InteractionSystem {
           dw().masterKeycardMeshGroup.visible = false;
           ctx.wantedSystem.showBanner('🔑 獲得【萬能逃脫鑰匙卡】！快前往南大門開啟大門撤離！', 5000);
           det().setCheckpoint(new THREE.Vector3(0, 0, 68), 'C區決戰勝利點');
-          soundManager.playSchoolBell();
+          soundManager.playSchoolBell(ctx.player.position);
         }
       },
       {
@@ -147,7 +147,7 @@ export class InteractionSystem {
             dw().openGateA();
             ctx.wantedSystem.showBanner('🔓 管制閘門 1 已開啟！進入 B 區訓練場，前往東側器材庫取得門禁卡 B！', 3500);
             det().setCheckpoint(new THREE.Vector3(0, 0, -25), 'B區閘門內側');
-            soundManager.playSchoolBell();
+            soundManager.playSchoolBell(ctx.player.position);
           } else {
             ctx.wantedSystem.showBanner('🔒 門禁鎖死！需要【藍色門禁卡 A】才能開啟閘門 1！', 3000);
           }
@@ -162,7 +162,7 @@ export class InteractionSystem {
             dw().openGateB();
             ctx.wantedSystem.showBanner('🔓 管制閘門 2 已開啟！進入 C 區決戰區，擊破總教官奪取萬能逃脫鑰匙卡！', 3500);
             det().setCheckpoint(new THREE.Vector3(0, 0, 42), 'C區決戰前哨');
-            soundManager.playSchoolBell();
+            soundManager.playSchoolBell(ctx.player.position);
           } else {
             ctx.wantedSystem.showBanner('🔒 門禁鎖死！需要【黃色門禁卡 B】才能開啟閘門 2！', 3000);
           }
@@ -177,7 +177,7 @@ export class InteractionSystem {
             dw().openSouthGate();
             ctx.wantedSystem.showBanner('🚪 南大門全面解鎖升起！快衝出大門逃出生天！', 5000);
             det().setCheckpoint(new THREE.Vector3(-7.5, 0, 91), '南大門逃脫點');
-            soundManager.playSchoolBell();
+            soundManager.playSchoolBell(ctx.player.position);
           } else {
             ctx.wantedSystem.showBanner('🔒 南大門鎖死！需要擊破特訓總教官取得【萬能逃脫鑰匙卡】！', 3500);
           }
@@ -199,7 +199,7 @@ export class InteractionSystem {
           player.stamina = Math.min(player.maxStamina, player.stamina + 60);
           player.hp = Math.min(player.maxHp, player.hp + 25);
           ctx.wantedSystem.showBanner('💪【特訓單槓】引體向上特訓！體力 +25 HP，精力大幅恢復 +60！', 2500);
-          soundManager.playPunch();
+          soundManager.playPunch(ctx.player.position);
         }
       },
       {
@@ -211,7 +211,7 @@ export class InteractionSystem {
           const { player } = ctx;
           player.hp = Math.min(player.maxHp, player.hp + 50);
           ctx.wantedSystem.showBanner('🏋️【特訓大重量臥推】極限力量爆發！體力強效恢復 +50 HP！', 2500);
-          soundManager.playBanditSlash();
+          soundManager.playBanditSlash(ctx.player.position);
         }
       },
       {
@@ -225,7 +225,7 @@ export class InteractionSystem {
           ctx.wantedSystem.showBanner('🛞【巨型輪胎翻滾特訓】重裝肌耐力翻滾！體力 +15 HP，解鎖 8 秒狂暴極速衝刺！', 3000);
           player.sprintSpeed = 14.0;
           setTimeout(() => { player.sprintSpeed = 10.0; }, 8000);
-          soundManager.playBanditSlash();
+          soundManager.playBanditSlash(ctx.player.position);
         }
       }
     ];
@@ -388,18 +388,18 @@ export class InteractionSystem {
     switch (result.effect) {
       case 'HEAL':
         player.hp = Math.min(player.maxHp, player.hp + 45);
-        soundManager.playEatFood();
+        soundManager.playEatFood(player.position);
         break;
       case 'STAMINA':
         player.stamina = player.maxStamina;
         player.hp = Math.min(player.maxHp, player.hp + 20);
-        soundManager.playEatFood();
+        soundManager.playEatFood(player.position);
         break;
       case 'POISON':
         player.takeDamage(12, '奇異毒菇');
         player.poisonTimer = 5.0;
         player.poisonTickTimer = 0.0;
-        soundManager.playPoisonTick();
+        soundManager.playPoisonTick(player.position);
         break;
       case 'PARALYSIS':
         player.takeDamage(8, '麻痺孢子');
@@ -413,7 +413,7 @@ export class InteractionSystem {
       case 'LUCKY_GOLD':
         progression.cash += 80;
         hud.setCash(progression.cash);
-        soundManager.playCoinToss();
+        soundManager.playCoinToss(player.position);
         break;
       case 'SUPER_JUMP':
         player.jumpStrength = 14.5;

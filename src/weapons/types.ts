@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { KfMove } from '../entities/shared/kungfu';
 import type { WeaponFxId } from '../effects/weaponFxStyle';
 import type { LaunchCap } from './launch';
+import type { Vec3Like } from '../audio/spatialAudio';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
 export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET';
@@ -34,8 +35,9 @@ export interface WeaponFinisherFx {
 
 // 音效：strike 於每次命中時間點呼叫 (strikeIndex 0 = 主擊，之後依招式 extraStrikes 順序遞增)；start 於起手呼叫
 export interface WeaponSounds {
-  readonly strike?: (strikeIndex: number) => void;
-  readonly start?: () => void;
+  // pos：發聲者 (持武器者) 位置，供空間音效距離衰減
+  readonly strike?: (strikeIndex: number, pos: Vec3Like) => void;
+  readonly start?: (pos: Vec3Like) => void;
 }
 
 // 拖尾 / 發光樣式：單一樣式或依持握手分色
