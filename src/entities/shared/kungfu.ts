@@ -186,6 +186,7 @@ const FIST_2 = defineMove('轉身鞭腿', { dur: 0.48, strike: 0.42, cancel: 0.6
 // 3 騰空旋風腿：下沉蓄勢 → 騰空 360° 旋身甩腿 → 落地馬步亮相 (終結技)
 const FIST_3 = defineMove('騰空旋風腿', {
   dur: 0.72, strike: 0.46, cancel: 0.74, reach: 1.2, arc: -1, dmg: 1.25, knock: 1.6, finisher: true, trailLimb: 'RL', trail: [0.3, 0.62], fx: 'SPIN',
+  charge: [0.02, 0.18], // 下沉蓄勢：聚氣光環 (純視覺，不影響節奏)
   aoe: { center: 'SELF', offset: 0, radius: 1.3, max: 5, falloff: 0.35, shake: 0.4, hitStop: 0.08, hitStopMulti: 0.08, missShake: 0 }
 }, [
   [0.16, E_SMOOTH, { tw: -0.55, ln: 0.14, h: -0.17, la: [0.75, 0, -0.15], ra: [0.75, 0, 0.15], ll: [-0.35, 0, -0.08], rr: [0.3, 0, 0.08] }],
@@ -214,6 +215,7 @@ const BAT_2 = defineMove('回身反掃', { dur: 0.5, strike: 0.42, cancel: 0.62,
 // 3 躍起下劈：屈膝起跳、雙手舉棒過頂 → 落地沉身全力下劈 (終結技)
 const BAT_3 = defineMove('躍起下劈', {
   dur: 0.66, strike: 0.5, cancel: 0.95, reach: 1.05, arc: 0.1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.36, 0.56], fx: 'SLAM',
+  charge: [0.16, 0.36], // 起跳舉棒：聚氣光環 + 棒身蓄能發光 (純視覺)
   aoe: { center: 'FRONT', offset: 0.55, radius: 0.75, max: 6, falloff: 0.35, shake: 0.6, hitStop: 0.08, hitStopMulti: 0.1, missShake: 0.4, maxGold: 7, shakeGold: 0.8, hitStopGold: 0.11 }
 }, [
   [0.18, E_SMOOTH, { ln: 0.1, h: -0.15, la: [0.55, 0, -0.1], ra: [0.55, 0, 0.1], ll: [-0.3, 0, -0.05], rr: [0.3, 0, 0.05] }],
@@ -241,6 +243,7 @@ const BATON_2 = defineMove('轉腕回挑', { dur: 0.42, strike: 0.42, cancel: 0.
 // 3 旋身橫打：蓄勢後旋身一圈，警棍平舉橫打 (終結技)
 const BATON_3 = defineMove('旋身橫打', {
   dur: 0.66, strike: 0.5, cancel: 1, reach: 1.1, arc: -1, dmg: 1.1, knock: 1.5, finisher: true, trailLimb: 'W', trail: [0.2, 0.72], fx: 'SPIN',
+  charge: [0.02, 0.18], // 蓄勢：電弧聚氣光環 (純視覺)
   aoe: { center: 'SELF', offset: 0, radius: 1.12, max: 6, falloff: 0.35, shake: 0.45, hitStop: 0.09, hitStopMulti: 0.09, missShake: 0 }
 }, [
   [0.2, E_SMOOTH, { tw: 0.8, ln: -0.04, h: -0.1, la: [-1.1, 0, 0.2], ra: [-0.2, 0, 1.2], ll: [-0.35, 0, -0.15], rr: [0.3, 0, 0.15] }],
@@ -365,7 +368,8 @@ const BALL_2 = defineMove('迴旋快傳', {
 ]);
 // 3 灌籃氣功砲 (終結技)：沉腰把球收到腰側聚氣 (0.38) → 雙掌合推爆發 (0.45 出手，擊飛 + 小範圍爆風) → 前推定住 → 收勢
 const BALL_3 = defineMove('灌籃氣功砲', {
-  dur: 0.62, strike: 0.45, cancel: 0.8, reach: 1.0, arc: -1, dmg: 1.7, knock: 1.0, finisher: true, projectile: 'BALL_BLAST'
+  dur: 0.62, strike: 0.45, cancel: 0.8, reach: 1.0, arc: -1, dmg: 1.7, knock: 1.0, finisher: true, projectile: 'BALL_BLAST',
+  charge: [0.05, 0.38] // 沉腰聚氣：聚氣光環 (純視覺，節奏不變)
 }, [
   [0.38, E_SMOOTH, { tw: 0.35, ln: 0.12, h: -0.24, la: [-0.5, 0, 0.35], ra: [-0.6, 0, -0.35], ll: [-0.55, 0, -0.12], rr: [0.5, 0, 0.12] }],
   [0.45, E_IN, { tw: -0.05, ln: 0.2, h: -0.12, la: [-1.6, 0, 0.05], ra: [-1.6, 0, -0.05], ll: [-0.6, 0, -0.12], rr: [0.5, 0, 0.12] }],

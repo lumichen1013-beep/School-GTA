@@ -12,6 +12,7 @@ import { getFxQuality } from '../../effects/fxQuality';
 import { WEAPON_FX_STYLES } from '../../effects/weaponFxStyle';
 import { createPlayerHitSpec } from '../../game/CombatSystem';
 import { getWeapon } from '../registry';
+import { impactFeedback, type ImpactFeedback } from '../impactClass';
 import {
   createProjectileSpawnOpts, PFLAG_RETURN, PFLAG_TRACER, PFLAG_TRACER_RETURN, PROJ_BALL,
   type ProjectileEvent, type ProjectileSpawnOpts
@@ -39,12 +40,17 @@ const ORIGIN_SIDE = [0.38, -0.38, 0] as const;
 const LOCK_WORLD_Y_MAX = 2.2;          // 準星高度偏移 (目標腳底上方)
 const FLIGHT_LIFE = AIM_MAX_RANGE / BALL_SPEED + 0.05; // 光束飛行保險壽命 (飛完射程即收回)
 
-// 各段節拍 (索引 = 連段段數)：光束顏色 / 半寬 / 長度倍率、命中停格 (真實秒)、鏡頭震動、命中衝擊環半徑 (再乘 ringReach)
+// 各段節拍 (索引 = 連段段數)：光束顏色 / 半寬 / 長度倍率、命中衝擊環半徑 (再乘 ringReach)
+// 命中停格 / 鏡頭震動依武器 impactClass 分級 (第 1、2 投讀表；第 3 投取 max(分級下限, 下方終結覆寫))
 const BEAM_COLOR = [0xff9a3a, 0xffb24e, 0xffd27a] as const;
 const BEAM_HALF_WIDTH = [0.45, 0.48, 0.7] as const;
 const BEAM_LEN_MUL = [0.85, 1.0, 1.45] as const;
-const HIT_STOP_BY_KIND = [0.035, 0.045, 0.09] as const;
-const SHAKE_BY_KIND = [0.14, 0.18, 0.45] as const;
+const BALL_FINISHER_FEEDBACK = { hitStop: 0.09, hitStopMulti: 0.09, shake: 0.45 } as const;
+const _ballFb: ImpactFeedback = { hitStop: 0, shake: 0 };
+// 第 k 投的命中停格 / 震動 (結果寫入共用暫存，需立即取用)
+function ballFeedback(m: KfMove): ImpactFeedback {
+  return impactFeedback(getWeapon('BASKETBALL').impactClass, m.finisher, false, false, 0, m.finisher ? BALL_FINISHER_FEEDBACK : null, false, _ballFb);
+}
 const WAVE_RADIUS = [0.8, 1.0, 1.7] as const;
 const MUZZLE_RING = 0.55;              // 終結段出手聚氣環半徑
 const WALL_WAVE = 0.5;                 // 撞牆 / 落地小衝擊環半徑
@@ -94,7 +100,7 @@ export class BallThrowController {
       o.reboundBack = 3;
       o.reboundUp = 1.5;
       o.reboundDelay = 0.04;
-      o.hitStop = HIT_STOP_BY_KIND[i];
+      o.hitStop = ballFeedback(m).hitStop;
       o.hitFlashColor = BEAM_COLOR[i];
       o.tracerStyle = TRACER_KI;
       o.tracerColor = BEAM_COLOR[i];
@@ -216,7 +222,7 @@ export class BallThrowController {
         const k = this.kind;
         const q = getFxQuality();
         comboFinisherFX.spinWave(ev.point, WAVE_RADIUS[k] * q.ringReach, ev.point.y, WEAPON_FX_STYLES.BALL, 0, 0, 0);
-        requestCameraShake(SHAKE_BY_KIND[k]);
+        requestCameraShake(ballFeedback(this.combo[k]).shake);
         if (this.combo[k].finisher && ev.target) {
           soundManager.playKiImpact(ev.point, true);
           const ty = ev.target.position.y;

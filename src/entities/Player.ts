@@ -18,6 +18,8 @@ import { getWeapon, isWeaponEnabled, resolveLoadout, resolveVariant } from '../w
 import { devWeaponsMode } from '../weapons/featureFlags';
 import { SLING_AIM_STANCE } from '../weapons/slingshot/pose';
 import type { ResolvedWeapon, WeaponDefinition, WeaponDisplayId, WeaponId } from '../weapons/types';
+import { IMPACT_PROFILES } from '../weapons/impactClass';
+import { spawnWeaponArc } from '../effects/meleeHitFx';
 
 export type WeaponType = WeaponId;
 
@@ -26,6 +28,9 @@ const DEFAULT_RESPAWN_POS = new THREE.Vector3(0, 0, 15);
 const _playerMoveDir = new THREE.Vector3();
 const _armTop = new THREE.Vector3();
 const _trailBase = new THREE.Vector3();
+// 揮動中棒身電弧間隔 (秒)：黃金棒雷霆較密、警棍電弧較疏
+const ARC_INTERVAL_THUNDER = 0.035;
+const ARC_INTERVAL_ELECTRIC = 0.07;
 const _trailTip = new THREE.Vector3();
 // 潛行姿勢 A「持棍戒備」：蹲姿時雙臂以肩為軸隨身體下沉並縮短，右手持武器斜擋身前、左臂半舉前伸平衡
 const ARM_X = 0.45;
@@ -442,6 +447,8 @@ export class Player {
   public readonly dashOrigin = new THREE.Vector3();
   public dashSerial: number = -1;
   private chargeSerial: number = -1;
+  private arcTimer: number = 0;   // 棒身電弧下一次出現倒數
+  private lastDelta: number = 0;  // 本幀出招推進秒數 (電弧間隔計時用)
   private readonly strikes = new StrikeTracker();
   // 揮擊拖尾 / 武器發光狀態：lane 0 = 主拖尾 (trail)、lane 1 = 第二拖尾 (trail2)；
   // 拖尾槽依錨點持握手輪替 (右手 0/1、左手 2/3)
@@ -1023,7 +1030,17 @@ export class Player {
     this.kf.start(move, loadout.tempo, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.moveSerial++;
     this.isAttacking = true;
-    loadout.sounds.start?.(this.position);
+    // 起手音：武器自訂 (羽球拍 / 書鞭) 優先，否則依 impactClass 播揮空破風 (終結技更低更長)；發射型招式由投射物控制器出聲
+    if (loadout.sounds.start) loadout.sounds.start(this.position);
+    else if (!move.projectile) {
+      const ip = IMPACT_PROFILES[loadout.impactClass];
+      soundManager.playSwingWhoosh(this.position, ip.whooshHz, ip.whooshLen, move.finisher);
+    }
+  }
+
+  // 目前連段第幾段 (0..2；打擊音效分層用，如拳 / 腿分音)
+  public get comboStep(): number {
+    return this.comboIndex;
   }
 
   // 手持球棒 (第二世界為警棍) 棒尖世界座標，需於出招姿勢套用後呼叫；未持棒時回傳玩家位置
@@ -1094,7 +1111,18 @@ export class Player {
       this.trailActive[lane] = true;
       this.trailMove[lane] = move;
     }
-    if (this.sampleSwingAnchors(limb, _trailBase, _trailTip)) swingTrail.push(this.trailSlot[lane], _trailBase, _trailTip);
+    if (this.sampleSwingAnchors(limb, _trailBase, _trailTip)) {
+      swingTrail.push(this.trailSlot[lane], _trailBase, _trailTip);
+      // 雷 / 電元素武器：揮動中棒身纏繞電弧 (間隔取樣，數量受 fxQuality.miniBolts 池上限)
+      this.arcTimer -= this.lastDelta;
+      if (this.arcTimer <= 0) {
+        const st = weaponFxStyle(limb === 'WL' ? this.activeLoadout.fx.L : this.activeLoadout.fx.R);
+        if (st.element === 'THUNDER' || st.element === 'ELECTRIC') {
+          this.arcTimer = st.element === 'THUNDER' ? ARC_INTERVAL_THUNDER : ARC_INTERVAL_ELECTRIC;
+          spawnWeaponArc(_trailBase, _trailTip, st, move.finisher);
+        }
+      }
+    }
     return true;
   }
 
@@ -1115,8 +1143,18 @@ export class Player {
     const move = this.kf.move;
     // 僅一般連段套組出拖尾 (暗殺等專用招式不出)
     // 發射型招式 (球) 不揮拖尾：光痕由投射物負責
-    if (!move || move.projectile || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
+    if (!move || !this.activeLoadout.combo.includes(move)) { if (this.swingFxOn) this.endSwingFx(); return; }
     const p = this.kf.progress;
+    if (move.projectile) {
+      // 發射型招式 (籃球第 3 投聚氣)：只出聚氣光環 (手持球不發光)
+      if (move.charge && p >= move.charge[0] && p <= move.charge[1] && this.chargeSerial !== this.moveSerial) {
+        this.chargeSerial = this.moveSerial;
+        const st = weaponFxStyle(this.activeLoadout.fx.R);
+        slashFX.chargeRing(this.position.x, this.position.y + 0.9, this.position.z, st.color, st.tipColor);
+      }
+      if (this.swingFxOn) this.endSwingFx();
+      return;
+    }
     // 第二條拖尾 (雙持左手等) 區段獨立，不影響主拖尾與武器發光
     if (move.trail2) this.updateTrailLane(1, move, p, move.trail2, move.trailLimb2);
     else if (this.trailActive[1]) this.endTrailLane(1);
@@ -1144,11 +1182,6 @@ export class Player {
       const k = move.charge ? 1 - u : Math.sin(Math.PI * u);
       this.setWeaponGlow(k, style.glow * (move.finisher ? FINISHER_FX_BOOST.glow : 1) * (move.charge ? 1.6 : 1), style.color);
     }
-  }
-
-  // 本幀命中時間點的打擊音效 (strikeIndex 0 = 主擊)
-  private playStrikeSound(strikeIndex: number) {
-    this.displayLoadout.sounds.strike?.(strikeIndex, this.position);
   }
 
   // 本幀招式突進速度 (m/s)：圖層時間 t → t + delta 與突進區段重疊的位移 ÷ delta (各幀加總恰為 lunge.dist)
@@ -1209,6 +1242,7 @@ export class Player {
 
   // 每幀推進出招時間與命中事件，並將姿勢疊加於一般動作之上 (於 animatePlayer 之後呼叫)
   private updateKungFu(delta: number) {
+    this.lastDelta = delta;
     this.strikeMove = null;
     if (this.punchTimer > 0) this.punchTimer -= delta;
     this.sinceStrike += delta;
@@ -1221,8 +1255,7 @@ export class Player {
     if (strikeIndex >= 0) {
       this.strikeMove = this.strikes.move;
       this.strikeIndex = strikeIndex;
-      this.sinceStrike = 0;
-      this.playStrikeSound(strikeIndex);
+      this.sinceStrike = 0; // 打擊音效改於 CombatSystem 判定結算後播放 (依是否打中)
     }
     if (this.attackQueued && this.canAttack) this.startComboMove();
     if (!this.kf.move) this.isAttacking = false;

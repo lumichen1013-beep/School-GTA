@@ -21,7 +21,9 @@ export type SpatialSoundId =
   // 操場踢足球雙人組：腳面觸球悶響
   | 'soccerKick'
   // 世界 Boss 花劍客：細劍突刺 (細劍武器共用)、高帽旋轉、花瓣綻放、終幕鐘聲、結界嗡鳴
-  | 'rapierThrust' | 'hatSpin' | 'petalBloom' | 'finaleChime' | 'barrierHum';
+  | 'rapierThrust' | 'hatSpin' | 'petalBloom' | 'finaleChime' | 'barrierHum'
+  // 近戰打擊分級：揮空破風、腿擊、終結技低頻重擊、雷電劈啪、警棍金屬電擊
+  | 'swingWhoosh' | 'kickHit' | 'finisherThump' | 'zap' | 'batonHit';
 
 // 最大可聞距離 (公尺)：超過即完全不播放、不建立 audio node。小動作小、全校性事件大
 export const SOUND_RANGE: Record<SpatialSoundId, number> = {
@@ -66,6 +68,11 @@ export const SOUND_RANGE: Record<SpatialSoundId, number> = {
   petalBloom: 25,
   finaleChime: 40,
   barrierHum: 40,
+  swingWhoosh: 10,
+  kickHit: 15,
+  finisherThump: 20,
+  zap: 18,
+  batonHit: 15,
   thunder: 1000 // 天空全域事件：以校園中心計距離，任何世界位置皆接近滿音量
 };
 

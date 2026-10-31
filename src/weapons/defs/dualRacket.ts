@@ -17,10 +17,18 @@ export const DUAL_RACKET: WeaponDefinition = {
   combo: PLAYER_COMBOS.DUAL,
   tempo: 1,
   fxStyle: { R: 'DUAL_R', L: 'DUAL_L' },
+  impactClass: 'MEDIUM',
   finisherFx: { waistY: 1.0, feathers: true },
   model: { mount: 'BOTH', build: buildDualRackets },
   anchors: { R: { base: 0.5, tip: 1.0 }, L: { base: 0.5, tip: 1.0 } },
-  sounds: { start: (pos) => soundManager.playBadmintonWhoosh(pos), strike: (_i, pos) => soundManager.playBadmintonHit(pos) },
+  sounds: {
+    start: (pos) => soundManager.playBadmintonWhoosh(pos),
+    strike: (_i, pos, fin, _s, landed) => {
+      if (!landed) return;
+      soundManager.playBadmintonHit(pos);
+      if (fin) soundManager.playFinisherThump(pos, false);
+    }
+  },
   readyPose: 'DUAL',
   suppressUmbrella: true,
   unlock: {

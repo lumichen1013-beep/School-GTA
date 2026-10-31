@@ -52,11 +52,12 @@ function buildResolved(def: WeaponDefinition | WeaponOverrideDefinition, variant
     combo: variant ? variant.combo : def.combo,
     tempo: variant?.tempo ?? def.tempo,
     fx: normalizeFx(variant ? variant.fxStyle : def.fxStyle),
+    impactClass: def.impactClass,
     finisherFx: variant?.finisherFx ?? def.finisherFx ?? {},
     launchCap: variant?.launchCap ?? def.launchCap ?? null,
     chainWindow: def.chainWindow ?? 0.6,
     anchors: def.anchors,
-    sounds: def.sounds,
+    sounds: variant?.sounds ?? def.sounds,
     readyPose: def.readyPose
   };
 }

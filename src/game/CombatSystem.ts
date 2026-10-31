@@ -7,6 +7,9 @@ import { slashFX } from '../effects/SlashFX';
 import { impactDust } from '../effects/ImpactDust';
 import { getFxQuality } from '../effects/fxQuality';
 import { weaponFxStyle } from '../effects/weaponFxStyle';
+import { spawnFinisherExtras, spawnMeleeHitFx } from '../effects/meleeHitFx';
+import { npcHitFlash } from '../effects/npcHitFlash';
+import { impactFeedback, type ImpactFeedback } from '../weapons/impactClass';
 import type { CollidableBox } from '../world/CampusWorld';
 import type { NPC } from '../entities/NPC';
 import { AOE_SECONDARY_DMG, PLAYER_TAKEDOWN, PLAYER_TAKEDOWN_WINDUP, NPC_GRAB_THROW, NPC_RULER_FLURRY, NPC_SPINKICK, probeFan, probeLine, probePath, strikeDmg, strikeHitMode, strikeRoute, wrapAngle, type KfMove, type PlayerHitMode } from '../entities/shared/kungfu';
@@ -35,11 +38,14 @@ const FX_FIST_LAND_DELAY = 0.22; // 旋風腿落地補環延遲 (約招式進度
 // 雙燕羽刃斬痕：X 字離地高度、命中閃光胸口高度
 const SLASH_X_HEIGHT = 1.15;
 const HIT_FLASH_HEIGHT = 1.0;
+const HIT_FX_FORWARD = 0.45; // 命中特效點自受擊者中心往攻擊者方向的偏移 (m)
 const PATH_FORWARD_PUSH = 0.6; // 突進斬擊退方向：往兩側外推 + 沿突進方向的分量
 const DASH_BAND_REMAIN = 1.0; // 突進光帶終點 = 目前位置 + 剩餘突進距離 × 此倍率
 const ENEMY_CROSS_HALF_LEN = 0.75; // 突進斬命中者身上的 X 字斬痕單臂半長
 const DASH_RING_RADIUS = 1.5; // 突進斬終點雙圈衝擊環半徑
 const _pathProbe = new Float32Array(3);
+const _impactFb: ImpactFeedback = { hitStop: 0, shake: 0 };
+const _fxBossDir = new THREE.Vector3();
 const _plantShape = new PlantAoeShape();
 // 顏色往白色混合 (t = 0 原色、1 純白)
 function mixWhiteChannel(c: number, t: number): number {
@@ -140,9 +146,9 @@ const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const FRONTAL_BANNER = '🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！';
 const HIT_TEXT_LIFE = 0.8; // 通用命中傷害數字壽命 (秒)
-export const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
-const HIT_STOP_FINISHER = 0.08; // 連段終結技命中停格
-export const HIT_STOP_EXTRA = HIT_STOP * 0.6; // 多段招式額外擊 (小擊) 命中停格；投射物命中預設
+// 近戰停格 / 震動改由武器 impactClass 分級 (weapons/impactClass)；以下僅供投射物預設停格使用
+export const HIT_STOP = 0.04;
+export const HIT_STOP_EXTRA = HIT_STOP * 0.6; // 投射物命中預設停格 (遠程武器另依 impactClass 覆寫)
 const HIT_STOP_SCALE = 0.05;
 // 終結技群攻：次目標傷害倍率、判定距離寬容與高低差上限
 const AOE_REACH_GRACE = 0.3;
@@ -221,7 +227,8 @@ export class CombatSystem {
   // 已通緝 / 已顯示正面防禦提示的出招序號 (同一招多段命中只結算一次)
   private readonly crimeSlot = new SerialSlot();
   private readonly frontalSlot = new SerialSlot();
-  private slashFlashes: number = 0; // 本擊已出的命中閃光數
+  private slashFlashes: number = 0; // 本擊已出命中特效 (星芒 / 碎片) 的目標數
+  private strikeLanded: boolean = false; // 本擊是否打中任何目標 (決定是否播命中音)
   private slashCrosses: number = 0; // 本擊已出的敵身 X 字斬痕數
 
   constructor(private readonly ctx: GameContext) {}
@@ -780,11 +787,14 @@ export class CombatSystem {
     this.resolvePlayerHit(move, player.strikeIndex);
   }
 
-  // 命中回饋：短暫停格 (額外擊縮短)，終結技主擊加長並震動鏡頭、其餘依招式 hitShake 震動
+  // 命中回饋 (單體)：停格 / 鏡頭震動依武器 impactClass 分級 (見 weapons/impactClass)，不隨裝置降級
   private onPlayerHitLanded(move: KfMove, strikeIndex: number) {
-    this.hitStop = strikeIndex > 0 ? HIT_STOP_EXTRA : move.finisher ? HIT_STOP_FINISHER : HIT_STOP;
-    if (move.finisher && strikeIndex === 0) requestCameraShake(0.3);
-    else if (move.hitShake > 0) requestCameraShake(move.hitShake);
+    this.strikeLanded = true;
+    const player = this.ctx.player;
+    const fb = impactFeedback(player.activeWeapon.impactClass, move.finisher && strikeIndex === 0, strikeIndex > 0, false,
+      move.hitShake, move.aoe, player.weaponDef.useGoldAoe === true, _impactFb);
+    this.hitStop = Math.max(this.hitStop, fb.hitStop);
+    requestCameraShake(fb.shake);
   }
 
   // 本招推擊距離：目前武器的 lightPush；持羽球拍 (場景覆寫套組) 揮拍時不套用，維持只扣血
@@ -809,6 +819,7 @@ export class CombatSystem {
       if (!this.ctx.slingshot?.launch(move)) this.ctx.ballThrow?.launch(move);
       return;
     }
+    this.strikeLanded = false;
     this.spawnSlashFx(move, strikeIndex);
     const route = strikeRoute(move, strikeIndex);
     if (route === 'AOE') this.resolveFinisherAoe(move, move.aoe!);
@@ -818,6 +829,9 @@ export class CombatSystem {
       _aoeLightOpts.index = strikeIndex;
       this.resolveFinisherAoe(move, move.aoe!, _aoeLightOpts);
     } else this.resolveSingleHit(move, strikeIndex);
+    // 打擊音效：判定結算後才播 (武器依 landed 決定揮空是否出聲；揮空破風音已於起手播放)
+    const player = this.ctx.player;
+    player.activeWeapon.sounds.strike?.(strikeIndex, player.position, move.finisher && strikeIndex === 0, player.comboStep, this.strikeLanded);
   }
 
   // 斬痕特效 (命中判定前、揮空亦觸發)：招式 slashFx 'X' 於追擊 (左拍) 在面前交成 X 字光痕；
@@ -851,13 +865,32 @@ export class CombatSystem {
     }
   }
 
-  // 命中閃光：招式有 slashFx 者於受擊目標胸口出星芒 (每擊數量依品質上限)，右拍青綠、左拍櫻粉
-  private spawnHitFlash(move: KfMove, strikeIndex: number, npc: NPC) {
-    if (!move.slashFx || this.slashFlashes >= getFxQuality().flashPerStrike) return;
+  // 命中特效 (全武器)：受擊目標胸口出星芒 + 塊狀碎片 + 元素附加層 (見 effects/meleeHitFx)；每擊出特效的目標數依品質上限，
+  // 雙持武器依命中序號左右拍分色；終結技主擊 (AOE_FX) 放大
+  private spawnHitFlash(move: KfMove, strikeIndex: number, npc: NPC, dir: THREE.Vector3, finisherFx: boolean) {
+    this.spawnHitFxAt(move, strikeIndex, npc.position, dir, finisherFx);
+  }
+
+  // 命中特效 (任意受擊位置，target = 受擊者腳底；NPC / 花劍客共用)
+  private spawnHitFxAt(move: KfMove, strikeIndex: number, target: THREE.Vector3, dir: THREE.Vector3, finisherFx: boolean) {
+    const q = getFxQuality();
+    if (this.slashFlashes >= q.flashPerStrike) return;
     this.slashFlashes++;
     const weapon = this.ctx.player.activeWeapon;
-    slashFX.hitFlash(npc.position.x, npc.position.y + HIT_FLASH_HEIGHT, npc.position.z,
-      weaponFxStyle(strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R).color);
+    const style = weaponFxStyle(strikeIndex % 2 === 1 ? weapon.fx.L : weapon.fx.R);
+    // 特效點往攻擊者方向前移 (不被受擊者身體遮住)
+    spawnMeleeHitFx(target.x - dir.x * HIT_FX_FORWARD, target.y + HIT_FLASH_HEIGHT, target.z - dir.z * HIT_FX_FORWARD, dir.x, dir.z, style, weapon.impactClass,
+      finisherFx && move.finisher && strikeIndex === 0, q.flashPerStrike);
+  }
+
+  // 花劍客受擊特效 (霸體不閃白；星芒 / 碎片 / 元素層與 NPC 相同)
+  private spawnBossHitFx(move: KfMove, strikeIndex: number, finisherFx: boolean) {
+    const boss = this.ctx.fencerBossFight?.boss;
+    if (!boss) return;
+    const p = this.ctx.player.position;
+    const dx = boss.position.x - p.x, dz = boss.position.z - p.z;
+    const d = Math.hypot(dx, dz) || 1;
+    this.spawnHitFxAt(move, strikeIndex, boss.position, _fxBossDir.set(dx / d, 0, dz / d), finisherFx);
   }
 
   // 突進斬收刀爆點：每個命中者身上爆出 X 字斬痕 (數量依品質上限，與命中閃光共用上限)
@@ -884,6 +917,7 @@ export class CombatSystem {
     // 0. 世界 Boss 花劍客 (結界戰中；霸體：只扣血與命中回饋，不擊飛、不通緝)
     if (this.ctx.fencerBossFight?.tryHitMelee(player.position, reach, damage)) {
       this.onPlayerHitLanded(move, strikeIndex);
+      this.spawnBossHitFx(move, strikeIndex, false);
       return;
     }
 
@@ -998,13 +1032,15 @@ export class CombatSystem {
     const move = spec.move;
     if (move && spec.feedback !== 'NONE') {
       if (spec.feedback === 'SINGLE') this.onPlayerHitLanded(move, spec.strikeIndex);
-      this.spawnHitFlash(move, spec.strikeIndex, npc);
+      this.spawnHitFlash(move, spec.strikeIndex, npc, spec.dir, spec.feedback === 'AOE_FX');
       if (spec.feedback === 'AOE_FX') this.spawnEnemyCross(move, npc);
     }
 
     const cap = spec.launchCap;
     const ko = npc.launchFlying(spec.dir, knockback, damage, spec.mode === 'LAUNCH', spec.ignoreCooldown, true, cap?.h, cap?.v,
       spec.mode === 'SHOVE' ? spec.shoveDist : 0);
+    // 受擊閃白 (全武器共通，含投射物)：只換該 NPC 部位材質為共用發光版本，不破壞共用材質 / 不增 draw call
+    if (npc.lastHitResult !== 'BLOCKED') npcHitFlash.flash(npc.mesh);
     if (ko) {
       this.handleNpcDefeated(npc, 'ATTACK', spec.reportCrime && this.takeCrimeSlot(spec.serial));
     } else {
@@ -1045,6 +1081,7 @@ export class CombatSystem {
       if (onGround) p.y = gy;
       comboFinisherFX.groundSlam(p, radius, style, weapon.finisherFx.slamBolt === true, onGround);
       if (onGround) impactDust.burst(this.ctx.engine.scene, p, _fxNoDir.set(0, 0, 0), { count: q.debrisCount, upward: 2.2, spreadY: 0.2, life: 0.7, size: 1.5 });
+      spawnFinisherExtras(p, radius, style, weapon.impactClass, 'SLAM', p.y);
       return;
     }
 
@@ -1054,6 +1091,7 @@ export class CombatSystem {
     if (inPond || inPool) return;
     comboFinisherFX.spinWave(p, move.fx === 'DASH' ? DASH_RING_RADIUS : radius, p.y + (fx.waistY ?? 0), style,
       grounded ? fx.landRadius ?? 0 : 0, p.y, FX_FIST_LAND_DELAY);
+    if (move.fx === 'SPIN') spawnFinisherExtras(p, radius, style, weapon.impactClass, 'SPIN', p.y + (fx.waistY ?? 0.9));
   }
 
   // 取 (x, z) 腳下地面高度：與玩家落腳邏輯一致 (不高於 refY + 容許高度的最高水平面 / 坡道，預設 0)
@@ -1126,6 +1164,7 @@ export class CombatSystem {
     else if (isLine) plantShape = _plantShape.set(1, player.position.x, player.position.z, fwd.x, fwd.z, 0, lineLen, lineHalfW);
     // 0. 世界 Boss 花劍客：與生態園相同的形狀判定 (圓 / 扇形 / 長條，LINE 起點可為突進起點)，佔一個命中名額
     const bossHits = this.ctx.fencerBossFight?.tryHitAoe(center, plantRadius, damage, plantShape) ? 1 : 0;
+    if (bossHits > 0) this.spawnBossHitFx(move, opts ? opts.index : 0, fx);
     const plantCount = bossHits + ecologicalGarden.tryHitAllByPlayer(center, plantRadius, damage, max - bossHits, _aoePlantHits, AOE_SECONDARY_DMG, plantShape);
     let bossBanner = false;
     let plantBanner = '';
@@ -1243,15 +1282,14 @@ export class CombatSystem {
 
     // 每招一次的結算：命中回饋、打鬥聲響、正面防禦提示、通緝
     const npcHits = hits - plantCount;
-    if (!fx) {
-      if (hits > 0) {
-        this.hitStop = HIT_STOP_EXTRA;
-        if (move.hitShake > 0) requestCameraShake(move.hitShake);
-      }
-    } else if (hits > 0) {
-      this.hitStop = gold ? aoe.hitStopGold ?? aoe.hitStop : hits >= 2 ? aoe.hitStopMulti : aoe.hitStop;
-      requestCameraShake(gold ? aoe.shakeGold ?? aoe.shake : aoe.shake);
-    } else if (aoe.missShake > 0) {
+    // 停格 / 震動依 impactClass 分級；終結技取 max(分級下限, 招式 aoe 覆寫值)
+    if (hits > 0) {
+      this.strikeLanded = true;
+      const idx = opts ? opts.index : 0;
+      const fb = impactFeedback(player.activeWeapon.impactClass, fx && move.finisher, idx > 0, hits >= 2, move.hitShake, aoe, gold, _impactFb);
+      this.hitStop = Math.max(this.hitStop, fb.hitStop);
+      requestCameraShake(fb.shake);
+    } else if (fx && aoe.missShake > 0) {
       requestCameraShake(aoe.missShake); // 揮空：只震不停格
     }
     if (isDetention && n > 0) this.ctx.detention.emitFightNoise(player.position);

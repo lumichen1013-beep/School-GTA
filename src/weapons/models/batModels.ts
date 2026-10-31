@@ -8,6 +8,11 @@ export function mountOnHand(root: THREE.Group) {
   root.visible = false;
 }
 
+// 棒身沿長軸加長倍率 (視覺誇大；錨點 / 棒尖衝擊點以模型本地座標計算，隨之外移)。判定距離 (stats.reach) 不變：
+// 棒尖 + 拖尾外延 (weaponFxStyle tipExt) 的外緣仍在判定距離內，見 tests/weaponFx.test.ts
+export const NORMAL_BAT_LENGTH_SCALE = 1.15;
+export const GOLD_BAT_LENGTH_SCALE = 1.2;
+
 // 普通木質棒球棍 (Normal Wooden Baseball Bat)：揮擊時木質棒身以樣式主色 emissive 脈衝
 export function buildNormalBat(): WeaponModelHandle {
   const root = new THREE.Group();
@@ -20,6 +25,7 @@ export function buildNormalBat(): WeaponModelHandle {
   barrel1.position.y = 0.58;
   root.add(barrel1);
   mountOnHand(root);
+  root.scale.y = NORMAL_BAT_LENGTH_SCALE;
   return {
     parts: { R: root },
     glow: (k, peak, color) => {
@@ -56,6 +62,7 @@ export function buildGoldBat(): WeaponModelHandle {
   crown.position.y = 1.02;
   root.add(crown);
   mountOnHand(root);
+  root.scale.y = GOLD_BAT_LENGTH_SCALE;
   return {
     parts: { R: root },
     // 金屬發光維持原 emissive 色，只調整強度

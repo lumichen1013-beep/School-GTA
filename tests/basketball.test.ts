@@ -276,7 +276,7 @@ describe('籃球狀態機：命中、落空、撞牆、被擋', () => {
     expect(r.hits).toHaveLength(1);
     expect(r.hits[0]).toMatchObject({ mode: 'LIGHT', damage: 45, knockback: 11, shoveDist: 0, launchCap: null, serial: r.player.moveSerial });
     expect(spin).toHaveBeenCalledTimes(1);      // 命中衝擊環
-    expect(r.stops).toEqual([0.035]);           // 第 1 段短停格
+    expect(r.stops).toEqual([0.045]);           // 第 1 段停格 = impactClass MEDIUM 讀表
     const tBack = r.stepUntil(() => r.ctrl.state === 'READY', 4);
     expect(tHit + tBack).toBeLessThan(0.35);
     expect(r.player.attackLock).toBe(false);

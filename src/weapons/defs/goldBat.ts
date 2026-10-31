@@ -17,11 +17,20 @@ export const SPECIAL_BAT: WeaponDefinition = {
   combo: PLAYER_COMBOS.BAT,
   tempo: 1.14,
   fxStyle: 'GOLD',
+  impactClass: 'GOLD',
   finisherFx: { slamBolt: true },
   useGoldAoe: true,
   model: { mount: 'R', build: buildGoldBat },
   anchors: { R: { base: 0.4, tip: 1.02 } },
-  sounds: { strike: (_i, pos) => soundManager.playSpecialBatHit(pos) },
+  // 命中才出聲：雷霆轟擊 + 每擊雷電劈啪，終結技疊低頻重擊 (落地另有地裂音)；揮空破風 (低沉) 由 impactClass 預設
+  sounds: {
+    strike: (_i, pos, fin, _s, landed) => {
+      if (!landed) return;
+      soundManager.playSpecialBatHit(pos);
+      soundManager.playZap(pos);
+      if (fin) soundManager.playFinisherThump(pos, true);
+    }
+  },
   readyPose: 'WEAPON',
   unlock: {
     lockedHint: (p, world) => world === 'DETENTION'

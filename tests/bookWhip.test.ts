@@ -267,7 +267,7 @@ describe('綁帶捆書：持羽球拍時只扣血', () => {
       currentWorldType: 'CAMPUS', npcs: [npc],
       player: {
         isDead: false, position: new THREE.Vector3(), rotationY: 0, moveSerial: 1, isHoldingRacket: holdingRacket,
-        weaponDef: DEF, activeWeapon: { launchCap: null },
+        weaponDef: DEF, activeWeapon: { launchCap: null, impactClass: 'MEDIUM', sounds: {} }, comboStep: 0,
         strikeMove: holdingRacket ? PLAYER_COMBOS.RACKET[0] : W1, strikeIndex: 0,
         getWeaponReach: () => REACH, getWeaponDamage: () => DEF.stats.damage, getWeaponKnockback: () => DEF.stats.knockback
       },

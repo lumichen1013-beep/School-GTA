@@ -9,7 +9,13 @@ const sfx = vi.hoisted(() => ({
   playBadmintonHit: vi.fn(),
   playWhipCrack: vi.fn(),
   playBookThud: vi.fn(),
-  playThrowWhoosh: vi.fn()
+  playThrowWhoosh: vi.fn(),
+  playFistHit: vi.fn(),
+  playKickHit: vi.fn(),
+  playFinisherThump: vi.fn(),
+  playZap: vi.fn(),
+  playBatonHit: vi.fn(),
+  playSwingWhoosh: vi.fn()
 }));
 vi.mock('../src/audio/SoundEffects', () => ({ soundManager: sfx }));
 // 拖尾條帶材質需要 canvas (document)：測試環境改用一般材質
@@ -35,6 +41,7 @@ type SfxName = keyof typeof sfx;
 //  拖尾樣式   resolveWeaponFxId(comboSet, currentWeapon === 'SPECIAL_BAT')
 //  錨點       sampleSwingAnchors 'W'：羽球拍 0.66/0.98、黃金棒 0.4/1.02、普通棒 0.35/0.89 (拳無可見武器 → 不取樣)
 //  打擊音效   playStrikeSound：羽球拍無、黃金棒 playSpecialBatHit、普通棒 playBatHit、拳 playPunch；羽球拍起手 playBadmintonWhoosh
+//             (武器特效統一後：打中才出聲、取第一層主音；拳 → playFistHit (腿 playKickHit)、警棍 → playBatonHit、羽球拍 → playBadmintonHit)
 //  待機姿勢   applyCrouchReadyPose：拳且未持拍 → READY_RIGHT_FIST
 //  終結特效   CombatSystem.onFinisherImpact：SLAM gold 參數 = 持黃金棒；SPIN 拳 腰高 0.9 + 落地環 1.1、警棍 腰高 1.0
 //  群攻覆寫   resolveFinisherAoe：持黃金棒改讀招式上的 maxGold / shakeGold / hitStopGold
@@ -78,7 +85,7 @@ const SLINGSHOT_COMBO = { combo: getWeapon('SLINGSHOT').combo, comboNames: ['放
 
 const BASELINE = {
   FIST: {
-    ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playPunch', start: null,
+    ...STATS.FIST, ...FIST_COMBO, tempo: 1, fxId: 'FIST', anchors: null, strike: 'playFistHit', start: null,
     readyPose: 'FIST', slamBolt: false, spinWaistY: 0.9, spinLandRadius: 1.1, goldAoe: false
   },
   NORMAL_BAT_CAMPUS: {
@@ -86,7 +93,7 @@ const BASELINE = {
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: false
   },
   NORMAL_BAT_DETENTION: {
-    ...STATS.NORMAL_BAT, ...BATON_COMBO, tempo: 1, fxId: 'BATON', anchors: { base: 0.35, tip: 0.89 }, strike: 'playBatHit', start: null,
+    ...STATS.NORMAL_BAT, ...BATON_COMBO, tempo: 1, fxId: 'BATON', anchors: { base: 0.35, tip: 0.89 }, strike: 'playBatonHit', start: null,
     readyPose: 'WEAPON', slamBolt: false, spinWaistY: 1.0, spinLandRadius: 0, goldAoe: false
   },
   SPECIAL_BAT: {
@@ -117,7 +124,7 @@ const BASELINE = {
 
 // 羽球拍覆寫：招式 / 樣式 / 錨點 / 音效取自羽球拍，數值與群攻覆寫仍取目前武器
 const racketBaseline = (current: WeaponId): Snapshot => ({
-  ...STATS[current], ...RACKET_COMBO, tempo: 1, fxId: 'RACKET', anchors: { base: 0.66, tip: 0.98 }, strike: null, start: 'playBadmintonWhoosh',
+  ...STATS[current], ...RACKET_COMBO, tempo: 1, fxId: 'RACKET', anchors: { base: 0.66, tip: 0.98 }, strike: 'playBadmintonHit', start: 'playBadmintonWhoosh',
   readyPose: 'WEAPON', slamBolt: false, spinWaistY: null, spinLandRadius: 0, goldAoe: current === 'SPECIAL_BAT'
 });
 
@@ -128,9 +135,11 @@ function snapshot(current: WeaponId, override: WeaponOverrideId | null, world: W
   const callSfx = (fn: ((...args: any[]) => void) | undefined): SfxName | null => {
     for (const k of Object.keys(sfx) as SfxName[]) sfx[k].mockClear();
     if (!fn) return null;
-    fn(0, { x: 0, y: 0, z: 0 });
-    const called = (Object.keys(sfx) as SfxName[]).filter((k) => sfx[k].mock.calls.length > 0);
-    expect(called.length).toBe(1);
+    // 第 1 段主擊、打中 (非終結技)；多層音效時取第一個播放的主音
+    fn(0, { x: 0, y: 0, z: 0 }, false, 0, true);
+    const called = (Object.keys(sfx) as SfxName[]).filter((k) => sfx[k].mock.calls.length > 0)
+      .sort((a, b) => sfx[a].mock.invocationCallOrder[0] - sfx[b].mock.invocationCallOrder[0]);
+    expect(called.length).toBeGreaterThanOrEqual(1);
     return called[0];
   };
   return {
@@ -193,10 +202,10 @@ describe('武器查表快照 (階段 0：與重構前常數表一致)', () => {
     const def = getWeapon('BOOK_WHIP');
     expect(def.release).toBe('dev');
     expect(def.lightPush ?? 0).toBe(0);
-    expect(def.launchCap).toEqual({ h: 9.5, v: 5.4 });
+    expect(def.launchCap).toEqual({ h: 9.4, v: 5.5 });
     expect(def.worlds).toEqual({ CAMPUS: true, DETENTION: false });
     sfx.playBookThud.mockClear();
-    def.sounds.strike!(1, { x: 1, y: 2, z: 3 });
+    def.sounds.strike!(1, { x: 1, y: 2, z: 3 }, false, 1, true);
     expect(sfx.playBookThud).toHaveBeenCalledWith({ x: 1, y: 2, z: 3 });
     expect(def.unlock?.lockedHint({ swimWon: false } as never, 'DETENTION')).toBe('⚠️ 特訓院管制區：器材已遭沒收！');
     expect(def.unlock?.lockedHint({ swimWon: false } as never, 'CAMPUS')).toContain('游泳比賽');

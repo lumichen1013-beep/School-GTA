@@ -52,6 +52,22 @@ function getSharedMaterial(key: BucketKey, sample?: THREE.Material): THREE.Mater
   return mat;
 }
 
+// 受擊閃白材質：共用烘焙材質 (lambert / double) 的發光版本，同樣全體 NPC 共用。
+// 與原材質同類型、同 vertexColors / side (shader defines 相同)，只差 emissive uniform → 沿用同一 shader program，無需另行編譯；
+// 每個 NPC 部位本來就是各自的 Mesh / draw call，受擊時短暫換材質不增加 draw call，也不影響其他 NPC 的共用材質
+const flashMaterials = new Map<THREE.Material, THREE.Material>();
+export const HIT_FLASH_EMISSIVE = 0.62;
+export function getHitFlashMaterial(mat: THREE.Material): THREE.Material | null {
+  const cached = flashMaterials.get(mat);
+  if (cached) return cached;
+  if (mat !== sharedMaterials.get('lambert') && mat !== sharedMaterials.get('double')) return null;
+  const flash = (mat as THREE.MeshLambertMaterial).clone();
+  flash.emissive.setRGB(HIT_FLASH_EMISSIVE, HIT_FLASH_EMISSIVE, HIT_FLASH_EMISSIVE);
+  markShared(flash);
+  flashMaterials.set(mat, flash);
+  return flash;
+}
+
 // 依原材質決定烘焙類別：透明零件獨立保留；明亮的無光照零件 (反光條、感測燈) 保持無光照；其餘以 Lambert 呈現
 function classify(mat: THREE.Material): BucketKey {
   const m = mat as THREE.MeshBasicMaterial;

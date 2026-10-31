@@ -19,6 +19,8 @@ import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
 import { comboFinisherFX } from './effects/ComboFinisherFX';
 import { slashFX } from './effects/SlashFX';
+import { hitSparkFX } from './effects/HitSparkFX';
+import { npcHitFlash } from './effects/npcHitFlash';
 import { impactDust } from './effects/ImpactDust';
 import { BasketballGame } from './systems/BasketballGame';
 import { RacingGame } from './systems/RacingGame';
@@ -215,6 +217,7 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.init(this.engine.scene);
     comboFinisherFX.init(this.engine.scene);
     slashFX.init(this.engine.scene);
+    hitSparkFX.init(this.engine.scene);
     this.projectiles = new ProjectileSystem(createProjectileHost(this));
     this.projectiles.init(this.engine.scene);
     if (devWeaponsMode !== 'off') {
@@ -373,6 +376,7 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.prewarm(compile);
     comboFinisherFX.prewarm(compile);
     slashFX.prewarm(compile);
+    hitSparkFX.prewarm(compile);
     impactDust.prewarm(this.engine.scene, compile);
     this.waterSplashVFX.prewarm(compile);
     this.projectiles.prewarm(compile);
@@ -393,6 +397,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.reset();
     comboFinisherFX.reset();
     slashFX.reset();
+    hitSparkFX.reset();
+    npcHitFlash.reset();
 
     const previousWorld = this.currentWorldType;
     this.currentWorldType = targetWorld;
@@ -599,6 +605,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.reset();
     comboFinisherFX.reset();
     slashFX.reset();
+    hitSparkFX.reset();
+    npcHitFlash.reset();
     this.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
     this.slingshot?.cancel(); // 取消蓄力 / 開鏡
     this.projectiles.reset();
@@ -614,6 +622,8 @@ class SchoolGTASandbox implements GameContext {
       swingTrail.reset();
       comboFinisherFX.reset();
       slashFX.reset();
+      hitSparkFX.reset();
+      npcHitFlash.reset();
       if (this.currentWorldType === 'DETENTION') {
         this.detention.applyLoadout();
         this.detention.spawnGraceTimer = 5.0;
@@ -912,6 +922,8 @@ class SchoolGTASandbox implements GameContext {
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);
     slashFX.update(delta, this.cameraCtrl.camera);
+    hitSparkFX.update(delta);
+    npcHitFlash.update(delta);
     this.combat.updateNpcAttacks(targetPosition, isSpawnGraceActive);
     // 花劍客 (太陽花待機 / Boss AI 與招式 / 結界 / 回血 / 勝敗收尾)
     this.fencerBossFight.update(delta);

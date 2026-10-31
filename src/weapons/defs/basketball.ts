@@ -26,6 +26,7 @@ export function createBasketball(): WeaponDefinition {
     combo: PLAYER_COMBOS.BALL,
     tempo: 1,
     fxStyle: 'BALL',
+    impactClass: 'MEDIUM',
     finisherFx: {},
     chainWindow: BASKETBALL_CHAIN_WINDOW,
     ranged: { speed: 60, range: 18, catchDelay: 0.06, dpsDistance: 8 },

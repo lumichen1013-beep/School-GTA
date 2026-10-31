@@ -19,6 +19,7 @@ export function createSlingshot(): WeaponDefinition {
     combo: createSlingRelease(),
     tempo: 1,
     fxStyle: 'STONE',
+    impactClass: 'LIGHT',
     finisherFx: {},
     ranged: { speed: SLING.speedMax, range: SLING.range, catchDelay: SLING.afterShot, dpsDistance: SLING.falloffNear, charged: true },
     model: { mount: 'R', build: buildSlingshot },

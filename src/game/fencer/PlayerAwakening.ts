@@ -55,9 +55,12 @@ export function awakenFxStyle(id: WeaponFxId, base: WeaponFxStyle): WeaponFxStyl
   let s = awakenStyleCache.get(id);
   if (!s) {
     const left = id === 'DUAL_L';
+    // 沿用原樣式的形狀 / 元素欄位 (拖尾外延 tipExt、命中元素 element)，只換配色；尾端色改朝陽系
     s = {
+      ...base,
       color: left ? AWAKEN_SKY : AWAKEN_GOLD,
       tipColor: AWAKEN_WHITE,
+      tail: left ? AWAKEN_GOLD : AWAKEN_SKY,
       intensity: Math.max(base.intensity, 1.25),
       life: base.life * 1.15,
       glow: base.glow,
