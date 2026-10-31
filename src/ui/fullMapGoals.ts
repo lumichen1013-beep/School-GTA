@@ -1,6 +1,6 @@
 import type { MissionTrackerData, DetentionRadarData } from './HUD';
 import { getCampusPoi, type CampusPoiId } from '../world/campusLayout';
-import { QUEST_STAGES } from '../game/fencer/fencerStory';
+import { fencerQuestText } from '../game/fencer/fencerStory';
 
 // 大地圖「下一步目標」：第一個未完成且有固定地點的任務 (純函式，供地圖脈衝環與目標卡共用)
 export interface FullMapGoal {
@@ -21,10 +21,12 @@ interface CampusGoalDef {
   done: (d: MissionTrackerData) => boolean;
   /** 依進度改寫圖示 / 標題 / 說明 (花劍客三段揭露) */
   text?: (d: MissionTrackerData) => { icon: string; title: string; desc: string };
+  /** 為 true 時完全隱藏 (尋寶：發現前不出現在目標卡 / 地圖) */
+  hidden?: (d: MissionTrackerData) => boolean;
 }
 
 const fencerStageText = (d: MissionTrackerData) => {
-  const s = QUEST_STAGES[Math.max(0, Math.min(2, d.fencerStage))];
+  const s = fencerQuestText(d.fencerStage, d.fencerGrowth);
   return { icon: s.goalIcon, title: s.goalTitle, desc: s.goalDesc };
 };
 
@@ -39,13 +41,13 @@ const CAMPUS_GOALS: readonly CampusGoalDef[] = [
   { key: 'bike', poi: 'bikeShed', icon: '🚲', title: '騎乘火柴人自行車', desc: '自行車棚取車，按 E 騎乘', done: (d) => d.hasRiddenBike },
   { key: 'pond', poi: 'pond', icon: '🪙', title: '許願池投幣', desc: '生態園區蓮花許願池', done: (d) => d.hasWishedPond },
   { key: 'hotfood', poi: 'commissary', icon: '🍱', title: '合作社品嚐熱食', desc: '天天合作社櫃台', done: (d) => d.hasTastedHotFood },
-  { key: 'fencer', poi: 'sunflower', icon: '❓', title: QUEST_STAGES[0].goalTitle, desc: QUEST_STAGES[0].goalDesc, done: (d) => d.fencerDefeated, text: fencerStageText }
+  { key: 'fencer', poi: 'sunflower', icon: '❓', title: '', desc: '', done: (d) => d.fencerDefeated, text: fencerStageText, hidden: (d) => !d.fencerDiscovered }
 ];
 
 // 校園下一目標 (全部完成回傳 null)
 export function pickCampusGoal(d: MissionTrackerData): FullMapGoal | null {
   for (const g of CAMPUS_GOALS) {
-    if (g.done(d)) continue;
+    if (g.done(d) || g.hidden?.(d)) continue;
     const poi = getCampusPoi(g.poi);
     const t = g.text ? g.text(d) : g;
     return { key: g.key, icon: t.icon, title: t.title, desc: t.desc, x: poi.x, z: poi.z };
@@ -53,13 +55,17 @@ export function pickCampusGoal(d: MissionTrackerData): FullMapGoal | null {
   return null;
 }
 
-// 興趣點完成狀態遮罩 (bit 依序：合作社 / 羽球場 / 食人花 / 許願池 / 閃身步老師 / 太陽花)，供靜態底圖快取判斷是否重繪
+// 興趣點完成狀態遮罩 (bit 依序：合作社 / 羽球場 / 食人花 / 許願池 / 閃身步老師 / 太陽花 / 已發現怪苗)，供靜態底圖快取判斷是否重繪
 export function campusPoiDoneMask(d: MissionTrackerData | null): number {
   if (!d) return 0;
-  return (d.hasTastedHotFood ? 1 : 0) | (d.peBossDefeated ? 2 : 0) | (d.plantBossDefeated ? 4 : 0) | (d.hasWishedPond ? 8 : 0) | (d.dodgeSkillLevel >= 1 ? 16 : 0) | (d.fencerDefeated ? 32 : 0);
+  return (d.hasTastedHotFood ? 1 : 0) | (d.peBossDefeated ? 2 : 0) | (d.plantBossDefeated ? 4 : 0) | (d.hasWishedPond ? 8 : 0) | (d.dodgeSkillLevel >= 1 ? 16 : 0) | (d.fencerDefeated ? 32 : 0) | (d.fencerDiscovered ? 64 : 0);
 }
 
 const CAMPUS_POI_DONE_BIT: Partial<Record<CampusPoiId, number>> = { commissary: 1, badminton: 2, plant: 4, pond: 8, dodgeTeacher: 16, sunflower: 32 };
+/** 發現前完全不畫的興趣點 (太陽花：mask bit 64 = 已發現) */
+export function isCampusPoiHidden(mask: number, id: CampusPoiId): boolean {
+  return id === 'sunflower' && (mask & 64) === 0;
+}
 export function isCampusPoiDone(mask: number, id: CampusPoiId): boolean {
   const bit = CAMPUS_POI_DONE_BIT[id];
   return bit !== undefined && (mask & bit) !== 0;

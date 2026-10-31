@@ -8,6 +8,7 @@ import type { WeaponFxStyle } from '../effects/weaponFxStyle';
 import { FAN_ANGLE_MIN_DIST, probeLine } from './shared/kungfu';
 import type { PlantAoeShape } from '../world/EcologicalGarden';
 import { SkillBubble, TALK_BUBBLE_STYLE } from './shared/SkillBubble';
+import { ndcOvershoot, worldDropForNdc, ndcInsetX } from '../game/fencer/bubbleSafeArea';
 import {
   BossHealthBars, FENCER, segmentPointDistance, rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit,
   pinchClonePos, pinchHitMask, type BossDamageResult, type BossCue
@@ -128,6 +129,8 @@ export interface FencerBossHost {
 }
 
 const BUBBLE_Y = 2.75;
+const _bv = new THREE.Vector3();
+const _br = new THREE.Vector3();
 
 // ===== 模型 =====
 function colored(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
@@ -414,6 +417,37 @@ export class FencerBoss {
   /** 換樂章過場已進行秒數 (非換樂章時 -1) */
   public get transitionTime(): number {
     return this.act === 'TRANSITION' ? this.actTimer : -1;
+  }
+
+  /**
+   * 手機直屏遠景：把頭頂框上緣夾在螢幕安全區 (頂部資訊條下方)；safeTop = null 表示不夾 (桌機 / 橫屏)。
+   * 以兩次投影求「世界高度 → NDC」斜率，換算需下移的世界高度。
+   */
+  public fitBubble(camera: THREE.Camera, safeTop: number | null) {
+    const sprite = this.bubble.sprite;
+    const b = this.bubble;
+    if (safeTop === null || !sprite || !sprite.visible) { b.yOffset = b.xOffset = b.zOffset = 0; return; }
+    // 垂直：上緣不進入頂部 UI
+    const topY = BUBBLE_Y + 0.25 + sprite.scale.y * 0.85; // +0.25 = 浮動上升量
+    _bv.set(this.position.x, topY, this.position.z).project(camera);
+    if (_bv.z > 1) { b.yOffset = b.xOffset = b.zOffset = 0; return; }
+    const y0 = _bv.y;
+    _bv.set(this.position.x, topY + 1, this.position.z).project(camera);
+    const slope = _bv.y - y0;
+    b.yOffset = -worldDropForNdc(ndcOvershoot(y0, safeTop), slope, BUBBLE_Y - 1.2);
+    // 水平：左右不被螢幕邊緣切掉 (沿鏡頭右方向平移)
+    _br.setFromMatrixColumn(camera.matrixWorld, 0).setY(0);
+    if (_br.lengthSq() < 1e-6) { b.xOffset = b.zOffset = 0; return; }
+    _br.normalize();
+    const halfWorld = sprite.scale.x / 2;
+    _bv.set(this.position.x, BUBBLE_Y, this.position.z).project(camera);
+    const cx = _bv.x;
+    _bv.set(this.position.x + _br.x * halfWorld, BUBBLE_Y, this.position.z + _br.z * halfWorld).project(camera);
+    const halfNdc = Math.abs(_bv.x - cx);
+    const inset = ndcInsetX(cx, halfNdc, 0.03);
+    const shift = halfNdc > 1e-4 ? (inset / halfNdc) * halfWorld : 0;
+    b.xOffset = _br.x * shift;
+    b.zOffset = _br.z * shift;
   }
 
   /** 頭頂對話框 (NPC 樣式，≤ 22 字) */

@@ -37,9 +37,13 @@ export const REMATCH_LINE_AFTER_LOSS = '又是你？還沒學乖？';
 
 /** 互動提示 (依戳的進度烘托氣氛) */
 export const POKE_PROMPT = {
-  /** 1~4 句 */
-  calm: (n: number, total: number) => `🌻 戳一下太陽花 (${n}/${total})`,
-  /** 5~8 句 */
+  /** 尚未發現 (第 0 下，只在約 2m 內出現) */
+  undiscovered: '🌱 草裡好像有什麼……戳戳看？',
+  /** 1~3 下：小苗 */
+  calm: (n: number, total: number) => `🌱 再戳一下小苗 (${n}/${total})`,
+  /** 4~6 下：花苞 */
+  bud: (n: number, total: number) => `🌷 再戳一下花苞？(${n}/${total})`,
+  /** 7~8 句 */
   tense: (n: number, total: number) => `🌻 再戳一下太陽花？(${n}/${total})`,
   /** 9 句以後 */
   warn: (n: number, total: number) => `⚠️ 真的還要戳嗎？(${n}/${total})`,
@@ -52,17 +56,17 @@ export const POKE_PROMPT = {
 
 export const RUMOR = {
   /** 田徑阿凱 (起跑線拉筋時輪播) */
-  trackBefore: ['操場中間那朵花，會轉頭看人。', '我跑第十圈時，它對我『嘖』了一聲。'],
+  trackBefore: ['操場草皮好像有東西在動。', '我跑第十圈時，草裡有人『嘖』了一聲。'],
   trackAfter: ['欸，昨天操場是不是有人在擊劍？', '那朵花剛剛跟我說早安……'],
   trackChallenge: '要跟我比 200m 嗎？',
   /** 足球雙人組：射門沒進 → 射門者 + 隊友接話 */
-  soccerShooterBefore: '球又滾去太陽花那了……你去撿！',
+  soccerShooterBefore: '球又滾進那片草裡了……你去撿！',
   soccerReplyBefore: '別去！上次有人戳它，就沒回來上課。',
   soccerShooterAfter: '球滾去太陽花那，它踢回來了！',
   /** 中央花台長椅 */
-  bench: '操場那朵太陽花，比這些大十倍耶。',
+  bench: '半夜聽到草裡有人在嘆氣。',
   /** 路人聊天群組 (顯示時前綴 💬) */
-  chatBefore: '聽說操場的太陽花會罵人',
+  chatBefore: '聽說放學後草地會碎碎念',
   chatAfter: ['聽說有人跟花決鬥還贏了', '操場的花現在超有禮貌']
 } as const;
 
@@ -70,7 +74,7 @@ export const RUMOR = {
 
 export const BROADCAST = {
   lines: [
-    '📢【總務處公告】操場中央的太陽花請勿踩踏、請勿戳弄，它最近脾氣不太好，已經會翻白眼了。',
+    '📢【總務處公告】校園草皮上的不明小東西請勿踩踏、請勿戳弄，它最近脾氣不太好，已經會翻白眼了。',
     '📢【體育組尋物】器材室找到三十年前西洋劍社的社旗，上面繡著一朵太陽花與一頂高帽，請知情者洽體育組！'
   ],
   /** 首勝後才會出現 */
@@ -89,10 +93,23 @@ export interface QuestStageText {
 }
 
 export const QUEST_STAGES: readonly [QuestStageText, QuestStageText, QuestStageText] = [
-  { name: '操場中央的怪花', desc: '放學後它好像會轉頭……戳戳看？', goalIcon: '❓', goalTitle: '操場中央的怪花', goalDesc: '放學後它好像會轉頭看人' },
+  { name: '草地上的怪苗', desc: '它好像會回應你……再戳戳看？', goalIcon: '❓', goalTitle: '草地上的怪苗', goalDesc: '它好像會回應你' },
   { name: '擊敗操場花劍客', desc: '向日爵士在結界裡等你回禮', goalIcon: '🎩', goalTitle: '擊敗花劍客・向日爵士', goalDesc: '戳太陽花一下即可再戰' },
   { name: '花劍客・禮成', desc: '太陽花重新向陽 · 再戰勝利 +$200', goalIcon: '🎩', goalTitle: '花劍客・禮成', goalDesc: '太陽花重新向陽' }
 ];
+
+/** 發現怪苗 (首次戳到)：任務看板 / 大地圖在此之前完全不顯示 */
+export const DISCOVER_BANNER = { text: '🌱 你發現了奇怪的小苗……', ms: 2800 } as const;
+
+/** 階段 0 (怪苗) 的任務文字隨成長更新 (growth 0~10)；遭遇 / 完成後沿用 QUEST_STAGES */
+export function fencerQuestText(stage: number, growth: number): QuestStageText {
+  const s = QUEST_STAGES[Math.max(0, Math.min(2, stage))];
+  if (stage > 0) return s;
+  if (growth >= 10) return { ...s, name: '操場中央的怪花', desc: '它好像會轉頭看人……戳戳看？', goalTitle: '操場中央的怪花', goalDesc: '它好像會轉頭看人' };
+  if (growth >= 7) return { ...s, name: '快開花的怪苗', desc: '花苞越來越大……它在生氣嗎？', goalTitle: '快開花的怪苗', goalDesc: '花苞越來越大了' };
+  if (growth >= 4) return { ...s, name: '長出花苞的怪苗', desc: '它又長高了一截……再戳戳看？', goalTitle: '長出花苞的怪苗', goalDesc: '它又長高了一截' };
+  return s;
+}
 
 // ===== 戰中：開場過場 =====
 

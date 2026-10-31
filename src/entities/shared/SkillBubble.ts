@@ -34,6 +34,11 @@ const BUBBLE_FONT_FAMILY = '"Segoe UI", -apple-system, BlinkMacSystemFont, "Micr
 // 頭頂技能名稱 / 對話氣泡 (3D Billboard Sprite，CanvasTexture 0-GC，可延遲建立)
 export class SkillBubble {
   public sprite?: THREE.Sprite;
+  /** 額外垂直偏移 (世界單位，例如螢幕安全區夾制時往下壓) */
+  public yOffset = 0;
+  /** 額外水平偏移 (世界單位，螢幕邊緣夾制時往內推) */
+  public xOffset = 0;
+  public zOffset = 0;
   private canvas?: HTMLCanvasElement;
   private context?: CanvasRenderingContext2D;
   private texture?: THREE.CanvasTexture;
@@ -42,7 +47,7 @@ export class SkillBubble {
 
   constructor(
     private readonly parent: THREE.Object3D,
-    private readonly baseY: number,
+    public baseY: number,
     private readonly style: SkillBubbleStyle
   ) {}
 
@@ -193,7 +198,7 @@ export class SkillBubble {
     this.draw(text, isAdvanced);
     this.timer = this.duration;
     if (this.sprite) {
-      this.sprite.position.y = this.baseY;
+      this.sprite.position.set(this.xOffset, this.baseY + this.yOffset, this.zOffset);
       (this.sprite.material as THREE.SpriteMaterial).opacity = 0.95;
       this.sprite.visible = true;
     }
@@ -204,7 +209,7 @@ export class SkillBubble {
     this.timer -= delta;
     const progress = 1.0 - (this.timer / this.duration);
     // 輕微平緩上浮 (+0.25m)
-    this.sprite.position.y = this.baseY + progress * 0.25;
+    this.sprite.position.set(this.xOffset, this.baseY + this.yOffset + progress * 0.25, this.zOffset);
 
     // 前 60% 維持清晰，後 40% 平滑淡出
     const mat = this.sprite.material as THREE.SpriteMaterial;

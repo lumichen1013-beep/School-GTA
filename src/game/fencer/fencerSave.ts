@@ -15,10 +15,12 @@ export interface FencerSave {
   pokes: number;
   warmLineShown: boolean;
   dodgeEggShown: boolean;
+  /** 已發現怪苗 (第一次戳到)；發現前大地圖 / 任務看板不顯示 */
+  discovered: boolean;
 }
 
 export function defaultFencerSave(): FencerSave {
-  return { fightsStarted: 0, defeated: false, wins: 0, lastResult: 'NONE', pokes: 0, warmLineShown: false, dodgeEggShown: false };
+  return { fightsStarted: 0, defeated: false, wins: 0, lastResult: 'NONE', pokes: 0, warmLineShown: false, dodgeEggShown: false, discovered: false };
 }
 
 const int = (v: unknown, max: number): number => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(max, Math.floor(v)) : 0);
@@ -41,6 +43,7 @@ export function parseFencerSave(raw: string | null | undefined): FencerSave {
   s.pokes = int(o.pokes, FENCER.TAUNT_COUNT);
   s.warmLineShown = bool(o.warmLineShown);
   s.dodgeEggShown = bool(o.dodgeEggShown);
+  s.discovered = bool(o.discovered);
   s.lastResult = o.lastResult === 'WIN' || o.lastResult === 'LOSS' ? o.lastResult : 'NONE';
   // 一致性：贏過 → 至少開戰 1 次、勝場 ≥ 1；開戰過但沒結果 (中途關閉) → 視為敗；從未開戰 → 無結果
   if (s.defeated) {
@@ -50,13 +53,15 @@ export function parseFencerSave(raw: string | null | undefined): FencerSave {
   if (s.fightsStarted > 0 && s.lastResult === 'NONE') s.lastResult = s.defeated ? 'WIN' : 'LOSS';
   if (s.fightsStarted === 0) s.lastResult = 'NONE';
   if (!s.defeated) s.warmLineShown = false;
+  // 舊存檔 (無 discovered 欄位)：戳過 / 開過戰 / 贏過必定已發現
+  if (s.pokes > 0 || s.fightsStarted > 0 || s.defeated) s.discovered = true;
   return s;
 }
 
 export function serializeFencerSave(s: FencerSave): string {
   return JSON.stringify({
     v: 1, fightsStarted: s.fightsStarted, defeated: s.defeated, wins: s.wins, lastResult: s.lastResult,
-    pokes: s.pokes, warmLineShown: s.warmLineShown, dodgeEggShown: s.dodgeEggShown
+    pokes: s.pokes, warmLineShown: s.warmLineShown, dodgeEggShown: s.dodgeEggShown, discovered: s.discovered
   });
 }
 

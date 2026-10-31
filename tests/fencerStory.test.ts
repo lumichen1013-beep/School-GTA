@@ -263,7 +263,7 @@ describe('劇情進度存檔 (相容舊存檔)', () => {
   });
 
   it('序列化往返一致；揭露段與首勝 / 溫情句 / 彩蛋旗標保存', () => {
-    const s = { fightsStarted: 3, defeated: true, wins: 2, lastResult: 'WIN' as const, pokes: 10, warmLineShown: true, dodgeEggShown: true };
+    const s = { fightsStarted: 3, defeated: true, wins: 2, lastResult: 'WIN' as const, pokes: 10, warmLineShown: true, dodgeEggShown: true, discovered: true };
     expect(parseFencerSave(serializeFencerSave(s))).toEqual(s);
     expect(fencerQuestStage(0, false)).toBe(0);
     expect(fencerQuestStage(1, false)).toBe(1);

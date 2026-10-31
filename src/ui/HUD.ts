@@ -25,8 +25,8 @@ import { isTouchDevice } from '../core/device';
 import { qualityManager } from '../core/QualityManager';
 import { QUALITY_PRESETS } from '../core/quality';
 import { getDiagFlags } from '../core/diagFlags';
-import { QUEST_STAGES } from '../game/fencer/fencerStory';
-import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
+import { fencerQuestText } from '../game/fencer/fencerStory';
+import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -119,6 +119,9 @@ export interface MissionTrackerData {
   fencerDefeated: boolean;
   /** 花劍客任務揭露段：0 未知 (操場中央的怪花)、1 已遭遇、2 完成 */
   fencerStage: number;
+  /** 已發現怪苗 (發現前任務看板 / 大地圖不顯示) 與成長階段 0~10 */
+  fencerDiscovered: boolean;
+  fencerGrowth: number;
 }
 
 export interface DetentionRadarData {
@@ -1169,7 +1172,9 @@ export class HUD {
       last.hasTastedHotFood === data.hasTastedHotFood &&
       last.dodgeSkillLevel === data.dodgeSkillLevel &&
       last.fencerDefeated === data.fencerDefeated &&
-      last.fencerStage === data.fencerStage
+      last.fencerStage === data.fencerStage &&
+      last.fencerDiscovered === data.fencerDiscovered &&
+      last.fencerGrowth === data.fencerGrowth
     ) {
       return;
     }
@@ -1244,7 +1249,8 @@ export class HUD {
 
     // 13. 世界 Boss：擊敗操場花劍客
     const fencerDone = data.fencerDefeated;
-    const fencerText = QUEST_STAGES[Math.max(0, Math.min(2, data.fencerStage))];
+    const fencerText = fencerQuestText(data.fencerStage, data.fencerGrowth);
+    if (this.qFencerItem) this.qFencerItem.style.display = data.fencerDiscovered ? '' : 'none';
     if (this.qFencerIcon) this.qFencerIcon.textContent = fencerText.goalIcon;
     if (this.qFencerName) this.qFencerName.textContent = fencerText.name;
     if (this.qFencerDesc) this.qFencerDesc.textContent = fencerText.desc;
@@ -1256,7 +1262,7 @@ export class HUD {
     ].filter(Boolean).length;
 
     // 更新總進度與進度條 (任務小介面與大地圖側欄同步)
-    this.setQuestSummary('📜 校園歷練', completedCount, 14);
+    this.setQuestSummary('📜 校園歷練', completedCount, data.fencerDiscovered ? 14 : 13);
   }
 
   // 合作社 (熱食補血部) 彈出式選單
@@ -2880,7 +2886,7 @@ export class HUD {
         ctx.font = this.fmFont(10);
         ctx.textAlign = 'center';
         // 建築內含興趣點圖示時，標籤改貼建築下緣避開圖示
-        const hasPoi = CAMPUS_POIS.some((p) => p.icon && Math.abs(p.x - bx) <= bw / 2 && Math.abs(p.z - bz) <= bd / 2);
+        const hasPoi = CAMPUS_POIS.some((p) => p.icon && !isCampusPoiHidden(poiDoneMask, p.id) && Math.abs(p.x - bx) <= bw / 2 && Math.abs(p.z - bz) <= bd / 2);
         this.fmText(ctx, label, toScreenX(bx), hasPoi ? toScreenY(bz + bd / 2) - 3 : toScreenY(bz) + 3);
       }
     };
@@ -2923,7 +2929,7 @@ export class HUD {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const poi of CAMPUS_POIS) {
-      if (!poi.icon) continue;
+      if (!poi.icon || isCampusPoiHidden(poiDoneMask, poi.id)) continue;
       const done = isCampusPoiDone(poiDoneMask, poi.id);
       const px0 = toScreenX(poi.x);
       const py0 = toScreenY(poi.z);

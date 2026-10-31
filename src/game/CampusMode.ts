@@ -86,7 +86,9 @@ export class CampusMode {
     hasTastedHotFood: false,
     dodgeSkillLevel: 0,
     fencerDefeated: false,
-    fencerStage: 0
+    fencerStage: 0,
+    fencerDiscovered: false,
+    fencerGrowth: 0
   };
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
@@ -587,6 +589,8 @@ export class CampusMode {
     tracker.dodgeSkillLevel = progression.dodgeSkillLevel;
     tracker.fencerDefeated = !!progression.fencerDefeated;
     tracker.fencerStage = this.ctx.fencerBossFight?.questStage ?? 0; // 測試替身可能未提供
+    tracker.fencerDiscovered = this.ctx.fencerBossFight?.discovered ?? false;
+    tracker.fencerGrowth = this.ctx.fencerBossFight?.growthStage ?? 0;
     this.ctx.hud.updateMissionTracker(tracker);
   }
 }

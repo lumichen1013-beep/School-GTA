@@ -3,7 +3,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SkillBubble, TALK_BUBBLE_STYLE } from '../entities/shared/SkillBubble';
 import type { SunflowerFace, SunflowerReaction } from '../game/fencer/fencerRules';
 
-// 操場中央的巨型太陽花 (花劍客的召喚者)：莖 + 葉 (1 call)、花盤 + 20 瓣 (1 call)、臉 (表情圖集 quad，1 call) = 3 draw calls。
+// 操場中央的太陽花 (花劍客的召喚者)：莖 + 葉 (1 call)、花盤 / 花苞 (1 call，依成長切換預建幾何)、臉 (表情圖集 quad，1 call) = 最多 3 draw calls。
+// 成長：一開始是不起眼的小綠苗 (約 20cm、兩片嫩葉、無花)，每被戳一次長大一階 (0~10)，
+//   階段 4~6 花苞、7~9 半開、10 完整綻放；成長以彈簧平滑逼近 (略過衝)，葉片以 drawRange 增減，執行期零配置。
+//   小苗階段另有 1 顆極小閃光點 (僅在玩家 5m 內偶爾閃現，花苞階段起隱藏)，同時最多 2 draw calls。
 // 每次被戳依台詞播放小反應 (轉向 / 背對 / 縮小 / 發抖 / 鞠躬 / 變色)，狀態以目標值平滑逼近，執行期零配置。
 
 const FACE_ORDER: readonly SunflowerFace[] = ['BLANK', 'SIDE', 'SWEAT', 'ANNOYED', 'ANGRY', 'SHOCK', 'CRY', 'EVIL', 'SMUG', 'SLEEPY'];
@@ -11,6 +14,30 @@ const ATLAS_COLS = 4;
 const ATLAS_ROWS = 3;
 const CELL = 128;
 const HEAD_Y = 1.75;
+const MAX_STAGE = 10;
+// 各成長階段 (0~10) 的外觀表：莖高 / 粗細 (相對完整尺寸)、葉片數、花頭縮放
+const STEM_H = [0.2, 0.3, 0.45, 0.62, 0.85, 1.05, 1.25, 1.45, 1.6, 1.7, HEAD_Y];
+const STEM_T = [0.14, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.88, 0.95, 1.0];
+const LEAVES = [2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6];
+const HEAD_S = [0, 0, 0, 0, 0.22, 0.3, 0.4, 0.46, 0.62, 0.8, 1.0];
+/** 花頭型態切換點：< 6.5 花苞、< 9.5 半開、其餘綻放 */
+const BUD_UNTIL = 6.5;
+const HALF_UNTIL = 9.5;
+const SPRING_K = 256;
+const SPRING_C = 12.8;
+
+function table(arr: readonly number[], g: number): number {
+  const c = Math.max(0, Math.min(MAX_STAGE, g));
+  const i = Math.min(MAX_STAGE - 1, Math.floor(c));
+  return arr[i] + (arr[i + 1] - arr[i]) * (c - i);
+}
+
+/** 目前成長值對應的外觀數值 (純函式，供測試)：莖高、粗細、葉片數、花頭縮放、花頭型態 */
+export function sunflowerLook(g: number): { height: number; thickness: number; leaves: number; headScale: number; kind: 'NONE' | 'BUD' | 'HALF' | 'FULL' } {
+  const hs = table(HEAD_S, g);
+  const kind = hs < 0.02 ? 'NONE' : g < BUD_UNTIL ? 'BUD' : g < HALF_UNTIL ? 'HALF' : 'FULL';
+  return { height: table(STEM_H, g), thickness: table(STEM_T, g), leaves: LEAVES[Math.min(MAX_STAGE, Math.max(0, Math.floor(g + 0.6)))], headScale: hs, kind };
+}
 
 function colorize(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   const c = new THREE.Color(hex);
@@ -75,6 +102,26 @@ export class Sunflower {
   public readonly root = new THREE.Group();
   public readonly position: THREE.Vector3;
   private readonly bendPivot = new THREE.Group(); // 莖底：整朵前傾 (鞠躬)
+  private stemMesh!: THREE.Mesh;
+  private headMesh!: THREE.Mesh;
+  private faceMesh!: THREE.Mesh;
+  private glint!: THREE.Mesh;
+  private geoFull!: THREE.BufferGeometry;
+  private geoBud!: THREE.BufferGeometry;
+  private geoHalf!: THREE.BufferGeometry;
+  private stemIndexCount = 0;
+  private leafIndexCounts: number[] = [];
+  private collider: { min: THREE.Vector3; max: THREE.Vector3 } | null = null;
+  private growth = 0;          // 目前成長值 (彈簧)
+  private growthVel = 0;
+  private targetGrowth = 0;
+  private headScaleBase = 0;
+  private sproutMode = true;
+  private aware = 0;           // 小苗對玩家靠近的反應程度 0~1
+  private awareTarget = 0;
+  private glintCd = 2;
+  private glintT = 0;
+  private rnd = 12345;
   private readonly headPivot = new THREE.Group(); // 花盤
   private readonly petalMat: THREE.MeshLambertMaterial;
   private readonly faceTex: THREE.CanvasTexture | null;
@@ -100,12 +147,24 @@ export class Sunflower {
     this.root.name = 'sunflower';
     this.root.position.copy(this.position);
 
-    // 莖 + 兩片葉 (頂點色合併 1 call)
-    const stem = colorize(new THREE.CylinderGeometry(0.07, 0.11, HEAD_Y, 8).translate(0, HEAD_Y / 2, 0), 0x3f8f3a);
-    const leafA = colorize(new THREE.SphereGeometry(0.32, 8, 6).scale(1.4, 0.18, 0.6).rotateZ(0.5).translate(0.36, 0.75, 0), 0x4caf50);
-    const leafB = colorize(new THREE.SphereGeometry(0.28, 8, 6).scale(1.4, 0.18, 0.6).rotateZ(-0.5).translate(-0.32, 1.1, 0), 0x43a047);
-    const stemMesh = new THREE.Mesh(mergeGeometries([stem, leafA, leafB]), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    // 莖 + 6 片葉 (頂點色合併 1 call；葉片依序在 index 尾端，成長時以 drawRange 增減)
+    const stem = colorize(new THREE.CylinderGeometry(0.07, 0.11, HEAD_Y, 8).translate(0, HEAD_Y / 2, 0), 0x3d8f35);
+    const leafDefs: Array<[number, number, number, number, number, number]> = [
+      // 半徑, 傾角, x, y, 繞莖旋轉, 顏色
+      [0.32, 0.5, 0.36, 0.75, 0, 0x56b047],
+      [0.28, -0.5, -0.32, 1.1, 0, 0x4fa642],
+      [0.3, 0.45, 0.34, 0.45, 2.1, 0x56b047],
+      [0.26, -0.5, -0.3, 0.95, 1.1, 0x4fa642],
+      [0.26, 0.5, 0.3, 1.3, 3.6, 0x56b047],
+      [0.24, -0.45, -0.28, 0.3, 4.6, 0x4fa642]
+    ];
+    const leafGeos = leafDefs.map(([r, tilt, x, y, ry, col]) =>
+      colorize(new THREE.SphereGeometry(r, 8, 6).scale(1.4, 0.18, 0.6).rotateZ(tilt).translate(x, y, 0).rotateY(ry), col));
+    this.stemIndexCount = stem.index!.count;
+    this.leafIndexCounts = leafGeos.map((g) => g.index!.count);
+    const stemMesh = new THREE.Mesh(mergeGeometries([stem, ...leafGeos]), new THREE.MeshLambertMaterial({ vertexColors: true }));
     stemMesh.castShadow = true;
+    this.stemMesh = stemMesh;
 
     // 花盤 + 20 瓣 (花瓣材質色作為整朵色調，變色只改 uniform 不重編譯)
     const parts: THREE.BufferGeometry[] = [colorize(new THREE.CylinderGeometry(0.5, 0.5, 0.16, 20).rotateX(Math.PI / 2), 0x6b3f1d)];
@@ -114,9 +173,25 @@ export class Sunflower {
       const r = i % 2 === 0 ? 0.78 : 0.72;
       parts.push(colorize(new THREE.SphereGeometry(0.2, 6, 4).scale(1.0, 0.42, 0.12).rotateZ(a).translate(Math.cos(a) * r, Math.sin(a) * r, -0.02), i % 2 === 0 ? 0xf6c21c : 0xffd54a));
     }
+    this.geoFull = mergeGeometries(parts);
+    // 花苞：綠色球 + 8 片收攏的黃色花瓣尖 (含苞)
+    const budParts: THREE.BufferGeometry[] = [colorize(new THREE.SphereGeometry(0.45, 10, 8).scale(1, 1, 1.05), 0x4d9f3f)];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      budParts.push(colorize(new THREE.SphereGeometry(0.14, 5, 4).scale(0.7, 1.5, 0.5).rotateZ(a - Math.PI / 2).translate(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0.36), 0xe9bd2a));
+    }
+    this.geoBud = mergeGeometries(budParts);
+    // 半開：花盤 + 16 片向前攏起的花瓣 (杯狀)
+    const halfParts: THREE.BufferGeometry[] = [colorize(new THREE.CylinderGeometry(0.46, 0.46, 0.16, 16).rotateX(Math.PI / 2), 0x6b3f1d)];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      halfParts.push(colorize(new THREE.SphereGeometry(0.2, 6, 4).scale(1.3, 0.5, 0.12).translate(0.5, 0, 0).rotateY(-1.0).rotateZ(a), i % 2 === 0 ? 0xf0b81a : 0xf7cb3c));
+    }
+    this.geoHalf = mergeGeometries(halfParts);
     this.petalMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const headMesh = new THREE.Mesh(mergeGeometries(parts), this.petalMat);
+    const headMesh = new THREE.Mesh(this.geoFull, this.petalMat);
     headMesh.castShadow = true;
+    this.headMesh = headMesh;
 
     // 臉 (表情圖集，切 UV offset)
     const atlas = drawFaceAtlas();
@@ -130,6 +205,14 @@ export class Sunflower {
     faceMesh.position.z = 0.09;
     faceMesh.renderOrder = 1;
 
+    this.faceMesh = faceMesh;
+
+    // 小苗閃光點 (極小、僅偶爾閃現；平時 visible=false 不佔 draw call)
+    this.glint = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.glint.visible = false;
+    this.root.add(this.glint);
+
     this.headPivot.position.set(0, HEAD_Y, 0.05);
     this.headPivot.add(headMesh, faceMesh);
     this.bendPivot.add(stemMesh, this.headPivot);
@@ -138,6 +221,57 @@ export class Sunflower {
 
     this.bubble = new SkillBubble(this.root, 2.85, TALK_BUBBLE_STYLE);
     this.setFace('SMUG');
+    this.applyGrowth();
+  }
+
+  /** 成長階段 (0~10)：instant = 讀檔 / 重置不播動畫；否則以彈簧平滑長大 (略過衝) */
+  public setGrowth(stage: number, instant: boolean = false) {
+    const t = Math.max(0, Math.min(MAX_STAGE, stage));
+    if (!instant && t >= MAX_STAGE && this.targetGrowth < MAX_STAGE) this.pulse = 1.2; // 綻放瞬間花瓣炸開
+    this.targetGrowth = t;
+    if (instant) { this.growth = t; this.growthVel = 0; this.applyGrowth(); }
+  }
+
+  public get growthStage(): number {
+    return this.targetGrowth;
+  }
+
+  /** 玩家距離 (dist < 0 = 不在附近)：小苗階段在 SPROUT_AWARE_RANGE 內才有細微反應 */
+  public setPlayerNear(dist: number, playerPos: THREE.Vector3, awareRange: number) {
+    const near = dist >= 0 && dist < awareRange && this.targetGrowth < 4;
+    this.awareTarget = near ? 1 : 0;
+    if (near) this.targetYaw = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+  }
+
+  /** 碰撞盒隨大小調整 (只縮不超出初始範圍，ColliderGrid 已依初始大小分格) */
+  public bindCollider(box: { min: THREE.Vector3; max: THREE.Vector3 }) {
+    this.collider = box;
+    this.applyGrowth();
+  }
+
+  private applyGrowth() {
+    const look = sunflowerLook(this.growth);
+    const over = Math.max(0, this.growth - MAX_STAGE);
+    this.stemMesh.scale.set(look.thickness, look.height / HEAD_Y, look.thickness);
+    let n = this.stemIndexCount;
+    for (let i = 0; i < look.leaves; i++) n += this.leafIndexCounts[i];
+    this.stemMesh.geometry.setDrawRange(0, n);
+    this.headPivot.position.y = look.height;
+    const showHead = look.kind !== 'NONE';
+    this.headMesh.visible = showHead;
+    this.faceMesh.visible = showHead;
+    if (showHead) {
+      this.headMesh.geometry = look.kind === 'BUD' ? this.geoBud : look.kind === 'HALF' ? this.geoHalf : this.geoFull;
+      this.faceMesh.position.z = look.kind === 'BUD' ? 0.47 : 0.09;
+    }
+    this.headScaleBase = look.headScale * (1 + over * 0.5);
+    this.bubble.baseY = Math.max(0.6, look.height + look.headScale * 0.8 + 0.3);
+    if (this.collider) {
+      const half = Math.max(0.06, 0.25 * look.thickness);
+      this.collider.min.set(this.position.x - half, 0, this.position.z - half);
+      this.collider.max.set(this.position.x + half, Math.max(0.3, look.height + look.headScale * 0.8), this.position.z + half);
+    }
+    this.sproutMode = look.kind === 'NONE';
   }
 
   public setFace(face: SunflowerFace) {
@@ -189,6 +323,10 @@ export class Sunflower {
     this.twitch = 0;
     this.spin = 0;
     this.pulse = 0;
+    this.aware = 0;
+    this.awareTarget = 0;
+    this.glintT = 0;
+    this.glint.visible = false;
     this.targetTint.setHex(0xffffff);
     this.tint.setHex(0xffffff);
     this.petalMat.color.setHex(0xffffff);
@@ -198,6 +336,30 @@ export class Sunflower {
 
   public setVisible(v: boolean) {
     this.root.visible = v;
+  }
+
+  // 小苗閃光：玩家在範圍內每隔數秒閃現一顆極小光點 (0.4s)
+  private updateGlint(dt: number) {
+    if (!this.sproutMode) { if (this.glint.visible) this.glint.visible = false; return; }
+    if (this.glintT > 0) {
+      this.glintT -= dt;
+      const k = Math.max(0, this.glintT / 0.4);
+      this.glint.scale.setScalar(Math.sin(k * Math.PI));
+      if (this.glintT <= 0) this.glint.visible = false;
+      return;
+    }
+    if (this.awareTarget <= 0) { this.glintCd = Math.max(this.glintCd, 1.5); return; }
+    this.glintCd -= dt;
+    if (this.glintCd > 0) return;
+    this.rnd = (this.rnd * 1664525 + 1013904223) >>> 0;
+    const r1 = (this.rnd & 0xffff) / 0xffff;
+    this.rnd = (this.rnd * 1664525 + 1013904223) >>> 0;
+    const r2 = (this.rnd & 0xffff) / 0xffff;
+    const h = sunflowerLook(this.growth).height;
+    this.glint.position.set((r1 - 0.5) * 0.14, h * (0.55 + r2 * 0.5), (r2 - 0.5) * 0.1);
+    this.glint.visible = true;
+    this.glintT = 0.4;
+    this.glintCd = 3 + r1 * 3;
   }
 
   public update(dt: number) {
@@ -213,16 +375,32 @@ export class Sunflower {
     this.tint.lerp(this.targetTint, k);
     this.petalMat.color.copy(this.tint);
     this.pulse = Math.max(0, this.pulse - dt * 2.5);
+    if (this.growth !== this.targetGrowth || this.growthVel !== 0) {
+      // 彈簧 (略欠阻尼，約 0.5s 內長大並微微過衝)；子步避免大 dt 發散
+      let left = Math.min(dt, 0.1);
+      while (left > 0) {
+        const h = Math.min(left, 1 / 120);
+        this.growthVel += ((this.targetGrowth - this.growth) * SPRING_K - this.growthVel * SPRING_C) * h;
+        this.growth += this.growthVel * h;
+        left -= h;
+      }
+      if (Math.abs(this.targetGrowth - this.growth) < 0.002 && Math.abs(this.growthVel) < 0.02) { this.growth = this.targetGrowth; this.growthVel = 0; }
+      this.applyGrowth();
+    }
+    this.aware += (this.awareTarget - this.aware) * Math.min(1, dt * 3);
+    this.updateGlint(dt);
     if (this.twitch > 0) this.twitch -= dt;
     const jitter = this.shake * Math.sin(this.time * 55) + (this.twitch > 0 ? 0.1 * Math.sin(this.time * 70) * this.twitch : 0);
     // 待機輕晃
     const idle = Math.sin(this.time * 1.3) * 0.035;
     this.root.rotation.y = this.yaw;
     this.root.scale.setScalar(this.scale);
-    this.bendPivot.rotation.x = this.bend + idle * 0.5;
-    this.bendPivot.rotation.z = jitter;
+    // 小苗察覺玩家靠近：輕抖 + 微微朝玩家傾身 (只有在 5m 內才有，平時與草地融為一體)
+    const sprout = this.sproutMode ? this.aware : 0;
+    this.bendPivot.rotation.x = this.bend + idle * 0.5 + sprout * 0.14;
+    this.bendPivot.rotation.z = jitter + sprout * 0.05 * Math.sin(this.time * 17);
     this.headPivot.rotation.x = this.headPitch;
-    this.headPivot.scale.setScalar(1 + this.pulse * 0.25);
+    this.headPivot.scale.setScalar(this.headScaleBase * (1 + this.pulse * 0.25));
     this.bubble.update(dt);
   }
 }

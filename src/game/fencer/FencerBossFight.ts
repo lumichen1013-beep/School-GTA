@@ -16,17 +16,18 @@ import { BattleModeSwitch } from './BattleMode';
 import { AwakeningStats, PlayerAwakening } from './PlayerAwakening';
 import {
   FENCER, SunflowerTaunt, CombatRegen, canSkipIntro, victoryReward, BossLineGate, HeartVoice,
-  introTimeline, fencerQuestStage, victoryIsLong, INTRO_FIRST, VICTORY_FIRST, VICTORY_REPEAT, CHASE_LINE_MIN_FIGHT_SEC,
+  introTimeline, fencerQuestStage, sunflowerStage, sunflowerPokeRange, SPROUT_AWARE_RANGE, victoryIsLong, INTRO_FIRST, VICTORY_FIRST, VICTORY_REPEAT, CHASE_LINE_MIN_FIGHT_SEC,
   type BossDamageResult, type BossCue, type IntroTimeline
 } from './fencerRules';
 import {
   INTRO_FIRST_BEATS, INTRO_REMATCH_BEATS, REMATCH_BOSS_LINE, PLAYER_AWAKEN_BUBBLE, AWAKEN_BANNERS, AWAKEN_BANNER_GAP,
   BOSS_OPEN_LINE, BOSS_OPEN_DELAY, BOSS_CUE_LINES, TRANSITION_BEATS, MOVEMENT_BANNERS, HEART_LINES, HEART_LOW_HP,
   HEART_CRITICAL_HP, REGEN_BANNER, VICTORY_FIRST_BEATS, VICTORY_SLEEPY_LINE, VICTORY_BANNER, PLAYER_WIN_BUBBLE,
-  REMATCH_WIN_BOSS_LINE, DEFEAT_BOSS_LINES, RESPAWN_HEART_LINE, SUNFLOWER_DAILY_SEC, POKE_PROMPT, DODGE_TEACHER_EGG,
+  REMATCH_WIN_BOSS_LINE, DISCOVER_BANNER, DEFEAT_BOSS_LINES, RESPAWN_HEART_LINE, SUNFLOWER_DAILY_SEC, POKE_PROMPT, DODGE_TEACHER_EGG,
   type StoryBeat, type DailyLine, type HeartLineId
 } from './fencerStory';
 import { loadFencerSave, storeFencerSave } from './fencerSave';
+import { safeTopNdc, shouldFitBubble } from './bubbleSafeArea';
 import { buildRapier } from '../../weapons/models/rapierModel';
 
 // 世界 Boss【花劍客】總控：太陽花戳戳 → 開戰過場 (清場 / 結界 / 暮紅異空間 / Boss 亮相 / 玩家向陽覺醒)
@@ -52,7 +53,7 @@ const DUSK_SKY = 0x3a1222;
 const DUSK_FOG = 0x4a1830;
 const DUSK_FOG_DENSITY = 0.018;
 const BATTLE_SHADOW_EXTENT = 20;
-const POKE_RANGE = 3.2;
+const SPROUT_PETALS_GREEN = [0x6ccf5a, 0x8fd66b, 0x4fa642] as const;
 const SEPARATION = 0.95;
 const EMPTY_COLLIDERS: CollidableBox[] = [];
 
@@ -81,6 +82,9 @@ export class FencerBossFight {
   public readonly stats = new AwakeningStats();
   public fightsStarted = 0;
   public sunflower!: Sunflower;
+  private _discovered = false;
+  private bubbleSafeTop: number | null = null;
+  private bubbleSafeTimer = 0;
   public arena!: BossArena;
   public boss!: FencerBoss;
   public fx!: BossFX;
@@ -137,10 +141,12 @@ export class FencerBossFight {
     this.hooks = hooks;
     const { engine, world, ecologicalGarden, player } = this.ctx;
     this.sunflower = new Sunflower(world.group, FENCER.CENTER_X, FENCER.CENTER_Z);
-    world.colliders.push({
+    const sunflowerBox = {
       min: new THREE.Vector3(FENCER.CENTER_X - 0.25, 0, FENCER.CENTER_Z - 0.25),
       max: new THREE.Vector3(FENCER.CENTER_X + 0.25, 2.2, FENCER.CENTER_Z + 0.25)
-    });
+    };
+    world.colliders.push(sunflowerBox);
+    this.sunflower.bindCollider(sunflowerBox); // 碰撞盒隨成長調整 (小苗幾乎不擋路)
     this.arena = new BossArena(FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R);
     this.fx = new BossFX();
     this.boss = new FencerBoss(this.bossHost, this.fx);
@@ -170,6 +176,8 @@ export class FencerBossFight {
     this.taunt.pokes = s.pokes;
     this.taunt.warmLineShown = s.warmLineShown;
     this.dodgeEggShown = s.dodgeEggShown;
+    this._discovered = s.discovered;
+    this.sunflower.setGrowth(sunflowerStage(s.pokes, s.lastResult), true);
     if (s.lastResult === 'WIN') this.sunflower.resetPose('SLEEPY');
   }
 
@@ -178,8 +186,18 @@ export class FencerBossFight {
     storeFencerSave({
       fightsStarted: this.fightsStarted, defeated: progression.fencerDefeated, wins: progression.fencerWins,
       lastResult: this.taunt.lastResult, pokes: this.taunt.pokes, warmLineShown: this.taunt.warmLineShown,
-      dodgeEggShown: this.dodgeEggShown
+      dodgeEggShown: this.dodgeEggShown, discovered: this._discovered
     });
+  }
+
+  /** 已發現怪苗 (第一次戳到才為 true；發現前大地圖 / 任務看板 / 小地圖都不顯示) */
+  public get discovered(): boolean {
+    return this._discovered;
+  }
+
+  /** 太陽花目前成長階段 0~10 */
+  public get growthStage(): number {
+    return this.initialized ? this.sunflower.growthStage : 0;
   }
 
   /** 任務看板 / 大地圖揭露段：0 未知、1 已遭遇、2 已首勝 */
@@ -244,17 +262,19 @@ export class FencerBossFight {
     if (racingGame.isRacingTrack || racingGame.isSwimmingRace || tennisGame.tennisState !== 'IDLE' || campus.elevatorTransition) return false;
     const dx = pos.x - FENCER.CENTER_X;
     const dz = pos.z - FENCER.CENTER_Z;
-    return dx * dx + dz * dz < POKE_RANGE * POKE_RANGE && Math.abs(pos.y) < 1.5;
+    const range = sunflowerPokeRange(this.sunflower.growthStage);
+    return dx * dx + dz * dz < range * range && Math.abs(pos.y) < 1.5;
   }
 
   public pokePromptText(): string {
     const t = this.taunt;
     if (t.lastResult === 'LOSS') return POKE_PROMPT.afterLoss;
     if (t.lastResult === 'WIN') return t.isArmed(performance.now() / 1000) ? POKE_PROMPT.afterWinArmed : POKE_PROMPT.afterWinIdle;
+    if (t.pokes === 0) return POKE_PROMPT.undiscovered;
     if (t.pokes !== this.promptN) {
-      // 依進度烘托氣氛 (第 5 句後追問、第 9 句後警告)；只在計數變動時組字串
+      // 依進度烘托氣氛 (小苗 → 花苞 → 追問 → 警告)；只在計數變動時組字串
       this.promptN = t.pokes;
-      const fmt = t.pokes >= 9 ? POKE_PROMPT.warn : t.pokes >= 5 ? POKE_PROMPT.tense : POKE_PROMPT.calm;
+      const fmt = t.pokes >= 9 ? POKE_PROMPT.warn : t.pokes >= 7 ? POKE_PROMPT.tense : t.pokes >= 4 ? POKE_PROMPT.bud : POKE_PROMPT.calm;
       this.promptText = fmt(t.pokes, FENCER.TAUNT_COUNT);
     }
     return this.promptText;
@@ -264,6 +284,22 @@ export class FencerBossFight {
     const res = this.taunt.poke(performance.now() / 1000);
     if (!res.accepted || !res.line) return true;
     this.sunflower.react(res.line.reaction, res.line.face, this.ctx.player.position);
+    // 首次戳到 = 發現：短音效 + 橫幅；之後任務看板 / 大地圖才出現
+    if (!this._discovered) {
+      this._discovered = true;
+      soundManager.playWantedClearChime();
+      this.ctx.wantedSystem.showBanner(DISCOVER_BANNER.text, DISCOVER_BANNER.ms);
+      this.persist();
+    }
+    // 成長：戳一下長大一階 (彈簧動畫) + 幾片葉子 / 草屑；第 10 下綻放由開戰過場的花瓣爆發接續
+    if (res.index > 0) {
+      this.sunflower.setGrowth(sunflowerStage(this.taunt.pokes, this.taunt.lastResult));
+      if (res.index < FENCER.TAUNT_COUNT) {
+        this.fx.petalBurst(FENCER.CENTER_X, 0.1 + res.index * 0.12, FENCER.CENTER_Z, 4 + res.index, 1.4, SPROUT_PETALS_GREEN, 1.2, 0.5);
+      } else {
+        this.fx.petalBurst(FENCER.CENTER_X, 1.8, FENCER.CENTER_Z, 60, 5, PETAL_PALETTE_SUN, 2.5);
+      }
+    }
     this.sunflower.say(res.line.text, res.startFight ? 2.2 : res.daily ? SUNFLOWER_DAILY_SEC : 3.0);
     if (res.line.reaction === 'STIFFEN_HUM') soundManager.playBarrierHum(this.sunflower.position);
     else soundManager.playPetalBloom(this.sunflower.position);
@@ -333,6 +369,7 @@ export class FencerBossFight {
     this.sunflower.update(dt);
     this.arena.update(dt);
     this.boss.update(dt);
+    this.fitBossBubble(dt);
     this.fx.update(dt);
     comboFinisherFX.update(dt, this.ctx.cameraCtrl.camera);
     slashFX.update(dt, this.ctx.cameraCtrl.camera);
@@ -520,6 +557,26 @@ export class FencerBossFight {
     }
   }
 
+  /** 手機直屏：Boss 頭頂框夾在頂部資訊條 / Boss 血條下方 (量測每 0.5s 更新；桌機 / 橫屏不啟用) */
+  private fitBossBubble(dt: number) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (!shouldFitBubble(window.innerWidth, window.innerHeight)) {
+      if (this.bubbleSafeTop !== null) { this.bubbleSafeTop = null; this.boss.fitBubble(this.ctx.cameraCtrl.camera, null); }
+      return;
+    }
+    this.bubbleSafeTimer -= dt;
+    if (this.bubbleSafeTop === null || this.bubbleSafeTimer <= 0) {
+      this.bubbleSafeTimer = 0.5;
+      let bottom = 0;
+      document.querySelectorAll('.hud-info-group, #boss-hud').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0) bottom = Math.max(bottom, r.bottom); // display:none 的高度為 0
+      });
+      this.bubbleSafeTop = safeTopNdc(Math.max(bottom, 36), window.innerHeight);
+    }
+    this.boss.fitBubble(this.ctx.cameraCtrl.camera, this.bubbleSafeTop);
+  }
+
   /** 每幀 (delta = 停格縮放後)：IDLE 時只更新太陽花 */
   public update(delta: number) {
     if (!this.initialized) return;
@@ -532,7 +589,13 @@ export class FencerBossFight {
           this.followUp = null;
         }
       }
-      if (this.ctx.currentWorldType === 'CAMPUS') this.sunflower.update(delta);
+      if (this.ctx.currentWorldType === 'CAMPUS') {
+        const pp = this.ctx.player.position;
+        const dx = pp.x - FENCER.CENTER_X;
+        const dz = pp.z - FENCER.CENTER_Z;
+        this.sunflower.setPlayerNear(Math.sqrt(dx * dx + dz * dz), pp, SPROUT_AWARE_RANGE);
+        this.sunflower.update(delta);
+      }
       if (this.arena.anim !== 'DOWN') this.arena.update(delta);
       if (this.fx.group.visible) this.fx.update(delta);
       if (this.awakening.isOn) this.awakening.update(delta, this.ctx.player.position, this.ctx.player.isDead); // 勝利還原收尾
@@ -545,6 +608,7 @@ export class FencerBossFight {
     this.arena.update(delta);
     this.fx.update(delta);
     this.sunflower.update(delta);
+    this.fitBossBubble(delta);
     this.awakening.update(delta, player.position, player.isDead || player.isRidingVehicle, player.hp / player.maxHp, this.regen.isFastRegen(player.hp, player.maxHp));
 
     // 鏡頭不穿進 Boss 身體

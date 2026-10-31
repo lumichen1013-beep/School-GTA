@@ -129,6 +129,22 @@ export class SunflowerTaunt {
   }
 }
 
+// ===== 太陽花成長 (小綠苗 → 完整太陽花) =====
+
+/** 成長階段 0~10：首戰前 = 已戳次數；任何一場戰鬥後一律完整 (戰敗 / 首勝後都不回到綠苗) */
+export function sunflowerStage(pokes: number, lastResult: FightResult): number {
+  if (lastResult !== 'NONE') return FENCER.TAUNT_COUNT;
+  return Math.max(0, Math.min(FENCER.TAUNT_COUNT, Math.floor(pokes)));
+}
+
+/** 互動範圍：小苗 2.0m，隨成長擴大到完整太陽花 3.2m */
+export function sunflowerPokeRange(stage: number): number {
+  return 2 + 0.12 * Math.max(0, Math.min(FENCER.TAUNT_COUNT, stage));
+}
+
+/** 小苗的細微反應距離 (葉子輕抖 / 轉向 / 偶爾閃光) */
+export const SPROUT_AWARE_RANGE = 5;
+
 /** 任務看板 / 大地圖揭露階段：0 未知 (還沒開過戰)、1 已遭遇、2 已首勝 */
 export function fencerQuestStage(fightsStarted: number, defeated: boolean): 0 | 1 | 2 {
   if (defeated) return 2;
