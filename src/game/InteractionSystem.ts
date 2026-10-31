@@ -337,6 +337,13 @@ export class InteractionSystem {
         prompt: () => { },
         act: () => ctx.basketballGame.drop(ctx.player, ctx.hud, ctx.wantedSystem)
       },
+      // 操場中央太陽花：戳 10 次開戰花劍客 (首戰後戳 1 次即可再戰)
+      {
+        world: W,
+        when: (p) => ctx.fencerBossFight.canPoke(p),
+        prompt: () => this.showPrompt(ctx.fencerBossFight.pokePromptText()),
+        act: () => ctx.fencerBossFight.poke()
+      },
       {
         world: W,
         when: (p) => p.distanceTo(ctx.world.broadcastStationPos) < 2.5,

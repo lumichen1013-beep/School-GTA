@@ -30,7 +30,8 @@ const CAMPUS_GOALS: readonly CampusGoalDef[] = [
   { key: 'swim', poi: 'pool', icon: '🏊', title: '25m 水上競速', desc: '標準游泳館', done: (d) => Boolean(d.swimRecordText) && d.swimRecordText !== '未完成' },
   { key: 'bike', poi: 'bikeShed', icon: '🚲', title: '騎乘火柴人自行車', desc: '自行車棚取車，按 E 騎乘', done: (d) => d.hasRiddenBike },
   { key: 'pond', poi: 'pond', icon: '🪙', title: '許願池投幣', desc: '生態園區蓮花許願池', done: (d) => d.hasWishedPond },
-  { key: 'hotfood', poi: 'commissary', icon: '🍱', title: '合作社品嚐熱食', desc: '天天合作社櫃台', done: (d) => d.hasTastedHotFood }
+  { key: 'hotfood', poi: 'commissary', icon: '🍱', title: '合作社品嚐熱食', desc: '天天合作社櫃台', done: (d) => d.hasTastedHotFood },
+  { key: 'fencer', poi: 'sunflower', icon: '🎩', title: '挑戰操場花劍客', desc: '操場中央的太陽花，戳到它生氣為止', done: (d) => d.fencerDefeated }
 ];
 
 // 校園下一目標 (全部完成回傳 null)
@@ -43,13 +44,13 @@ export function pickCampusGoal(d: MissionTrackerData): FullMapGoal | null {
   return null;
 }
 
-// 興趣點完成狀態遮罩 (bit 依序：合作社 / 羽球場 / 食人花 / 許願池 / 閃身步老師)，供靜態底圖快取判斷是否重繪
+// 興趣點完成狀態遮罩 (bit 依序：合作社 / 羽球場 / 食人花 / 許願池 / 閃身步老師 / 太陽花)，供靜態底圖快取判斷是否重繪
 export function campusPoiDoneMask(d: MissionTrackerData | null): number {
   if (!d) return 0;
-  return (d.hasTastedHotFood ? 1 : 0) | (d.peBossDefeated ? 2 : 0) | (d.plantBossDefeated ? 4 : 0) | (d.hasWishedPond ? 8 : 0) | (d.dodgeSkillLevel >= 1 ? 16 : 0);
+  return (d.hasTastedHotFood ? 1 : 0) | (d.peBossDefeated ? 2 : 0) | (d.plantBossDefeated ? 4 : 0) | (d.hasWishedPond ? 8 : 0) | (d.dodgeSkillLevel >= 1 ? 16 : 0) | (d.fencerDefeated ? 32 : 0);
 }
 
-const CAMPUS_POI_DONE_BIT: Partial<Record<CampusPoiId, number>> = { commissary: 1, badminton: 2, plant: 4, pond: 8, dodgeTeacher: 16 };
+const CAMPUS_POI_DONE_BIT: Partial<Record<CampusPoiId, number>> = { commissary: 1, badminton: 2, plant: 4, pond: 8, dodgeTeacher: 16, sunflower: 32 };
 export function isCampusPoiDone(mask: number, id: CampusPoiId): boolean {
   const bit = CAMPUS_POI_DONE_BIT[id];
   return bit !== undefined && (mask & bit) !== 0;

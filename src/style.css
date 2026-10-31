@@ -243,6 +243,28 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   filter: drop-shadow(0 0 4px rgba(231, 76, 60, 0.9));
   animation: hp-ring-pulse 0.9s ease-in-out infinite alternate;
 }
+/* 花劍客戰：脫戰快速回血 (綠色呼吸) / 被打斷閃紅 */
+.hp-ring.hp-ring--regen .hp-ring-fill {
+  stroke: #4ade80;
+  filter: drop-shadow(0 0 5px rgba(74, 222, 128, 0.95));
+  animation: hp-ring-regen 1s ease-in-out infinite alternate;
+}
+@keyframes hp-ring-regen {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+.hp-ring.hp-ring--interrupt .hp-ring-track {
+  animation: hp-ring-interrupt 0.45s ease-out 1;
+}
+@keyframes hp-ring-interrupt {
+  0% { stroke: rgba(239, 68, 68, 0.95); }
+  100% { stroke: rgba(8, 12, 20, 0.72); }
+}
+.hp-ring-regen-tag {
+  margin-left: 3px;
+  color: #4ade80;
+  font-size: 11px;
+}
 @keyframes hp-ring-pulse {
   from { opacity: 1; }
   to { opacity: 0.45; }

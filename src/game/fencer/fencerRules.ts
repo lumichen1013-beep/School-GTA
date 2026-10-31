@@ -1,0 +1,300 @@
+// 世界 Boss【花劍客】的純規則 (無 three.js / DOM 依賴，可單元測試)：
+// 數值常數、太陽花台詞計數與再戰規則、三管血與換樂章、戰鬥中回血 (基礎 + 脫離戰鬥快速回氣)、獎勵。
+
+export const FENCER = {
+  /** 操場草皮中央：結界中心 (= 太陽花 / Boss 現身點) */
+  CENTER_X: -55,
+  CENTER_Z: 34,
+  ARENA_R: 16,
+  PLAYER_CLAMP_PAD: 0.6,
+  BOSS_CLAMP_PAD: 0.8,
+  /** 三管血 × 2100 (三個樂章) */
+  BAR_HP: 2100,
+  BARS: 3,
+  /** 戰鬥期間玩家體力上限 (覺醒)；戰後還原為 NORMAL_MAX_HP */
+  BATTLE_MAX_HP: 200,
+  NORMAL_MAX_HP: 100,
+  /** 基礎回血 (任何狀態都在回，受擊也不暫停) */
+  BASE_REGEN: 0.8,
+  /** 脫離戰鬥快速回血 (僅於上限 80% 以下) */
+  OOC_REGEN: 12,
+  OOC_CAP_RATIO: 0.8,
+  /** 脫戰條件：N 秒內沒被 Boss 打中、N 秒內沒攻擊 Boss (遠程也算)、與 Boss 距離大於 M 公尺 */
+  OOC_NO_HIT_SEC: 2,
+  OOC_NO_ATTACK_SEC: 2,
+  OOC_MIN_DIST: 8,
+  /** 太陽花：戳 10 次開戰；每次間隔冷卻防連點 */
+  TAUNT_COUNT: 10,
+  POKE_COOLDOWN: 1.0,
+  /** 獎勵 */
+  FIRST_WIN_CASH: 1500,
+  REPEAT_WIN_CASH: 200,
+  /** 每管打空：無敵亮相 + 換樂章過場 (期間不出手、玩家算脫戰) */
+  BAR_BREAK_POSE_SEC: 1.2,
+  BAR_TRANSITION_SEC: 8.0
+} as const;
+
+// ===== 太陽花台詞 (每戳一次一句；第 10 句後開戰) =====
+
+export type SunflowerFace = 'BLANK' | 'SIDE' | 'SWEAT' | 'ANNOYED' | 'ANGRY' | 'SHOCK' | 'CRY' | 'EVIL' | 'SMUG' | 'SLEEPY';
+export type SunflowerReaction =
+  | 'TWITCH' | 'TURN_TO' | 'DROOP_SWEAT' | 'TURN_AWAY' | 'BURST_RED' | 'SHRINK'
+  | 'STIFFEN_HUM' | 'TREMBLE' | 'BOW' | 'AWAKEN';
+
+export interface SunflowerLine {
+  text: string;
+  reaction: SunflowerReaction;
+  face: SunflowerFace;
+}
+
+export const SUNFLOWER_LINES: readonly SunflowerLine[] = [
+  { text: '.', reaction: 'TWITCH', face: 'BLANK' },
+  { text: '..', reaction: 'TURN_TO', face: 'SIDE' },
+  { text: '...', reaction: 'DROOP_SWEAT', face: 'SWEAT' },
+  { text: '嘖。', reaction: 'TURN_AWAY', face: 'ANNOYED' },
+  { text: '滾', reaction: 'BURST_RED', face: 'ANGRY' },
+  { text: '哎呀別踩我', reaction: 'SHRINK', face: 'SHOCK' },
+  { text: '不要逼我', reaction: 'STIFFEN_HUM', face: 'ANGRY' },
+  { text: '我只是一朵花啊……', reaction: 'TREMBLE', face: 'CRY' },
+  { text: '大哥我錯了', reaction: 'BOW', face: 'CRY' },
+  { text: '看來不好好教訓你不行了', reaction: 'AWAKEN', face: 'EVIL' }
+];
+
+export const REMATCH_LINE_AFTER_WIN = '別、別再來了……好啦再一場';
+export const REMATCH_LINE_AFTER_LOSS = '又是你？還沒學乖？';
+
+export type FightResult = 'NONE' | 'WIN' | 'LOSS';
+
+export interface PokeResult {
+  accepted: boolean;  // false = 冷卻中 (略過本次)
+  line: SunflowerLine | null;
+  index: number;      // 第幾句 (1 起算；再戰為 0)
+  startFight: boolean;
+}
+
+/**
+ * 太陽花戳戳計數：首戰前需戳滿 10 次 (離開不歸零)，之後勝或敗都只需戳 1 次即可再戰；
+ * 每次間隔 POKE_COOLDOWN 秒防連點跳過台詞。now 為秒。
+ */
+export class SunflowerTaunt {
+  public pokes = 0;
+  public lastResult: FightResult = 'NONE';
+  private lastPokeAt = -Infinity;
+
+  public get needsFullTaunt(): boolean {
+    return this.lastResult === 'NONE';
+  }
+
+  public get remaining(): number {
+    return this.needsFullTaunt ? Math.max(0, FENCER.TAUNT_COUNT - this.pokes) : 1;
+  }
+
+  public poke(now: number): PokeResult {
+    if (now - this.lastPokeAt < FENCER.POKE_COOLDOWN) return { accepted: false, line: null, index: 0, startFight: false };
+    this.lastPokeAt = now;
+    if (!this.needsFullTaunt) {
+      const text = this.lastResult === 'WIN' ? REMATCH_LINE_AFTER_WIN : REMATCH_LINE_AFTER_LOSS;
+      return { accepted: true, line: { text, reaction: 'AWAKEN', face: 'EVIL' }, index: 0, startFight: true };
+    }
+    this.pokes = Math.min(FENCER.TAUNT_COUNT, this.pokes + 1);
+    const line = SUNFLOWER_LINES[this.pokes - 1];
+    return { accepted: true, line, index: this.pokes, startFight: this.pokes >= FENCER.TAUNT_COUNT };
+  }
+
+  /** 戰鬥結束 (勝 / 敗 / 中途離開) 後記錄結果：離開視為敗，之後戳 1 次即可再戰 */
+  public recordResult(result: 'WIN' | 'LOSS') {
+    this.lastResult = result;
+  }
+}
+
+/** 開場過場是否可跳過：第二次起 (曾經開戰過) */
+export function canSkipIntro(fightsStarted: number): boolean {
+  return fightsStarted >= 2;
+}
+
+/** 勝利獎金：首勝 1500，再戰勝利 200 */
+export function victoryReward(alreadyDefeated: boolean): number {
+  return alreadyDefeated ? FENCER.REPEAT_WIN_CASH : FENCER.FIRST_WIN_CASH;
+}
+
+// ===== 三管血 (三樂章) =====
+
+export interface BossDamageResult {
+  applied: number;     // 實際扣除量 (無敵或已倒時 0)
+  barBroken: boolean;  // 本擊打空一管 (進入換樂章)
+  defeated: boolean;   // 本擊打空最後一管
+}
+
+/**
+ * 三管血：每管 BAR_HP，打空一管 → 換樂章 (由呼叫端播放無敵亮相 + 過場，期間設 invulnerable)；
+ * 溢出傷害不跨管 (下一管從滿血開始)。bar 為 0 起算的目前樂章。
+ */
+export class BossHealthBars {
+  public bar = 0;
+  public hp: number = FENCER.BAR_HP;
+  public invulnerable = false;
+
+  public reset() {
+    this.bar = 0;
+    this.hp = FENCER.BAR_HP;
+    this.invulnerable = false;
+  }
+
+  public get isDefeated(): boolean {
+    return this.bar >= FENCER.BARS - 1 && this.hp <= 0;
+  }
+
+  public damage(amount: number): BossDamageResult {
+    if (this.invulnerable || this.isDefeated || amount <= 0) return { applied: 0, barBroken: false, defeated: false };
+    const applied = Math.min(this.hp, amount);
+    this.hp -= applied;
+    if (this.hp > 0) return { applied, barBroken: false, defeated: false };
+    if (this.bar >= FENCER.BARS - 1) return { applied, barBroken: true, defeated: true };
+    return { applied, barBroken: true, defeated: false };
+  }
+
+  /** 換樂章過場結束：進入下一管 (滿血) */
+  public advanceBar() {
+    if (this.bar < FENCER.BARS - 1) {
+      this.bar++;
+      this.hp = FENCER.BAR_HP;
+    }
+  }
+
+  /** 整場總剩餘血量 (0 ~ BARS × BAR_HP) */
+  public get totalRemaining(): number {
+    return Math.max(0, this.hp) + (FENCER.BARS - 1 - this.bar) * FENCER.BAR_HP;
+  }
+}
+
+export const MOVEMENT_NAMES = ['第一樂章', '第二樂章', '終樂章'] as const;
+
+/** HUD 血條名稱：🎩 花劍客・第二樂章 (2/3) */
+export function bossBarLabel(bar: number): string {
+  const i = Math.max(0, Math.min(FENCER.BARS - 1, bar));
+  return `花劍客・${MOVEMENT_NAMES[i]} (${i + 1}/${FENCER.BARS})`;
+}
+
+// ===== 戰鬥中回血：基礎 0.8/s + 脫離戰鬥 12/s (僅 80% 以下) =====
+
+export interface RegenInput {
+  hp: number;
+  maxHp: number;
+  distToBoss: number;
+  /** 強制視為脫戰 (換樂章過場) */
+  forceOutOfCombat: boolean;
+}
+
+/**
+ * 脫離戰鬥追蹤：記錄距上次被 Boss 打中 / 距上次攻擊 Boss 的秒數，判定脫戰並回傳本幀回血量。
+ * 脫戰 = 2 秒內沒被打、2 秒內沒出手 (含遠程)、且距 Boss > 8m；換樂章過場一律算脫戰。
+ */
+export class CombatRegen {
+  public sinceHit = Infinity;
+  public sinceAttack = Infinity;
+  public outOfCombat = false;
+  /** 本次撤退是否已跳過「脫離戰鬥」橫幅 (重新進入戰鬥時重置) */
+  public bannerShown = false;
+
+  public reset() {
+    this.sinceHit = Infinity;
+    this.sinceAttack = Infinity;
+    this.outOfCombat = false;
+    this.bannerShown = false;
+  }
+
+  /** 被 Boss 打中 (實際扣血)：回傳是否打斷了脫戰狀態 */
+  public onPlayerHit(): boolean {
+    this.sinceHit = 0;
+    const interrupted = this.outOfCombat;
+    this.outOfCombat = false;
+    return interrupted;
+  }
+
+  /** 玩家出手 (近戰揮擊 / 遠程發射 / 命中 Boss) */
+  public onPlayerAttack() {
+    this.sinceAttack = 0;
+  }
+
+  public static isOutOfCombat(sinceHit: number, sinceAttack: number, distToBoss: number, force: boolean): boolean {
+    if (force) return true;
+    return sinceHit >= FENCER.OOC_NO_HIT_SEC && sinceAttack >= FENCER.OOC_NO_ATTACK_SEC && distToBoss > FENCER.OOC_MIN_DIST;
+  }
+
+  /** 本幀回血速率 (HP/s)：80% 以上只剩基礎回血 */
+  public static regenRate(outOfCombat: boolean, hp: number, maxHp: number): number {
+    if (outOfCombat && hp < maxHp * FENCER.OOC_CAP_RATIO) return FENCER.OOC_REGEN;
+    return FENCER.BASE_REGEN;
+  }
+
+  /** 推進計時並回傳本幀回血量 (不超過上限；快速回血不超過 80% 線) */
+  public update(dt: number, inp: RegenInput): number {
+    this.sinceHit += dt;
+    this.sinceAttack += dt;
+    const ooc = CombatRegen.isOutOfCombat(this.sinceHit, this.sinceAttack, inp.distToBoss, inp.forceOutOfCombat);
+    if (!ooc) this.bannerShown = false;
+    this.outOfCombat = ooc;
+    if (inp.hp <= 0 || inp.hp >= inp.maxHp) return 0;
+    const rate = CombatRegen.regenRate(ooc, inp.hp, inp.maxHp);
+    let heal = rate * dt;
+    if (rate > FENCER.BASE_REGEN) {
+      // 快速回血到 80% 線為止，超出部分改以基礎速率計
+      const capLine = inp.maxHp * FENCER.OOC_CAP_RATIO;
+      if (inp.hp + heal > capLine) heal = Math.max(capLine - inp.hp, 0) + FENCER.BASE_REGEN * dt;
+    }
+    return Math.min(heal, inp.maxHp - inp.hp);
+  }
+
+  /** 是否正在快速回血 (HUD 綠環 / 腳下光圈) */
+  public isFastRegen(hp: number, maxHp: number): boolean {
+    return this.outOfCombat && hp > 0 && hp < maxHp * FENCER.OOC_CAP_RATIO;
+  }
+}
+
+// ===== 圓形結界夾回 (解析式) =====
+
+/** 將 (x, z) 夾回圓心 (cx, cz) 半徑 r 內；回傳是否有夾 (out 寫入結果與徑向單位向量) */
+export function clampToCircle(x: number, z: number, cx: number, cz: number, r: number, out: { x: number; z: number; nx: number; nz: number }): boolean {
+  const dx = x - cx;
+  const dz = z - cz;
+  const d2 = dx * dx + dz * dz;
+  out.x = x; out.z = z; out.nx = 0; out.nz = 0;
+  if (d2 <= r * r) return false;
+  const d = Math.sqrt(d2);
+  out.nx = dx / d;
+  out.nz = dz / d;
+  out.x = cx + out.nx * r;
+  out.z = cz + out.nz * r;
+  return true;
+}
+
+/** 線段 (ax, az) → (bx, bz) 到點 (px, pz) 的最短距離 (S1 突刺膠囊判定) */
+export function segmentPointDistance(ax: number, az: number, bx: number, bz: number, px: number, pz: number): number {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const len2 = vx * vx + vz * vz;
+  let t = len2 > 1e-8 ? ((px - ax) * vx + (pz - az) * vz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = ax + vx * t - px;
+  const dz = az + vz * t - pz;
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+/** 自圓內一點出發的線段首次穿出圓 (半徑 r) 的參數 t (0~1)；未穿出回傳 -1 (投射物撞結界牆) */
+export function segmentExitCircleT(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, r: number): number {
+  const bdx = bx - cx;
+  const bdz = bz - cz;
+  if (bdx * bdx + bdz * bdz <= r * r) return -1;
+  const adx = ax - cx;
+  const adz = az - cz;
+  const vx = bx - ax;
+  const vz = bz - az;
+  const a = vx * vx + vz * vz;
+  if (a < 1e-10) return -1;
+  const b = 2 * (adx * vx + adz * vz);
+  const c = adx * adx + adz * adz - r * r;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return -1;
+  const t = (-b + Math.sqrt(disc)) / (2 * a);
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}

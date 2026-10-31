@@ -115,6 +115,7 @@ export interface MissionTrackerData {
   hasWishedPond: boolean;
   hasTastedHotFood: boolean;
   dodgeSkillLevel: number;
+  fencerDefeated: boolean;
 }
 
 export interface DetentionRadarData {
@@ -583,6 +584,8 @@ export class HUD {
 
     this.qPlantItem = document.getElementById('q-plant-item');
     this.qPlantStatus = document.getElementById('q-plant-status');
+    this.qFencerItem = document.getElementById('q-fencer-item');
+    this.qFencerStatus = document.getElementById('q-fencer-status');
 
     this.qInspectorItem = document.getElementById('q-inspector-item');
     this.qInspectorProg = document.getElementById('q-inspector-prog');
@@ -675,6 +678,8 @@ export class HUD {
 
   private qPlantItem: HTMLElement | null;
   private qPlantStatus: HTMLElement | null;
+  private qFencerItem: HTMLElement | null;
+  private qFencerStatus: HTMLElement | null;
 
   private qInspectorItem: HTMLElement | null;
   private qInspectorProg: HTMLElement | null;
@@ -714,6 +719,10 @@ export class HUD {
   private lastWeaponAtk = -1;
   private lastHp: number = -1;
   private lastHpLevel: string = '';
+  // 花劍客戰：雷達暫停 (隱藏小地圖、不重繪) 與血量環脫戰回血狀態
+  private radarSuspended = false;
+  private hpRegenOn = false;
+  private hpRegenTag: HTMLElement | null = null;
   private lastStamina: number = -1;
   private staminaRingVisible: boolean = false;
   private staminaFullTimer: number = 0;
@@ -1107,7 +1116,8 @@ export class HUD {
       last.hasEscapedDog === data.hasEscapedDog &&
       last.hasWishedPond === data.hasWishedPond &&
       last.hasTastedHotFood === data.hasTastedHotFood &&
-      last.dodgeSkillLevel === data.dodgeSkillLevel
+      last.dodgeSkillLevel === data.dodgeSkillLevel &&
+      last.fencerDefeated === data.fencerDefeated
     ) {
       return;
     }
@@ -1180,13 +1190,17 @@ export class HUD {
     }
     this.setQuestState(this.qDodgeItem, this.qDodgeStatus, dodgeDone, dodgeLvl >= 2 ? '大成 🌟' : '閃身步 ✅', '未習得');
 
+    // 13. 世界 Boss：擊敗操場花劍客
+    const fencerDone = data.fencerDefeated;
+    this.setQuestState(this.qFencerItem, this.qFencerStatus, fencerDone);
+
     const completedCount = [
       batDone, specialDone, peDone, plantDone, inspectorDone, bballDone, trackDone,
-      swimDone, bikeDone, dogDone, pondDone, hotfoodDone, dodgeDone
+      swimDone, bikeDone, dogDone, pondDone, hotfoodDone, dodgeDone, fencerDone
     ].filter(Boolean).length;
 
     // 更新總進度與進度條 (任務小介面與大地圖側欄同步)
-    this.setQuestSummary('📜 校園歷練', completedCount, 13);
+    this.setQuestSummary('📜 校園歷練', completedCount, 14);
   }
 
   // 合作社 (熱食補血部) 彈出式選單
@@ -1602,6 +1616,40 @@ export class HUD {
     }
   }
 
+  // 雷達暫停：隱藏小地圖畫布並停止重繪 (血量環照常)；恢復時下一幀立即重繪
+  public setRadarSuspended(suspended: boolean) {
+    if (this.radarSuspended === suspended) return;
+    this.radarSuspended = suspended;
+    const wrap = document.getElementById('minimap-wrapper');
+    if (wrap) wrap.style.visibility = suspended ? 'hidden' : '';
+    if (!suspended) this.minimapDeltaAccumulator = 999;
+  }
+
+  // 血量環脫戰快速回血：綠色呼吸 + 「+12/s」標籤 (狀態切換時才改 class)
+  public setHpRegen(on: boolean, label: string = '+12/s') {
+    if (this.hpRegenOn === on) return;
+    this.hpRegenOn = on;
+    this.hpRingEl?.classList.toggle('hp-ring--regen', on);
+    if (!this.hpRegenTag) {
+      const host = this.hpRingNumEl?.parentElement;
+      if (!host) return;
+      this.hpRegenTag = document.createElement('span');
+      this.hpRegenTag.className = 'hp-ring-regen-tag';
+      host.appendChild(this.hpRegenTag);
+    }
+    this.hpRegenTag.textContent = label;
+    this.hpRegenTag.style.display = on ? '' : 'none';
+  }
+
+  // 脫戰被打斷：血量環閃紅一次
+  public flashHpRingInterrupt() {
+    const el = this.hpRingEl as HTMLElement | SVGElement | null;
+    if (!el) return;
+    el.classList.remove('hp-ring--interrupt');
+    void (el as SVGElement).getBoundingClientRect();
+    el.classList.add('hp-ring--interrupt');
+  }
+
   private renderMinimap(
     playerPos: THREE.Vector3,
     playerRotY: number,
@@ -1611,7 +1659,7 @@ export class HUD {
     currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
     detentionData?: DetentionRadarData
   ) {
-    if (getDiagFlags().map === false) return; // ?diag=&map=0：停止小地圖重繪
+    if (getDiagFlags().map === false || this.radarSuspended) return; // ?diag=&map=0 / 花劍客戰：停止小地圖重繪
     const now = performance.now();
     const dt = delta !== undefined ? delta : (this.lastMinimapTime > 0 ? (now - this.lastMinimapTime) / 1000 : 0.04);
     this.lastMinimapTime = now;

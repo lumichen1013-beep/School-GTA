@@ -121,6 +121,9 @@ export class Progression {
   public hasEscapedDog: boolean = false;
   public hasWishedPond: boolean = false;
   public hasTastedHotFood: boolean = false;
+  // 世界 Boss【花劍客】：首勝旗標 (任務 / 大地圖完成、細劍解鎖點) 與勝場數
+  public fencerDefeated: boolean = false;
+  public fencerWins: number = 0;
   // 身法技能系統 (閃身步 / 狗熊哆嗦毛，冷卻皆 1s)
   public dodgeSkillLevel: number = 0; // 0: 未習得, 1: 閃身步, 2: 狗熊哆嗦毛
   public dodgeCooldownTimer: number = 0;

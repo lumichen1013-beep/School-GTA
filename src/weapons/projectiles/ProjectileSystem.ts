@@ -8,6 +8,7 @@ import { updateVisibleMatricesOnly } from '../../core/matrixUpdate';
 import { getFxQuality } from '../../effects/fxQuality';
 import { TRACER_KI, TRACER_LINE, tracerFX } from '../../effects/TracerFX';
 import { buildBallGeometry } from './ballGeometry';
+import { segmentExitCircleT } from '../../game/fencer/fencerRules';
 import { createPlayerHitSpec, HIT_STOP_EXTRA, type PlayerHitSpec } from '../../game/CombatSystem';
 import {
   DOG_CAPSULE_R, DOG_CAPSULE_Y0, DOG_CAPSULE_Y1, HUMAN_CAPSULE_R, HUMAN_CAPSULE_Y0, HUMAN_CAPSULE_Y1,
@@ -77,6 +78,10 @@ export interface ProjectileHost {
   hitTarget(target: ProjectileTarget, spec: PlayerHitSpec): boolean;
   // 生態園點判定 (含扣血與獎勵結算)；本世界無生態園回傳 null
   hitGardenAt(point: THREE.Vector3, r: number, damage: number): ProjectileGardenHit | null;
+  // 世界 Boss (花劍客) 點判定 (含扣血)：戰鬥外回傳 null；命中結果沿用 GARDEN 事件 (isBoss = true)
+  hitBossAt?(point: THREE.Vector3, r: number, damage: number): ProjectileGardenHit | null;
+  // 圓形結界邊界 (花劍客戰)：彈體穿出時觸發 WALL 事件 (法線徑向朝內)；null = 無
+  readonly arena?: { x: number; z: number; r: number } | null;
   requestHitStop(seconds: number): void;
   playSound(id: ProjectileSoundId, pos: THREE.Vector3): void;
   hitFlash(pos: THREE.Vector3, color: number): void;
@@ -421,6 +426,20 @@ export class ProjectileSystem {
         if (tt >= 0 && tt < bestT) { bestT = tt; hitType = HIT_NPC; hitTarget = t; }
       }
 
+      // 世界 Boss：沿線段取樣點判定 (與生態園相同的取樣步長)
+      if (this.host.hitBossAt) {
+        const tEndB = bestT < 1 ? bestT : 1;
+        const lenB = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az)) * tEndB;
+        const stepsB = Math.max(1, Math.ceil(lenB / GARDEN_SAMPLE_STEP));
+        for (let s = 1; s <= stepsB; s++) {
+          const t = (s / stepsB) * tEndB;
+          _point.set(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t);
+          const bh = this.host.hitBossAt(_point, r, this.damage[i]);
+          if (bh === null) break; // 不在 Boss 戰中
+          if (bh.hit) { bestT = t; hitType = HIT_GARDEN; _event.garden = bh; break; }
+        }
+      }
+
       // 生態園：沿線段取樣點判定 (只到目前最近命中為止；命中即扣血，故依 t 由小到大)
       const tEnd = bestT < 1 ? bestT : 1;
       const len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az)) * tEnd;
@@ -431,6 +450,20 @@ export class ProjectileSystem {
         const gh = this.host.hitGardenAt(_point, r, this.damage[i]);
         if (gh === null) break; // 本世界無生態園
         if (gh.hit) { bestT = t; hitType = HIT_GARDEN; _event.garden = gh; break; }
+      }
+    }
+
+    // 圓形結界牆：線段穿出圓 (彈體半徑內縮) 視為撞牆
+    const arena = this.host.arena;
+    if (arena && hitType !== HIT_GARDEN) {
+      const ta = segmentExitCircleT(ax, az, bx, bz, arena.x, arena.z, arena.r - r);
+      if (ta >= 0 && ta < bestT) {
+        bestT = ta;
+        hitType = HIT_WALL;
+        const ex = ax + (bx - ax) * ta - arena.x;
+        const ez = az + (bz - az) * ta - arena.z;
+        const el = Math.sqrt(ex * ex + ez * ez) || 1;
+        _hitNormal.set(-ex / el, 0, -ez / el);
       }
     }
 

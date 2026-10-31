@@ -881,6 +881,12 @@ export class CombatSystem {
 
     _scratchPlayerForward.set(Math.sin(player.rotationY), 0, Math.cos(player.rotationY)).normalize();
 
+    // 0. 世界 Boss 花劍客 (結界戰中；霸體：只扣血與命中回饋，不擊飛、不通緝)
+    if (this.ctx.fencerBossFight?.tryHitMelee(player.position, reach, damage)) {
+      this.onPlayerHitLanded(move, strikeIndex);
+      return;
+    }
+
     // 1. 檢測是否命中生態園植物生物
     const plantHit = ecologicalGarden.tryHitByPlayer(player.position, reach, damage, _scratchPlayerForward);
     if (plantHit.hit) {
@@ -1118,11 +1124,13 @@ export class CombatSystem {
     let plantShape: PlantAoeShape | null = null;
     if (isFan) plantShape = _plantShape.set(0, player.position.x, player.position.z, fwd.x, fwd.z, fanCos, 0, 0);
     else if (isLine) plantShape = _plantShape.set(1, player.position.x, player.position.z, fwd.x, fwd.z, 0, lineLen, lineHalfW);
-    const plantCount = ecologicalGarden.tryHitAllByPlayer(center, plantRadius, damage, max, _aoePlantHits, AOE_SECONDARY_DMG, plantShape);
+    // 0. 世界 Boss 花劍客：與生態園相同的形狀判定 (圓 / 扇形 / 長條，LINE 起點可為突進起點)，佔一個命中名額
+    const bossHits = this.ctx.fencerBossFight?.tryHitAoe(center, plantRadius, damage, plantShape) ? 1 : 0;
+    const plantCount = bossHits + ecologicalGarden.tryHitAllByPlayer(center, plantRadius, damage, max - bossHits, _aoePlantHits, AOE_SECONDARY_DMG, plantShape);
     let bossBanner = false;
     let plantBanner = '';
     let plantBannerMs = 1500;
-    for (let i = 0; i < plantCount; i++) {
+    for (let i = 0; i < plantCount - bossHits; i++) {
       const r = _aoePlantHits[i];
       if (r.isBoss) {
         bossBanner = true;

@@ -83,7 +83,8 @@ export class CampusMode {
     hasEscapedDog: false,
     hasWishedPond: false,
     hasTastedHotFood: false,
-    dodgeSkillLevel: 0
+    dodgeSkillLevel: 0,
+    fencerDefeated: false
   };
 
   // 生態園回呼 (建構一次，避免每幀配置新閉包)
@@ -578,6 +579,7 @@ export class CampusMode {
     tracker.hasWishedPond = progression.hasWishedPond;
     tracker.hasTastedHotFood = progression.hasTastedHotFood;
     tracker.dodgeSkillLevel = progression.dodgeSkillLevel;
+    tracker.fencerDefeated = !!progression.fencerDefeated;
     this.ctx.hud.updateMissionTracker(tracker);
   }
 }
