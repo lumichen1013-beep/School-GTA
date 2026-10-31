@@ -388,6 +388,11 @@ export class FencerBoss {
       && !this.isAirborne && !this.bars.invulnerable;
   }
 
+  /** 出招中的招式 (非出招 null)；Boss 戰鏡頭依此判斷大招預警 */
+  public get currentAttack(): AttackId | null {
+    return this.act === 'ATTACK' ? this.attack : null;
+  }
+
   public get isInTransition(): boolean {
     return this.act === 'TRANSITION';
   }

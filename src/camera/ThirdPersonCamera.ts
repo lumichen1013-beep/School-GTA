@@ -10,7 +10,21 @@ import {
   portraitDistanceScale,
   portraitFactor,
   portraitFov,
+  horizontalFov,
 } from './portraitCamera';
+import {
+  ARENA_FIT_MAX_PITCH,
+  BossZoomDirector,
+  MANUAL_ROTATE_PRIORITY,
+  MANUAL_ZOOM_LEVELS,
+  SoftLock,
+  arenaFit,
+  arenaHeightCap,
+  bossCamProfile,
+  pitchToClear,
+  type BossAttackKind,
+  type BossCamProfile,
+} from './bossCamera';
 
 const _cameraSegNear: CollidableBox[] = [];
 
@@ -97,6 +111,33 @@ export class ThirdPersonCamera {
   // 動態圓柱障礙 (花劍客本體)：焦點 → 機位線段穿過圓柱時把機位拉到圓柱前 (null = 無)
   public obstacle: { x: number; z: number; r: number; top: number } | null = null;
 
+  // ----- 花劍客 Boss 戰鏡頭 (只在戰鬥中由 BossCameraLink 開啟；參數與狀態機見 bossCamera.ts) -----
+  public bossMode: boolean = false;
+  /** 觸控裝置 (手機橫屏參數)；main 啟動時設定 */
+  public isTouch: boolean = false;
+  /** Boss 水平位置 (soft lock / 拉遠判定)；null = 不取景 */
+  public bossTarget: { x: number; z: number } | null = null;
+  public bossAttack: BossAttackKind = null;
+  /** 設定「Boss 戰鏡頭：動態 / 固定」 (固定 = 完全不做距離變化) */
+  public bossCamDynamic: boolean = true;
+  /** 手動縮放檔位 (MANUAL_ZOOM_LEVELS 索引) */
+  public bossZoomIndex: number = 1;
+  public readonly bossZoom = new BossZoomDirector();
+  public readonly bossSoftLock = new SoftLock();
+  private bossRamp: number = 0;     // 0~1 線性進出 (1 秒)，以 smoothstep 套用至 FOV / 視線前移 / 俯角
+  private bossWasOn: boolean = false;
+  private manualRotateTimer: number = 0;
+  private distVel: number = 0;      // 距離臨界阻尼彈簧速度
+  private occPitch: number = 0;     // Boss 遮擋抬高的平滑俯角
+  private aimPitchTouched: boolean = false;
+  private bossFitK: number = 1;     // 靠牆水平內收比例 (平滑)；視線前移最多縮小一半，避免俯視時角色被推到畫面底
+  private readonly bossProfile: BossCamProfile = { distance: 0, pitch: 0, fov: 65, lookAhead: 0 };
+  private readonly _fit = { hd: 0, h: 0 };
+  private static readonly BOSS_DIST_OMEGA = 3.5;
+  private static readonly BOSS_PITCH_RETURN = 1.5;  // 俯角回正速率 (每秒，指數)
+  private static readonly BOSS_AIM_PITCH = 0.12;    // Boss 戰開鏡時俯角輔助目標 (遠景俯角太大會瞄到地面)
+  private static readonly MANUAL_ROTATE_EPS = 2;    // 每幀滑鼠/觸控位移 > 2px 視為手動轉鏡頭
+
   // 平滑將鏡頭轉至目標朝向正後方 (headingY 為載具 rotationY，前進方向為 (sin, cos))
   public followHeading(headingY: number, delta: number) {
     let diff = (headingY + Math.PI) - this.yaw;
@@ -112,6 +153,11 @@ export class ThirdPersonCamera {
     if (this.isVehicleFollow) return; // 手機騎車視角跟隨車頭
     // 開鏡時靈敏度 × fov / 預設 fov (放大倍率越高轉得越慢)
     const k = this.aimBlend > 0 ? this.camera.fov / this.defaultFov : 1;
+    if (this.bossMode && Math.abs(deltaX) + Math.abs(deltaY) > ThirdPersonCamera.MANUAL_ROTATE_EPS) {
+      this.manualRotateTimer = MANUAL_ROTATE_PRIORITY;
+      this.bossSoftLock.reset();
+      if (this.aimZoom > 0 && deltaY !== 0) this.aimPitchTouched = true;
+    }
     this.yaw -= deltaX * this.sensitivityX * k;
     this.pitch += deltaY * this.sensitivityY * k;
 
@@ -136,9 +182,17 @@ export class ThirdPersonCamera {
     return this.isVehicleMode ? 72 : 65;
   }
 
+  /** Boss 戰鏡頭進出平滑係數 (0~1) */
+  private get bossBlend(): number {
+    const t = this.bossRamp;
+    return t * t * (3 - 2 * t);
+  }
+
   // 依目前平滑係數套用垂直 FOV 並更新投影矩陣 (暗殺運鏡期間只更新 defaultFov)
   private applyPortraitFov() {
-    this.defaultFov = portraitFov(this.baseFov(), this.portraitBlend);
+    const normal = portraitFov(this.baseFov(), this.portraitBlend);
+    const b = this.bossBlend;
+    this.defaultFov = b > 0 ? normal + (bossCamProfile(this.portraitBlend, this.isTouch, this.bossProfile).fov - normal) * b : normal;
     if (!this.isCinematicExecution) {
       this.camera.fov = this.aimedFov();
       this.camera.updateProjectionMatrix();
@@ -169,6 +223,68 @@ export class ThirdPersonCamera {
       this.portraitBlend += diff * Math.min(delta * PORTRAIT_BLEND_RATE, 1.0);
     }
     this.applyPortraitFov();
+  }
+
+  // Boss 戰鏡頭進出 (1 秒線性，FOV 只在進出時變化，戰鬥中固定)；進入時重設動態狀態
+  private stepBossRamp(delta: number) {
+    if (this.bossMode && !this.bossWasOn) {
+      this.bossZoom.reset();
+      this.bossSoftLock.reset();
+      this.manualRotateTimer = 0;
+      this.occPitch = 0;
+      this.aimPitchTouched = false;
+    }
+    this.bossWasOn = this.bossMode;
+    const target = this.bossMode ? 1 : 0;
+    if (this.bossRamp === target) return;
+    this.bossRamp = this.bossMode ? Math.min(1, this.bossRamp + delta) : Math.max(0, this.bossRamp - delta);
+    this.applyPortraitFov();
+  }
+
+  // Boss 戰：俯角回正 / 開鏡輔助、soft lock、動態拉遠；回傳 Boss 戰目標距離 (未啟用回傳 -1)
+  private updateBossFraming(delta: number, focus: THREE.Vector3): number {
+    if (!this.bossMode) {
+      // 退出後 1 秒內俯角平滑回到一般跟隨 0.25
+      if (this.bossRamp > 0) this.pitch = this.bossRamp <= delta ? 0.25 : this.pitch + (0.25 - this.pitch) * (1 - Math.exp(-5 * delta));
+      return -1;
+    }
+    const prof = bossCamProfile(this.portraitBlend, this.isTouch, this.bossProfile);
+    if (this.manualRotateTimer > 0) this.manualRotateTimer = Math.max(0, this.manualRotateTimer - delta);
+    const aiming = this.aimZoom > 0 || this.aimBlend > 0.02;
+    if (!aiming) this.aimPitchTouched = false;
+    if (aiming) {
+      if (!this.aimPitchTouched) this.pitch += (ThirdPersonCamera.BOSS_AIM_PITCH - this.pitch) * Math.min(1, delta * 6);
+    } else if (this.manualRotateTimer <= 0) {
+      this.pitch += (prof.pitch - this.pitch) * (1 - Math.exp(-ThirdPersonCamera.BOSS_PITCH_RETURN * delta));
+    }
+    let bossDist = 0;
+    const b = this.bossTarget;
+    if (b) {
+      bossDist = Math.hypot(b.x - focus.x, b.z - focus.z);
+      const halfH = (horizontalFov(this.camera.fov, this.camera.aspect) * Math.PI) / 360;
+      const weight = aiming || this.manualRotateTimer > 0 ? 0 : 1;
+      this.yaw = this.bossSoftLock.step(this.yaw, delta, this.currentPosition.x, this.currentPosition.z, b.x, b.z, bossDist, halfH, weight);
+    }
+    const boost = this.bossZoom.update(delta, b ? this.bossAttack : null, bossDist, this.bossCamDynamic);
+    const zi = Math.max(0, Math.min(MANUAL_ZOOM_LEVELS.length - 1, this.bossZoomIndex));
+    return prof.distance * MANUAL_ZOOM_LEVELS[zi] * (1 + boost);
+  }
+
+  /** 過場接手鏡頭時立即結束 Boss 戰鏡頭 (FOV 回一般值；過場自行擺位) */
+  public cancelBossMode() {
+    this.bossMode = false;
+    this.bossWasOn = false;
+    if (this.bossRamp === 0) return;
+    this.bossRamp = 0;
+    this.distVel = 0;
+    this.applyPortraitFov();
+  }
+
+  /** 手機縮放鈕：循環切換檔位，手動優先 (自動拉遠暫停) */
+  public cycleBossZoom(): number {
+    this.bossZoomIndex = (this.bossZoomIndex + 1) % MANUAL_ZOOM_LEVELS.length;
+    this.bossZoom.onManualZoom();
+    return this.bossZoomIndex;
   }
 
   // 開始暗殺側面運鏡：鏡頭置於打擊軸垂直側 (類 2D 格鬥遊戲構圖)。
@@ -351,9 +467,12 @@ export class ThirdPersonCamera {
 
     this.stepPortraitBlend(delta);
     this.stepAimBlend(delta);
+    this.stepBossRamp(delta);
     this.target.copy(targetPos);
     // Offset target to character head/chest height (1.35m)
     const focusPoint = this._focus.set(targetPos.x, targetPos.y + 1.35, targetPos.z);
+    const bossTargetDistance = this.updateBossFraming(delta, focusPoint);
+    const boss = bossTargetDistance > 0;
     const isCampus = this.currentWorld === 'CAMPUS';
 
     // 1. 檢測玩家所在場景區域 (樓梯間、電梯、演藝大樓為天天國中專屬空間，其他世界不套用)
@@ -384,6 +503,9 @@ export class ThirdPersonCamera {
       effectiveTargetDistance = ThirdPersonCamera.MATCH_DISTANCE;
     }
 
+    // Boss 戰遠景 (覆蓋一般跟隨距離)
+    if (boss) effectiveTargetDistance = bossTargetDistance;
+
     // 開鏡拉近：距離往 AIM_DISTANCE (直屏同樣乘補償係數) 靠攏，但不超過當下場景距離 (室內 2.8m / 樓梯間 / 電梯更近者維持)
     if (this.aimBlend > 0) {
       const aimDist = ThirdPersonCamera.AIM_DISTANCE * (isIndoors ? 1 : portraitDistanceScale(this.portraitBlend));
@@ -394,12 +516,47 @@ export class ThirdPersonCamera {
     // 衝刺拉遠不得超過當下場景的距離上限 (電梯 1.75m / 樓梯間 1.85m / 室內 2.8m)
     const sceneCap = inElevator ? 1.75 : (inStairwell ? 1.85 : (isIndoors ? 2.8 : Infinity));
     const pulledDistance = Math.min(effectiveTargetDistance + this.dashPullBlend, Math.max(sceneCap, effectiveTargetDistance));
-    this.distance = THREE.MathUtils.lerp(this.distance, pulledDistance, delta * 6.0);
+    if (boss || this.bossRamp > 0) {
+      // Boss 戰 (含退出後 1 秒)：距離走臨界阻尼彈簧 (不過衝、單次過渡 ≥ 0.8s)；開鏡拉近仍需跟手，改用一般速率
+      const target = boss ? effectiveTargetDistance : pulledDistance;
+      if (this.aimBlend > 0.02) {
+        this.distance = THREE.MathUtils.lerp(this.distance, target, Math.min(delta * 6.0, 1.0));
+        this.distVel = 0;
+      } else {
+        const w = ThirdPersonCamera.BOSS_DIST_OMEGA;
+        const h = Math.min(delta, 0.1);
+        this.distVel += (w * w * (target - this.distance) - 2 * w * this.distVel) * h;
+        this.distance += this.distVel * h;
+      }
+    } else {
+      this.distVel = 0;
+      this.distance = THREE.MathUtils.lerp(this.distance, pulledDistance, delta * 6.0);
+    }
 
     // 3. 計算球面座標之理想鏡頭位置
-    const horizontalDistance = this.distance * Math.cos(this.pitch);
-    // 直屏戶外額外抬高機位 (室內不抬高，避免頂到天花板)
-    const heightLift = isIndoors ? 0 : PORTRAIT_HEIGHT_LIFT * this.portraitBlend;
+    let pitch = this.pitch;
+    if (boss && this.obstacle) {
+      // Boss 擋在玩家與鏡頭之間：抬高俯角越過 Boss 頭頂 (平滑；升快降慢)，避免遠景機位被拉到 Boss 前的大幅跳近
+      const o = this.obstacle;
+      const need = pitchToClear(focusPoint.x, focusPoint.y, focusPoint.z, this.yaw, pitch, o.x, o.z, o.r, o.top, ARENA_FIT_MAX_PITCH) - pitch;
+      const rate = need > this.occPitch ? 5 : 1.5;
+      this.occPitch += (need - this.occPitch) * Math.min(1, delta * rate);
+      pitch += this.occPitch;
+    } else this.occPitch = 0;
+    let horizontalDistance = this.distance * Math.cos(pitch);
+    // 直屏戶外額外抬高機位 (室內不抬高，避免頂到天花板；Boss 戰參數已含直屏補償)
+    let heightLift = isIndoors || boss ? 0 : PORTRAIT_HEIGHT_LIFT * this.portraitBlend;
+    let heightOffset = this.distance * Math.sin(pitch);
+    if (boss && this.arenaBound) {
+      // 結界牆內：水平往內收並抬高維持總距離 (不穿牆、不貼臉)
+      const ab = this.arenaBound;
+      const fit = arenaFit(focusPoint.x, focusPoint.z, Math.sin(this.yaw), Math.cos(this.yaw), horizontalDistance, heightOffset, ab.x, ab.z, ab.r - 0.3, this._fit);
+      const k = horizontalDistance > 0.01 ? fit.hd / horizontalDistance : 1;
+      this.bossFitK += (k - this.bossFitK) * Math.min(1, delta * 4);
+      horizontalDistance = fit.hd;
+      heightOffset = fit.h;
+      heightLift = 0;
+    }
     // 過肩偏移：機位與視線同向右移 (鏡頭右方向 = (cos yaw, 0, −sin yaw))，遮擋射線仍由角色頭部出發，故不會穿牆
     // 直屏水平視野窄，偏移同距離倍率一併放大 (室內距離不放大)
     const shoulder = ThirdPersonCamera.AIM_SHOULDER * this.aimBlend * (isIndoors ? 1 : portraitDistanceScale(this.portraitBlend));
@@ -407,9 +564,15 @@ export class ThirdPersonCamera {
     const shoulderZ = -Math.sin(this.yaw) * shoulder;
     const idealPosition = this._ideal.set(
       focusPoint.x + horizontalDistance * Math.sin(this.yaw) + shoulderX,
-      focusPoint.y + this.distance * Math.sin(this.pitch) + heightLift,
+      focusPoint.y + heightOffset + heightLift,
       focusPoint.z + horizontalDistance * Math.cos(this.yaw) + shoulderZ
     );
+
+    if (boss && this.arenaBound) {
+      const ab = this.arenaBound;
+      const cap = arenaHeightCap(Math.hypot(idealPosition.x - ab.x, idealPosition.z - ab.z), ab.r);
+      if (idealPosition.y > cap) idealPosition.y = cap;
+    }
 
     // 4. 實體障礙物與實體牆壁遮擋射線/球體檢測 (AABB Swept-Sphere Raycast)
     const actualPosition = this._actual.copy(idealPosition);
@@ -486,13 +649,16 @@ export class ThirdPersonCamera {
 
     // 5.5 圓形結界邊界：理想機位在牆外時沿焦點 → 機位方向拉回牆內
     if (this.arenaBound) this.clampToArena(actualPosition, focusPoint, this.arenaBound);
-    if (this.obstacle) this.clampToObstacle(actualPosition, focusPoint, this.obstacle);
+    // Boss 戰遠景改以抬高俯角越過 Boss (見上方 pitchToClear)，不把機位拉到 Boss 前造成大幅跳近
+    if (this.obstacle && !boss) this.clampToObstacle(actualPosition, focusPoint, this.obstacle);
 
     // 6. 鏡頭位置與視線平滑插值 (Smooth Camera Lag)
     const lerpFactor = Math.min(delta * 14.0, 1.0);
     this.currentPosition.lerp(actualPosition, lerpFactor);
     // 比賽視角時視線焦點往鏡頭前方 (球網方向) 推移，角色落在畫面下方
-    const lookAhead = ThirdPersonCamera.MATCH_LOOK_AHEAD * this.matchBlend;
+    // Boss 戰視線前移：玩家落在畫面中下，前方戰場多入鏡 (開鏡時收回)
+    const lookAhead = ThirdPersonCamera.MATCH_LOOK_AHEAD * this.matchBlend
+      + (this.bossRamp > 0 ? bossCamProfile(this.portraitBlend, this.isTouch, this.bossProfile).lookAhead * this.bossBlend * (1 - this.aimBlend) * (0.5 + 0.5 * this.bossFitK) : 0);
     this.matchLookAt.set(
       focusPoint.x - Math.sin(this.yaw) * lookAhead + shoulderX,
       focusPoint.y + PORTRAIT_LOOK_LIFT * this.portraitBlend,

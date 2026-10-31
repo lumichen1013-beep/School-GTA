@@ -52,6 +52,7 @@ import { devWeaponsMode } from './weapons/featureFlags';
 import { BallThrowController } from './weapons/basketball/BallThrowController';
 import { SlingshotController } from './weapons/slingshot/SlingshotController';
 import { FencerBossFight } from './game/fencer/FencerBossFight';
+import { BossCameraLink } from './game/fencer/BossCameraLink';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -121,6 +122,7 @@ class SchoolGTASandbox implements GameContext {
   private readonly interaction = new InteractionSystem(this);
   // 世界 Boss【花劍客】(操場太陽花、開戰過場、結界戰、戰後恢復)
   public readonly fencerBossFight: FencerBossFight = new FencerBossFight(this);
+  private bossCameraLink: BossCameraLink | null = null;
 
   private isGameRunning: boolean = false;
   private isHandlingDeath: boolean = false;
@@ -270,6 +272,7 @@ class SchoolGTASandbox implements GameContext {
         this.npcs = suspended ? [] : (this.currentWorldType === 'CAMPUS' ? this.campusNPCs : this.detentionNPCs);
       }
     });
+    this.bossCameraLink = new BossCameraLink(this.cameraCtrl, this.fencerBossFight, () => this.input.isTouchDevice);
     this.wantedSystem = new WantedSystem();
     qualityManager.onNotify = (text) => this.wantedSystem.showBanner(`🎨 ${text}`, 2500);
     this.wantedSystem.onWantedCleared = () => {
@@ -759,6 +762,7 @@ class SchoolGTASandbox implements GameContext {
     // -0.8 花劍客開戰過場 (清場 / 結界 / 亮相 / 向陽覺醒)：第二次起可按空白鍵跳過
     if (this.fencerBossFight.isCutscene) {
       this.input.consumeMouseDelta();
+      this.bossCameraLink?.update(); // 過場中立即還原一般鏡頭 FOV (不干擾過場運鏡)
       if (this.input.jump && this.fencerBossFight.canSkip) {
         this.input.consumeJump();
         this.fencerBossFight.skipIntro();
@@ -939,6 +943,7 @@ class SchoolGTASandbox implements GameContext {
     this.cameraCtrl.isMatchView = this.tennisGame.tennisState === 'STARTING' || this.tennisGame.tennisState === 'PLAYING';
     this.combat.updateExecution(rawDelta);
     this.cameraCtrl.dashPull = this.player.isDashMove ? DASH_CAMERA_PULL : 0;
+    this.bossCameraLink?.update(); // 花劍客戰鬥中：Boss 戰遠景 / soft lock / 畫外箭頭
     this.cameraCtrl.update(targetPosition, rawDelta, colliders);
 
     // 12~14. 生態探索園區、游泳水花微粒與 Boss 血條
