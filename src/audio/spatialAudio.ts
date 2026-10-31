@@ -19,7 +19,9 @@ export type SpatialSoundId =
   // 彈弓：拉弦吱嘎、放弦彈響、爆頭叮聲
   | 'slingDraw' | 'slingTwang' | 'headshotDing'
   // 操場踢足球雙人組：腳面觸球悶響
-  | 'soccerKick';
+  | 'soccerKick'
+  // 世界 Boss 花劍客：細劍突刺 (細劍武器共用)、高帽旋轉、花瓣綻放、終幕鐘聲、結界嗡鳴
+  | 'rapierThrust' | 'hatSpin' | 'petalBloom' | 'finaleChime' | 'barrierHum';
 
 // 最大可聞距離 (公尺)：超過即完全不播放、不建立 audio node。小動作小、全校性事件大
 export const SOUND_RANGE: Record<SpatialSoundId, number> = {
@@ -59,6 +61,11 @@ export const SOUND_RANGE: Record<SpatialSoundId, number> = {
   slingTwang: 15,
   headshotDing: 20,
   soccerKick: 12,
+  rapierThrust: 25,
+  hatSpin: 25,
+  petalBloom: 25,
+  finaleChime: 40,
+  barrierHum: 40,
   thunder: 1000 // 天空全域事件：以校園中心計距離，任何世界位置皆接近滿音量
 };
 
@@ -75,7 +82,9 @@ export const SOUND_COOLDOWN: Partial<Record<SpatialSoundId, number>> = {
   dogBark: 1.2,
   dodge: 0.25,
   headshotDing: 0.2,
-  soccerKick: 0.15
+  soccerKick: 0.15,
+  hatSpin: 0.3,
+  petalBloom: 0.08
 };
 
 // 無明確發聲物件的全域／場景音效定點位置 (校園中心；校鐘、廣播、雷聲等大範圍事件以此計距離)

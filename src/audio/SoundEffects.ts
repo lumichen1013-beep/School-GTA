@@ -258,6 +258,48 @@ export class SoundEffects {
     this.noise(now, 0.06, { type: 'lowpass', freq: [['set', 700, now]], q: 0.7 }, [['set', 0.12, now], ['exp', 0.001, now + 0.06]]);
   }
 
+  // 細劍突刺：高頻金屬破空 (帶通雜訊快速上掃) + 短促金屬鳴 (花劍客 S1 / 細劍武器共用)
+  public playRapierThrust(pos: Vec3Like) {
+    if (!this.gate('rapierThrust', pos)) return;
+    const now = this.audio().currentTime;
+    this.noise(now, 0.16, { type: 'bandpass', freq: [['set', 1800, now], ['exp', 5200, now + 0.12]], q: 2.5 },
+      [['set', 0.0001, now], ['lin', 0.22, now + 0.02], ['exp', 0.0001, now + 0.16]]);
+    this.tone('triangle', [['set', 2350, now + 0.03], ['exp', 1900, now + 0.18]], [['set', 0.0001, now + 0.03], ['lin', 0.07, now + 0.04], ['exp', 0.0001, now + 0.2]], now + 0.03, now + 0.21);
+  }
+
+  // 高帽迴旋：低通雜訊呼呼聲 (飛行中約 0.4 秒一次)
+  public playHatSpin(pos: Vec3Like) {
+    if (!this.gate('hatSpin', pos)) return;
+    const now = this.audio().currentTime;
+    this.noise(now, 0.32, { type: 'bandpass', freq: [['set', 500, now], ['exp', 900, now + 0.16], ['exp', 500, now + 0.32]], q: 1.4 },
+      [['set', 0.0001, now], ['lin', 0.12, now + 0.12], ['exp', 0.0001, now + 0.32]]);
+  }
+
+  // 花瓣綻放：柔和上行雙音 + 輕雜訊 (S3 綻放圈爆開)
+  public playPetalBloom(pos: Vec3Like) {
+    if (!this.gate('petalBloom', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 660, now], ['exp', 990, now + 0.18]], [['set', 0.0001, now], ['lin', 0.12, now + 0.02], ['exp', 0.0001, now + 0.3]], now, now + 0.31);
+    this.noise(now, 0.2, { type: 'highpass', freq: [['set', 2500, now]], q: 0.7 }, [['set', 0.06, now], ['exp', 0.001, now + 0.2]]);
+  }
+
+  // 終幕：低頻衝擊 + 鐘聲泛音
+  public playFinaleChime(pos: Vec3Like) {
+    if (!this.gate('finaleChime', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 120, now], ['exp', 45, now + 0.4]], [['set', 0.35, now], ['exp', 0.001, now + 0.45]], now, now + 0.46);
+    this.tone('sine', [['set', 1046.5, now]], [['set', 0.0001, now], ['lin', 0.12, now + 0.01], ['exp', 0.0001, now + 1.2]], now, now + 1.21);
+    this.tone('sine', [['set', 1568, now + 0.02]], [['set', 0.0001, now + 0.02], ['lin', 0.06, now + 0.03], ['exp', 0.0001, now + 0.9]], now + 0.02, now + 0.91);
+  }
+
+  // 結界升起：低頻嗡鳴 (約 1.5 秒)
+  public playBarrierHum(pos: Vec3Like) {
+    if (!this.gate('barrierHum', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sawtooth', [['set', 55, now], ['exp', 82, now + 1.4]], [['set', 0.0001, now], ['lin', 0.09, now + 0.3], ['exp', 0.0001, now + 1.6]], now, now + 1.62);
+    this.tone('sine', [['set', 110, now], ['exp', 164, now + 1.4]], [['set', 0.0001, now], ['lin', 0.12, now + 0.3], ['exp', 0.0001, now + 1.6]], now, now + 1.62);
+  }
+
   // 籃球運球落地拍球聲 (Dribble Bounce)
   public playDribble(pos: Vec3Like) {
     if (!this.gate('dribble', pos)) return;

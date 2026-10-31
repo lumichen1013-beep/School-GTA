@@ -92,6 +92,10 @@ export class ThirdPersonCamera {
 
   // 手機騎乘單車：視角自動鎖定車頭方向，玩家只需用虛擬搖桿操控
   public isVehicleFollow: boolean = false;
+  // 圓形邊界 (花劍客結界)：鏡頭水平距圓心超過 r 時沿「焦點 → 鏡頭」方向拉近 (null = 不限制)
+  public arenaBound: { x: number; z: number; r: number } | null = null;
+  // 動態圓柱障礙 (花劍客本體)：焦點 → 機位線段穿過圓柱時把機位拉到圓柱前 (null = 無)
+  public obstacle: { x: number; z: number; r: number; top: number } | null = null;
 
   // 平滑將鏡頭轉至目標朝向正後方 (headingY 為載具 rotationY，前進方向為 (sin, cos))
   public followHeading(headingY: number, delta: number) {
@@ -480,6 +484,10 @@ export class ThirdPersonCamera {
       this.clampToCampusSpaces(actualPosition, targetPos, actualPosition, inNorthStairwell, inSouthStairwell, inElevator);
     }
 
+    // 5.5 圓形結界邊界：理想機位在牆外時沿焦點 → 機位方向拉回牆內
+    if (this.arenaBound) this.clampToArena(actualPosition, focusPoint, this.arenaBound);
+    if (this.obstacle) this.clampToObstacle(actualPosition, focusPoint, this.obstacle);
+
     // 6. 鏡頭位置與視線平滑插值 (Smooth Camera Lag)
     const lerpFactor = Math.min(delta * 14.0, 1.0);
     this.currentPosition.lerp(actualPosition, lerpFactor);
@@ -506,6 +514,50 @@ export class ThirdPersonCamera {
       this.camera.position.z += (Math.random() - 0.5) * shake;
     }
     this.camera.lookAt(this.currentLookAt);
+  }
+
+  // 線段 focus → pos 與圓 (水平) 的交點：pos 在圓外時移到交點 (focus 在圓內)
+  private clampToArena(pos: THREE.Vector3, focus: THREE.Vector3, b: { x: number; z: number; r: number }) {
+    const px = pos.x - b.x;
+    const pz = pos.z - b.z;
+    if (px * px + pz * pz <= b.r * b.r) return;
+    const fx = focus.x - b.x;
+    const fz = focus.z - b.z;
+    const vx = pos.x - focus.x;
+    const vz = pos.z - focus.z;
+    const a = vx * vx + vz * vz;
+    if (a < 1e-8) return;
+    const bb = 2 * (fx * vx + fz * vz);
+    const c = fx * fx + fz * fz - b.r * b.r;
+    const disc = bb * bb - 4 * a * c;
+    if (disc < 0) return;
+    const t = Math.max(0, Math.min(1, (-bb + Math.sqrt(disc)) / (2 * a)));
+    pos.x = focus.x + vx * t;
+    pos.y = focus.y + (pos.y - focus.y) * t;
+    pos.z = focus.z + vz * t;
+  }
+
+  // 機位被圓柱 (水平半徑 r、高 0 ~ top) 擋住：沿焦點 → 機位方向拉到圓柱前緣 (至少保留 0.6m)
+  private clampToObstacle(pos: THREE.Vector3, focus: THREE.Vector3, o: { x: number; z: number; r: number; top: number }) {
+    const vx = pos.x - focus.x;
+    const vz = pos.z - focus.z;
+    const len = Math.sqrt(vx * vx + vz * vz);
+    if (len < 0.01) return;
+    const ux = vx / len;
+    const uz = vz / len;
+    const along = (o.x - focus.x) * ux + (o.z - focus.z) * uz;
+    if (along <= 0 || along > len + o.r) return;
+    const lx = focus.x + ux * along - o.x;
+    const lz = focus.z + uz * along - o.z;
+    const lateral2 = lx * lx + lz * lz;
+    if (lateral2 >= o.r * o.r) return;
+    const t = Math.max(0.6, along - Math.sqrt(o.r * o.r - lateral2)) / len;
+    if (t >= 1) return;
+    const y = focus.y + (pos.y - focus.y) * t;
+    if (y > o.top) return;
+    pos.x = focus.x + vx * t;
+    pos.y = y;
+    pos.z = focus.z + vz * t;
   }
 
   // 天天國中室內空間鏡頭約束：樓梯間外牆、電梯車廂、演藝大樓與教學大樓天花板

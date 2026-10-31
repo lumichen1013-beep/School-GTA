@@ -4,7 +4,7 @@ import { getDiagFlags } from './diagFlags';
 
 // 陽光相對於陰影焦點 (玩家) 的固定偏移，維持原有光照方向
 const SUN_OFFSET = new THREE.Vector3(45, 70, 30);
-const SHADOW_DISTANCE = 40;
+export const SHADOW_DISTANCE = 40;
 // 光源視角座標軸 (與陰影相機 lookAt 一致)，用於將焦點對齊陰影貼圖像素格防止移動時陰影閃爍
 const _sunAxisZ = SUN_OFFSET.clone().normalize();
 const _sunAxisX = new THREE.Vector3(0, 1, 0).cross(_sunAxisZ).normalize();
@@ -20,6 +20,8 @@ export class Engine {
   // 本次 WebGL context 實際的抗鋸齒設定 (建立後無法更改，變更需重新整理)
   public readonly antialias: boolean;
   private shadowTexelSize = 0;
+  // 陰影相機半邊長 (公尺)：平時 ±40，花劍客結界戰縮為 ±20 (只改正交邊界，不切 castShadow 以免重編譯)
+  private shadowExtent = SHADOW_DISTANCE;
   // 畫質檔位決定的像素比上限與陰影貼圖尺寸 (由 QualityManager.attach / applyQuality 設定；預設為中檔)
   private maxPixelRatio = 1.5;
   private shadowRes = 1024;
@@ -152,7 +154,7 @@ export class Engine {
         light.shadow.map.dispose();
         light.shadow.map = null;
       }
-      this.shadowTexelSize = (SHADOW_DISTANCE * 2) / shadowRes;
+      this.shadowTexelSize = (this.shadowExtent * 2) / shadowRes;
     }
     if (!casting && light.shadow.map) {
       // 關閉陰影時一併釋放貼圖記憶體 (重新開啟時依 mapSize 重建)
@@ -202,6 +204,19 @@ export class Engine {
 
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
+  }
+
+  // 設定陰影涵蓋範圍 (半邊長 d 公尺)：正交相機邊界 + 投影矩陣 + 像素格對齊尺寸
+  public setShadowExtent(d: number) {
+    if (d === this.shadowExtent) return;
+    this.shadowExtent = d;
+    const cam = this.dirLight.shadow.camera;
+    cam.left = -d;
+    cam.right = d;
+    cam.top = d;
+    cam.bottom = -d;
+    cam.updateProjectionMatrix();
+    this.shadowTexelSize = (d * 2) / this.shadowRes;
   }
 
   // 陽光與陰影相機跟隨焦點 (玩家/載具)；焦點在光源視角平面上對齊陰影像素格，避免移動時陰影邊緣閃爍

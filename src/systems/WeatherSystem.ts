@@ -245,6 +245,11 @@ export class WeatherSystem {
     this.setWeather('SUNNY', false, false);
   }
 
+  // 暫停期間 (花劍客結界戰不呼叫 update) 先收起雨滴粒子；恢復後由 update 依當前天氣重新顯示
+  public hideParticles() {
+    this.rainPoints.visible = false;
+  }
+
   public getCurrentPreset(): WeatherPreset {
     return WEATHER_PRESETS[this.currentWeather];
   }
