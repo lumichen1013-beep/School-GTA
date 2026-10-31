@@ -15,7 +15,7 @@ import type { GameContext } from '../GameContext';
 import { BattleModeSwitch } from './BattleMode';
 import { AwakeningStats, PlayerAwakening } from './PlayerAwakening';
 import {
-  FENCER, SunflowerTaunt, CombatRegen, canSkipIntro, victoryReward, bossBarLabel, BossLineGate, HeartVoice,
+  FENCER, SunflowerTaunt, CombatRegen, canSkipIntro, victoryReward, BossLineGate, HeartVoice,
   introTimeline, fencerQuestStage, victoryIsLong, INTRO_FIRST, VICTORY_FIRST, VICTORY_REPEAT, CHASE_LINE_MIN_FIGHT_SEC,
   type BossDamageResult, type BossCue, type IntroTimeline
 } from './fencerRules';
@@ -473,6 +473,7 @@ export class FencerBossFight {
     player.isCinematicLocked = false;
     this.sunflower.setVisible(false);
     this.setCutsceneUi(false);
+    this.ctx.hud.setBossFightHud(true);
     cameraCtrl.resetBehind(player.position, player.rotationY + Math.PI);
     this.boss.startFight(FIGHT_GRACE);
     this.ctx.input.requestPointerLock();
@@ -559,7 +560,7 @@ export class FencerBossFight {
       this.updateFightStory();
       this.updateRegen(delta);
       const bars = this.boss.bars;
-      hud.setBossHealth(Math.max(0, bars.hp), FENCER.BAR_HP, !this.boss.isDefeated, `${bossBarLabel(bars.bar)}`, '🎩');
+      hud.setFencerBossHealth(bars.totalRemaining, FENCER.BAR_HP * FENCER.BARS, bars.bar, !this.boss.isDefeated);
     } else if (this.phase === 'VICTORY') {
       hud.setBossHealth(0, FENCER.BAR_HP, false);
       if (this.timer >= VICTORY_REPEAT.restoreAt && this.step(32)) this.restoreAfterVictory(true);
@@ -691,6 +692,7 @@ export class FencerBossFight {
   private startVictory() {
     const { progression, wantedSystem, player } = this.ctx;
     this.phase = 'VICTORY';
+    this.ctx.hud.setBossFightHud(false);
     this.timer = 0;
     this.introSteps = 0;
     this.ctx.combat.requestHitStop(0.25);
@@ -864,6 +866,7 @@ export class FencerBossFight {
     if (this.phase === 'INTRO') { this.abort(); return; }
     if (this.phase === 'VICTORY' || this.phase === 'DEFEAT') return;
     this.phase = 'DEFEAT';
+    this.ctx.hud.setBossFightHud(false);
     this.timer = 0;
     this.introSteps &= ~32;
     this.boss.triumph();
@@ -914,6 +917,7 @@ export class FencerBossFight {
     this.boss.hide();
     this.fx.reset();
     this.ctx.hud.setBossHealth(0, FENCER.BAR_HP, false);
+    this.ctx.hud.setBossFightHud(false);
     this.ctx.hud.setHpRegen(false);
     this.wasFastRegen = false;
   }

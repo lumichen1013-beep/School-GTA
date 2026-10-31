@@ -231,6 +231,7 @@ export class HUD {
   private lastBossHp: number = -2;
   private lastBossMaxHp: number = -1;
   private lastBossName: string | undefined = undefined;
+  private lastBossBar: number = -1;
   // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
@@ -1031,6 +1032,8 @@ export class HUD {
     this.lastBossHp = hpKey;
     this.lastBossMaxHp = maxHp;
     this.lastBossName = bossName;
+    this.lastBossBar = -1;
+    this.bossHudEl.classList.remove('boss-hud-fencer', 'bar-flash');
 
     if (!shown) {
       this.bossHudEl.style.display = 'none';
@@ -1047,6 +1050,45 @@ export class HUD {
     const pct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
     this.bossBarFillEl.style.width = `${pct}%`;
     this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
+  }
+
+  /**
+   * 花劍客 Boss 血條：同一條血條呈現三管 (無文字)。fill = 整場剩餘 / 總量，兩條細分隔線標示三段，
+   * 顏色隨管數 (bar 0~2) 變化，換管時閃光一次。僅寫 class / width，並做髒檢查。
+   */
+  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+    if (!this.bossHudEl || !this.bossBarFillEl) return;
+    const shown = visible && totalHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : -1;
+    if (shown === this.lastBossShown && pct === this.lastBossHp && bar === this.lastBossBar && this.lastBossName === '__fencer') return;
+    const barChanged = bar !== this.lastBossBar;
+    this.lastBossShown = shown;
+    this.lastBossHp = pct;
+    this.lastBossBar = bar;
+    this.lastBossMaxHp = totalMax;
+    this.lastBossName = '__fencer';
+    const el = this.bossHudEl;
+    if (!shown) {
+      el.style.display = 'none';
+      el.classList.remove('boss-hud-fencer');
+      this.lastBossBar = -1;
+      return;
+    }
+    el.style.display = 'block';
+    el.classList.add('boss-hud-fencer');
+    el.dataset.bar = String(bar);
+    this.bossBarFillEl.style.width = `${pct}%`;
+    if (barChanged) {
+      el.classList.remove('bar-flash');
+      void el.offsetWidth;
+      el.classList.add('bar-flash');
+    }
+  }
+
+  /** 花劍客戰鬥中精簡 HUD：只切 body class (CSS 隱藏校園歷練 / 地點資訊 / 零用錢 / 校規處分) */
+  public setBossFightHud(on: boolean) {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('boss-fight-hud', on);
   }
 
   // 任務清單已整合進大地圖【任務】分頁：開啟 / 關閉 / 切換 (J 鍵開地圖分頁；任務小介面直達任務分頁)
