@@ -479,7 +479,7 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     expect(boss.tryHitMelee(new THREE.Vector3(boss.position.x + 1, 0, boss.position.z), 1.2, 30)?.applied).toBe(30);
   });
 
-  it('S5：靜止玩家兩回合各吃一次 8 (被夾也只算一次)；分身不可被攻擊、刺完即散', () => {
+  it('S5：靜止玩家兩回合各吃一次 (被夾也只算一次，第 2 回合為追擊)；分身不可被攻擊、刺完即散', () => {
     const player = new THREE.Vector3(cx, 0, cz + 2);
     const { boss, host } = makeBossAt(2, player);
     boss.position.set(cx, 0, cz + 8);
@@ -490,9 +490,69 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     expect(Math.hypot(cp.x - boss.position.x, cp.z - boss.position.z)).toBeGreaterThan(2);
     expect(boss.tryHitAtPoint(cp, 0.1, 50)).toBeNull();
     for (let i = 0; i < 120 && boss.act === 'ATTACK'; i++) boss.update(1 / 30);
-    expect(host.damage).toEqual([[8, '花影雙人舞'], [8, '花影雙人舞']]);
+    // 終樂章：第 1 回合 8+1；第 1 回合刺中 → 第 2 回合追擊 12
+    expect(host.damage).toEqual([[9, '花影雙人舞'], [12, '花影雙人舞']]);
     for (let i = 0; i < 30; i++) boss.update(1 / 30);
     expect(boss.clone.visible).toBe(false);
+  });
+
+  it('難度：第 2 管起連刺追擊、終樂章 S1 / 綻放圈 / S5 傷害 +1', () => {
+    expect(PHASES.map((p) => p.followUp)).toEqual([false, true, true]);
+    expect(PHASES.map((p) => p.dmgBonus)).toEqual([0, 0, 1]);
+  });
+
+  type S1Internals = { beginAttack(id: string, c: boolean): void; s1Windup: number; s1Follow: boolean; s1Start: THREE.Vector3; s1End: THREE.Vector3; atkStep: number };
+  /** S1：第 1 刺刺中後，把玩家放到第 2 刺的線上，回傳第 2 刺預警與傷害列表 */
+  function s1SecondThrust(bar: number) {
+    const player = new THREE.Vector3(cx, 0, cz + 3);
+    const { boss, host } = makeBossAt(bar, player);
+    boss.position.set(cx, 0, cz);
+    const b = boss as unknown as S1Internals;
+    b.beginAttack('S1', false);
+    for (let i = 0; i < 60 && host.damage.length === 0; i++) boss.update(1 / 60);
+    expect(host.damage[0]).toEqual([8, '玫瑰三連刺']);
+    for (let i = 0; i < 60 && b.atkStep !== 0; i++) boss.update(1 / 60); // 突進完 → 第 2 刺瞄準
+    const windup = b.s1Windup;
+    // 第 2 刺：站在新突刺線中點
+    player.set((b.s1Start.x + b.s1End.x) / 2, 0, (b.s1Start.z + b.s1End.z) / 2);
+    for (let i = 0; i < 60 && b.atkStep === 0; i++) boss.update(1 / 60);
+    for (let i = 0; i < 12; i++) boss.update(1 / 60);
+    return { windup, damage: host.damage.map(([d]) => d) };
+  }
+
+  it('S1 連刺追擊：第 2 管起前一刺刺中 → 下一刺預警 0.2s、傷害 12；第 1 管不追擊', () => {
+    const p2 = s1SecondThrust(1);
+    expect(p2.windup).toBeCloseTo(0.2);
+    expect(p2.damage).toEqual([8, 12]);
+    const p1 = s1SecondThrust(0);
+    expect(p1.windup).toBeCloseTo(0.35);
+    expect(p1.damage).toEqual([8, 8]);
+  });
+
+  it('S1 連刺追擊只懲罰被刺中：前一刺閃過則下一刺照常 0.35s / 8', () => {
+    const player = new THREE.Vector3(cx, 0, cz + 3);
+    const { boss, host } = makeBossAt(1, player);
+    boss.position.set(cx, 0, cz);
+    const b = boss as unknown as S1Internals;
+    b.beginAttack('S1', false);
+    player.set(cx + 3, 0, cz + 3); // 預警中側閃出第 1 刺的線
+    for (let i = 0; i < 60 && b.atkStep === 0; i++) boss.update(1 / 60);
+    for (let i = 0; i < 60 && b.atkStep !== 0; i++) boss.update(1 / 60); // 突進完 → 第 2 刺瞄準
+    expect(host.damage.length).toBe(0);
+    expect(b.s1Follow).toBe(false);
+    expect(b.s1Windup).toBeCloseTo(0.35);
+  });
+
+  it('終樂章 S3 綻放圈 7 (第 1、2 管 6)，終幕大圈仍 12', () => {
+    for (const [bar, ring] of [[0, 6], [2, 7]] as const) {
+      const player = new THREE.Vector3(cx, 0, cz + 3);
+      const { boss, host } = makeBossAt(bar, player);
+      (boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S3', false);
+      for (let i = 0; i < 30 * 8 && host.damage.length === 0; i++) boss.update(1 / 30);
+      expect(host.damage[0]).toEqual([ring, '萬花綻放']);
+      for (let i = 0; i < 30 * 8; i++) boss.update(1 / 30);
+      expect(Math.max(...host.damage.map(([d]) => d))).toBe(12);
+    }
   });
 
   it('第 2、3 管 AI 循環確實放出 S4 / S5，Boss 待在結界內', () => {
