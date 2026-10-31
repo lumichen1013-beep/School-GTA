@@ -344,6 +344,7 @@ export class CampusMode {
   private mountBike(bike: Bicycle, groundY: number) {
     this.ctx.player.cancelAttack();
     this.ctx.ballThrow?.cancel();
+    this.ctx.slingshot?.cancel();
     this.ctx.projectiles.reset(); // 上車：清空飛行中 / 回收中的投射物
     bike.mount(this.ctx.player, groundY);
     this.ctx.currentRidingBike = bike;
@@ -561,6 +562,11 @@ export class CampusMode {
     progression.basketballMade = basketballGame.totalMade;
     if (DEV_WEAPONS_BUILD && basketballGame.totalMade >= BASKETBALL_UNLOCK_GOAL) {
       progression.unlockWeapon('BASKETBALL', { text: '🏀 累計投進 10 球！解鎖【籃球】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare(), autoEquip: false });
+    }
+    // 跑操場比賽獲勝 (阿凱；輸不寫最佳成績) → 解鎖開發中武器彈弓。正式版整段被移除
+    progression.trackWon = racingGame.bestTrackTime !== null;
+    if (DEV_WEAPONS_BUILD && racingGame.bestTrackTime) {
+      progression.unlockWeapon('SLINGSHOT', { text: '🏃 跑操場冠軍！解鎖【彈弓】(滾輪或大地圖【裝備】切換)', duration: 7000, sfx: () => soundManager.playFanfare() });
     }
     if (racingGame.bestSwimTime !== this.lastSwimRecord) {
       this.lastSwimRecord = racingGame.bestSwimTime;

@@ -31,6 +31,7 @@ export function createProjectileHost(ctx: GameContext): ProjectileHost {
         case 'stoneHit': soundManager.playStoneHit(pos); break;
         case 'ballCatch': soundManager.playBallCatch(pos); break;
         case 'dribble': soundManager.playDribble(pos); break;
+        case 'slingTwang': soundManager.playSlingTwang(pos); break;
       }
     },
     hitFlash: (pos, color) => slashFX.hitFlash(pos.x, pos.y, pos.z, color),

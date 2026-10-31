@@ -857,6 +857,51 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   background: #ffd9a8;
 }
 
+/* 彈弓準星 (DOM，只改 transform / class)：預設 = 螢幕中心十字；--lock = 手機鎖定目標胸口圈；--head = 滿蓄力穩住後縮小移到頭部；--full = 滿蓄力 */
+.sling-reticle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 15;
+  pointer-events: none;
+  will-change: transform;
+}
+.sling-reticle::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: -18px;
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(255, 244, 214, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
+  transition: width 0.12s, height 0.12s, left 0.12s, top 0.12s, border-color 0.12s;
+}
+.sling-reticle::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ff5a3c;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+}
+.sling-reticle--full::before { border-color: #ffd23f; }
+.sling-reticle--lock::before { border-color: #ff8a3c; box-shadow: 0 0 8px rgba(255, 138, 60, 0.9); }
+.sling-reticle--head::before {
+  left: -8px;
+  top: -8px;
+  width: 14px;
+  height: 14px;
+  border-color: #ff3b30;
+  box-shadow: 0 0 8px rgba(255, 59, 48, 0.95);
+}
+
 /* Basketball Shot Timing Gauge */
 #shot-meter {
   position: absolute;

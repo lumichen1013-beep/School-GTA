@@ -16,6 +16,7 @@ import { WEAPON_FX_STYLES, FINISHER_FX_BOOST } from '../effects/weaponFxStyle';
 import { WeaponRig } from '../weapons/WeaponRig';
 import { getWeapon, isWeaponEnabled, resolveLoadout, resolveVariant } from '../weapons/registry';
 import { devWeaponsMode } from '../weapons/featureFlags';
+import { SLING_AIM_STANCE } from '../weapons/slingshot/pose';
 import type { ResolvedWeapon, WeaponDefinition, WeaponDisplayId, WeaponId } from '../weapons/types';
 
 export type WeaponType = WeaponId;
@@ -1126,6 +1127,13 @@ export class Player {
     return !this.isDead && !this.isSwimming && this.knockdownTimer <= 0 && this.punchTimer <= 0 && this.kf.canChain && !this.attackLock;
   }
 
+  // 瞄準姿勢 (readyPose 'SLING_AIM')：aimCharge = 目標蓄力比例 0..1 (由彈弓控制器每幀設定)，aimRatio = 平滑後實際套用比例；
+  // aimYaw 非 null 時角色朝向鎖定該角度 (蓄力開鏡期間面向鏡頭前方)
+  public aimCharge: number = 0;
+  public aimYaw: number | null = null;
+  private aimRatio: number = 0;
+  private aimRigId: WeaponDisplayId | null = null;
+
   // 武器鎖：遠程回收型武器 (籃球) 的球在外時為 true，不可出招 (由 BallThrowController 設定)
   public attackLock: boolean = false;
 
@@ -1450,8 +1458,12 @@ export class Player {
       this.mesh.rotation.z = 0;
     }
 
-    // 6. 朝向旋轉 (Facing Direction)
-    if (isMoving && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
+    // 6. 朝向旋轉 (Facing Direction)；瞄準中 (aimYaw) 面向鏡頭前方，不隨移動方向轉身
+    if (this.aimYaw !== null && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
+      const diff = Math.atan2(Math.sin(this.aimYaw - this.rotationY), Math.cos(this.aimYaw - this.rotationY));
+      this.rotationY += diff * Math.min(delta * 18.0, 1.0);
+      this.mesh.rotation.y = this.rotationY;
+    } else if (isMoving && !this.isKnockedFlying && !this.isBackflipping && !this.isLunging) {
       const targetRotation = Math.atan2(_playerMoveDir.x, _playerMoveDir.z);
       // Smooth angle slerp
       const diff = Math.atan2(Math.sin(targetRotation - this.rotationY), Math.cos(targetRotation - this.rotationY));
@@ -1875,7 +1887,30 @@ export class Player {
     }
 
     this.applyDualStance(delta);
+    this.applyAimStance(delta);
     this.applyCrouchReadyPose(isMoving);
+  }
+
+  // 瞄準姿勢 (readyPose 'SLING_AIM')：依蓄力比例把右臂前舉持弓、左臂前伸拉弦，同時驅動模型 (整支轉向前、橡皮筋拉伸)；
+  // 撐傘時左臂維持撐傘姿勢；出招圖層 (放弦) 啟動後由圖層接手並以目前姿勢為第 0 格
+  private applyAimStance(delta: number) {
+    const wants = this.displayLoadout.readyPose === 'SLING_AIM' && !this.isDead;
+    const target = wants ? this.aimCharge : 0;
+    this.aimRatio = THREE.MathUtils.lerp(this.aimRatio, target, Math.min(delta * 16, 1));
+    if (target === 0 && this.aimRatio < 0.002) this.aimRatio = 0;
+    if (wants) this.aimRigId = this.currentWeaponId;
+    if (this.aimRigId) {
+      this.weaponRig.setAim(this.aimRigId, this.aimRatio);
+      if (this.aimRatio === 0) this.aimRigId = null;
+    }
+    const d = this.aimRatio;
+    if (d === 0) return;
+    const S = SLING_AIM_STANCE;
+    const ra = this.rightArm.rotation;
+    ra.set(THREE.MathUtils.lerp(ra.x, S.rightArm.x, d), THREE.MathUtils.lerp(ra.y, S.rightArm.y, d), THREE.MathUtils.lerp(ra.z, S.rightArm.z, d));
+    if (this.isHoldingUmbrella) return;
+    const la = this.leftArm.rotation;
+    la.set(THREE.MathUtils.lerp(la.x, S.leftArm.x, d), THREE.MathUtils.lerp(la.y, S.leftArm.y, d), THREE.MathUtils.lerp(la.z, S.leftArm.z, d));
   }
 
   // 雙持架勢 (readyPose 'DUAL')：雙臂固定為倒提雙拍姿勢，不隨步伐擺動 (跑步時只隨步伐小幅晃動)，雙腿照常；蹲姿時淡出
@@ -1933,7 +1968,7 @@ export class Player {
       this.leftLeg.rotation.z = -0.07 * c;
       this.rightLeg.rotation.z = 0.07 * c;
     }
-    this.updateArmRig(c, Math.max(c, this.dualRatio));
+    this.updateArmRig(c, Math.max(c, this.dualRatio, this.aimRatio));
   }
 
   // 雙臂骨架：縮放、肩部基準位置 (站立維持原本以手臂中心為軸；蹲姿以肩為軸) 並同步給出招圖層

@@ -286,7 +286,7 @@ export class Progression {
         step('擊倒單車糾察', this.bikePatrolDefeatedCount, 5)
       ];
       case 'DUAL_RACKET': return [step('擊敗羽球大如老師', 0, 1)];
-      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id；SLINGSHOT (trackWon) 待後續階段補
+      // 開發中武器 (BOOK_WHIP / BASKETBALL 等) 的步驟寫在武器定義 unlock.steps，正式版不打包其 id
       default: return (getWeapon(id).unlock?.steps?.(this) ?? []).map((s) => step(s.label, s.cur, s.max));
     }
   }

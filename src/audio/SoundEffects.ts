@@ -295,7 +295,7 @@ export class SoundEffects {
     }
   }
 
-  // ===== 投射物 (待補：以下暫以既有合成音配方代替，正式音色另行設計) =====
+  // ===== 投射物 / 彈弓 =====
   // 籃球出手破風：低通 1.8k 的正弦下滑 (手臂揮出) + 帶通 600→1300Hz 的短噪音上掃 (空氣聲)，淡入淡出、量小不刺耳
   public playThrowWhoosh(pos: Vec3Like) {
     if (!this.gate('throwWhoosh', pos)) return;
@@ -315,11 +315,40 @@ export class SoundEffects {
       [['set', 0.0001, now], ['lin', 0.12, now + 0.005], ['exp', 0.0001, now + 0.08]], now, now + 0.09, 1100);
   }
 
-  // 石子命中清脆撞擊 (暫代：羽球殺球配方)
+  // 石子命中 (彈弓專屬)：小石擊中身體的乾脆「啪」— 低頻正弦下滑 (撞擊) + 低通 1.6k 的三角波短促敲擊，起音 4ms 避免喀聲、整體量小不刺耳
   public playStoneHit(pos: Vec3Like) {
     if (!this.gate('stoneHit', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('triangle', [['set', 1400, now], ['exp', 320, now + 0.08]], [['set', 0.35, now], ['exp', 0.001, now + 0.1]], now, now + 0.11);
+    this.tone('sine', [['set', 260, now], ['exp', 90, now + 0.07]], [['set', 0.0001, now], ['lin', 0.24, now + 0.004], ['exp', 0.0001, now + 0.09]], now, now + 0.1);
+    this.softTone('triangle', [['set', 820, now], ['exp', 340, now + 0.05]],
+      [['set', 0.0001, now], ['lin', 0.13, now + 0.003], ['exp', 0.0001, now + 0.06]], now, now + 0.07, 1600);
+  }
+
+  // 彈弓拉弦：橡皮筋被拉緊的低沉吱嘎 — 低通 900Hz 的三角波緩慢上滑 + 帶通 500Hz 的細噪音摩擦，淡入淡出，量小
+  public playSlingDraw(pos: Vec3Like) {
+    if (!this.gate('slingDraw', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 150, now], ['exp', 260, now + 0.3]],
+      [['set', 0.0001, now], ['lin', 0.1, now + 0.08], ['exp', 0.0001, now + 0.32]], now, now + 0.34, 900);
+    this.noise(now, 0.28, { type: 'bandpass', freq: [['set', 450, now], ['exp', 700, now + 0.28]], q: 1.2 },
+      [['set', 0.0001, now], ['lin', 0.05, now + 0.08], ['exp', 0.0001, now + 0.28]]);
+  }
+
+  // 彈弓放弦：橡皮筋彈響 — 低通 1.4k 的三角波快速下滑 (弦振) + 低頻正弦 (回彈)，衰減快不拖尾
+  public playSlingTwang(pos: Vec3Like) {
+    if (!this.gate('slingTwang', pos)) return;
+    const now = this.audio().currentTime;
+    this.softTone('triangle', [['set', 720, now], ['exp', 210, now + 0.12]],
+      [['set', 0.0001, now], ['lin', 0.2, now + 0.004], ['exp', 0.0001, now + 0.14]], now, now + 0.15, 1400);
+    this.tone('sine', [['set', 130, now], ['exp', 70, now + 0.08]], [['set', 0.0001, now], ['lin', 0.14, now + 0.004], ['exp', 0.0001, now + 0.1]], now, now + 0.11);
+  }
+
+  // 爆頭叮聲：兩個柔和正弦泛音 (E6 / B6) 快速淡出，不用方波與高頻噪音，冷卻 0.2 秒避免連發刺耳
+  public playHeadshotDing(pos: Vec3Like) {
+    if (!this.gate('headshotDing', pos)) return;
+    const now = this.audio().currentTime;
+    this.tone('sine', [['set', 1318.5, now]], [['set', 0.0001, now], ['lin', 0.16, now + 0.006], ['exp', 0.0001, now + 0.22]], now, now + 0.23);
+    this.tone('sine', [['set', 1975.5, now + 0.05]], [['set', 0.0001, now + 0.05], ['lin', 0.08, now + 0.056], ['exp', 0.0001, now + 0.26]], now + 0.05, now + 0.27);
   }
 
   // 接球：手掌包住球的輕拍 — 低通 700Hz 的正弦下滑 + 帶通 900Hz 的極短噪音，量小

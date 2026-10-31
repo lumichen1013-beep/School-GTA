@@ -11,7 +11,7 @@ import { KungFuLayer, getNpcMoveset, NPC_SHIELD_BLOCK, NPC_CROSS_PARRY, NPC_GRAB
 import { findSafeTeleportPos } from './shared/teleport';
 import { buildDogModel, buildBikePatrolModel, buildHumanoidModel, buildBanditModel, buildBossTelegraphMesh, NPCModelRig } from './npc/models';
 import { ROLE_CONFIG, STUDENT_STYLE_STATS, NPCRoleConfig } from './npc/roleConfig';
-import { applyNpcLodLevel, nextNpcLodLevel, type NpcLodLevel, type NpcLodRig } from './npc/lod';
+import { applyNpcLodLevel, lodBoostedDistSq, nextNpcLodLevel, type NpcLodLevel, type NpcLodRig } from './npc/lod';
 import { freezeLocalMatrix, updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import { launchHorizontal, launchVertical } from '../weapons/launch';
 import { impactDust } from '../effects/ImpactDust';
@@ -476,6 +476,8 @@ export class NPC {
   // 遠處繪製分級 (僅切換零件 visible，不影響骨架節點的動畫與遊戲邏輯)
   private lod?: NpcLodRig;
   private lodLevel: NpcLodLevel = 0;
+  // 開鏡鎖定時的 LOD 距離放大倍率 (彈弓控制器設定；距離 ÷ 倍率，只提升被鎖定者；1 = 不調整)
+  public lodBoost: number = 1;
 
   private hpBarGroup: THREE.Group;
   private hpBarFrame: THREE.Group;
@@ -1084,7 +1086,7 @@ export class NPC {
   public updateLod(viewPos: THREE.Vector3) {
     const lod = this.lod;
     if (!lod) return;
-    const next = nextNpcLodLevel(this.lodLevel, this.mesh.position.distanceToSquared(viewPos), this.needsFullModel());
+    const next = nextNpcLodLevel(this.lodLevel, lodBoostedDistSq(this.mesh.position.distanceToSquared(viewPos), this.lodBoost), this.needsFullModel());
     if (next === this.lodLevel) return;
     this.lodLevel = next;
     applyNpcLodLevel(lod, next);

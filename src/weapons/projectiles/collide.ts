@@ -13,8 +13,23 @@ export const DOG_CAPSULE_Y0 = 0.4;
 export const DOG_CAPSULE_Y1 = 0.4;
 export const DOG_CAPSULE_R = 0.4;
 
+// 爆頭判定：命中點高於目標腳底此高度 (只限人型)
+export const HEADSHOT_HEIGHT = 1.4;
+
+// 射程傷害倍率：near (m) 內全額，near → far 線性衰減到 minMul，之後維持 minMul；near <= 0 = 不衰減
+export function rangeDamageMul(dist: number, near: number, far: number, minMul: number): number {
+  if (near <= 0 || dist <= near) return 1;
+  if (dist >= far) return minMul;
+  return 1 + (minMul - 1) * ((dist - near) / (far - near));
+}
+
 export function isCanineRole(role: string): boolean {
   return role === 'DOG' || role === 'DETENTION_WOLF';
+}
+
+// 命中點高度 (高於目標腳底) 是否算爆頭：高於 HEADSHOT_HEIGHT 且非犬型
+export function isHeadshotHit(hitHeight: number, role: string): boolean {
+  return hitHeight > HEADSHOT_HEIGHT && !isCanineRole(role);
 }
 
 // 線段 A→B 對球心 S、半徑 r 的球：回傳進入時的 t (起點已在球內回傳 0)

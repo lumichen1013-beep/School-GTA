@@ -48,6 +48,7 @@ import { createProjectileHost } from './weapons/projectiles/gameHost';
 import { installProjectileDebug } from './weapons/projectiles/devProjectileDebug';
 import { DEV_WEAPONS_BUILD, devWeaponsMode } from './weapons/featureFlags';
 import { BallThrowController } from './weapons/basketball/BallThrowController';
+import { SlingshotController } from './weapons/slingshot/SlingshotController';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -113,6 +114,7 @@ class SchoolGTASandbox implements GameContext {
   public readonly combat: CombatSystem = new CombatSystem(this);
   public projectiles!: ProjectileSystem; // 共用投射物池 (於初始化時建立)
   public ballThrow: BallThrowController | null = null; // 籃球武器狀態機 (僅開發中武器建置且開關未關閉)
+  public slingshot: SlingshotController | null = null; // 彈弓武器狀態機 (同上)
   private readonly interaction = new InteractionSystem(this);
 
   private isGameRunning: boolean = false;
@@ -209,7 +211,10 @@ class SchoolGTASandbox implements GameContext {
     slashFX.init(this.engine.scene);
     this.projectiles = new ProjectileSystem(createProjectileHost(this));
     this.projectiles.init(this.engine.scene);
-    if (DEV_WEAPONS_BUILD && devWeaponsMode !== 'off') this.ballThrow = new BallThrowController(this);
+    if (DEV_WEAPONS_BUILD && devWeaponsMode !== 'off') {
+      this.ballThrow = new BallThrowController(this);
+      this.slingshot = new SlingshotController(this);
+    }
     this.waterSplashVFX = new WaterSplashVFX(this.engine.scene);
     this.prewarmFx();
     // 畫質切換開關陰影後材質會重新編譯：立即重新預熱，避免之後首次施放特效時才卡頓
@@ -359,6 +364,7 @@ class SchoolGTASandbox implements GameContext {
     impactDust.prewarm(this.engine.scene, compile);
     this.waterSplashVFX.prewarm(compile);
     this.projectiles.prewarm(compile);
+    this.slingshot?.prewarm(compile);
   }
 
   public switchWorld(targetWorld: WorldType, skipCutscene: boolean = false) {
@@ -576,6 +582,7 @@ class SchoolGTASandbox implements GameContext {
     comboFinisherFX.reset();
     slashFX.reset();
     this.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
+    this.slingshot?.cancel(); // 取消蓄力 / 開鏡
     this.projectiles.reset();
     if (!isCampus) {
       this.detention.resetGuards();
@@ -855,6 +862,7 @@ class SchoolGTASandbox implements GameContext {
     this.combat.updatePlayerStrike();
     // 投射物：使用停格縮放後的 delta (停格 / 計量表暫停時凍結)；閒置時不走訪
     this.ballThrow?.update(delta); // 預輸入 / 自動接投 / 準星 (須在投射物更新之前)
+    this.slingshot?.update(delta); // 蓄力 / 開鏡 / 鎖定 / 上彈 / 預輸入 (須在鏡頭更新之前)
     this.projectiles.update(delta);
     swingTrail.update(delta);
     comboFinisherFX.update(delta, this.cameraCtrl.camera);

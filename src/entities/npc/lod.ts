@@ -53,6 +53,11 @@ export function nextNpcLodLevel(current: NpcLodLevel, distSq: number, forceFull:
   return distSq < FAR_EXIT_SQ ? 1 : 2;
 }
 
+// 開鏡鎖定目標的距離放大：距離 ÷ 倍率 (boost <= 1 = 不調整)，傳回調整後的距離平方
+export function lodBoostedDistSq(distSq: number, boost: number): number {
+  return boost > 1 ? distSq / (boost * boost) : distSq;
+}
+
 // 模型建構時預先建立的分級網格 (幾何體依外觀共用快取，執行期僅切換 visible)
 export interface NpcLodRig {
   mid: THREE.Mesh;          // 分級 1：軀幹+頭+雙臂合併網格

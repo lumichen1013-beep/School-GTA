@@ -24,8 +24,8 @@ export const E_OUT = 2;
 export const E_LINEAR = 3;
 
 type V3 = readonly [number, number, number];
-interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
-type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
+export interface PoseSpec { tw?: number; ln?: number; rl?: number; h?: number; la?: V3; ra?: V3; ll?: V3; rr?: V3 }
+export type KeySpec = readonly [t: number, ease: number, pose: PoseSpec];
 
 // 揮擊拖尾錨點：W 手持武器 (右手)、WL 左手武器 (雙持)、RA 右拳、RL 右腿、LL 左腿
 export type TrailLimb = 'W' | 'WL' | 'RA' | 'RL' | 'LL';
@@ -67,8 +67,8 @@ export interface FinisherAoe {
 }
 
 // 發射型招式 (遠程回收武器，如籃球)：命中時間點不做近戰判定而是發射彈體
-// BALL_CHEST 胸前推傳 (直線)、BALL_BOUNCE 地板反彈傳球 (目標前方彈一下)、BALL_LOB 高拋灌籃 (終結技)
-export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_BOUNCE' | 'BALL_LOB';
+// BALL_CHEST 胸前推傳 (直線)、BALL_BOUNCE 地板反彈傳球 (目標前方彈一下)、BALL_LOB 高拋灌籃 (終結技)、SLING 彈弓放弦 (石子)
+export type ProjectileMoveKind = 'BALL_CHEST' | 'BALL_BOUNCE' | 'BALL_LOB' | 'SLING';
 
 export interface KfMove {
   readonly name: string;
@@ -102,7 +102,7 @@ export interface KfMove {
   readonly count: number;
 }
 
-interface MoveOpts {
+export interface MoveOpts {
   dur: number; strike: number; cancel?: number; reach?: number; arc?: number; dmg?: number; knock?: number; finisher?: boolean; extraStrikes?: readonly number[];
   trail?: readonly [number, number]; trailLimb?: TrailLimb; aoe?: FinisherAoe; fx?: FinisherFx;
   trail2?: readonly [number, number]; trailLimb2?: TrailLimb; extraDmg?: readonly number[]; lunge?: KfLunge; charge?: readonly [number, number]; hitShake?: number; slashFx?: SlashFx;
@@ -120,7 +120,7 @@ function defaultTrail(strike: number, keys: readonly KeySpec[]): [number, number
   return [from, to];
 }
 
-function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
+export function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove {
   const data = new Float32Array(keys.length * STRIDE);
   keys.forEach(([t, ease, p], i) => {
     const b = i * STRIDE;
@@ -166,7 +166,7 @@ function defineMove(name: string, o: MoveOpts, keys: readonly KeySpec[]): KfMove
   };
 }
 
-const REST: PoseSpec = {};
+export const REST: PoseSpec = {};
 
 // ───────────── 玩家：徒手 ─────────────
 // 1 弓步衝拳：沉身扭腰蓄勢 → 擰腰送肩直拳、另一拳收抱腰間

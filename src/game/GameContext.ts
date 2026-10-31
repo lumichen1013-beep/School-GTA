@@ -21,6 +21,7 @@ import type { CampusLife } from './CampusLife';
 import type { CombatSystem } from './CombatSystem';
 import type { ProjectileSystem } from '../weapons/projectiles/ProjectileSystem';
 import type { BallThrowController } from '../weapons/basketball/BallThrowController';
+import type { SlingshotController } from '../weapons/slingshot/SlingshotController';
 
 export type WorldType = 'CAMPUS' | 'DETENTION';
 
@@ -53,6 +54,8 @@ export interface GameContext {
   readonly projectiles: ProjectileSystem;
   /** 籃球武器狀態機 (僅開發中武器建置才建立；正式版為 null) */
   readonly ballThrow: BallThrowController | null;
+  /** 彈弓武器狀態機 (僅開發中武器建置才建立；正式版為 null) */
+  readonly slingshot: SlingshotController | null;
 
   readonly currentWorldType: WorldType;
   readonly activeColliders: CollidableBox[];

@@ -1,4 +1,7 @@
 import type { ProjectileMoveKind } from '../../entities/shared/kungfu';
+
+// 籃球的三種投法 (彈弓的 SLING 不走此求解)
+export type BallMoveKind = Exclude<ProjectileMoveKind, 'SLING'>;
 import { isCanineRole } from '../projectiles/collide';
 
 // 籃球瞄準與彈道求解 (純函式，零配置；測試與 BallThrowController 共用)。
@@ -67,7 +70,7 @@ export interface LaunchVelocity { h: number; vy: number } // 水平速率 (沿�
 // CHEST：水平速度固定 24，垂直速度使球恰好在 dist 處經過瞄準點；
 // BOUNCE：水平速度 20，使球在 dist × 0.55 處觸地 (之後依恢復係數彈起，上行穿過目標)；
 // LOB：固定仰角 (近 58° / 遠 38°)，初速使球恰好落在瞄準點
-export function solveLaunch(kind: ProjectileMoveKind, dist: number, originH: number, aimH: number, out: LaunchVelocity): LaunchVelocity {
+export function solveLaunch(kind: BallMoveKind, dist: number, originH: number, aimH: number, out: LaunchVelocity): LaunchVelocity {
   const g = BALL_GRAVITY;
   if (kind === 'BALL_CHEST') {
     const t = dist / BALL_CHEST_SPEED;
@@ -90,6 +93,6 @@ export function solveLaunch(kind: ProjectileMoveKind, dist: number, originH: num
 }
 
 // 無目標時的預設瞄準距離
-export function defaultAimDistance(kind: ProjectileMoveKind): number {
+export function defaultAimDistance(kind: BallMoveKind): number {
   return DEFAULT_DIST[kind];
 }

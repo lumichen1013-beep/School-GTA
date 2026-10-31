@@ -139,6 +139,7 @@ const BIG_MOVE_INTERRUPT_CHANCE = 0.5; // 玩家出招中被大招 (擒拿摔、
 const NPC_ATTACK_INTERVAL_ALERT = 0.6;
 const FRONTAL_LOCK = 0.34; // 正面攻擊守衛的出招間隔：命中點起算 0.34 秒 (加上預備動作約等於按鍵起 0.5 秒)
 const FRONTAL_BANNER = '🛡️ 正面衝擊守備防禦！傷害 ×0.6、技能間隔 0.5s、擊退力減半！';
+const HIT_TEXT_LIFE = 0.8; // 通用命中傷害數字壽命 (秒)
 export const HIT_STOP = 0.04; // 一般命中停格 (真實秒)
 const HIT_STOP_FINISHER = 0.08; // 連段終結技命中停格
 export const HIT_STOP_EXTRA = HIT_STOP * 0.6; // 多段招式額外擊 (小擊) 命中停格；投射物命中預設
@@ -231,6 +232,7 @@ export class CombatSystem {
     this.hitStop = 0;
     this.ctx.player.cancelAttack();
     this.ctx.ballThrow?.cancel(); // 球消失並噴煙塵 (須在清空投射物之前)
+    this.ctx.slingshot?.cancel(); // 取消蓄力 / 開鏡
     this.ctx.projectiles.reset();
   }
 
@@ -653,6 +655,71 @@ export class CombatSystem {
     this.updateDamageText(target);
   }
 
+  // 通用命中傷害數字 (彈弓爆頭)：單一重用精靈，畫布只在顯示時重繪；首次建立後掛入場景 (閒置時隱藏，不佔 draw call)
+  private hitText: THREE.Sprite | null = null;
+  private hitTextCanvas: HTMLCanvasElement | null = null;
+  private hitTextTimer = 0;
+  private readonly hitTextBase = new THREE.Vector3();
+
+  private ensureHitText(): THREE.Sprite {
+    if (!this.hitText) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      this.hitTextCanvas = canvas;
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+      sprite.scale.set(1.5, 0.75, 1);
+      sprite.renderOrder = 999;
+      sprite.visible = false;
+      this.hitText = sprite;
+    }
+    if (this.hitText.parent !== this.ctx.engine.scene) this.ctx.engine.scene.add(this.hitText);
+    return this.hitText;
+  }
+
+  // 預熱傷害數字精靈的 shader (進入世界 / 畫質切換後各呼叫一次)
+  public prewarmHitText(compile: () => void) {
+    const sprite = this.ensureHitText();
+    sprite.visible = true;
+    compile();
+    sprite.visible = this.hitTextTimer > 0;
+  }
+
+  // 於 pos 上方浮出傷害數字 (爆頭金黃色)，0.8 秒內上浮並淡出
+  public showHitDamage(pos: THREE.Vector3, damage: number) {
+    const sprite = this.ensureHitText();
+    const canvas = this.hitTextCanvas!;
+    const g = canvas.getContext('2d')!;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    const text = `-${damage}`;
+    g.font = '900 88px "Segoe UI", sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 10;
+    g.strokeStyle = '#1f0a0a';
+    g.strokeText(text, 128, 64);
+    g.fillStyle = '#ffd23f';
+    g.fillText(text, 128, 64);
+    (sprite.material as THREE.SpriteMaterial).map!.needsUpdate = true;
+    this.hitTextBase.set(pos.x, pos.y + 0.5, pos.z);
+    sprite.position.copy(this.hitTextBase);
+    (sprite.material as THREE.SpriteMaterial).opacity = 1;
+    sprite.visible = true;
+    this.hitTextTimer = HIT_TEXT_LIFE;
+  }
+
+  public updateHitText(delta: number) {
+    if (this.hitTextTimer <= 0 || !this.hitText) return;
+    this.hitTextTimer -= delta;
+    const sprite = this.hitText;
+    if (this.hitTextTimer <= 0) { sprite.visible = false; return; }
+    const u = 1 - this.hitTextTimer / HIT_TEXT_LIFE;
+    sprite.position.set(this.hitTextBase.x, this.hitTextBase.y + u * 0.7, this.hitTextBase.z);
+    (sprite.material as THREE.SpriteMaterial).opacity = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
+  }
+
   // 傷害數字於倒地與後空翻階段緩慢上浮，後段淡出
   private updateDamageText(target: NPC) {
     const sprite = this.damageText;
@@ -687,6 +754,8 @@ export class CombatSystem {
     if (this.execPhase !== 'NONE') return;
     // 籃球武器：投出到接回之前不能出招，按鍵進預輸入緩衝；已在上方處理小遊戲持球優先投籃
     if (this.ctx.ballThrow?.handleAttack()) return;
+    // 彈弓：按下開始蓄力 (放開才發射，見 SlingshotController.update)；放弦 / 上彈期間進預輸入緩衝
+    if (this.ctx.slingshot?.handleAttack()) return;
     if (!player.canAttack) {
       player.attack();
       return;
@@ -729,9 +798,9 @@ export class CombatSystem {
 
   // 依命中序號分流：主擊沿用招式本身；終結技額外擊只扣血 (不擊飛、不觸發終結特效)；其餘額外擊為單體判定
   private resolvePlayerHit(move: KfMove, strikeIndex: number) {
-    // 發射型招式 (籃球)：球離手，不做近戰判定
+    // 發射型招式 (籃球 / 彈弓)：離手 / 離弦，不做近戰判定；各控制器只處理屬於自己招式組的招式
     if (move.projectile) {
-      this.ctx.ballThrow?.launch(move);
+      if (!this.ctx.slingshot?.launch(move)) this.ctx.ballThrow?.launch(move);
       return;
     }
     this.spawnSlashFx(move, strikeIndex);

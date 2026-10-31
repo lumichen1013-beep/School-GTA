@@ -5,7 +5,7 @@ import type { LaunchCap } from './launch';
 import type { Vec3Like } from '../audio/spatialAudio';
 
 // 武器槽中的武器 (循環切換)；場景覆寫 (如 4F 羽球賽球拍) 不進武器槽
-// BOOK_WHIP / BASKETBALL 為開發中武器 (release 'dev')；SLINGSHOT 為預留 id (尚未建 def)
+// BOOK_WHIP / BASKETBALL / SLINGSHOT 為開發中武器 (release 'dev')
 export type WeaponId = 'FIST' | 'NORMAL_BAT' | 'SPECIAL_BAT' | 'DUAL_RACKET' | 'BOOK_WHIP' | 'BASKETBALL' | 'SLINGSHOT';
 export type WeaponOverrideId = 'RACKET';
 export type WeaponDisplayId = WeaponId | WeaponOverrideId;
@@ -45,7 +45,8 @@ export interface WeaponSounds {
 // 拖尾 / 發光樣式：單一樣式或依持握手分色
 export type WeaponFxSpec = WeaponFxId | { readonly R: WeaponFxId; readonly L?: WeaponFxId };
 
-export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL';
+// SLING_AIM：待命同 WEAPON，蓄力時右臂前舉 / 左臂拉弦依蓄力比例插值 (Player.aimCharge)
+export type WeaponReadyPose = 'FIST' | 'WEAPON' | 'DUAL' | 'SLING_AIM';
 
 // 預建模型 (建構時一次建立，執行期只切換 visible / scale / 材質數值)
 export interface WeaponModelHandle {
@@ -54,6 +55,8 @@ export interface WeaponModelHandle {
   readonly glow: ((k: number, peak: number, color: number) => void) | null;
   // 還原材質原值 (發光基準)
   resetGlow(): void;
+  // 瞄準姿勢模型變化 (如彈弓橡皮筋拉伸 / 整支轉向前)：ratio = 蓄力比例 0..1；無則不處理
+  readonly aim?: (ratio: number) => void;
 }
 
 export interface WeaponModelSpec {
@@ -100,12 +103,14 @@ interface WeaponLoadoutFields {
 }
 
 // 遠程武器彈道參數：speed = 出手初速 (m/s，去程估算用；回程速度見 projectiles/collide RETURN_SPEED)、range = 最大射程 (m)、
-// catchDelay = 接到球後到可再出手的緩衝 (秒)、dpsDistance = 裝備頁標準秒傷距離 (m)
+// catchDelay = 接到球後到可再出手的緩衝 (秒)、dpsDistance = 裝備頁標準秒傷距離 (m)；
+// charged = 蓄力單發型 (彈弓)：秒傷改用蓄力曲線 (slingshot/ballistics)，無回收
 export interface WeaponRanged {
   readonly speed: number;
   readonly range: number;
   readonly catchDelay: number;
   readonly dpsDistance: number;
+  readonly charged?: boolean;
 }
 
 export interface WeaponDefinition extends WeaponLoadoutFields {

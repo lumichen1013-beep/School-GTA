@@ -222,6 +222,7 @@ export class FullMapPanels {
       stat('擊退', `${w.knockback}`),
       stat('約秒傷', `約 ${Math.round(s.dps)}/s`, s.ranged ? `估算 · 距離 ${s.ranged.standardDistance}m` : '估算'),
       ...(s.ranged === null ? [] : [stat('各距離秒傷', s.ranged.distances.map((d, i) => `${d}m ${Math.round(s.ranged!.dpsAt[i])}`).join(' · '), '遠程口徑')]),
+      ...(s.ranged?.scenarios ? [stat('蓄力情境秒傷', s.ranged.scenarios.map((c) => `${c.label} ${Math.round(c.dps)}`).join(' · '), '估算')] : []),
       ...(s.groupDps === null ? [] : [stat(`群攻 ${s.groupTargets} 人`, `約 ${Math.round(s.groupDps)}/s`, '估算')]),
       stat('整套總傷', `${s.totalDamage}`, `${s.moves.length} 招 · ${s.totalSeconds.toFixed(1)} 秒`)
     );

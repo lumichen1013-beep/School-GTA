@@ -2,6 +2,7 @@ import type { KfMove } from '../entities/shared/kungfu';
 import { AOE_SECONDARY_DMG, strikeDmg, strikeRoute } from '../entities/shared/kungfu';
 import { getWeapon, resolveVariant } from '../weapons/registry';
 import { returnDuration } from '../weapons/projectiles/collide';
+import { SLING, SLING_SNAP_CHARGE, slingDps } from '../weapons/slingshot/ballistics';
 import type { WeaponId, WeaponRanged, WeaponWorld } from '../weapons/types';
 
 // 大地圖【裝備】分頁用的連段估算 (純計算，不影響戰鬥數值)
@@ -18,7 +19,12 @@ export interface RangedSummary {
   standardDistance: number;
   distances: readonly number[];
   dpsAt: readonly number[]; // 與 distances 對應
+  // 蓄力單發型 (彈弓) 的情境秒傷 (標準距離)：滿蓄力 / 爆頭 / 點射；其餘武器為 null
+  scenarios: readonly { readonly label: string; readonly dps: number }[] | null;
 }
+
+// 蓄力單發型各距離秒傷的顯示距離 (m)：近距離全額、射程衰減起點、接近射程盡頭
+export const CHARGED_DISTANCES: readonly number[] = [10, 30, 45];
 
 export interface WeaponSummary {
   moves: MoveSummary[];
@@ -61,12 +67,30 @@ export function summarizeCombo(combo: readonly KfMove[], baseDamage: number, tem
     totalSeconds += m.cancel * m.dur * tempo;
     return { name: m.name, finisher: m.finisher, mults, damage };
   });
+  if (ranged?.charged) {
+    // 蓄力單發 (彈弓)：單發期望傷害 ÷ (蓄力 + 上彈 + 接後緩衝)；標準 = 滿蓄力、標準距離內全額
+    const full = SLING.chargeFull;
+    const d = ranged.dpsDistance;
+    return {
+      moves, totalDamage, totalSeconds: full + SLING.reload + SLING.afterShot, dps: slingDps(full, d, false), groupDps: null, groupTargets: GROUP_TARGETS,
+      ranged: {
+        standardDistance: d,
+        distances: CHARGED_DISTANCES,
+        dpsAt: CHARGED_DISTANCES.map((x) => slingDps(full, x, false)),
+        scenarios: [
+          { label: '滿蓄力', dps: slingDps(full, d, false) },
+          { label: '爆頭', dps: slingDps(full, d, true) },
+          { label: '點射', dps: slingDps(SLING_SNAP_CHARGE, d, false) }
+        ]
+      }
+    };
+  }
   if (ranged) {
     const dpsAt = RANGED_DISTANCES.map((d) => totalDamage / rangedSeconds(combo, tempo, ranged, d));
     totalSeconds = rangedSeconds(combo, tempo, ranged, ranged.dpsDistance);
     return {
       moves, totalDamage, totalSeconds, dps: totalDamage / totalSeconds, groupDps: null, groupTargets: GROUP_TARGETS,
-      ranged: { standardDistance: ranged.dpsDistance, distances: RANGED_DISTANCES, dpsAt }
+      ranged: { standardDistance: ranged.dpsDistance, distances: RANGED_DISTANCES, dpsAt, scenarios: null }
     };
   }
   return {

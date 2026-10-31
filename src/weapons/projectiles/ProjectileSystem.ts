@@ -11,7 +11,7 @@ import { buildBallGeometry } from './ballGeometry';
 import { createPlayerHitSpec, HIT_STOP_EXTRA, type PlayerHitSpec } from '../../game/CombatSystem';
 import {
   DOG_CAPSULE_R, DOG_CAPSULE_Y0, DOG_CAPSULE_Y1, HUMAN_CAPSULE_R, HUMAN_CAPSULE_Y0, HUMAN_CAPSULE_Y1,
-  isCanineRole, quadBezier, returnDuration, segmentAabbT, segmentCapsuleT, segmentFloorT
+  isCanineRole, isHeadshotHit, rangeDamageMul, quadBezier, returnDuration, segmentAabbT, segmentCapsuleT, segmentFloorT
 } from './collide';
 
 // 共用投射物系統 (籃球 / 彈弓石子等)：固定 PROJ_MAX 槽的物件池，位置 / 上一幀位置 / 速度存於 Float32Array，執行期零配置。
@@ -53,7 +53,7 @@ const NPC_BROAD_PAD = 1.0;            // NPC XZ 粗篩額外半徑 (含膠囊半
 const GARDEN_SAMPLE_STEP = 0.5;       // 生態園點判定沿線段取樣間距 (m)
 const MAX_SPIN_STEP = 0.5;            // 每幀自轉角上限 (rad，避免高速彈體頻閃)
 
-export type ProjectileSoundId = 'throwWhoosh' | 'ballHit' | 'stoneHit' | 'ballCatch' | 'dribble';
+export type ProjectileSoundId = 'throwWhoosh' | 'ballHit' | 'stoneHit' | 'ballCatch' | 'dribble' | 'slingTwang';
 export type ProjectileEventType = 'NPC' | 'GARDEN' | 'WALL' | 'FLOOR' | 'CATCH' | 'EXPIRE';
 
 // 可被投射物命中的角色 (NPC 結構子集，便於測試)
@@ -89,12 +89,16 @@ export interface ProjectileEvent {
   kind: ProjectileKind;
   serial: number;
   readonly point: THREE.Vector3;    // 撞擊點 (彈體中心)
+  readonly origin: THREE.Vector3;   // 發射起點 (射程衰減用)
   readonly normal: THREE.Vector3;   // 撞擊面法線 (NPC / 生態園為速度反向)
   readonly velocity: THREE.Vector3; // 撞擊前速度
   target: ProjectileTarget | null;
   result: NpcHitResult | null;      // NPC 防禦結果 (lastHitResult)
   applied: boolean;                 // NPC：結算成立 (false = 金鐘護盾)
   hitHeight: number;                // 命中點高於目標腳底 (爆頭判定用)
+  headshot: boolean;                // NPC：本次判定為爆頭 (已套 headshotMul)
+  distance: number;                 // 發射起點到撞擊點的直線距離 (m)
+  damage: number;                   // NPC：結算傷害 (含射程衰減與爆頭倍率；未四捨五入)
   garden: ProjectileGardenHit | null;
   bounces: number;
 }
@@ -120,6 +124,11 @@ export interface ProjectileSpawnOpts {
   reboundUp: number;    //                  向上速度
   reboundDelay: number; //                  反彈多久後開始回收
   hitStop: number;      // 命中停格 (真實秒)
+  headHitStop: number;  // 爆頭命中停格 (真實秒；< 0 = 同 hitStop)
+  falloffNear: number;  // 射程衰減：此距離 (m) 內全額；<= 0 = 不衰減
+  falloffFar: number;   //          此距離 (m) 衰減到 falloffMin 倍，之後維持
+  falloffMin: number;
+  headshotMul: number;  // 爆頭傷害倍率 (> 1 才判定爆頭：命中點高於腳底 HEADSHOT_HEIGHT 且非犬型)
   hitFlashColor: number;// 命中閃光顏色 (< 0 = 不出)
   hitDust: boolean;     // 命中 / 撞牆 / 落地結束時噴煙塵
   launchSound: ProjectileSoundId | null;
@@ -141,7 +150,7 @@ export function createProjectileSpawnOpts(kind: ProjectileKind): ProjectileSpawn
     flags: PFLAG_TRACER | (ball ? PFLAG_BOUNCE_FLOOR | PFLAG_BOUNCE_WALL | PFLAG_RETURN : 0),
     maxBounces: BALL_MAX_BOUNCES, restitution: BALL_RESTITUTION, friction: BALL_FRICTION, wallRestitution: WALL_RESTITUTION,
     reboundBack: 6, reboundUp: 5, reboundDelay: 0.2,
-    hitStop: HIT_STOP_EXTRA, hitFlashColor: ball ? 0xff8a2a : 0xffffff, hitDust: true,
+    hitStop: HIT_STOP_EXTRA, headHitStop: -1, falloffNear: 0, falloffFar: 0, falloffMin: 1, headshotMul: 1, hitFlashColor: ball ? 0xff8a2a : 0xffffff, hitDust: true,
     launchSound: 'throwWhoosh', hitSound: ball ? 'ballHit' : 'stoneHit', wallSound: ball ? 'dribble' : 'stoneHit',
     floorSound: ball ? 'dribble' : 'stoneHit', catchSound: ball ? 'ballCatch' : null,
     tracerColor: ball ? 0xffb066 : 0xfff2cc, tracerHalfWidth: ball ? 0.09 : 0.04,
@@ -154,7 +163,8 @@ function copyOpts(s: ProjectileSpawnOpts, d: ProjectileSpawnOpts) {
   d.damage = s.damage; d.knockback = s.knockback; d.mode = s.mode; d.shoveDist = s.shoveDist; d.launchCap = s.launchCap; d.serial = s.serial;
   d.flags = s.flags; d.maxBounces = s.maxBounces; d.restitution = s.restitution; d.friction = s.friction; d.wallRestitution = s.wallRestitution;
   d.reboundBack = s.reboundBack; d.reboundUp = s.reboundUp; d.reboundDelay = s.reboundDelay;
-  d.hitStop = s.hitStop; d.hitFlashColor = s.hitFlashColor; d.hitDust = s.hitDust;
+  d.hitStop = s.hitStop; d.headHitStop = s.headHitStop; d.falloffNear = s.falloffNear; d.falloffFar = s.falloffFar; d.falloffMin = s.falloffMin;
+  d.headshotMul = s.headshotMul; d.hitFlashColor = s.hitFlashColor; d.hitDust = s.hitDust;
   d.launchSound = s.launchSound; d.hitSound = s.hitSound; d.wallSound = s.wallSound; d.floorSound = s.floorSound; d.catchSound = s.catchSound;
   d.tracerColor = s.tracerColor; d.tracerHalfWidth = s.tracerHalfWidth;
   d.returnTarget = s.returnTarget; d.onEvent = s.onEvent;
@@ -166,8 +176,8 @@ interface Vec3Like { x: number; y: number; z: number }
 const HIT_NONE = 0, HIT_FLOOR = 1, HIT_WALL = 2, HIT_NPC = 3, HIT_GARDEN = 4;
 const _event: ProjectileEvent = {
   type: 'NPC', slot: 0, kind: PROJ_BALL, serial: 0,
-  point: new THREE.Vector3(), normal: new THREE.Vector3(), velocity: new THREE.Vector3(),
-  target: null, result: null, applied: false, hitHeight: 0, garden: null, bounces: 0
+  point: new THREE.Vector3(), origin: new THREE.Vector3(), normal: new THREE.Vector3(), velocity: new THREE.Vector3(),
+  target: null, result: null, applied: false, hitHeight: 0, headshot: false, distance: 0, damage: 0, garden: null, bounces: 0
 };
 const _wallNear: CollidableBox[] = [];
 const _n = { x: 0, y: 0, z: 0 };
@@ -438,10 +448,14 @@ export class ProjectileSystem {
     ev.serial = this.serial[i];
     ev.point.set(this.pos[o], this.pos[o + 1], this.pos[o + 2]);
     ev.velocity.set(this.vel[o], this.vel[o + 1], this.vel[o + 2]);
+    ev.origin.set(this.origin[o], this.origin[o + 1], this.origin[o + 2]);
+    ev.distance = Math.hypot(ev.point.x - ev.origin.x, ev.point.y - ev.origin.y, ev.point.z - ev.origin.z);
     ev.target = null;
     ev.result = null;
     ev.applied = false;
     ev.hitHeight = 0;
+    ev.headshot = false;
+    ev.damage = 0;
     if (type !== 'GARDEN') ev.garden = null;
     ev.bounces = this.bounces[i];
     return ev;
@@ -476,8 +490,14 @@ export class ProjectileSystem {
       spec.useAttackDir = true;
       spec.attackDirX = dirX;
       spec.attackDirZ = dirZ;
+      // 射程衰減 (發射起點到命中點) 與爆頭 (只限人型、命中點高於腳底 HEADSHOT_HEIGHT)
+      ev.hitHeight = ev.point.y - target.position.y;
+      ev.headshot = op.headshotMul > 1 && isHeadshotHit(ev.hitHeight, target.role);
+      let mul = rangeDamageMul(ev.distance, op.falloffNear, op.falloffFar, op.falloffMin);
+      if (ev.headshot) mul *= op.headshotMul;
+      ev.damage = this.damage[i] * mul;
       spec.damage = this.damage[i];
-      spec.dmgMul = 1;
+      spec.dmgMul = mul;
       spec.knockback = op.knockback;
       spec.mode = op.mode;
       spec.shoveDist = op.shoveDist;
@@ -493,11 +513,11 @@ export class ProjectileSystem {
       applied = host.hitTarget(target, spec);
       ev.target = target;
       ev.result = target.lastHitResult;
-      ev.hitHeight = ev.point.y - target.position.y;
     }
     ev.applied = applied;
     if (applied) {
-      if (op.hitStop > 0) host.requestHitStop(op.hitStop);
+      const stop = ev.headshot && op.headHitStop >= 0 ? op.headHitStop : op.hitStop;
+      if (stop > 0) host.requestHitStop(stop);
       if (op.hitFlashColor >= 0 && ev.result !== 'BLOCKED') host.hitFlash(ev.point, op.hitFlashColor);
       if (op.hitDust) host.dust(ev.point, ev.normal);
     }

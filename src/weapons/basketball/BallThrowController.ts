@@ -12,9 +12,10 @@ import {
   type ProjectileEvent, type ProjectileSpawnOpts
 } from '../projectiles/ProjectileSystem';
 import { BASKETBALL_SHOVE_DIST } from '../defs/basketball';
+import { PRE_INPUT_WINDOW, ScreenReticle } from '../rangedCommon';
 import {
   AIM_DESKTOP_HALF_ANGLE, AIM_MAX_RANGE, AIM_TOUCH_HALF_ANGLE, aimHeight, defaultAimDistance, pickAimTarget, solveLaunch,
-  type LaunchVelocity
+  type BallMoveKind, type LaunchVelocity
 } from './aim';
 
 // 籃球武器狀態機 (僅 DEV_WEAPONS_BUILD 的建置由 main.ts 建立；正式版整檔 tree-shake，頂層無副作用)。
@@ -22,7 +23,7 @@ import {
 //   WINDUP 投球動作的預備段 (已鎖攻擊)，到命中時間點 (球離手) 由 CombatSystem 呼叫 launch() 發射
 //   FLIGHT 球在外 (投射物池的球飛行 / 彈跳 / 回收；手上的球隱藏、攻擊鎖定)，被接住 (CATCH) 回到 READY
 // 換武器 / 上車 / 換世界 / 死亡 / 手持小遊戲籃球：cancel()，球立即消失並噴煙塵。
-export const PRE_INPUT_WINDOW = 0.25;  // 預輸入緩衝 (秒)：接球前這段時間內按攻擊，接球後自動投出下一球
+export { PRE_INPUT_WINDOW };            // 預輸入緩衝 (秒)：接球前這段時間內按攻擊，接球後自動投出下一球 (共用常數見 rangedCommon)
 const FLIGHT_FAILSAFE = 5;             // 飛行 / 回收總秒數上限 (正常 2 秒保險 + 回收 <= 0.9，超過視為異常強制收回)
 const ORIGIN_CHEST = 1.25;             // 胸前 / 地板傳球出手高度 (高於腳底)
 const ORIGIN_LOB = 1.9;                // 高拋出手高度 (過頂)
@@ -49,8 +50,7 @@ export class BallThrowController {
   private readonly launchV: LaunchVelocity = { h: 0, vy: 0 };
   private flightTime = 0;
   private aimTarget: NPC | null = null;
-  private reticle: HTMLElement | null = null;
-  private reticleShown = false;
+  private readonly reticle = new ScreenReticle('ballLockReticle', 'ball-lock-reticle');
   private readonly returnTarget = (out: THREE.Vector3) => { this.ctx.player.getHandPoint(out); };
   private readonly onEvent = (ev: ProjectileEvent) => this.handleEvent(ev);
 
@@ -122,7 +122,7 @@ export class BallThrowController {
     const idx = this.combo.indexOf(move);
     if (idx < 0) { this.finishWindup(); return; }
     this.aim();
-    const kindName = move.projectile!;
+    const kindName = move.projectile as BallMoveKind;
     const originH = kindName === 'BALL_LOB' ? ORIGIN_LOB : ORIGIN_CHEST;
     const t = this.aimTarget;
     let dist = t ? Math.hypot(t.position.x - player.position.x, t.position.z - player.position.z) - ORIGIN_FORWARD : defaultAimDistance(kindName);
@@ -180,7 +180,7 @@ export class BallThrowController {
   public update(delta: number) {
     const { player, projectiles } = this.ctx;
     if (!this.enabled) {
-      if (this.state !== 'READY' || player.attackLock) this.cancel();
+      if (this.state !== 'READY') this.cancel(); // 只處理自己的狀態 (attackLock 可能是其他遠程武器設定)
       this.buffer = 0;
       this.showReticle(false);
       return;
@@ -245,28 +245,11 @@ export class BallThrowController {
     const fwd = cameraCtrl.getForwardVector();
     const t = pickAimTarget(npcs, player.position.x, player.position.y, player.position.z, fwd.x, fwd.z, AIM_TOUCH_HALF_ANGLE, AIM_MAX_RANGE, 'NEAREST');
     if (!t) { this.showReticle(false); return; }
-    this.tmp.set(t.position.x, t.position.y + Math.min(LOCK_WORLD_Y_MAX, aimHeight(t.role) + 0.2), t.position.z).project(cameraCtrl.camera);
-    if (this.tmp.z > 1 || this.tmp.z < -1) { this.showReticle(false); return; }
-    const el = this.ensureReticle();
-    el.style.transform = `translate(${((this.tmp.x + 1) * 0.5 * window.innerWidth).toFixed(1)}px, ${((1 - this.tmp.y) * 0.5 * window.innerHeight).toFixed(1)}px)`;
-    this.showReticle(true);
-  }
-
-  private ensureReticle(): HTMLElement {
-    if (!this.reticle) {
-      const el = document.createElement('div');
-      el.id = 'ballLockReticle';
-      el.className = 'ball-lock-reticle';
-      el.style.display = 'none';
-      document.body.appendChild(el);
-      this.reticle = el;
-    }
-    return this.reticle;
+    this.tmp.set(t.position.x, t.position.y + Math.min(LOCK_WORLD_Y_MAX, aimHeight(t.role) + 0.2), t.position.z);
+    this.showReticle(this.reticle.placeAt(this.tmp, cameraCtrl.camera));
   }
 
   private showReticle(show: boolean) {
-    if (show === this.reticleShown) return;
-    this.reticleShown = show;
-    if (this.reticle || show) this.ensureReticle().style.display = show ? 'block' : 'none';
+    this.reticle.show(show);
   }
 }
