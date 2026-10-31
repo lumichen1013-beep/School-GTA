@@ -3,7 +3,7 @@ vi.mock('../src/audio/SoundEffects', () => ({ soundManager: {} }));
 
 import { Progression } from '../src/game/Progression';
 
-function make(level: number) {
+function make(level: number, boss = false) {
   const player = {
     isDead: false, isCinematicLocked: false, isDodging: false, hitCooldown: 0, isRidingVehicle: false,
     isSwimming: false, knockdownTimer: 0, isLunging: false,
@@ -12,7 +12,7 @@ function make(level: number) {
   const showBanner = vi.fn();
   const ctx = {
     player, wantedSystem: { showBanner }, currentRidingBike: null, activeColliders: [],
-    currentWorldType: 'CAMPUS', hud: { updateSkillHUD: vi.fn() }
+    currentWorldType: 'CAMPUS', fencerBossFight: { isActive: boss }, hud: { updateSkillHUD: vi.fn() }
   } as never;
   const p = new Progression(ctx);
   p.dodgeSkillLevel = level;
@@ -29,14 +29,25 @@ describe('被動自動閃避', () => {
     expect(player.performFlashStep).not.toHaveBeenCalled();
   });
 
-  it('等級 1 觸發閃身步；機率 30% 邊界', () => {
+  it('等級 1 觸發閃身步；平時機率 20% 邊界', () => {
     const { p, player } = make(1);
+    vi.spyOn(Math, 'random').mockReturnValue(0.2);
+    expect(p.tryAutoDodge()).toBe(false);
+    vi.spyOn(Math, 'random').mockReturnValue(0.19);
+    expect(p.tryAutoDodge()).toBe(true);
+    expect(player.performFlashStep).toHaveBeenCalledTimes(1);
+    expect(player.performBearShake).not.toHaveBeenCalled();
+  });
+
+  it('花劍客戰期間機率 30% 邊界', () => {
+    const { p } = make(1, true);
     vi.spyOn(Math, 'random').mockReturnValue(0.3);
     expect(p.tryAutoDodge()).toBe(false);
     vi.spyOn(Math, 'random').mockReturnValue(0.29);
     expect(p.tryAutoDodge()).toBe(true);
-    expect(player.performFlashStep).toHaveBeenCalledTimes(1);
-    expect(player.performBearShake).not.toHaveBeenCalled();
+    const n = make(1, false);
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    expect(n.p.tryAutoDodge()).toBe(false); // 平時 0.25 不過
   });
 
   it('等級 2 觸發狗熊哆嗦毛位移；突進斬中不位移但仍判定閃避', () => {

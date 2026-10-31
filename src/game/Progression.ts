@@ -9,7 +9,8 @@ import { RAPIER_UNLOCK_TEXT } from '../weapons/defs/rapier';
 
 // 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與被動自動閃避機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
-const AUTO_DODGE_CHANCE = 0.3;
+const AUTO_DODGE_CHANCE = 0.2;
+const AUTO_DODGE_CHANCE_BOSS = 0.3; // 花劍客 Boss 戰期間
 // 被動自動閃避獨立冷卻 (秒)，與主動技能冷卻分開計時，避免連續觸發
 const AUTO_DODGE_COOLDOWN = 1.0;
 // 學習閃身步 (等級 1) / 狗熊哆嗦毛 (等級 2) 的學費
@@ -96,6 +97,7 @@ export interface FullMapStatus {
   dodgeCooldown: number;
   dodgeCooldownMax: number;
   autoDodgeChance: number;
+  autoDodgeChanceBoss: number;
   dodgeNextFee: number; // 0 = 已精通
   // 特訓院戰績
   takedowns: number;
@@ -313,7 +315,7 @@ export class Progression {
 
   private readonly fullMapStatus: FullMapStatus = {
     hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, cash: 0, stars: 0, wantedTitle: '',
-    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, dodgeNextFee: 0,
+    dodgeLevel: 0, dodgeCooldown: 0, dodgeCooldownMax: DODGE_SKILL_COOLDOWN, autoDodgeChance: AUTO_DODGE_CHANCE, autoDodgeChanceBoss: AUTO_DODGE_CHANCE_BOSS, dodgeNextFee: 0,
     takedowns: 0, frontalKos: 0, alerts: 0, escapeSeconds: 0
   };
 
@@ -387,7 +389,7 @@ export class Progression {
       this.dodgeSkillLevel = 1;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！按 [Q] 鍵（手機點擊技能圖示）手動施放，冷卻 1 秒；被攻擊命中時另有 30% 機率自動閃避！', 5000);
+      wantedSystem.showBanner('🥋 成功習得技能【閃身步】！按 [Q] 鍵（手機點擊技能圖示）手動施放，冷卻 1 秒；被攻擊命中時另有 20% 機率自動閃避（花劍客戰 30%）！', 5000);
     } else if (targetLevel === 2) {
       if (this.dodgeSkillLevel < 1) {
         wantedSystem.showBanner('❌ 前置條件未達成！必須先學會基礎【閃身步】！', 2500);
@@ -401,7 +403,7 @@ export class Progression {
       this.dodgeSkillLevel = 2;
       hud.setCash(this.cash);
       soundManager.playCashRegister();
-      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！按 [Q] 鍵（手機點擊技能圖示）手動施放連續瞬移；被攻擊命中時仍有 30% 機率自動閃避！', 5000);
+      wantedSystem.showBanner('🐻 恭喜融會貫通進階【狗熊哆嗦毛】！按 [Q] 鍵（手機點擊技能圖示）手動施放連續瞬移；被攻擊命中時仍有 20% 機率自動閃避（花劍客戰 30%）！', 5000);
     }
   };
 
@@ -443,14 +445,15 @@ export class Progression {
   };
 
   // 被動自動閃避 (升級獎勵，與主動技能分開)：已習得閃身步/狗熊哆嗦毛 (level >= 1) 時，被敵人攻擊命中瞬間
-  // 有 AUTO_DODGE_CHANCE 機率自動施放對應等級的位移；使用獨立冷卻，不檢查也不消耗主動技能冷卻
+  // 有 AUTO_DODGE_CHANCE (花劍客戰 AUTO_DODGE_CHANCE_BOSS) 機率自動施放對應等級的位移；使用獨立冷卻，不檢查也不消耗主動技能冷卻
   // 成功回傳 true，呼叫端應視為完全閃掉此次攻擊
   public readonly tryAutoDodge = (): boolean => {
     const { player, wantedSystem } = this.ctx;
     if (this.dodgeSkillLevel < 1 || this.autoDodgeCooldownTimer > 0) return false;
     if (player.isDead || player.isCinematicLocked || player.isDodging || player.hitCooldown > 0) return false;
     if (this.ctx.currentRidingBike || player.isRidingVehicle || player.isSwimming || player.knockdownTimer > 0) return false;
-    if (Math.random() >= AUTO_DODGE_CHANCE) return false;
+    const chance = this.ctx.fencerBossFight?.isActive ? AUTO_DODGE_CHANCE_BOSS : AUTO_DODGE_CHANCE;
+    if (Math.random() >= chance) return false;
     this.autoDodgeCooldownTimer = AUTO_DODGE_COOLDOWN;
     const isAdvanced = this.dodgeSkillLevel === 2;
     // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行位移，避免中斷招式
