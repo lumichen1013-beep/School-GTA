@@ -96,7 +96,7 @@ export class WantedSystem {
 
         if (this.escapeTimer <= 0) {
           // 成功躲避 5 秒：全面銷過！
-          soundManager.playBroadcastChime();
+          soundManager.playWantedClearChime();
           if (this.currentWorld === 'DETENTION') {
             this.showBanner('🕊️ 警戒解除：成功避開巡邏守衛視線，院內戒備已撤除！', 3500);
           } else {

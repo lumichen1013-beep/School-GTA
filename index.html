@@ -366,6 +366,20 @@
             <span>🔁 切換世界</span>
             <span class="world-current" id="world-text">🏫 天天國中</span>
           </button>
+          <!-- 畫質：自動 (開局實測 FPS) / 高 / 中 / 低，顯示實際套用檔位與量測 FPS -->
+          <div class="fm-quality" id="fm-quality">
+            <div class="fm-quality-head">
+              <span class="fm-quality-title">🎨 畫質</span>
+              <span class="fm-quality-status" id="fm-quality-status">中</span>
+            </div>
+            <div class="fm-quality-seg" role="radiogroup" aria-label="畫質">
+              <button type="button" class="fm-quality-opt" role="radio" data-quality="auto">自動</button>
+              <button type="button" class="fm-quality-opt" role="radio" data-quality="high">高</button>
+              <button type="button" class="fm-quality-opt" role="radio" data-quality="medium">中</button>
+              <button type="button" class="fm-quality-opt" role="radio" data-quality="low">低</button>
+              <button type="button" class="fm-quality-opt fm-quality-redetect" id="fm-quality-redetect" title="重新實測 FPS 並自動選擇畫質">🔄 偵測</button>
+            </div>
+          </div>
         </div>
 
         <div class="fullmap-map-area">

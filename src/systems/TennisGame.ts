@@ -8,6 +8,8 @@ import { InputManager } from '../core/InputManager';
 
 const _scratchServeTarget = new THREE.Vector3();
 const _scratchLookTarget = new THREE.Vector3();
+// 4F 羽球場中心：裁判哨、倒數鈴等場地音效的發聲位置
+const COURT_CENTER = { x: 77, y: 12, z: 34 };
 
 export class TennisGame {
   public tennisState: 'IDLE' | 'STARTING' | 'PLAYING' | 'FINISHED' = 'IDLE';
@@ -95,7 +97,7 @@ export class TennisGame {
 
     hud.hidePrompt();
     this.updateScoreboard();
-    soundManager.playWhistle();
+    soundManager.playWhistle(COURT_CENTER);
   }
 
   public endMatch(
@@ -137,8 +139,8 @@ export class TennisGame {
         6000
       );
     } else {
-      soundManager.playPunch();
-      soundManager.playWhistle();
+      soundManager.playPunch(COURT_CENTER);
+      soundManager.playWhistle(COURT_CENTER);
       wantedSystem.showBanner(
         `❌ 挑戰失敗！大如老師：「體力或反應不足，再接再厲！」【${this.playerScore} - ${this.coachScore}】`,
         4500
@@ -221,7 +223,7 @@ export class TennisGame {
       const countSec = Math.max(1, Math.ceil(this.countdownTimer));
       if (countSec > 0 && countSec !== this.lastCountdownSec) {
         this.lastCountdownSec = countSec;
-        soundManager.playBroadcastChime();
+        soundManager.playBroadcastChime(COURT_CENTER);
         this.updateScoreboard();
       }
       if (peCoach) {
@@ -232,7 +234,7 @@ export class TennisGame {
       if (this.countdownTimer <= 0) {
         this.tennisState = 'PLAYING';
         this.serveTimer = 1.0;
-        soundManager.playWhistle();
+        soundManager.playWhistle(COURT_CENTER);
         this.updateScoreboard();
       }
     } else if (this.tennisState === 'PLAYING') {
@@ -402,7 +404,7 @@ export class TennisGame {
           this.rallyCount += 1;
           // 回擊瞬間擲骰：決定大如老師這一拍接不接得到
           this.coachWillReturn = Math.random() < this.coachReturnChance;
-          soundManager.playBadmintonHit();
+          soundManager.playBadmintonHit(sc.position);
           if (peCoach) {
             // 玩家擊球回擊：計算向上的彩虹高遠拋物線，巧妙打向教練半場的不同戰術落點 (左右大角、前場小球或底線)
             let returnX = 77.0;
@@ -459,7 +461,7 @@ export class TennisGame {
         const isInStrikeZone = sc.position.z <= 37.0 && sc.velocity.y < 0 && sc.position.y <= 13.6;
 
         if (this.coachWillReturn && (distToCoach < 2.5 || sc.position.z <= 27.2 || isInStrikeZone || isLanded)) {
-          soundManager.playBadmintonHit();
+          soundManager.playBadmintonHit(sc.position);
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
           // 大如老師回擊：沿用發球的 4 大球路，球回到玩家半場可再次擊球
@@ -480,7 +482,7 @@ export class TennisGame {
         if (!this.coachWillReturn && (isLanded || sc.position.z <= 27.2)) {
           NPC.disposeProjectile(sc, scene);
           this.shuttlecocks.splice(i, 1);
-          soundManager.playWhistle();
+          soundManager.playWhistle(COURT_CENTER);
           wantedSystem.showBanner('🏸 大如老師救球不及！玩家漂亮得分！', 1600);
           this.awardPoint(true, wantedSystem, hud, scene, onRewardCash, player);
           continue;
@@ -496,7 +498,7 @@ export class TennisGame {
 
         if (isHit || isPast || isLanded) {
           sc.hasHitOrMissed = true;
-          soundManager.playPunch();
+          soundManager.playPunch(sc.position);
           if (isHit) {
             player.takeDamage(2, '羽球衝擊');
           }
@@ -535,7 +537,7 @@ export class TennisGame {
     }
     this.rallyCount = 0;
     this.updateScoreboard();
-    soundManager.playWhistle();
+    soundManager.playWhistle(COURT_CENTER);
     if (this.playerScore >= 5) {
       this.endMatch(true, wantedSystem, hud, scene, onRewardCash, player);
     } else if (this.coachScore >= 5) {

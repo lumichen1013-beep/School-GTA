@@ -16,7 +16,7 @@ export const NORMAL_BAT: WeaponDefinition = {
   fxStyle: 'BAT',
   model: { mount: 'R', build: buildNormalBat },
   anchors: { R: { base: 0.35, tip: 0.89 } },
-  sounds: { strike: () => soundManager.playBatHit() },
+  sounds: { strike: (_i, pos) => soundManager.playBatHit(pos) },
   readyPose: 'WEAPON',
   unlock: {
     lockedHint: (p, world) => world === 'DETENTION'

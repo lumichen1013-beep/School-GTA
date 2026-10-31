@@ -399,7 +399,7 @@ export class CombatSystem {
       target.isDownFaceDown = target.role !== 'DETENTION_WOLF';
       target.knockoutSilently();
       detention.takedownCount++;
-      soundManager.playPunch();
+      soundManager.playPunch(this.ctx.player.position);
       const reward = this.payTakedownBounty(target);
       if (isFromHiding) {
         wantedSystem.showBanner(`🗡️【刺客教條·掩體暗殺】將 ${target.getRoleTitle()} 拖入${this.execCoverName}無聲刺殺！全額賞金 +$${reward}！`, 2500);
@@ -410,7 +410,7 @@ export class CombatSystem {
     }
 
     this.execHitStop = EXEC_HIT_STOP;
-    soundManager.playCinematicExecutionHit();
+    soundManager.playCinematicExecutionHit(this.ctx.player.position);
     requestCameraShake(0.55);
 
     // 每次精確造成 100 傷害，500 HP 需暗殺 5 次才能擊破
@@ -430,7 +430,7 @@ export class CombatSystem {
           : `🏆 狂賀！終極暗殺擊破特訓總教官！全額賞金 +$${reward}！掉落【萬能逃脫鑰匙卡】！快前往南大門！`,
         5000
       );
-      soundManager.playSchoolBell();
+      soundManager.playSchoolBell(this.ctx.player.position);
     } else {
       // 傷害與倒地資訊由恢復操控後的 QTE 打擊橫幅呈現，不另發頂部橫幅
       target.knockdownBoss(BOSS_DOWN_TIME);
@@ -459,7 +459,7 @@ export class CombatSystem {
     if (u >= 1 && !this.execBossLanded) {
       this.execBossLanded = true;
       requestCameraShake(isBoss ? 0.35 : 0.15);
-      soundManager.playPunch();
+      soundManager.playPunch(this.ctx.player.position);
     }
   }
 
@@ -513,7 +513,7 @@ export class CombatSystem {
     this.qteZone = TAKEDOWN_QTE_ZONE_MIN + Math.random() * (TAKEDOWN_QTE_ZONE_MAX - this.qteZoneWidth - TAKEDOWN_QTE_ZONE_MIN);
     this.qteArmed = false;
     hud.showTakedownMeter(this.qteZone, this.qteZoneWidth, input.isTouchDevice ? '綠區內再按 [打]' : '綠區內再按 F / 左鍵');
-    soundManager.playDodge(false);
+    soundManager.playDodge(false, this.ctx.player.position);
   }
 
   // 游標位置 (0~1)：自左端出發來回擺動
@@ -568,7 +568,7 @@ export class CombatSystem {
     const { player } = this.ctx;
     player.performParrySkid(target.position, EXEC_SKID_DIST, this.execDurations.SKID);
     requestCameraShake(this.execMode === 'BOSS' ? 0.35 : 0.2);
-    soundManager.playBatHit();
+    soundManager.playBatHit(this.ctx.player.position);
     this.ctx.wantedSystem.notifyAttacked();
     if (this.execMode !== 'BOSS') return;
     // 運鏡鎖定期間玩家免疫傷害，暫時解除以結算格擋反震
@@ -802,7 +802,7 @@ export class CombatSystem {
         if (npc.role === 'DETENTION_BOSS') {
           if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
             wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
-            soundManager.playPunch();
+            soundManager.playPunch(this.ctx.player.position);
             player.setAttackCooldown(FRONTAL_LOCK);
             return;
           }
@@ -852,7 +852,7 @@ export class CombatSystem {
     const inPool = isCampus && world.isInsideSwimmingPool(p);
 
     if (move.fx === 'SLAM') {
-      soundManager.playFallHit();
+      soundManager.playFallHit(this.ctx.player.position);
       // 水中改用既有水花特效，不放裂痕與環
       if (inPond || inPool) {
         this.ctx.waterSplashVFX.triggerSplashBurst(p, player.rotationY, true, inPond ? player.swimSurfaceY : 0.25);
@@ -1002,7 +1002,7 @@ export class CombatSystem {
         if (npc.role === 'DETENTION_BOSS') {
           if (npc.isBossInvulnerable || npc.bossInvulnerableTimer > 0) {
             wantedSystem.showBanner(`🛡️ 總教官處於受創金鐘護盾無敵中 (${npc.bossInvulnerableTimer.toFixed(1)}s)！免疫傷害！`, 1500);
-            soundManager.playPunch();
+            soundManager.playPunch(this.ctx.player.position);
             player.setAttackCooldown(FRONTAL_LOCK);
             continue;
           }
@@ -1164,7 +1164,7 @@ export class CombatSystem {
   private showDodgeBanner(text: string, advancedText: string, duration: number) {
     const isAdvanced = this.ctx.progression.isAdvancedDodge;
     this.ctx.wantedSystem.showBanner(isAdvanced ? advancedText : text, duration);
-    soundManager.playDodge(isAdvanced);
+    soundManager.playDodge(isAdvanced, this.ctx.player.position);
   }
 
   // NPC 攻擊玩家判定 (含總教官衝撞命中、預警/眩暈提示)
@@ -1191,8 +1191,8 @@ export class CombatSystem {
                 this.ctx.handlePlayerDeath('被鐵面總長狂暴衝撞擊潰！');
               }
             } else {
-              soundManager.playPunch();
-              soundManager.playBatHit();
+              soundManager.playPunch(this.ctx.player.position);
+              soundManager.playBatHit(this.ctx.player.position);
               wantedSystem.showBanner(`💥 遭到總教官狂暴衝撞重創！擊飛！(-${BOSS_CHARGE_DAMAGE} HP)`, 2500);
               wantedSystem.notifyAttacked();
               if (player.launchFlying(npc.bossChargeDir, 16.0, 7.0, BOSS_CHARGE_DAMAGE, '鐵面總長')) {
@@ -1298,7 +1298,7 @@ export class CombatSystem {
     wantedSystem.notifyAttacked();
     let died: boolean;
     if (!this.ctx.currentRidingBike && this.resistsHitWhileAttacking(true)) {
-      soundManager.playPunch();
+      soundManager.playPunch(this.ctx.player.position);
       died = player.takeDamage(damage, title);
       wantedSystem.showBanner(isGrab
         ? `🥋 硬吃主任教官擒拿！出招不中斷！(-${damage} HP)`
@@ -1306,7 +1306,7 @@ export class CombatSystem {
     } else if (this.ctx.currentRidingBike || !isGrab) {
       // 戒尺連打打斷玩家出招 (未出招時本就不影響)
       if (!isGrab && player.isAttacking) player.cancelAttack();
-      soundManager.playPunch();
+      soundManager.playPunch(this.ctx.player.position);
       died = player.takeDamage(damage, title);
       wantedSystem.showBanner(isGrab
         ? `🥋 遭到主任教官擒拿！穩住車身繼續騎行！(-${damage} HP)`
@@ -1334,7 +1334,7 @@ export class CombatSystem {
     const { player, wantedSystem } = this.ctx;
     if (player.hitCooldown > 0) return false;
     player.hitCooldown = 0.55;
-    soundManager.playPunch();
+    soundManager.playPunch(this.ctx.player.position);
     wantedSystem.showBanner(banner, 1500);
     wantedSystem.notifyAttacked();
     return player.takeDamage(damage, title);

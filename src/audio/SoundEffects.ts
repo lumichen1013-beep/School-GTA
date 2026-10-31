@@ -1,7 +1,7 @@
 // Procedural Web Audio API sound generator - no external asset dependencies!
 import { getAudioContext, resumeAudioContext } from './audioContext';
 import {
-  SOUND_COOLDOWN, SOUND_RANGE, cooldownReady, distanceBetween, distanceGain,
+  SOUND_COOLDOWN, SOUND_VOLUME, cooldownReady, distanceBetween, soundGain,
   type SpatialSoundId, type Vec3Like
 } from './spatialAudio';
 
@@ -19,7 +19,7 @@ export class SoundEffects {
   private noiseBuffer: AudioBuffer | null = null;
   private static readonly NOISE_SECONDS = 3.0;
 
-  // 聆聽者 (玩家) 位置參考：持續讀取最新座標；未設定時視為不分距離
+  // 聆聽者 (玩家) 位置參考：持續讀取最新座標；未設定時不衰減 (僅套用固定音量倍率)
   private listener: Vec3Like | null = null;
   // 本次播放的距離音量倍率 (gate 設定，同步播放結束後於 microtask 還原)
   private volScale = 1;
@@ -35,10 +35,10 @@ export class SoundEffects {
 
   // 空間音效閘門：超出可聞距離或冷卻中回傳 false (不建立任何 audio node)；
   // 通過時依距離設定音量倍率。距離超出者不消耗冷卻，避免遠處 NPC 壓掉近處音效。
-  private gate(id: SpatialSoundId, pos?: Vec3Like): boolean {
-    let scale = 1;
-    if (pos && this.listener) {
-      scale = distanceGain(distanceBetween(pos, this.listener), SOUND_RANGE[id]);
+  private gate(id: SpatialSoundId, pos: Vec3Like): boolean {
+    let scale = SOUND_VOLUME[id] ?? 1;
+    if (this.listener) {
+      scale = soundGain(id, distanceBetween(pos, this.listener));
       if (scale <= 0) return false;
     }
     const cooldown = SOUND_COOLDOWN[id];
@@ -121,7 +121,8 @@ export class SoundEffects {
   }
 
   // 經典台灣校園上下課西敏寺鐘聲 (4 聲鐘響)
-  public playSchoolBell() {
+  public playSchoolBell(pos: Vec3Like) {
+    if (!this.gate('schoolBell', pos)) return;
     const now = this.audio().currentTime;
     // F#4, D4, E4, A3 經典旋律
     const notes = [370.0, 293.7, 329.6, 220.0];
@@ -148,7 +149,7 @@ export class SoundEffects {
   }
 
   // 風紀糾察／教官哨音 (嗶嗶)：兩短聲，三角波 1.35k→1.45k + 低通 2.6k，淡入淡出避免喀聲
-  public playWhistle(pos?: Vec3Like) {
+  public playWhistle(pos: Vec3Like) {
     if (!this.gate('whistle', pos)) return;
     const now = this.audio().currentTime;
     for (let i = 0; i < 2; i++) {
@@ -159,7 +160,7 @@ export class SoundEffects {
   }
 
   // 腳踏車鈴聲 (叮叮)：1.05k 基音 + 非整數倍泛音 (x2.76) 金屬感，低通 3.2k，衰減 0.35 秒
-  public playBicycleBell(pos?: Vec3Like) {
+  public playBicycleBell(pos: Vec3Like) {
     if (!this.gate('bell', pos)) return;
     const now = this.audio().currentTime;
     for (const delay of [0, 0.14]) {
@@ -172,27 +173,28 @@ export class SoundEffects {
   }
 
   // 揮拳 / 擊打聲
-  public playPunch(pos?: Vec3Like) {
+  public playPunch(pos: Vec3Like) {
     if (!this.gate('punch', pos)) return;
     const now = this.audio().currentTime;
     this.tone('square', [['set', 160, now], ['exp', 40, now + 0.12]], [['set', 0.25, now], ['exp', 0.001, now + 0.15]], now, now + 0.15);
   }
 
   // 跳躍落地鈍音
-  public playJump() {
+  public playJump(pos: Vec3Like) {
+    if (!this.gate('jump', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('sine', [['set', 200, now], ['exp', 80, now + 0.08]], [['set', 0.15, now], ['exp', 0.01, now + 0.1]], now, now + 0.1);
+    this.tone('sine', [['set', 200, now], ['exp', 80, now + 0.08]], [['set', 0.15, now], ['exp', 0.001, now + 0.1]], now, now + 0.1);
   }
 
-  // 通緝警戒升級警笛
+  // 通緝警戒升級警笛 [純 HUD 回饋，不套用距離]
   public playAlert() {
     const now = this.audio().currentTime;
-    this.tone('sawtooth', [['set', 600, now], ['lin', 900, now + 0.25], ['lin', 600, now + 0.5]],
-      [['set', 0.12, now], ['lin', 0.01, now + 0.5]], now, now + 0.55);
+    this.softTone('sawtooth', [['set', 600, now], ['lin', 900, now + 0.25], ['lin', 600, now + 0.5]],
+      [['set', 0.0001, now], ['lin', 0.11, now + 0.03], ['lin', 0.01, now + 0.5], ['lin', 0.0001, now + 0.55]], now, now + 0.56, 2800);
   }
 
   // 狗吠叫聲 (汪汪！)
-  public playDogBark(pos?: Vec3Like) {
+  public playDogBark(pos: Vec3Like) {
     if (!this.gate('dogBark', pos)) return;
     const now = this.audio().currentTime;
     for (const delay of [0, 0.16]) {
@@ -202,14 +204,24 @@ export class SoundEffects {
   }
 
   // 重墜高處著地撞擊聲
-  public playFallHit(pos?: Vec3Like) {
+  public playFallHit(pos: Vec3Like) {
     if (!this.gate('fallHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 120, now], ['exp', 25, now + 0.28]], [['set', 0.4, now], ['exp', 0.001, now + 0.3]], now, now + 0.3);
   }
 
   // 經典台灣校園學務處全校廣播前奏鐘聲 (叮咚檔鐺！)
-  public playBroadcastChime() {
+  public playBroadcastChime(pos: Vec3Like) {
+    if (!this.gate('broadcast', pos)) return;
+    this.chimeNotes();
+  }
+
+  // 通緝解除提示音 [純 HUD 回饋，不套用距離]
+  public playWantedClearChime() {
+    this.chimeNotes();
+  }
+
+  private chimeNotes() {
     const now = this.audio().currentTime;
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
     const step = 0.16;
@@ -221,7 +233,8 @@ export class SoundEffects {
   }
 
   // 籃球空心刷網進球聲 (Swish!)：白色噪音 + 帶通濾波模擬刷網聲
-  public playSwish() {
+  public playSwish(pos: Vec3Like) {
+    if (!this.gate('swish', pos)) return;
     const now = this.audio().currentTime;
     this.noise(now, 0.25,
       { type: 'bandpass', freq: [['set', 1800, now], ['exp', 900, now + 0.22]], q: 3.0 },
@@ -229,20 +242,22 @@ export class SoundEffects {
   }
 
   // 籃球打鐵砸框金屬撞擊聲 (Rim Hit / Clang)：兩個振盪器共用同一音量包絡
-  public playRimHit() {
+  public playRimHit(pos: Vec3Like) {
+    if (!this.gate('rimHit', pos)) return;
     const now = this.audio().currentTime;
-    const gain = this.envGain([['set', 0.4, now], ['exp', 0.001, now + 0.18]]);
+    const gain = this.envGain([['set', 0.26, now], ['exp', 0.001, now + 0.18]]);
     this.osc('sine', [['set', 880, now], ['exp', 440, now + 0.15]], now, now + 0.2, gain);
     this.osc('triangle', [['set', 1420, now], ['exp', 710, now + 0.12]], now, now + 0.2, gain);
   }
 
   // 籃球運球落地拍球聲 (Dribble Bounce)
-  public playDribble() {
+  public playDribble(pos: Vec3Like) {
+    if (!this.gate('dribble', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sine', [['set', 125, now], ['exp', 42, now + 0.08]], [['set', 0.28, now], ['exp', 0.001, now + 0.09]], now, now + 0.1);
   }
 
-  // 挑戰成功小勝利號角 (Victory Fanfare)
+  // 挑戰成功小勝利號角 (Victory Fanfare) [純 HUD 回饋，不套用距離]
   public playFanfare() {
     const now = this.audio().currentTime;
     const melody = [
@@ -259,7 +274,7 @@ export class SoundEffects {
     }
   }
 
-  // 收銀機開箱金幣聲 (Ka-ching!)
+  // 收銀機開箱金幣聲 (Ka-ching!) [購買／獎勵 HUD 回饋，不套用距離]
   public playCashRegister() {
     const now = this.audio().currentTime;
     [1567.98, 2093.00].forEach((freq, idx) => {
@@ -270,7 +285,8 @@ export class SoundEffects {
   }
 
   // 吃食物補血咀嚼吞嚥聲 (Munch & Gulp)
-  public playEatFood() {
+  public playEatFood(pos: Vec3Like) {
+    if (!this.gate('eatFood', pos)) return;
     const now = this.audio().currentTime;
     for (let i = 0; i < 3; i++) {
       const t0 = now + i * 0.09;
@@ -280,38 +296,40 @@ export class SoundEffects {
   }
 
   // 普通棒球棍重擊木擊聲 (Wooden Bat Crack)
-  public playBatHit(pos?: Vec3Like) {
+  public playBatHit(pos: Vec3Like) {
     if (!this.gate('batHit', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 520, now], ['exp', 140, now + 0.12]], [['set', 0.42, now], ['exp', 0.001, now + 0.16]], now, now + 0.17);
   }
 
   // 特殊黃金神級棒球棍雷霆轟擊聲 (Golden Bat Thunder Whoosh)
-  public playSpecialBatHit(pos?: Vec3Like) {
+  public playSpecialBatHit(pos: Vec3Like) {
     if (!this.gate('batHit', pos)) return;
     const now = this.audio().currentTime;
-    this.tone('sawtooth', [['set', 180, now], ['exp', 45, now + 0.28]], [['set', 0.45, now], ['exp', 0.001, now + 0.32]], now, now + 0.33);
-    this.tone('sine', [['set', 1318.5, now], ['exp', 880, now + 0.25]], [['set', 0.25, now], ['exp', 0.001, now + 0.30]], now, now + 0.31);
+    this.tone('sawtooth', [['set', 180, now], ['exp', 45, now + 0.28]], [['set', 0.34, now], ['exp', 0.001, now + 0.32]], now, now + 0.33);
+    this.tone('sine', [['set', 1318.5, now], ['exp', 880, now + 0.25]], [['set', 0.18, now], ['exp', 0.001, now + 0.30]], now, now + 0.31);
   }
 
   // 刺客處決/慢動作暴擊重音 (Cinematic Bullet Time Impact Boom & Metallic Crunch)
-  public playCinematicExecutionHit() {
+  public playCinematicExecutionHit(pos: Vec3Like) {
+    if (!this.gate('execution', pos)) return;
     const now = this.audio().currentTime;
     // 1. 低頻震顫震撼低音 (Sub-bass boom)
-    this.tone('sine', [['set', 130, now], ['exp', 28, now + 0.65]], [['set', 0.65, now], ['exp', 0.001, now + 0.70]], now, now + 0.72);
+    this.tone('sine', [['set', 130, now], ['exp', 28, now + 0.65]], [['set', 0.42, now], ['exp', 0.001, now + 0.70]], now, now + 0.72);
     // 2. 金屬撞擊撕裂聲 (Metallic impact crunch)
-    this.tone('triangle', [['set', 540, now], ['exp', 75, now + 0.35]], [['set', 0.42, now], ['exp', 0.001, now + 0.38]], now, now + 0.40);
+    this.tone('triangle', [['set', 540, now], ['exp', 75, now + 0.35]], [['set', 0.28, now], ['exp', 0.001, now + 0.38]], now, now + 0.40);
   }
 
   // 食人花 Boss 巨顎咬噬聲 (Monster Chomp)
-  public playBossBite(pos?: Vec3Like) {
+  public playBossBite(pos: Vec3Like) {
     if (!this.gate('bossBite', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sawtooth', [['set', 110, now], ['exp', 35, now + 0.22]], [['set', 0.38, now], ['exp', 0.001, now + 0.25]], now, now + 0.26);
   }
 
   // 水花拍擊聲 (Water Splash / Swimming)：白色噪波水花衝擊，較快衰減至 0.14 秒
-  public playWaterSplash() {
+  public playWaterSplash(pos: Vec3Like) {
+    if (!this.gate('splash', pos)) return;
     const now = this.audio().currentTime;
     this.noise(now, 0.22,
       { type: 'lowpass', freq: [['set', 800, now], ['exp', 180, now + 0.2]] },
@@ -319,73 +337,76 @@ export class SoundEffects {
   }
 
   // 中毒咳嗽流血心跳 (Poison Tick / Cough)
-  public playPoisonTick() {
+  public playPoisonTick(pos: Vec3Like) {
+    if (!this.gate('poisonTick', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 95, now], ['exp', 40, now + 0.16]], [['set', 0.3, now], ['exp', 0.001, now + 0.18]], now, now + 0.19);
   }
 
   // 強盜劈砍揮刀聲 (Bandit Weapon Slash)
-  public playBanditSlash(pos?: Vec3Like) {
+  public playBanditSlash(pos: Vec3Like) {
     if (!this.gate('slash', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sawtooth', [['set', 480, now], ['exp', 120, now + 0.18]], [['set', 0.32, now], ['exp', 0.001, now + 0.2]], now, now + 0.21);
   }
 
   // 羽球殺球清脆爆裂擊球聲 (Badminton Smash Hit)
-  public playBadmintonHit(pos?: Vec3Like) {
+  public playBadmintonHit(pos: Vec3Like) {
     if (!this.gate('badminton', pos)) return;
     const now = this.audio().currentTime;
     this.tone('triangle', [['set', 1400, now], ['exp', 320, now + 0.08]], [['set', 0.45, now], ['exp', 0.001, now + 0.1]], now, now + 0.11);
   }
 
   // 羽球拍破空橫掃呼嘯聲 (Badminton Racket Swing)
-  public playBadmintonWhoosh(pos?: Vec3Like) {
+  public playBadmintonWhoosh(pos: Vec3Like) {
     if (!this.gate('badminton', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sine', [['set', 650, now], ['exp', 160, now + 0.16]], [['set', 0.35, now], ['exp', 0.001, now + 0.18]], now, now + 0.19);
   }
 
-  // 閃身步 / 狗熊哆嗦毛身法疾風破空聲 (Martial Dodge Wind Whoosh)
-  public playDodge(isAdvanced: boolean = false, pos?: Vec3Like) {
-    if (!this.gate('dodge', pos)) return;
+  // 閃身步 / 狗熊哆嗦毛身法疾風破空聲 (Martial Dodge Wind Whoosh)；isPractice：閃身步老師演武，音量與可聞距離較小
+  public playDodge(isAdvanced: boolean, pos: Vec3Like, isPractice: boolean = false) {
+    if (!this.gate(isPractice ? 'dodgePractice' : 'dodge', pos)) return;
     const now = this.audio().currentTime;
     this.tone(isAdvanced ? 'triangle' : 'sine', [['set', isAdvanced ? 950 : 720, now], ['exp', 140, now + 0.22]],
       [['set', 0.42, now], ['exp', 0.001, now + 0.25]], now, now + 0.26);
   }
 
   // 許願池投幣清脆金幣落水聲 (Coin Toss Into Pond)
-  public playCoinToss() {
+  public playCoinToss(pos: Vec3Like) {
+    if (!this.gate('coinToss', pos)) return;
     const now = this.audio().currentTime;
     // 1. 金幣叮噹聲
     this.tone('sine', [['set', 1980, now], ['set', 2450, now + 0.06]],
       [['set', 0, now], ['lin', 0.3, now + 0.02], ['exp', 0.001, now + 0.28]], now, now + 0.3);
     // 2. 隨後的水花咚聲
     setTimeout(() => {
-      this.playWaterSplash();
+      this.playWaterSplash(pos);
     }, 120);
   }
 
   // 生態園昆蟲窸窣嘶鳴聲 (Garden Bug Scurry & Click)
-  public playBugChirp(pos?: Vec3Like) {
+  public playBugChirp(pos: Vec3Like) {
     if (!this.gate('bugChirp', pos)) return;
     const now = this.audio().currentTime;
     for (let i = 0; i < 2; i++) {
       const t0 = now + i * 0.05;
-      this.tone('sawtooth', [['set', 3200 + i * 400, t0], ['exp', 1100, now + i * 0.05 + 0.04]],
-        [['set', 0.22, t0], ['exp', 0.001, now + i * 0.05 + 0.05]], t0, now + i * 0.05 + 0.06);
+      this.softTone('sawtooth', [['set', 2200 + i * 300, t0], ['exp', 900, t0 + 0.04]],
+        [['set', 0.0001, t0], ['lin', 0.15, t0 + 0.004], ['exp', 0.0001, t0 + 0.05]], t0, t0 + 0.06, 2800);
     }
   }
 
   // 搶奪腳踏車踹人驚叫與倒地碰撞 (Bike Hijack Shove & Impact)
-  public playBikeHijack() {
-    this.playPunch();
+  public playBikeHijack(pos: Vec3Like) {
+    this.playPunch(pos);
     setTimeout(() => {
-      this.playBicycleBell();
+      this.playBicycleBell(pos);
     }, 150);
   }
 
   // 演藝大樓直達電梯升降與抵達鐘聲 (Elevator Ding)
-  public playElevatorDing() {
+  public playElevatorDing(pos: Vec3Like) {
+    if (!this.gate('elevator', pos)) return;
     const now = this.audio().currentTime;
     this.tone('sine', [['set', 880, now], ['set', 1174.66, now + 0.12]], // A5 → D6
       [['set', 0, now], ['lin', 0.28, now + 0.02], ['exp', 0.001, now + 0.85]], now, now + 0.9);
@@ -445,7 +466,8 @@ export class SoundEffects {
   }
 
   // 天氣系統：程序化低沉震撼雷鳴滾滾 (Rolling Thunder Synthesis)
-  public playThunder() {
+  public playThunder(pos: Vec3Like) {
+    if (!this.gate('thunder', pos)) return;
     const now = this.audio().currentTime;
     // 1. 低頻超低音轟鳴震盪 (Sub-bass rumble 75Hz -> 28Hz)
     this.tone('sine', [['set', 75, now], ['exp', 28, now + 3.2]],

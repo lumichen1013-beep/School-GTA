@@ -258,14 +258,14 @@ export class RacingGame {
     }
     state.countdown -= delta;
     if (state.countdown <= 0) {
-      soundManager.playWhistle();
+      soundManager.playWhistle(state.startPos);
       wantedSystem.showBanner('🏁 GO！', 900);
       return false;
     }
     const sec = Math.ceil(state.countdown);
     if (sec !== state.lastCountdownSec) {
       state.lastCountdownSec = sec;
-      soundManager.playBroadcastChime();
+      soundManager.playBroadcastChime(state.startPos);
       wantedSystem.showBanner(`🚦 ${sec}`, 800);
     }
     return true;
@@ -423,13 +423,13 @@ export class RacingGame {
       this.checkpointMarker.visible = false;
       state.rivalWon = true;
       state.postRaceTimer = RIVAL_POST_RACE_TIME;
-      soundManager.playWhistle();
+      soundManager.playWhistle(state.startPos);
       wantedSystem.showBanner(`😤【對手搶先抵達！】田徑隊阿凱以 ${this.raceTimer.toFixed(1)} 秒率先衝線，再挑戰一次吧！`, 4000);
       return;
     }
 
     if (playerPos.distanceTo(targetCp) < TRACK_CP_RADIUS) {
-      soundManager.playBicycleBell();
+      soundManager.playBicycleBell(playerPos);
       this.raceCheckpointIdx++;
       if (this.raceCheckpointIdx >= checkpoints.length) {
         this.isRacingTrack = false;
@@ -491,7 +491,7 @@ export class RacingGame {
     this.swimRival.setPose(inWater ? 'SWIM' : 'RUN', delta);
     if (wasOnDeck && inWater) {
       // 對手躍入水中水花
-      soundManager.playWaterSplash();
+      soundManager.playWaterSplash(state.startPos);
       waterSplashVFX.triggerSplashBurst(this.swimRival.mesh.position, this.swimRival.mesh.rotation.y, true, 0.25);
     }
 
@@ -500,13 +500,13 @@ export class RacingGame {
       this.swimCheckpointMarker.visible = false;
       state.rivalWon = true;
       state.postRaceTimer = RIVAL_POST_RACE_TIME;
-      soundManager.playWhistle();
+      soundManager.playWhistle(state.startPos);
       wantedSystem.showBanner(`😤【對手搶先觸壁！】游泳隊小魚以 ${this.swimRaceTimer.toFixed(1)} 秒率先完賽，再挑戰一次吧！`, 4000);
       return;
     }
 
     if (playerPos.distanceTo(targetSwimCp) < SWIM_CP_RADIUS) {
-      soundManager.playWaterSplash();
+      soundManager.playWaterSplash(playerPos);
       waterSplashVFX.triggerSplashBurst(player.position, player.rotationY, true, 0.25);
       this.swimCheckpointIdx++;
       if (this.swimCheckpointIdx >= checkpoints.length) {

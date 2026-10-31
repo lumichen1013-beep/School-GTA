@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getFxQuality } from './fxQuality';
+import { FX_POOL_MAX, getFxQuality } from './fxQuality';
 import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import { FINISHER_FX_BOOST, TRAIL_WIDTH, type WeaponFxStyle } from './weaponFxStyle';
 
@@ -56,15 +56,13 @@ class SwingTrailSystem {
   private slots: Slot[] = [];
   private maxSamples = 0;
   private hist = 0;
-  private sub = 0;
 
   // 初始化並加入場景 (閒置時 visible=false，不產生 draw call)
   public init(scene: THREE.Object3D) {
     if (this.mesh) return;
-    const q = getFxQuality();
-    this.hist = q.trailPoints;
-    this.sub = q.trailSubdiv;
-    this.maxSamples = (this.hist - 1) * (this.sub + 1) + 1;
+    // 緩衝依最高檔 (最多歷史點 × 最多插值) 預建；實際插值數每幀取目前檔位，不足的樣本退化為零面積
+    this.hist = FX_POOL_MAX.trailPoints;
+    this.maxSamples = (this.hist - 1) * (FX_POOL_MAX.trailSubdiv + 1) + 1;
     const S = this.maxSamples;
     const vertsPerSlot = S * 2;
     const total = vertsPerSlot * SLOTS;
@@ -169,10 +167,13 @@ class SwingTrailSystem {
       const dx = tx - s.pts[o + 3], dy = ty - s.pts[o + 4], dz = tz - s.pts[o + 5];
       if (dx * dx + dy * dy + dz * dz < 1e-6) return;
     }
-    if (s.count >= this.hist) {
-      s.pts.copyWithin(0, 6, s.count * 6);
-      s.ages.copyWithin(0, 1, s.count);
-      s.count--;
+    // 歷史點上限依目前檔位 (不超過預建容量)；降檔後殘留較多點時一次丟棄最舊的多餘點
+    const lim = Math.min(this.hist, getFxQuality().trailPoints);
+    if (s.count >= lim) {
+      const drop = s.count - lim + 1;
+      s.pts.copyWithin(0, drop * 6, s.count * 6);
+      s.ages.copyWithin(0, drop, s.count);
+      s.count -= drop;
     }
     const o = s.count * 6;
     s.pts[o] = bx; s.pts[o + 1] = by; s.pts[o + 2] = bz;
@@ -230,7 +231,7 @@ class SwingTrailSystem {
       col.fill(0, base * 4, (base + S * 2) * 4);
       return false;
     }
-    const sub = this.sub;
+    const sub = Math.min(FX_POOL_MAX.trailSubdiv, getFxQuality().trailSubdiv);
     const total = (n - 1) * (sub + 1) + 1;
     const pts = s.pts;
     for (let k = 0; k < S; k++) {

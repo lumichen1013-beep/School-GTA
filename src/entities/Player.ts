@@ -499,7 +499,7 @@ export class Player {
       impactDir.z * horizontalForce
     );
 
-    soundManager.playPunch();
+    soundManager.playPunch(this.position);
     return this.takeDamage(damage, reason);
   }
 
@@ -526,7 +526,7 @@ export class Player {
     this.showSkillBubble('💨 閃身步', false);
 
     // 疾風破空音效
-    soundManager.playDodge(false);
+    soundManager.playDodge(false, this.position);
 
     // 初始位置產生第 1 道破空殘影 (青色微光)
     this.spawnAfterimage(0x38bdf8, 0.28);
@@ -574,7 +574,7 @@ export class Player {
     this.mesh.rotation.y = this.rotationY;
 
     // 5. 瞬移音效
-    soundManager.playDodge(true);
+    soundManager.playDodge(true, this.position);
 
     this.bearBlinkCount++;
   }
@@ -606,7 +606,7 @@ export class Player {
     this.isGrounded = false;
     this.afterimageSpawnTimer = 0;
 
-    soundManager.playDodge(false);
+    soundManager.playDodge(false, this.position);
   }
 
   // 後空翻姿勢：繞身體中心 (離地 0.9m) 向後翻轉一圈，並於翻轉中留下青色殘影
@@ -881,7 +881,7 @@ export class Player {
     this.kf.start(move, loadout.tempo, this.mesh, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
     this.moveSerial++;
     this.isAttacking = true;
-    loadout.sounds.start?.();
+    loadout.sounds.start?.(this.position);
   }
 
   // 手持球棒 (第二世界為警棍) 棒尖世界座標，需於出招姿勢套用後呼叫；未持棒時回傳玩家位置
@@ -1005,7 +1005,7 @@ export class Player {
 
   // 本幀命中時間點的打擊音效 (strikeIndex 0 = 主擊)
   private playStrikeSound(strikeIndex: number) {
-    this.displayLoadout.sounds.strike?.(strikeIndex);
+    this.displayLoadout.sounds.strike?.(strikeIndex, this.position);
   }
 
   // 本幀招式突進速度 (m/s)：圖層時間 t → t + delta 與突進區段重疊的位移 ÷ delta (各幀加總恰為 lunge.dist)
@@ -1107,7 +1107,7 @@ export class Player {
     this.isGrounded = false;
     this.knockVelocity.set(impactDir.x * 5.0, 6.5, impactDir.z * 5.0);
     this.knockdownTimer = downTime;
-    soundManager.playFallHit();
+    soundManager.playFallHit(this.position);
     return this.takeDamage(damage, reason);
   }
 
@@ -1378,7 +1378,7 @@ export class Player {
           // 水中踏水躍起 / 攀上池畔
           this.velocity.y = 6.8;
           this.isGrounded = false;
-          soundManager.playJump();
+          soundManager.playJump(this.position);
         } else {
           // 水面自然浮力平衡：依身體俯仰角計算雙腳深度，使身體沒入水中
           // 踩水直立 (0.32 rad)：下巴略高於水面；自由式俯趴 (1.18 rad 以上)：軀幹中線貼齊水面
@@ -1398,7 +1398,7 @@ export class Player {
           if (wantsJump) {
             this.velocity.y = this.jumpStrength;
             this.isGrounded = false;
-            soundManager.playJump();
+            soundManager.playJump(this.position);
           }
         } else {
           // 後空翻以半步積分 (位移前後各加半步重力)，頂點高度與滯空時間不受幀率影響
@@ -1628,7 +1628,7 @@ export class Player {
       if (landingSpeedY < -13.0) {
         const excessSpeed = -landingSpeedY - 13.0;
         const fallDmg = Math.round(excessSpeed * 4.5);
-        soundManager.playFallHit();
+        soundManager.playFallHit(this.position);
         this.takeDamage(fallDmg, '墜落摔傷');
       }
     } else {

@@ -1,8 +1,9 @@
-import { Engine } from '../core/Engine';
+// 連段特效品質等級 (僅影響視覺密度，遊戲規則不隨裝置變)。
+// 物件池一律依 FX_POOL_MAX (各檔位最大值) 預建，執行期切換檔位只改變「實際使用量 / 尺寸 / 層數 / 開關」，不配置新物件。
+export type FxTier = 'low' | 'medium' | 'high';
 
-// 連段特效品質等級 (僅影響視覺密度，遊戲規則不隨裝置變)
 export interface FxQuality {
-  mobile: boolean;
+  chargeRingDouble: boolean; // 蓄力收束光環是否疊第二圈
   trailPoints: number;      // 揮擊拖尾歷史點數
   trailSubdiv: number;      // 每段 Catmull-Rom 插入點數 (0 = 不插值)
   crackPool: number;        // 地裂發光裂痕池
@@ -22,24 +23,50 @@ export interface FxQuality {
   featherPool: number;      // 羽毛粒子池
 }
 
-const HIGH: FxQuality = {
-  mobile: false, trailPoints: 14, trailSubdiv: 2,
-  crackPool: 3, crackLife: 1.8, crackMaxSize: 9, crackLayers: 3, ringReach: 1, slashLenScale: 1, slashWidthScale: 1, ringPool: 8, debrisCount: 24, dustPool: 8,
-  lightningStrands: 5, lightningSegments: 6,
-  slashPool: 20, flashPerStrike: 3, featherPool: 24,
+export const FX_PRESETS: Readonly<Record<FxTier, Readonly<FxQuality>>> = {
+  high: {
+    chargeRingDouble: true, trailPoints: 14, trailSubdiv: 2,
+    crackPool: 3, crackLife: 1.8, crackMaxSize: 9, crackLayers: 3, ringReach: 1, slashLenScale: 1, slashWidthScale: 1, ringPool: 8, debrisCount: 24, dustPool: 8,
+    lightningStrands: 5, lightningSegments: 6,
+    slashPool: 20, flashPerStrike: 3, featherPool: 24,
+  },
+  medium: {
+    chargeRingDouble: true, trailPoints: 14, trailSubdiv: 1,
+    crackPool: 3, crackLife: 1.5, crackMaxSize: 6, crackLayers: 3, ringReach: 0.88, slashLenScale: 0.9, slashWidthScale: 0.8, ringPool: 6, debrisCount: 18, dustPool: 4,
+    lightningStrands: 4, lightningSegments: 6,
+    slashPool: 14, flashPerStrike: 2, featherPool: 16,
+  },
+  low: {
+    chargeRingDouble: false, trailPoints: 14, trailSubdiv: 0,
+    crackPool: 2, crackLife: 1.2, crackMaxSize: 3.6, crackLayers: 2, ringReach: 0.75, slashLenScale: 0.8, slashWidthScale: 0.6, ringPool: 4, debrisCount: 14, dustPool: 0,
+    lightningStrands: 3, lightningSegments: 6,
+    slashPool: 10, flashPerStrike: 1, featherPool: 10,
+  },
 };
 
-const MOBILE: FxQuality = {
-  mobile: true, trailPoints: 14, trailSubdiv: 0,
-  crackPool: 2, crackLife: 1.2, crackMaxSize: 3.6, crackLayers: 2, ringReach: 0.75, slashLenScale: 0.8, slashWidthScale: 0.6, ringPool: 4, debrisCount: 14, dustPool: 0,
-  lightningStrands: 3, lightningSegments: 6,
-  slashPool: 10, flashPerStrike: 1, featherPool: 10,
-};
+// 預建池容量：各數量欄位取所有檔位的最大值
+type PoolField = 'trailPoints' | 'trailSubdiv' | 'crackPool' | 'crackLayers' | 'ringPool' | 'dustPool' | 'lightningStrands' | 'lightningSegments' | 'slashPool' | 'featherPool';
+const POOL_FIELDS: PoolField[] = ['trailPoints', 'trailSubdiv', 'crackPool', 'crackLayers', 'ringPool', 'dustPool', 'lightningStrands', 'lightningSegments', 'slashPool', 'featherPool'];
 
-let _quality: FxQuality | null = null;
+export function computeFxPoolMax(presets: Readonly<Record<FxTier, Readonly<FxQuality>>>): Record<PoolField, number> {
+  const out = {} as Record<PoolField, number>;
+  for (const f of POOL_FIELDS) out[f] = Math.max(presets.high[f], presets.medium[f], presets.low[f]);
+  return out;
+}
 
-// 依裝置取得品質等級 (首次呼叫時決定並快取)
-export function getFxQuality(): FxQuality {
-  if (!_quality) _quality = Engine.isMobileDevice() ? MOBILE : HIGH;
-  return _quality;
+export const FX_POOL_MAX: Readonly<Record<PoolField, number>> = computeFxPoolMax(FX_PRESETS);
+
+let _tier: FxTier = 'medium';
+
+// 目前檔位的特效參數 (每次呼叫皆回傳最新檔位，改檔後立即生效；呼叫端勿長期快取)
+export function getFxQuality(): Readonly<FxQuality> {
+  return FX_PRESETS[_tier];
+}
+
+export function getFxTier(): FxTier {
+  return _tier;
+}
+
+export function setFxTier(tier: FxTier) {
+  _tier = tier;
 }

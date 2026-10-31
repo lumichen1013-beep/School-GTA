@@ -15,10 +15,28 @@ export const NPC_LOD_DIST = {
   farExit: 52
 } as const;
 
-const MID_ENTER_SQ = NPC_LOD_DIST.midEnter * NPC_LOD_DIST.midEnter;
-const MID_EXIT_SQ = NPC_LOD_DIST.midExit * NPC_LOD_DIST.midExit;
-const FAR_ENTER_SQ = NPC_LOD_DIST.farEnter * NPC_LOD_DIST.farEnter;
-const FAR_EXIT_SQ = NPC_LOD_DIST.farExit * NPC_LOD_DIST.farExit;
+// 門檻平方 (依畫質檔位的距離倍率縮放；低檔縮短距離讓遠處 NPC 更早改用合併網格)
+let MID_ENTER_SQ = 0;
+let MID_EXIT_SQ = 0;
+let FAR_ENTER_SQ = 0;
+let FAR_EXIT_SQ = 0;
+let lodScale = 0;
+
+export function setNpcLodDistanceScale(scale: number) {
+  if (scale === lodScale) return;
+  lodScale = scale;
+  const sq = (d: number) => (d * scale) * (d * scale);
+  MID_ENTER_SQ = sq(NPC_LOD_DIST.midEnter);
+  MID_EXIT_SQ = sq(NPC_LOD_DIST.midExit);
+  FAR_ENTER_SQ = sq(NPC_LOD_DIST.farEnter);
+  FAR_EXIT_SQ = sq(NPC_LOD_DIST.farExit);
+}
+
+export function getNpcLodDistanceScale(): number {
+  return lodScale;
+}
+
+setNpcLodDistanceScale(1);
 
 // 依目前分級與距離平方決定下一個分級 (含遲滯)；forceFull 為 true 時一律回到完整模型
 export function nextNpcLodLevel(current: NpcLodLevel, distSq: number, forceFull: boolean): NpcLodLevel {

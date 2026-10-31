@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { getFxQuality } from './fxQuality';
+import { FX_POOL_MAX, getFxQuality } from './fxQuality';
 import { updateVisibleMatricesOnly } from '../core/matrixUpdate';
 import type { WeaponFxStyle } from './weaponFxStyle';
 
 // 連段終結技特效：發光裂痕 / 衝擊波環 / 塵土 / 黃金棒雷電，各類以單一 InstancedMesh 繪製 (每類 1 draw call)。
-// 全為預建物件池，閒置時 visible=false (不產生 draw call)，執行期零配置；碎石由 ImpactDust 負責。
+// 全為預建物件池 (容量取各畫質檔位最大值)，閒置時 visible=false (不產生 draw call)，執行期零配置；碎石由 ImpactDust 負責。
+// 實際使用量 / 尺寸 / 層數於每次施放時讀取目前檔位 (getFxQuality)，執行期改檔立即生效。
 const CRACK_FADE_START = 0.4; // 裂痕維持滿亮度的壽命比例，之後線性淡出
 const CRACK_POP = 0.1;        // 裂痕彈出放大秒數
 const RING_LIFE = 0.45;
@@ -12,7 +13,7 @@ const RING_REACH = 1.45;       // 環最大半徑 = 群攻半徑 × 此倍率 (�
 const RING2_DELAY = 0.08;     // 第二圈錯開時間
 const RING2_SCALE = 0.72;     // 第二圈相對大小
 const CRACK_SCALE = 3.4;      // 裂痕邊長 = 群攻半徑 × 此倍率 (受品質上限約束)
-const CRACK_LAYERS_MAX = 3;   // 每道裂痕最多疊 3 層實例：焦黑底 / 色光 / 白熱芯 (手機只疊前 2 層)
+const CRACK_LAYERS_MAX = 3;   // 每道裂痕最多疊 3 層實例：焦黑底 / 色光 / 白熱芯 (低檔只疊前 2 層)
 const DUST_LIFE = 0.7;
 const BOLT_LIFE = 0.4;
 const BOLT_REVEAL = 0.1;      // 雷電由地面向上竄起所需秒數
@@ -184,7 +185,7 @@ function flushFx(mesh: THREE.InstancedMesh) {
   (mesh.geometry.getAttribute('instanceAlpha') as THREE.BufferAttribute).needsUpdate = true;
 }
 
-interface Crack { life: number; max: number; x: number; y: number; z: number; rot: number; size: number; color: number; core: number }
+interface Crack { life: number; max: number; x: number; y: number; z: number; rot: number; size: number; color: number; core: number; layers: number }
 interface Ring { life: number; delay: number; x: number; y: number; z: number; radius: number; color: number }
 interface Puff { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; size: number }
 interface Feather { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; sx: number; sy: number; sz: number; phase: number; color: number }
@@ -213,53 +214,46 @@ class ComboFinisherFXSystem {
   private boltX = 0; private boltY = 0; private boltZ = 0;
   private strands = 0;
   private segments = 0;
-  private maxCrackSize = 4.5;
-  private crackLayers = CRACK_LAYERS_MAX;
-  private ringReach = 1;
-  private crackLifeSec = 1.8;
 
   // 初始化並加入場景 (閒置時皆 visible=false，不產生 draw call)
   public init(scene: THREE.Object3D) {
     if (this.crackMesh) return;
-    const q = getFxQuality();
-    this.maxCrackSize = q.crackMaxSize;
-    this.crackLayers = Math.min(CRACK_LAYERS_MAX, q.crackLayers);
-    this.ringReach = q.ringReach;
-    this.crackLifeSec = q.crackLife;
+    const P = FX_POOL_MAX;
 
     const crackGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     const crackMat = fadeMat(createCrackTexture(), false);
     crackMat.polygonOffset = true;
     crackMat.polygonOffsetFactor = -2;
     crackMat.polygonOffsetUnits = -2;
-    this.crackMesh = createInstanced(crackGeo, crackMat, q.crackPool * this.crackLayers, 3, true);
-    for (let i = 0; i < q.crackPool; i++) this.cracks.push({ life: 0, max: 1, x: 0, y: 0, z: 0, rot: 0, size: 1, color: 0xffffff, core: 0xffffff });
+    // 每道裂痕固定佔 CRACK_LAYERS_MAX 個實例 (索引 i * CRACK_LAYERS_MAX + 層)，實際疊層數依施放當下檔位
+    this.crackMesh = createInstanced(crackGeo, crackMat, P.crackPool * CRACK_LAYERS_MAX, 3, true);
+    for (let i = 0; i < P.crackPool; i++) this.cracks.push({ life: 0, max: 1, x: 0, y: 0, z: 0, rot: 0, size: 1, color: 0xffffff, core: 0xffffff, layers: CRACK_LAYERS_MAX });
 
     const ringGeo = new THREE.RingGeometry(0.55, 1, 48).rotateX(-Math.PI / 2);
-    this.ringMesh = createInstanced(ringGeo, fadeMat(createRingTexture(), true), q.ringPool, 4, true);
-    for (let i = 0; i < q.ringPool; i++) this.rings.push({ life: 0, delay: 0, x: 0, y: 0, z: 0, radius: 1, color: 0xffffff });
+    this.ringMesh = createInstanced(ringGeo, fadeMat(createRingTexture(), true), P.ringPool, 4, true);
+    for (let i = 0; i < P.ringPool; i++) this.rings.push({ life: 0, delay: 0, x: 0, y: 0, z: 0, radius: 1, color: 0xffffff });
 
-    if (q.dustPool > 0) {
+    // 塵土一律預建 (低檔 dustPool = 0 時不施放)，執行期升檔即可使用
+    if (P.dustPool > 0) {
       const dustMat = new THREE.MeshBasicMaterial({
         map: createPuffTexture(), color: 0xa09688, transparent: true, opacity: 0.7, depthWrite: false, fog: true,
       });
-      this.dustMesh = createInstanced(new THREE.PlaneGeometry(1, 1), dustMat, q.dustPool, 2, false);
-      for (let i = 0; i < q.dustPool; i++) this.puffs.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 1 });
+      this.dustMesh = createInstanced(new THREE.PlaneGeometry(1, 1), dustMat, P.dustPool, 2, false);
+      for (let i = 0; i < P.dustPool; i++) this.puffs.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 1 });
     }
 
-    this.strands = q.lightningStrands;
-    this.segments = q.lightningSegments;
+    // 雷電實例依最多條數 × 最多段數預建；實際條數 / 段數於 spawnBolt 時取目前檔位
     const boltGeo = new THREE.BoxGeometry(BOLT_THICKNESS, 1, BOLT_THICKNESS);
-    this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), this.strands * this.segments, 5, true);
-    this.boltPts = new Float32Array(this.strands * (this.segments + 1) * 3);
+    this.boltMesh = createInstanced(boltGeo, fadeMat(null, false), P.lightningStrands * P.lightningSegments, 5, true);
+    this.boltPts = new Float32Array(P.lightningStrands * (P.lightningSegments + 1) * 3);
 
     // 羽毛 (雙燕羽刃終結技)：葉形薄片，白 / 青 / 粉 instanceColor
     const leaf = new THREE.Shape();
     leaf.moveTo(0, -0.5);
     leaf.quadraticCurveTo(0.34, -0.1, 0, 0.5);
     leaf.quadraticCurveTo(-0.34, -0.1, 0, -0.5);
-    this.featherMesh = createInstanced(new THREE.ShapeGeometry(leaf), fadeMat(null, true), q.featherPool, 6, true);
-    for (let i = 0; i < q.featherPool; i++) {
+    this.featherMesh = createInstanced(new THREE.ShapeGeometry(leaf), fadeMat(null, true), P.featherPool, 6, true);
+    for (let i = 0; i < P.featherPool; i++) {
       this.feathers.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0, rz: 0, sx: 0, sy: 0, sz: 0, phase: 0, color: FEATHER_COLORS[i % 3] });
     }
 
@@ -305,12 +299,17 @@ class ComboFinisherFXSystem {
   public groundSlam(point: THREE.Vector3, radius: number, style: WeaponFxStyle, gold: boolean, crack: boolean) {
     if (!this.crackMesh) return;
     if (crack) {
+      const q = getFxQuality();
+      // 輪替僅限目前檔位的前 crackPool 道 (降檔後超出者自然播完)
+      const pool = Math.max(1, Math.min(this.cracks.length, q.crackPool));
+      if (this.nextCrack >= pool) this.nextCrack = 0;
       const c = this.cracks[this.nextCrack];
-      this.nextCrack = (this.nextCrack + 1) % this.cracks.length;
-      c.life = c.max = this.crackLifeSec;
+      this.nextCrack = (this.nextCrack + 1) % pool;
+      c.life = c.max = q.crackLife;
+      c.layers = Math.max(1, Math.min(CRACK_LAYERS_MAX, q.crackLayers));
       c.x = point.x; c.y = point.y + 0.03; c.z = point.z;
       c.rot = Math.random() * Math.PI * 2;
-      c.size = Math.min(this.maxCrackSize, radius * CRACK_SCALE);
+      c.size = Math.min(q.crackMaxSize, radius * CRACK_SCALE);
       c.color = style.impact;
       c.core = mixWhite(style.impact, 0.7);
       this.crackActive++;
@@ -334,7 +333,8 @@ class ComboFinisherFXSystem {
   public featherBurst(center: THREE.Vector3) {
     const mesh = this.featherMesh;
     if (!mesh) return;
-    const n = this.feathers.length;
+    const n = Math.min(this.feathers.length, getFxQuality().featherPool);
+    if (n <= 0) return;
     for (let i = 0; i < n; i++) {
       const f = this.feathers[i];
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.6;
@@ -346,13 +346,15 @@ class ComboFinisherFXSystem {
       f.sx = (Math.random() - 0.5) * 14; f.sy = (Math.random() - 0.5) * 14; f.sz = (Math.random() - 0.5) * 14;
       f.phase = Math.random() * 6.28;
     }
-    this.featherActive = n;
+    this.featherActive = Math.max(this.featherActive, n);
     mesh.visible = true;
   }
 
   private spawnRing(x: number, y: number, z: number, radius: number, color: number, delay: number) {
+    const pool = Math.max(1, Math.min(this.rings.length, getFxQuality().ringPool));
+    if (this.nextRing >= pool) this.nextRing = 0;
     const r = this.rings[this.nextRing];
-    this.nextRing = (this.nextRing + 1) % this.rings.length;
+    this.nextRing = (this.nextRing + 1) % pool;
     r.life = RING_LIFE; r.delay = delay;
     r.x = x; r.y = y; r.z = z; r.radius = radius; r.color = color;
     this.ringActive++;
@@ -360,10 +362,12 @@ class ComboFinisherFXSystem {
   }
 
   private spawnDust(point: THREE.Vector3, radius: number) {
-    if (!this.dustMesh) return;
-    for (let i = 0; i < this.puffs.length; i++) {
+    const n = Math.min(this.puffs.length, getFxQuality().dustPool);
+    if (!this.dustMesh || n <= 0) return;
+    if (this.nextPuff >= n) this.nextPuff = 0;
+    for (let i = 0; i < n; i++) {
       const p = this.puffs[this.nextPuff];
-      this.nextPuff = (this.nextPuff + 1) % this.puffs.length;
+      this.nextPuff = (this.nextPuff + 1) % n;
       const a = Math.random() * Math.PI * 2;
       const d = radius * (0.1 + Math.random() * 0.5);
       const sp = 1.4 + Math.random() * 1.6;
@@ -372,11 +376,17 @@ class ComboFinisherFXSystem {
       p.vx = Math.cos(a) * sp; p.vy = 0.9 + Math.random() * 1.0; p.vz = Math.sin(a) * sp;
       p.size = 1.8 + Math.random() * 1.4;
     }
-    this.puffActive = this.puffs.length;
+    this.puffActive = Math.max(this.puffActive, n);
     this.dustMesh.visible = true;
   }
 
   private spawnBolt(point: THREE.Vector3) {
+    const q = getFxQuality();
+    const mesh = this.boltMesh!;
+    // 條數 / 段數取目前檔位 (不超過預建容量)；佈局可能改變，先清空全部實例
+    this.strands = Math.max(1, Math.min(FX_POOL_MAX.lightningStrands, q.lightningStrands));
+    this.segments = Math.max(1, Math.min(FX_POOL_MAX.lightningSegments, q.lightningSegments));
+    for (let i = 0; i < mesh.count; i++) { mesh.setMatrixAt(i, _zeroMatrix); setFx(mesh, i, 0xffffff, 0); }
     this.boltX = point.x; this.boltY = point.y; this.boltZ = point.z;
     this.boltLife = BOLT_LIFE;
     this.boltJitter = 0;
@@ -425,9 +435,9 @@ class ComboFinisherFXSystem {
       const c = this.cracks[i];
       if (c.life <= 0) continue;
       c.life -= delta;
-      const i0 = i * this.crackLayers;
+      const i0 = i * CRACK_LAYERS_MAX;
       if (c.life <= 0) {
-        for (let l = 0; l < this.crackLayers; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
+        for (let l = 0; l < CRACK_LAYERS_MAX; l++) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); }
         continue;
       }
       alive++;
@@ -437,7 +447,8 @@ class ComboFinisherFXSystem {
       const t = c.life / c.max;
       const f = t > 1 - CRACK_FADE_START ? 1 : t / (1 - CRACK_FADE_START);
       // 0 焦黑底 (略大) / 1 色光 / 2 白熱芯 (較小、較快淡去)
-      for (let l = 0; l < this.crackLayers; l++) {
+      for (let l = 0; l < CRACK_LAYERS_MAX; l++) {
+        if (l >= c.layers) { mesh.setMatrixAt(i0 + l, _zeroMatrix); setFx(mesh, i0 + l, 0xffffff, 0); continue; }
         const sl = s * (l === 0 ? 1.12 : l === 1 ? 1 : 0.6);
         _quat.setFromAxisAngle(_yAxis, c.rot + (l === 2 ? 0.5 : 0));
         _matrix.compose(_pos.set(c.x, c.y + l * 0.004, c.z), _quat, _scl.set(sl, 1, sl));
@@ -454,6 +465,7 @@ class ComboFinisherFXSystem {
 
   private updateRings(delta: number) {
     const mesh = this.ringMesh!;
+    const reach = RING_REACH * getFxQuality().ringReach;
     let alive = 0;
     for (let i = 0; i < this.rings.length; i++) {
       const r = this.rings[i];
@@ -468,7 +480,7 @@ class ComboFinisherFXSystem {
       alive++;
       const t = 1 - r.life / RING_LIFE;
       const e = 1 - (1 - t) * (1 - t) * (1 - t); // easeOutCubic
-      const s = r.radius * RING_REACH * this.ringReach * (0.2 + 0.8 * e);
+      const s = r.radius * reach * (0.2 + 0.8 * e);
       _matrix.compose(_pos.set(r.x, r.y, r.z), _quat.identity(), _scl.set(s, 1, s));
       mesh.setMatrixAt(i, _matrix);
       const f = Math.pow(1 - t, 0.9);

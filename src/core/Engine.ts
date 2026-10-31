@@ -16,6 +16,9 @@ export class Engine {
   public dirLight!: THREE.DirectionalLight;
   private clock: THREE.Clock;
   private shadowTexelSize = 0;
+  // 畫質檔位決定的像素比上限與陰影貼圖尺寸 (由 QualityManager.attach / applyQuality 設定；預設為中檔)
+  private maxPixelRatio = 1.5;
+  private shadowRes = 1024;
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -35,9 +38,7 @@ export class Engine {
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    const isMobile = Engine.isMobileDevice();
-    const maxPixelRatio = isMobile ? 1.5 : 2;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -126,8 +127,41 @@ export class Engine {
     window.setTimeout(() => meta.setAttribute('content', this.viewportMetaContent || ''), 50);
   }
 
-  public static isMobileDevice(): boolean {
-    return ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth <= 900;
+  // 套用畫質參數：像素比上限立即生效 (重配繪圖緩衝)；陰影尺寸改變時釋放舊陰影貼圖，下一幀依新尺寸重建；
+  // shadowRes = 0 關閉陽光投影 (光源陰影數改變會讓材質重新編譯一次)。回傳是否切換了陰影開關 (需重新預熱 shader)
+  public setQualityParams(pixelRatio: number, shadowRes: number): boolean {
+    this.maxPixelRatio = pixelRatio;
+    if (Math.abs(this.renderer.getPixelRatio() - this.effectivePixelRatio()) > 1e-6) {
+      this.renderer.setPixelRatio(this.effectivePixelRatio());
+    }
+    const light = this.dirLight;
+    const wasCasting = light.castShadow;
+    const casting = shadowRes > 0;
+    if (casting && shadowRes !== this.shadowRes) {
+      this.shadowRes = shadowRes;
+      light.shadow.mapSize.set(shadowRes, shadowRes);
+      if (light.shadow.map) {
+        light.shadow.map.dispose();
+        light.shadow.map = null;
+      }
+      this.shadowTexelSize = (SHADOW_DISTANCE * 2) / shadowRes;
+    }
+    if (!casting && light.shadow.map) {
+      // 關閉陰影時一併釋放貼圖記憶體 (重新開啟時依 mapSize 重建)
+      light.shadow.map.dispose();
+      light.shadow.map = null;
+    }
+    light.castShadow = casting;
+    return wasCasting !== casting;
+  }
+
+  // 目前生效的陰影貼圖邊長 (0 = 關閉)
+  public getShadowMapSize(): number {
+    return this.dirLight.castShadow ? this.shadowRes : 0;
+  }
+
+  private effectivePixelRatio(): number {
+    return Math.min(window.devicePixelRatio || 1, this.maxPixelRatio);
   }
 
   private setupLighting() {
@@ -141,9 +175,8 @@ export class Engine {
     this.dirLight.position.copy(SUN_OFFSET);
     this.dirLight.castShadow = true;
 
-    // 陰影覆蓋範圍 (行動端降檔至 1024x1024 顯著降低 GPU 頻寬與發熱，PC 維持 2048x2048)
-    const isMobile = Engine.isMobileDevice();
-    const shadowRes = isMobile ? 1024 : 2048;
+    // 陰影貼圖尺寸依畫質檔位 (低：關閉 / 中：1024 / 高：2048)，初始為中檔，QualityManager.attach 時套用實際檔位
+    const shadowRes = this.shadowRes;
     this.dirLight.shadow.mapSize.width = shadowRes;
     this.dirLight.shadow.mapSize.height = shadowRes;
     this.dirLight.shadow.camera.near = 0.5;
@@ -183,9 +216,7 @@ export class Engine {
     const safeWidth = Math.max(width, 1);
     const safeHeight = Math.max(height, 1);
     // 先設像素比再設尺寸：setPixelRatio 內部會以舊尺寸再呼叫一次 setSize，順序顛倒會重複配置繪圖緩衝區
-    const isMobile = Engine.isMobileDevice();
-    const maxPixelRatio = isMobile ? 1.5 : 2;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+    this.renderer.setPixelRatio(this.effectivePixelRatio());
     this.renderer.setSize(safeWidth, safeHeight);
     if (this.onResizeCallback) {
       this.onResizeCallback(safeWidth, safeHeight, safeWidth / safeHeight);

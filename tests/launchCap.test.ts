@@ -24,7 +24,7 @@ describe('終結技擊飛距離分級 (主目標、無衰減)', () => {
     ['FIST', 'CAMPUS', 4.0],
     ['NORMAL_BAT', 'CAMPUS', 5.4],
     ['NORMAL_BAT', 'DETENTION', 5.4], // 警棍
-    ['SPECIAL_BAT', 'CAMPUS', 6.5],
+    ['SPECIAL_BAT', 'CAMPUS', 7.0],
     ['DUAL_RACKET', 'CAMPUS', 5.0]
   ];
   for (const [id, world, expected] of targets) {

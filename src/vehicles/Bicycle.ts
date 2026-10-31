@@ -213,7 +213,7 @@ export class Bicycle {
     player.velocity.set(0, 0, 0);
     player.isGrounded = true;
 
-    soundManager.playBicycleBell();
+    soundManager.playBicycleBell(this.position);
   }
 
   // 下車：將玩家模型放回場景中並重置重力與著地狀態
@@ -238,7 +238,7 @@ export class Bicycle {
   }
 
   public ringBell() {
-    soundManager.playBicycleBell();
+    soundManager.playBicycleBell(this.position);
   }
 
   // 自場景移除並釋放非共用資源 (烘焙幾何體與材質由快取共用，不可釋放；車主牽回或超量回收路邊單車時呼叫；騎乘中不得呼叫)

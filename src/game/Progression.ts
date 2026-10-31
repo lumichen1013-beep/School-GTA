@@ -143,7 +143,7 @@ export class Progression {
     }
 
     soundManager.playCashRegister();
-    soundManager.playEatFood();
+    soundManager.playEatFood(player.position);
     hud.setCash(this.cash);
     wantedSystem.showBanner(
       this.ctx.currentWorldType === 'DETENTION'
@@ -180,7 +180,7 @@ export class Progression {
       player.hasNormalBat = true;
       player.setWeapon('NORMAL_BAT');
       wantedSystem.showBanner('🎉 達成【名揚校園】！擊敗5位普通同學，解鎖【普通球棒】！(滾輪或大地圖【裝備】切換，ATK 35)', 6000);
-      soundManager.playBatHit();
+      soundManager.playBatHit(player.position);
     }
     return entry;
   }
@@ -192,7 +192,7 @@ export class Progression {
       player.hasSpecialBat = true;
       player.setWeapon('SPECIAL_BAT');
       wantedSystem.showBanner('⚡ 達成傳奇成就【校園霸王】！擊倒生教組長、校犬與5名火柴人自行車騎士，解鎖神兵【黃金雷霆棒球棍】！(滾輪或大地圖【裝備】切換，ATK 68)', 7000);
-      soundManager.playSpecialBatHit();
+      soundManager.playSpecialBatHit(player.position);
     }
   }
 

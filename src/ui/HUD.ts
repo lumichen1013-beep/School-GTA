@@ -21,6 +21,7 @@ import type { FullMapStatus, WeaponEquipEntry } from '../game/Progression';
 import type { WeaponId } from '../weapons/types';
 import { CAMPUS_MAP_RECTS, CAMPUS_TRACK, CAMPUS_POIS, CAMPUS_WALL_HALF, CAMPUS_GATE, CAMPUS_GUARD_HOUSE, getCampusZoneName } from '../world/campusLayout';
 import { FullMapPanels } from './FullMapPanels';
+import { isTouchDevice } from '../core/device';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, type FullMapGoal } from './fullMapGoals';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
@@ -870,13 +871,9 @@ export class HUD {
     }
   }
 
+  // 觸控操作提示 (按鍵顯示為 [動] 等)：觸控裝置，或桌機手動開啟了觸控虛擬按鍵；不看視窗寬度
   public isMobile(): boolean {
-    return (
-      'ontouchstart' in window ||
-      navigator.maxTouchPoints > 0 ||
-      window.innerWidth <= 900 ||
-      document.body.classList.contains('touch-mode-active')
-    );
+    return isTouchDevice() || document.body.classList.contains('touch-mode-active');
   }
 
   private lastPromptKey = '';
