@@ -30,12 +30,12 @@ export class ThirdPersonCamera {
   private dashPullBlend: number = 0;
 
   // 瞄準鏡 (彈弓蓄力開鏡)：由呼叫端每幀設定目標比例 aimZoom (0..1，線性對應蓄力) 與倍率 aimZoomFactor (桌機 2×、手機 1.5×)，
-  // 內部平滑過渡；FOV 線性拉近到 1/factor、鏡頭距離 4.2 → 2.2 並加過肩偏移 (遵守室內距離上限與直屏補償)，放開後平滑回復
+  // 內部平滑過渡；FOV 線性拉近到 1/factor、鏡頭距離 4.2 → 2.2 並加過肩偏移 1m (角色移到畫面左側不擋準星) (遵守室內距離上限與直屏補償)，放開後平滑回復
   public aimZoom: number = 0;
   public aimZoomFactor: number = 2;
   private aimBlend: number = 0;
   private static readonly AIM_DISTANCE = 2.2;
-  private static readonly AIM_SHOULDER = 0.6;
+  private static readonly AIM_SHOULDER = 1.0; // 越肩偏移：角色落在畫面左側，持弓右臂 (朝準星方向伸出約 0.5m) 不擋準星
   private static readonly AIM_BLEND_RATE = 10;
 
   public sensitivityX: number = 0.0022;
@@ -397,7 +397,8 @@ export class ThirdPersonCamera {
     // 直屏戶外額外抬高機位 (室內不抬高，避免頂到天花板)
     const heightLift = isIndoors ? 0 : PORTRAIT_HEIGHT_LIFT * this.portraitBlend;
     // 過肩偏移：機位與視線同向右移 (鏡頭右方向 = (cos yaw, 0, −sin yaw))，遮擋射線仍由角色頭部出發，故不會穿牆
-    const shoulder = ThirdPersonCamera.AIM_SHOULDER * this.aimBlend;
+    // 直屏水平視野窄，偏移同距離倍率一併放大 (室內距離不放大)
+    const shoulder = ThirdPersonCamera.AIM_SHOULDER * this.aimBlend * (isIndoors ? 1 : portraitDistanceScale(this.portraitBlend));
     const shoulderX = Math.cos(this.yaw) * shoulder;
     const shoulderZ = -Math.sin(this.yaw) * shoulder;
     const idealPosition = this._ideal.set(

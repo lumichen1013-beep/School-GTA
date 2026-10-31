@@ -832,7 +832,7 @@ describe('彈弓：開鏡鏡頭 (ThirdPersonCamera.aimZoom)', () => {
     expect(Math.abs(cam.yaw - y1)).toBeCloseTo(base / 1.5, 6);
   });
 
-  it('過肩偏移 0.6：鏡頭位置朝鏡頭右方偏移，視線同向平移', () => {
+  it('過肩偏移 1.0：鏡頭位置朝鏡頭右方偏移，視線同向平移', () => {
     const cam = makeCam();
     cam.yaw = 0;
     run(cam, OUT, 2);
@@ -840,7 +840,7 @@ describe('彈弓：開鏡鏡頭 (ThirdPersonCamera.aimZoom)', () => {
     cam.aimZoomFactor = 2;
     cam.aimZoom = 1;
     run(cam, OUT, 2);
-    expect(cam.camera.position.x - x0).toBeCloseTo(0.6, 1); // yaw = 0：鏡頭右方 = +X
+    expect(cam.camera.position.x - x0).toBeCloseTo(1.0, 1); // yaw = 0：鏡頭右方 = +X
   });
 
   it('室內遵守距離上限 (2.8m 以內)、不穿過牆：開鏡距離 ≤ 2.2 且鏡頭不進入碰撞盒', () => {
