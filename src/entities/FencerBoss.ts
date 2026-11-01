@@ -11,7 +11,7 @@ import { SkillBubble, TALK_BUBBLE_STYLE } from './shared/SkillBubble';
 import { ndcOvershoot, worldDropForNdc, ndcInsetX } from '../game/fencer/bubbleSafeArea';
 import {
   BossHealthBars, FENCER, segmentPointDistance, rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit,
-  pinchClonePos, pinchHitMask, type BossDamageResult, type BossCue
+  pinchClonePos, pinchHitMask, inFan, type BossDamageResult, type BossCue
 } from '../game/fencer/fencerRules';
 
 // 世界 Boss【花劍客・向日爵士】：英倫紳士劍客。模型 7 個部件 (軀幹+頭+燕尾 / 雙臂 (右臂含細劍) / 雙腿 / 披風 / 高帽)，
@@ -37,72 +37,104 @@ interface PhaseSpec {
   s3Cooldown: number;
   /** 連刺追擊 (懲罰失誤)：S1 前一刺刺中 → 下一刺預警縮短、傷害 FOLLOW_DMG；S5 第 1 回合刺中 → 第 2 回合同理 */
   followUp: boolean;
-  /** S1 (含玫瑰殘影) / S3 綻放圈 / S5 的傷害加成 (S2、S4、終幕大圈不加) */
+  /** S1 (含玫瑰殘影 / 衝擊波) / S3 綻放圈 / S5 的傷害加成 (S2、S4、終幕不加) */
   dmgBonus: number;
+  /** S4 荊棘臂數 (四臂十字 / 終樂章六臂) */
+  thornArms: number;
+  /** S3 終幕：null = 落點大圈；否則全場爆發，只留 n 個安全圈 (最近一圈距玩家 near[0]~near[1] m) */
+  s3Field: { n: number; r: number; near: readonly [number, number]; warn: number } | null;
 }
 export const PHASES: readonly PhaseSpec[] = [
-  { rotation: ['S1', 'S2', 'S1', 'S3'], pressure: 1.0, speedMul: 1.0, s1Thrusts: 3, s1Echo: false, s2Hats: 1, s3Rings: 5, s3Cooldown: 14, followUp: false, dmgBonus: 0 },
-  { rotation: ['S1', 'S2', 'S4', 'S1', 'S3'], pressure: 1.2, speedMul: 1.0, s1Thrusts: 4, s1Echo: true, s2Hats: 2, s3Rings: 7, s3Cooldown: 14, followUp: true, dmgBonus: 0 },
+  { rotation: ['S1', 'S2', 'S1', 'S3'], pressure: 1.0, speedMul: 1.0, s1Thrusts: 3, s1Echo: false, s2Hats: 1, s3Rings: 5, s3Cooldown: 13, followUp: false, dmgBonus: 0, thornArms: 4, s3Field: null },
+  { rotation: ['S1', 'S2', 'S4', 'S1', 'S3'], pressure: 1.2, speedMul: 1.0, s1Thrusts: 4, s1Echo: true, s2Hats: 2, s3Rings: 7, s3Cooldown: 13, followUp: true, dmgBonus: 0, thornArms: 4,
+    s3Field: { n: 3, r: 2.6, near: [4, 7], warn: 1.8 } },
   // 終樂章兩輪一循環：S5 每輪、S4 隔輪 (模擬校正：S4 時間長，每輪都放會稀釋壓力)
-  { rotation: ['S1', 'S5', 'S2', 'S1', 'S4', 'S3', 'S1', 'S5', 'S2', 'S1', 'S3'], pressure: 1.4, speedMul: 1.2, s1Thrusts: 4, s1Echo: true, s2Hats: 2, s3Rings: 9, s3Cooldown: 11, followUp: true, dmgBonus: 1 }
+  { rotation: ['S1', 'S5', 'S2', 'S1', 'S4', 'S3', 'S1', 'S5', 'S2', 'S1', 'S3'], pressure: 1.4, speedMul: 1.2, s1Thrusts: 4, s1Echo: true, s2Hats: 2, s3Rings: 9, s3Cooldown: 10, followUp: true, dmgBonus: 2, thornArms: 6,
+    s3Field: { n: 2, r: 2.4, near: [5, 8], warn: 1.7 } }
 ];
-const BASE_COOLDOWN: Record<AttackId, number> = { S1: 5, S2: 7, S3: 14, S4: 12, S5: 10 };
+const BASE_COOLDOWN: Record<AttackId, number> = { S1: 4, S2: 6, S3: 13, S4: 11, S5: 9 };
 
-// 數值 (常數表；實測後只調這裡)
-const S1_LEN = 6;
-const S1_HIT_R = 0.7;
-const S1_DMG = 8;
+// 數值 (常數表；實測後只調這裡)。放大版 (結界 R23)：範圍放大 + 晚鎖定追蹤 + 傷害 ×1.75；預警下限見設計文件 §9.13，
+// 下限依據 = 反應 0.3s + 衝刺 10m/s (或閃身步 0.24s 無敵按時機)。預警範圍 = 判定範圍 (地面 decal 半寬 / 半徑與判定一致)。
+const S1_LEN = 9;              // 刺長上限 (= 到玩家位置 + S1_OVERSHOOT，夾在 S1_MIN_LEN~S1_LEN)
+const S1_MIN_LEN = 4;
+const S1_OVERSHOOT = 2.5;      // 穿過玩家後再前進的距離 (停在玩家前方附近 → 後續刺仍朝向玩家)
+const S1_HIT_R = 1.2;
+const S1_DMG = 14;
 const S1_DASH_SEC = 0.12;
-const S1_FIRST_WINDUP = 0.5;
-const S1_NEXT_WINDUP = 0.35;
-const S1_MAX_TURN = (35 * Math.PI) / 180;
+const S1_FIRST_WINDUP = 0.45;  // 下限 0.45
+const S1_NEXT_WINDUP = 0.3;    // 下限 0.3
+const S1_LOCK_FIRST = 0.3;     // 打出前 N 秒停止追蹤 (鎖定)；之前每秒最多轉 S1_TRACK_RATE
+const S1_LOCK_NEXT = 0.25;
+const S1_TRACK_RATE = (150 * Math.PI) / 180;
+const S1_MAX_TURN = (60 * Math.PI) / 180;
 const S1_ECHO_DELAY = 0.4;
-const S2_LEN = 12;
-const S2_FLIGHT = 1.6;
-const S2_WINDUP = 0.7;
-const S2_HIT_R = 0.8;
-const S2_DMG = 7;
+// S1 末刺玫瑰衝擊波：末刺後 S1_WAVE_DELAY 秒，自末刺起點沿刺擊方向擴成扇形 (起點半寬 S1_HIT_R、半角 18°) 一路衝到牆
+const S1_WAVE_DELAY = 0.35;
+const S1_WAVE_TAN = Math.tan((18 * Math.PI) / 180);
+const S1_WAVE_HALF_ANGLE = (18 * Math.PI) / 180;
+const S2_LEN = 18;
+const S2_FLIGHT = 2.0;
+const S2_WINDUP = 0.6;         // 下限 0.6
+const S2_HIT_R = 1.3;          // 帽子球半徑 (判定再加玩家胸口 0.45 = 1.75)
+const S2_BOW = 6;              // 弧線側偏
+const S2_HAT_SCALE = 1.8;
+const S2_DMG = 12;
 const S3_SPIN = 0.6;
-const S3_RING_R = 2.2;
-const S3_RING_GAP = 0.25;
-const S3_RING_WARN = 0.9;
-const S3_RING_DMG = 6;
-const S3_FINAL_R = 4.5;
-const S3_FINAL_WARN = 1.0;
-const S3_FINAL_DMG = 12;
+const S3_RING_R = 3.5;
+const S3_RING_GAP = 0.2;
+const S3_RING_WARN = 0.8;      // 下限 0.8
+const S3_RING_DMG = 11;
+const S3_FINAL_R = 8.5;        // 第一樂章終幕大圈
+const S3_FINAL_WARN = 1.2;     // + S3_RING_GAP = 1.4 (下限)
+const S3_FINAL_DMG = 21;
 const S3_AIR_Y = 6;
-// S4 玫瑰荊棘十字：躍到場中 → 細劍插地 + 地面十字預兆 1.0s → 荊棘爆出 → 停 0.5s → 2.5s 旋轉 90° → 縮回、拔劍破綻
-const S4_ANCHOR_MAX = 4;       // 插劍點距結界中心上限 (十字四臂都夠長、玩家有轉身空間)
+const S3_FIELD_SPACING = 8;    // 全場終幕安全圈彼此最小距離
+// S4 玫瑰荊棘十字：躍到場中 → 細劍插地 + 地面預兆 0.9s → 荊棘爆出 → 停 0.4s → 2.2s 旋轉一個臂距 → 縮回、拔劍破綻
+// 可解性：四臂角速度 0.714 rad/s → 距插劍點 ≤12.6m 可跟轉 (≤9m/s)、≥6.6m 可跳過 (臂寬 2.6m 掃過 ≤0.55s)，兩段重疊；
+// 六臂 (終樂章) 0.476 rad/s → 跟轉 ≤18.9m、跳 ≥9.9m
+const S4_ANCHOR_MAX = 6;       // 插劍點距結界中心上限
 const S4_LEAP_SEC = 0.3;
-const S4_WARN_SEC = 1.0;
+const S4_WARN_SEC = 0.9;       // 下限 0.9
 const S4_ERUPT_SEC = 0.22;
-const S4_HOLD_SEC = 0.5;
-const S4_ROTATE_SEC = 2.5;
+const S4_HOLD_SEC = 0.4;
+const S4_ROTATE_SEC = 2.2;     // 下限 2.0
 const S4_RETRACT_SEC = 0.4;
-const S4_HALF_W = 0.6;         // 荊棘半寬 (含玩家體型)
+const S4_HALF_W = 1.3;         // 荊棘半寬 (含玩家體型)
 const S4_JUMP_CLEAR = 0.6;     // 玩家腳高於此可跳過 (跳躍頂點約 1.5m)
-const S4_DMG = 9;
+const S4_DMG = 16;
 const S4_RECOVER_EXTRA = 0.5;  // 拔劍破綻 (RECOVER 0.7s + 0.5s)
-// S5 花影雙人舞：分身站到玩家另一側 (與本體夾 100°)，兩邊同時單刺夾擊，兩回合
+const MAX_THORN_ARMS = 6;
+// S5 花影雙人舞：分身站到玩家另一側 (與本體夾 100°)，兩邊同時單刺夾擊 (一路刺到牆)，兩回合
 const S5_ROUNDS = 2;
-const S5_FIRST_WINDUP = 0.8;
-const S5_NEXT_WINDUP = 0.5;
+const S5_FIRST_WINDUP = 0.7;
+const S5_NEXT_WINDUP = 0.45;   // 下限 0.45
+const S5_LOCK_FIRST = 0.3;
+const S5_LOCK_NEXT = 0.25;
 const S5_DASH_SEC = 0.14;
 const S5_CLONE_ANGLE = (100 * Math.PI) / 180;
-const S5_CLONE_DIST = 5;
-const S5_OVERSHOOT = 2.5;      // 穿過玩家後再前進的距離
-const S5_DMG = 8;
+const S5_CLONE_DIST = 8;
+const S5_HIT_R = 1.3;
+const S5_DMG = 14;
 const S5_RECOVER_EXTRA = 0.3;  // 收劍破綻 (RECOVER 0.7s + 0.3s)
 // 連刺追擊 (第 2 管起；新手難度校正：只懲罰已被刺中的玩家，一直在閃的人不受影響)
-const S1_FOLLOW_WINDUP = 0.2;  // 前一刺刺中 → 下一刺預警 0.35 → 0.2s
-const S5_FOLLOW_WINDUP = 0.2;  // 第 1 回合刺中 → 第 2 回合預警 0.5 → 0.2s
-const FOLLOW_DMG = 12;         // 追擊刺傷害 (= 全戰上限，同終幕大圈)
+const S1_FOLLOW_WINDUP = 0.2;  // 前一刺刺中 → 下一刺預警 0.3 → 0.2s
+const S5_FOLLOW_WINDUP = 0.2;  // 第 1 回合刺中 → 第 2 回合預警 0.45 → 0.2s
+const FOLLOW_DMG = 21;         // 追擊刺傷害 (= 全戰上限，同終幕)
 const BOW_SEC = 1.5;
 const HIT_PAD = 0.75;     // 玩家打 Boss 的體型補正
 const BODY_HEIGHT = 2.3;
 const AIRBORNE_Y = 2.0;   // 高於此高度無法被近戰命中
-const PREFERRED_MIN = 5;
-const PREFERRED_MAX = 7;
+const PREFERRED_MIN = 6;
+const PREFERRED_MAX = 9;
+const SIDESTEP_DIST = 3;
+const BACKFLIP_DIST = 5;
+const BLINK_MIN = 8;
+const BLINK_RAND = 3;
+const HAT_PRIORITY_DIST = 12;  // 玩家超過此距離優先丟高帽
+const BLINK_CLOSE_DIST = 13;   // 招式冷卻中且超過此距離 → 瞬步拉近
+const NEUTRAL_MIN = 0.4;
+const NEUTRAL_RAND = 0.5;
 const CHASE_AFTER = 1.5;
 
 const COLOR_WARN = 0xff4f8b;
@@ -110,6 +142,8 @@ const COLOR_WARN_BIG = 0xff2a55;
 const COLOR_HAT = 0xffb347;
 const COLOR_THORN = 0xff4fd8; // 洋紅：與結界地板紅色紋章、S1 粉紅預警區隔
 const COLOR_CLONE = 0xc04dff;
+const COLOR_LOCK = 0xfff0f6;  // 鎖定瞬間 (停止追蹤 = 現在閃)
+const COLOR_SAFE = 0xffd54f;  // 全場終幕安全圈 (金)
 const ROSE_STYLE: WeaponFxStyle = { color: 0xff5c8a, tipColor: 0xffe0ea, intensity: 1.2, life: 0.2, glow: 1, impact: 0xff3d6e };
 
 export interface FencerBossHost {
@@ -234,7 +268,7 @@ interface HatFlight {
   hitOut: boolean; hitBack: boolean;
   lastPos: THREE.Vector3;
 }
-interface PendingRing { active: boolean; x: number; z: number; t: number; r: number; dmg: number; big: boolean }
+interface PendingRing { active: boolean; x: number; z: number; t: number; r: number; dmg: number; big: boolean; field: boolean }
 
 export class FencerBoss {
   public readonly root = new THREE.Group();     // 位置 / 朝向 (世界座標)
@@ -289,6 +323,10 @@ export class FencerBoss {
   private hatCount = 1;
   private readonly s1Start = new THREE.Vector3();
   private readonly s1End = new THREE.Vector3();
+  private s1Wave = false;        // 本次 S1 末刺帶衝擊波 (近身單刺不帶)
+  private s1FanDecal = -1;
+  private s1Locked = false;
+  private s1Lead = S1_LOCK_FIRST;
   // S2
   private readonly hats: HatFlight[];
   private hatSpinSfx = 0;
@@ -298,6 +336,11 @@ export class FencerBoss {
   private readonly s3Land = new THREE.Vector3();
   private readonly s3From = new THREE.Vector3();
   private readonly rings: PendingRing[] = [];
+  /** 全場終幕安全圈 (x, z)；數量 = s3SafeCount */
+  private readonly s3Safe: { x: number; z: number }[] = [{ x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }];
+  private s3SafeCount = 0;
+  private s3SafeR = 0;
+  private s3FinaleSec = S3_FINAL_WARN + S3_RING_GAP;
   private airY = 0;
   // S4
   private readonly s4Anchor = new THREE.Vector3();
@@ -306,7 +349,8 @@ export class FencerBoss {
   private s4Dir = 1;
   private s4HitErupt = false;
   private s4HitSweep = false;
-  private readonly s4Lens = new Float32Array(4);
+  private readonly s4Lens = new Float32Array(MAX_THORN_ARMS);
+  private s4Arms = 4;
   // S5
   public readonly clone: THREE.Mesh;
   private readonly cloneMat: THREE.ShaderMaterial;
@@ -321,6 +365,11 @@ export class FencerBoss {
   private readonly s5BossTo = new THREE.Vector3();
   private readonly s5CloneFrom = new THREE.Vector3();
   private readonly s5CloneTo = new THREE.Vector3();
+  private readonly s5ClonePos = new THREE.Vector3();
+  private s5DecalBoss = -1;
+  private s5DecalClone = -1;
+  private s5Locked = false;
+  private s5Lead = S5_LOCK_FIRST;
   // 開場 / 亮相 / 換樂章
   private introPose = 0;
   /** 擊敗後化成花瓣的秒數 (首勝長過場 3.4s；再戰 1.4s) */
@@ -364,7 +413,7 @@ export class FencerBoss {
       hitOut: false, hitBack: false, lastPos: new THREE.Vector3()
     });
     this.hats = [mkHat(this.hat), mkHat(this.hat2)];
-    for (let i = 0; i < 12; i++) this.rings.push({ active: false, x: 0, z: 0, t: 0, r: 0, dmg: 0, big: false });
+    for (let i = 0; i < 12; i++) this.rings.push({ active: false, x: 0, z: 0, t: 0, r: 0, dmg: 0, big: false, field: false });
 
     // 花影分身：本體零件擺成突刺姿勢後合併 (共用零件建構，1 draw call、不透明剪影材質、不投影)
     this.hip.position.y = 0.85;
@@ -537,7 +586,7 @@ export class FencerBoss {
   }
 
   private resetHats() {
-    for (const h of this.hats) h.active = false;
+    for (const h of this.hats) { h.active = false; h.mesh.scale.setScalar(1); }
     if (this.hat.parent !== this.body) this.body.add(this.hat);
     this.hat.position.copy(this.hatHome);
     this.hat.rotation.set(0, 0, 0);
@@ -719,7 +768,7 @@ export class FencerBoss {
 
   private rollNeutral(): number {
     const spec = PHASES[this.phase];
-    return (0.6 + Math.random() * 0.6) / spec.pressure;
+    return (NEUTRAL_MIN + Math.random() * NEUTRAL_RAND) / spec.pressure;
   }
 
   private distToPlayer(): number {
@@ -765,8 +814,8 @@ export class FencerBoss {
       if (dist > 4) { this.startBlink(); this.pendingChaseThrust = true; return; }
     }
     const next = this.nextRotationAttack();
-    // 依距離微調：玩家 > 9m 優先高帽、< 2m 近身單刺
-    if (dist > 9 && this.cooldown.S2 <= 0) { this.beginAttack('S2', false); return; }
+    // 依距離微調：玩家遠 (> 12m) 優先高帽、< 2m 近身單刺
+    if (dist > HAT_PRIORITY_DIST && this.cooldown.S2 <= 0) { this.beginAttack('S2', false); return; }
     if (dist < 2 && this.cooldown.S1 <= 0) { this.beginAttack('S1', true); return; }
     if (next && this.cooldown[next] <= 0) {
       this.rotationIdx++;
@@ -774,7 +823,7 @@ export class FencerBoss {
       return;
     }
     // 招式冷卻中：繼續側步拉扯；距離過遠瞬步拉近
-    if (dist > 10) this.startBlink();
+    if (dist > BLINK_CLOSE_DIST) this.startBlink();
     else this.neutralTime = 0.3;
   }
 
@@ -826,13 +875,13 @@ export class FencerBoss {
     _dir.divideScalar(d);
     if (Math.random() < 0.3) this.sideSign = -this.sideSign;
     const speed = PHASES[this.phase].speedMul;
-    // 切線 2.5m + 徑向修正到偏好距離 5~7m
+    // 切線 3m + 徑向修正到偏好距離 6~9m
     const radial = d < PREFERRED_MIN ? Math.min(2, PREFERRED_MIN - d) : d > PREFERRED_MAX ? -Math.min(2.5, d - PREFERRED_MAX) : 0;
     this.moveFrom.copy(this.position);
     this.moveTo.set(
-      this.position.x + (-_dir.z * this.sideSign) * 2.5 * speed + _dir.x * radial,
+      this.position.x + (-_dir.z * this.sideSign) * SIDESTEP_DIST * speed + _dir.x * radial,
       0,
-      this.position.z + (_dir.x * this.sideSign) * 2.5 * speed + _dir.z * radial
+      this.position.z + (_dir.x * this.sideSign) * SIDESTEP_DIST * speed + _dir.z * radial
     );
     this.clampPoint(this.moveTo, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD - 0.5);
     this.move = 'SIDESTEP';
@@ -847,7 +896,7 @@ export class FencerBoss {
     if (_dir.lengthSq() < 1e-4) _dir.set(-Math.sin(this.rotY), 0, -Math.cos(this.rotY));
     _dir.normalize();
     this.moveFrom.copy(this.position);
-    this.moveTo.copy(this.position).addScaledVector(_dir, 4);
+    this.moveTo.copy(this.position).addScaledVector(_dir, BACKFLIP_DIST);
     this.clampPoint(this.moveTo, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD - 0.3);
     this.rotY = Math.atan2(-_dir.x, -_dir.z);
     this.move = 'BACKFLIP';
@@ -862,7 +911,7 @@ export class FencerBoss {
     const d = _dir.length();
     if (d < 0.01) return;
     _dir.divideScalar(d);
-    const step = Math.min(6 + Math.random() * 2, Math.max(0, d - 2.5));
+    const step = Math.min(BLINK_MIN + Math.random() * BLINK_RAND, Math.max(0, d - 2.5));
     if (step < 1) return;
     this.fx.petalBurst(this.position.x, 1.1, this.position.z, 24, 3, PETAL_PALETTE_ROSE, 1.5);
     this.moveFrom.copy(this.position);
@@ -896,6 +945,7 @@ export class FencerBoss {
     if (id === 'S1') {
       this.s1Count = close ? 1 : spec.s1Thrusts;
       this.s1Echo = !close && spec.s1Echo;
+      this.s1Wave = !close;
       this.cooldown.S1 = BASE_COOLDOWN.S1 * cdScale;
       this.beginThrustAim(true);
     } else if (id === 'S2') {
@@ -934,7 +984,8 @@ export class FencerBoss {
     else this.finishAttack(false);
   }
 
-  // S1 玫瑰三連刺：預警長條 → 0.12s 突進 6m (膠囊 0.7m)；每刺間最多轉向 35°
+  // S1 玫瑰連刺：預警長條 (= 判定寬) 持續追蹤玩家、打出前 0.3/0.25s 鎖定 (變白) → 0.12s 突進到玩家位置 +2.5m (4~9m)；
+  // 每刺間最多轉向 60°。末刺 (非近身單刺) 帶扇形衝擊波：末刺預警起就畫出扇形，刺完 0.35s 後爆發
   private beginThrustAim(first: boolean) {
     const p = this.host.playerPos;
     const target = Math.atan2(p.x - this.position.x, p.z - this.position.z);
@@ -942,22 +993,58 @@ export class FencerBoss {
     if (!first) diff = Math.max(-S1_MAX_TURN, Math.min(S1_MAX_TURN, diff));
     this.rotY += diff;
     this.s1Start.copy(this.position).setY(0);
-    this.s1End.set(this.position.x + Math.sin(this.rotY) * S1_LEN, 0, this.position.z + Math.cos(this.rotY) * S1_LEN);
-    this.clampPoint(this.s1End, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD);
+    this.planS1End();
     // 連刺追擊：前一刺刺中 → 預警縮短、傷害提高 (第 2 管起)
     this.s1Follow = !first && this.s1Hit && PHASES[this.phase].followUp;
     const windup = first ? S1_FIRST_WINDUP : this.s1Follow ? S1_FOLLOW_WINDUP : S1_NEXT_WINDUP;
-    this.s1Decal = this.fx.warnLine(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, 0.6, windup, windup + S1_DASH_SEC, COLOR_WARN);
+    this.s1Decal = this.fx.warnLine(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, S1_HIT_R, windup, windup + S1_DASH_SEC, COLOR_WARN);
+    this.s1FanDecal = -1;
+    if (this.s1Wave && this.s1Count === 1) {
+      const fill = windup + S1_DASH_SEC + S1_WAVE_DELAY;
+      this.s1FanDecal = this.fx.warnFan(this.s1Start.x, this.s1Start.z, this.rotY, S1_HIT_R, S1_WAVE_TAN, this.waveLength(), fill, fill + 0.05, COLOR_WARN_BIG);
+    }
     if (first || this.s1Follow) slashFX.hitFlash(this.position.x + Math.sin(this.rotY) * 0.9, 1.0, this.position.z + Math.cos(this.rotY) * 0.9, 0xffffff);
     this.atkStep = 0; // 0 = 瞄準
     this.atkTimer = 0;
     this.s1Hit = false;
     this.s1Windup = windup;
+    this.s1Lead = first ? S1_LOCK_FIRST : S1_LOCK_NEXT;
+    this.s1Locked = this.s1Follow; // 追擊刺不追蹤 (預警本來就短)
   }
 
-  private updateS1(_dt: number) {
+  /** 依目前朝向與玩家距離決定突刺終點 (到玩家 +2.5m，夾在 4~9m、結界內) */
+  private planS1End() {
+    const p = this.host.playerPos;
+    const d = Math.hypot(p.x - this.s1Start.x, p.z - this.s1Start.z);
+    const len = Math.max(S1_MIN_LEN, Math.min(S1_LEN, d + S1_OVERSHOOT));
+    this.s1End.set(this.s1Start.x + Math.sin(this.rotY) * len, 0, this.s1Start.z + Math.cos(this.rotY) * len);
+    this.clampPoint(this.s1End, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD);
+  }
+
+  /** 衝擊波長度：末刺起點沿朝向到結界牆 */
+  private waveLength(): number {
+    return rayCircleDistance(this.s1Start.x, this.s1Start.z, Math.sin(this.rotY), Math.cos(this.rotY), FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R);
+  }
+
+  private updateS1(dt: number) {
     const windup = this.s1Windup;
     if (this.atkStep === 0) {
+      if (!this.s1Locked) {
+        if (windup - this.atkTimer > this.s1Lead) {
+          // 追蹤：轉速上限，預警長條 / 扇形跟著轉
+          const p = this.host.playerPos;
+          const target = Math.atan2(p.x - this.s1Start.x, p.z - this.s1Start.z);
+          const diff = Math.atan2(Math.sin(target - this.rotY), Math.cos(target - this.rotY));
+          const step = S1_TRACK_RATE * dt;
+          this.rotY += Math.max(-step, Math.min(step, diff));
+          this.planS1End();
+          this.fx.moveLine(this.s1Decal, this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z);
+          if (this.s1FanDecal >= 0) this.fx.moveFan(this.s1FanDecal, this.s1Start.x, this.s1Start.z, this.rotY, this.waveLength());
+        } else {
+          this.s1Locked = true;
+          this.fx.setDecalColor(this.s1Decal, COLOR_LOCK);
+        }
+      }
       if (this.atkTimer >= windup) {
         this.atkStep = 1;
         this.atkTimer = 0;
@@ -971,16 +1058,21 @@ export class FencerBoss {
       this.position.z = this.s1Start.z + (this.s1End.z - this.s1Start.z) * k;
       this.checkThrustHit(this.s1Start.x, this.s1Start.z, this.position.x, this.position.z, this.s1Count === 1);
       if (k >= 1) {
-        slashFX.dashBand(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, 1.05, 0.3, 0xff5c8a);
-        this.fx.petalBurst(this.s1End.x, 1.0, this.s1End.z, 10, 2.5, PETAL_PALETTE_ROSE, 1.5);
+        slashFX.dashBand(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, S1_HIT_R * 2, 0.4, 0xff5c8a);
+        this.fx.petalBurst(this.s1End.x, 1.0, this.s1End.z, 20, 4, PETAL_PALETTE_ROSE, 1.8);
         this.s1Count--;
         if (this.s1Count > 0) this.beginThrustAim(false);
-        else if (this.s1Echo) {
-          this.atkStep = 2;
+        else if (this.s1Wave) {
+          this.atkStep = 3;
           this.atkTimer = 0;
-          this.fx.warnLine(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, 0.6, S1_ECHO_DELAY, S1_ECHO_DELAY + S1_DASH_SEC, COLOR_WARN);
-        } else this.finishAttack(false);
+        } else this.afterLastThrust();
       }
+      return;
+    }
+    if (this.atkStep === 3) {
+      if (this.atkTimer < S1_WAVE_DELAY) return;
+      this.fireWave();
+      this.afterLastThrust();
       return;
     }
     // 玫瑰殘影：0.4s 後沿同一條線再刺一次
@@ -988,11 +1080,38 @@ export class FencerBoss {
       this.s1Hit = false;
       this.s1Follow = false;
       this.checkThrustHit(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, false);
-      slashFX.dashBand(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, 1.05, 0.34, 0xffb3c6);
-      this.fx.petalBurst(this.s1Start.x, 1.0, this.s1Start.z, 14, 3, PETAL_PALETTE_ROSE, 1.5);
+      slashFX.dashBand(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, S1_HIT_R * 2, 0.44, 0xffb3c6);
+      this.fx.petalBurst(this.s1Start.x, 1.0, this.s1Start.z, 24, 4, PETAL_PALETTE_ROSE, 1.8);
       soundManager.playRapierThrust(this.s1Start);
       this.finishAttack(false);
     }
+  }
+
+  /** 末刺之後：玫瑰殘影 (第 2 管起) 或收招 */
+  private afterLastThrust() {
+    if (this.s1Echo) {
+      this.atkStep = 2;
+      this.atkTimer = 0;
+      this.fx.warnLine(this.s1Start.x, this.s1Start.z, this.s1End.x, this.s1End.z, S1_HIT_R, S1_ECHO_DELAY, S1_ECHO_DELAY + S1_DASH_SEC, COLOR_WARN);
+    } else this.finishAttack(false);
+  }
+
+  /** 玫瑰衝擊波：扇形 (起點半寬 S1_HIT_R、半角 18°) 自末刺起點衝到牆；判定瞬間 (可跳不可、閃身步無敵可吃掉) */
+  private fireWave() {
+    const ox = this.s1Start.x;
+    const oz = this.s1Start.z;
+    const ux = Math.sin(this.rotY);
+    const uz = Math.cos(this.rotY);
+    const len = this.waveLength();
+    this.fx.waveFan(ox, oz, this.rotY, S1_WAVE_HALF_ANGLE, len, 0xff5c8a);
+    this.fx.petalBurst(ox + ux * len * 0.5, 0.6, oz + uz * len * 0.5, 30, 6, PETAL_PALETTE_ROSE, 3);
+    soundManager.playPetalBloom(this.s1End);
+    this.host.shake(0.22);
+    const p = this.host.playerPos;
+    if (p.y > 1.8) return;
+    if (!inFan(ox, oz, ux, uz, S1_HIT_R, S1_WAVE_TAN, len, p.x, p.z)) return;
+    _dir.set(ux, 0, uz);
+    this.host.damagePlayer(S1_DMG + PHASES[this.phase].dmgBonus, _dir, 6, 2, '玫瑰衝擊波');
   }
 
   private s1Damage(): number {
@@ -1015,7 +1134,7 @@ export class FencerBoss {
     }
   }
 
-  // S2 高帽迴旋斬：預備 0.7s (地面虛線弧) → 帽子去回兩段二次貝茲 (共 1.6s)，球形 r=0.8，去回各命中一次
+  // S2 高帽迴旋斬：預備 0.6s (地面虛線弧) → 帽子 (放大 1.8 倍) 去回兩段二次貝茲 (共 2.0s、飛 18m)，球形 r=1.3，去回各命中一次
   private beginHatWindup(count: number) {
     const p = this.host.playerPos;
     _dir.set(p.x - this.position.x, 0, p.z - this.position.z);
@@ -1034,15 +1153,15 @@ export class FencerBoss {
       this.clampPoint(hf.p2, FENCER.ARENA_R - 0.5);
       const mx = (hf.p0.x + hf.p2.x) / 2;
       const mz = (hf.p0.z + hf.p2.z) / 2;
-      hf.p1.set(mx + -_dir.z * s * 4, 1.4, mz + _dir.x * s * 4);
-      hf.p3.set(mx + _dir.z * s * 4, 1.4, mz - _dir.x * s * 4);
+      hf.p1.set(mx + -_dir.z * s * S2_BOW, 1.4, mz + _dir.x * s * S2_BOW);
+      hf.p3.set(mx + _dir.z * s * S2_BOW, 1.4, mz - _dir.x * s * S2_BOW);
       // 虛線弧：去程 + 回程各半
       const per = Math.max(2, Math.floor(dots / count / 2));
       for (let i = 1; i <= per; i++) {
         this.bezier(hf.p0, hf.p1, hf.p2, i / per, _v);
-        this.fx.warnDot(_v.x, _v.z, 0.35, S2_WINDUP + S2_FLIGHT * 0.5, COLOR_HAT);
+        this.fx.warnDot(_v.x, _v.z, 0.6, S2_WINDUP + S2_FLIGHT * 0.5, COLOR_HAT);
         this.bezier(hf.p2, hf.p3, hf.p0, i / per, _v);
-        this.fx.warnDot(_v.x, _v.z, 0.3, S2_WINDUP + S2_FLIGHT, COLOR_HAT);
+        this.fx.warnDot(_v.x, _v.z, 0.5, S2_WINDUP + S2_FLIGHT, COLOR_HAT);
       }
     }
     // 帽子舉起發光 (第二樂章另從帽中變出第二頂)
@@ -1074,6 +1193,7 @@ export class FencerBoss {
           hf.hitBack = false;
           this.container.attach(hf.mesh);
           hf.mesh.visible = true;
+          hf.mesh.scale.setScalar(S2_HAT_SCALE);
           hf.mesh.position.copy(hf.p0);
           hf.lastPos.copy(hf.p0);
         }
@@ -1121,8 +1241,9 @@ export class FencerBoss {
     if (this.hatSpinSfx <= 0) this.hatSpinSfx = 0.4;
   }
 
-  // S3 萬花華爾滋・終幕：旋轉 0.6s → 躍起滯空，依序標出 N 個綻放圈 (第一個在玩家腳下、其後依速度預測)，
-  // 每圈 0.9s 後爆花瓣柱；最後落點大圈 1.0s 預警後終幕爆發 (12 + 擊飛)，收招 1.5s 脫帽致意 (固定破綻)
+  // S3 萬花華爾滋・終幕：旋轉 0.6s → 躍起滯空，依序標出 N 個綻放圈 (r3.5，第一個在玩家腳下、其後依速度預測)，
+  // 每圈 0.8s 後爆花瓣柱；終幕：第一樂章落點大圈 r8.5 (1.4s)，第二樂章起全場爆發只留金色安全圈 (1.8 / 1.7s)；
+  // 收招 1.5s 脫帽致意 (固定破綻)
   private updateS3(dt: number) {
     const p = this.host.playerPos;
     if (this.atkStep === 0) {
@@ -1152,11 +1273,19 @@ export class FencerBoss {
         this.s3RingsLeft--;
         this.s3RingTimer = S3_RING_GAP;
         if (this.s3RingsLeft === 0) {
-          // 終幕大圈：落在玩家目前位置
+          // 終幕：Boss 落在玩家目前位置；第一樂章大圈、之後全場 (安全圈)
           this.s3Land.set(p.x, 0, p.z);
           this.clampPoint(this.s3Land, FENCER.ARENA_R - 2);
           this.s3From.copy(this.position);
-          this.queueRing(this.s3Land.x, this.s3Land.z, S3_FINAL_R, S3_FINAL_WARN + S3_RING_GAP, S3_FINAL_DMG, true);
+          const field = PHASES[this.phase].s3Field;
+          if (field) {
+            this.planSafeZones(p.x, p.z, field.n, field.r, field.near[0], field.near[1]);
+            this.s3FinaleSec = field.warn;
+            this.queueField(field.warn, S3_FINAL_DMG);
+          } else {
+            this.s3FinaleSec = S3_FINAL_WARN + S3_RING_GAP;
+            this.queueRing(this.s3Land.x, this.s3Land.z, S3_FINAL_R, this.s3FinaleSec, S3_FINAL_DMG, true);
+          }
           this.atkStep = 2;
           this.atkTimer = 0;
           this.host.onCue?.('S3_FINALE');
@@ -1166,7 +1295,7 @@ export class FencerBoss {
     }
     if (this.atkStep === 2) {
       // 空中移到落點上方，預警結束瞬間落地
-      const k = Math.min(1, this.atkTimer / (S3_FINAL_WARN + S3_RING_GAP));
+      const k = Math.min(1, this.atkTimer / this.s3FinaleSec);
       this.position.x = this.s3From.x + (this.s3Land.x - this.s3From.x) * k;
       this.position.z = this.s3From.z + (this.s3Land.z - this.s3From.z) * k;
       this.airY = k < 0.8 ? S3_AIR_Y : S3_AIR_Y * (1 - (k - 0.8) / 0.2);
@@ -1180,19 +1309,20 @@ export class FencerBoss {
   }
 
   // S4 玫瑰荊棘十字 -----------------------------------------------------------------
-  // 躍到場中 (距中心 ≤ 4m) → 細劍插地：四條地面預兆線 (一臂對準玩家) + 旋轉方向箭點 1.0s →
-  // 荊棘自劍尖往牆爆出 (打擊幀) → 停 0.5s → 整個十字 2.5s 內旋轉 90° → 縮回、拔劍 (額外 0.5s 破綻)。
-  // 判定：玩家到任一臂線段 ≤ 0.6m 且腳高 < 0.6m (可跳過)；爆發 (含停頓) 與旋轉掃過各最多命中一次。Boss 插劍期間不動、可被打 (靠近中心最好閃也最好打)。
+  // 躍到場中 (距中心 ≤ 6m) → 細劍插地：四 (終樂章六) 條地面預兆線 (一臂對準玩家) + 旋轉方向箭點 0.9s →
+  // 荊棘自劍尖往牆爆出 (打擊幀) → 停 0.4s → 2.2s 內旋轉一個臂距 → 縮回、拔劍 (額外 0.5s 破綻)。
+  // 判定：玩家到任一臂線段 ≤ 1.3m 且腳高 < 0.6m (可跳過)；爆發 (含停頓) 與旋轉掃過各最多命中一次。Boss 插劍期間不動、可被打。
   private beginThornLeap() {
     this.s4From.copy(this.position).setY(0);
     this.s4Anchor.copy(this.s4From);
-    const dx = this.s4Anchor.x - FENCER.CENTER_X;
-    const dz = this.s4Anchor.z - FENCER.CENTER_Z;
+    const dx = this.s4Anchor.x - FENCER.ARENA_X;
+    const dz = this.s4Anchor.z - FENCER.ARENA_Z;
     const d = Math.hypot(dx, dz);
     if (d > S4_ANCHOR_MAX) {
-      this.s4Anchor.x = FENCER.CENTER_X + (dx / d) * S4_ANCHOR_MAX;
-      this.s4Anchor.z = FENCER.CENTER_Z + (dz / d) * S4_ANCHOR_MAX;
+      this.s4Anchor.x = FENCER.ARENA_X + (dx / d) * S4_ANCHOR_MAX;
+      this.s4Anchor.z = FENCER.ARENA_Z + (dz / d) * S4_ANCHOR_MAX;
     }
+    this.s4Arms = PHASES[this.phase].thornArms;
     this.s4HitErupt = false;
     this.s4HitSweep = false;
     this.atkStep = 0;
@@ -1201,9 +1331,10 @@ export class FencerBoss {
   }
 
   private computeThornLens(yaw: number) {
-    for (let k = 0; k < 4; k++) {
-      const a = thornArmYaw(yaw, k);
-      this.s4Lens[k] = rayCircleDistance(this.s4Anchor.x, this.s4Anchor.z, Math.sin(a), Math.cos(a), FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R);
+    for (let k = 0; k < MAX_THORN_ARMS; k++) {
+      if (k >= this.s4Arms) { this.s4Lens[k] = 0; continue; }
+      const a = thornArmYaw(yaw, k, this.s4Arms);
+      this.s4Lens[k] = rayCircleDistance(this.s4Anchor.x, this.s4Anchor.z, Math.sin(a), Math.cos(a), FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R);
     }
   }
 
@@ -1226,15 +1357,15 @@ export class FencerBoss {
         this.s4Dir = Math.random() < 0.5 ? 1 : -1;
         this.rotY = this.s4Yaw;
         this.computeThornLens(this.s4Yaw);
-        for (let i = 0; i < 4; i++) {
-          const ay = thornArmYaw(this.s4Yaw, i);
+        for (let i = 0; i < this.s4Arms; i++) {
+          const ay = thornArmYaw(this.s4Yaw, i, this.s4Arms);
           const len = this.s4Lens[i];
           this.fx.warnLine(a.x, a.z, a.x + Math.sin(ay) * len, a.z + Math.cos(ay) * len, S4_HALF_W, S4_WARN_SEC, S4_WARN_SEC + 0.05, COLOR_THORN);
           // 旋轉方向箭點：沿旋轉方向由小到大兩點
           for (let j = 1; j <= 2; j++) {
-            const da = ay + this.s4Dir * j * 0.26;
-            const rr = 3 + j * 0.9;
-            this.fx.warnDot(a.x + Math.sin(da) * rr, a.z + Math.cos(da) * rr, 0.22 + j * 0.12, S4_WARN_SEC + S4_ERUPT_SEC + S4_HOLD_SEC, COLOR_THORN);
+            const da = ay + this.s4Dir * j * 0.2;
+            const rr = 5 + j * 1.4;
+            this.fx.warnDot(a.x + Math.sin(da) * rr, a.z + Math.cos(da) * rr, 0.35 + j * 0.18, S4_WARN_SEC + S4_ERUPT_SEC + S4_HOLD_SEC, COLOR_THORN);
           }
         }
         slashFX.hitFlash(a.x, 0.3, a.z, 0xffffff);
@@ -1252,8 +1383,8 @@ export class FencerBoss {
         this.fx.thornFlash(1);
         this.host.shake(0.32);
         soundManager.playPetalBloom(this.position);
-        for (let i = 0; i < 4; i++) {
-          const ay = thornArmYaw(this.s4Yaw, i);
+        for (let i = 0; i < this.s4Arms; i++) {
+          const ay = thornArmYaw(this.s4Yaw, i, this.s4Arms);
           const half = this.s4Lens[i] * 0.5;
           this.fx.petalBurst(a.x + Math.sin(ay) * half, 0.5, a.z + Math.cos(ay) * half, 16, 5, PETAL_PALETTE_THORN, 3.5, 2.2);
         }
@@ -1267,10 +1398,10 @@ export class FencerBoss {
       grow = Math.min(1, this.atkTimer / S4_ERUPT_SEC);
       if (this.atkTimer >= S4_ERUPT_SEC + S4_HOLD_SEC) { this.atkStep = 3; this.atkTimer = 0; soundManager.playBarrierHum(this.position); }
     } else if (this.atkStep === 3) {
-      yaw = thornCrossYaw(this.s4Yaw, this.s4Dir, this.atkTimer, S4_ROTATE_SEC);
+      yaw = thornCrossYaw(this.s4Yaw, this.s4Dir, this.atkTimer, S4_ROTATE_SEC, this.s4Arms);
       if (this.atkTimer >= S4_ROTATE_SEC) { this.atkStep = 4; this.atkTimer = 0; }
     } else {
-      yaw = thornCrossYaw(this.s4Yaw, this.s4Dir, S4_ROTATE_SEC, S4_ROTATE_SEC);
+      yaw = thornCrossYaw(this.s4Yaw, this.s4Dir, S4_ROTATE_SEC, S4_ROTATE_SEC, this.s4Arms);
       sink = Math.min(1, this.atkTimer / S4_RETRACT_SEC);
       if (sink >= 1) {
         this.fx.hideThorns();
@@ -1280,7 +1411,7 @@ export class FencerBoss {
       }
     }
     this.computeThornLens(yaw);
-    this.fx.setThornCross(a.x, a.z, yaw, this.s4Lens, grow, sink);
+    this.fx.setThornCross(a.x, a.z, yaw, this.s4Lens, grow, sink, this.s4Arms, S4_HALF_W / 0.6);
     if (sink === 0) this.checkThornHit(yaw, grow);
   }
 
@@ -1290,11 +1421,11 @@ export class FencerBoss {
     const p = this.host.playerPos;
     if (p.y > S4_JUMP_CLEAR) return;
     const a = this.s4Anchor;
-    const arm = thornCrossHit(a.x, a.z, yaw, reach, FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R, p.x, p.z, S4_HALF_W);
+    const arm = thornCrossHit(a.x, a.z, yaw, reach, FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R, p.x, p.z, S4_HALF_W, this.s4Arms);
     if (arm < 0) return;
     if (sweep) this.s4HitSweep = true; else this.s4HitErupt = true;
     // 小擊退：垂直於該臂，旋轉中朝旋轉方向 (推到荊棘前方)，爆發時朝玩家所在側
-    const ay = thornArmYaw(yaw, arm);
+    const ay = thornArmYaw(yaw, arm, this.s4Arms);
     const nx = Math.cos(ay);
     const nz = -Math.sin(ay);
     // yaw 增加時臂朝 (cos, -sin) 掃過 → 旋轉中推往 dirSign 側 (荊棘前方)；爆發時推往玩家所在側
@@ -1309,22 +1440,24 @@ export class FencerBoss {
   }
 
   // S5 花影雙人舞 ---------------------------------------------------------------------
-  // 分身自花瓣中成形於玩家另一側 (與本體夾 100°)，兩條預警線在玩家處交叉 → 同時單刺夾擊 (沿用 S1 膠囊判定與光帶)；
-  // 兩回合 (第二回合分身重新站位、預警較短)，同一回合被兩邊夾到也只吃一次；分身不可被攻擊，刺完即散成花瓣。
+  // 分身自花瓣中成形於玩家另一側 (與本體夾 100°、距玩家 8m)，兩條預警線 (= 判定寬 1.3m) 持續瞄準玩家、打出前 0.3/0.25s 鎖定 →
+  // 同時單刺夾擊，一路刺到結界牆 (沿用 S1 光帶)；兩回合 (第二回合分身重新站位、預警較短)，同一回合被兩邊夾到也只吃一次；
+  // 分身不可被攻擊，刺完即散成花瓣。安全方向 = 兩線夾角外側 (沿角平分線退開約 1.7m)。
   private beginPinchAim(first: boolean) {
     const p = this.host.playerPos;
     this.rotY = Math.atan2(p.x - this.position.x, p.z - this.position.z);
     const side = Math.random() < 0.5 ? 1 : -1;
     pinchClonePos(p.x, p.z, this.position.x, this.position.z, side, S5_CLONE_ANGLE, S5_CLONE_DIST,
-      FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD, _clonePos);
+      FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD, _clonePos);
+    this.s5ClonePos.set(_clonePos.x, 0, _clonePos.z);
     this.planThrust(this.position.x, this.position.z, p, this.s5BossFrom, this.s5BossTo);
     this.planThrust(_clonePos.x, _clonePos.z, p, this.s5CloneFrom, this.s5CloneTo);
     this.cloneYaw = Math.atan2(p.x - _clonePos.x, p.z - _clonePos.z);
     // 連刺追擊：第 1 回合刺中 → 第 2 回合預警縮短、傷害提高 (s5Hit 於下方才重置)
     this.s5Follow = !first && this.s5Hit && PHASES[this.phase].followUp;
     const windup = first ? S5_FIRST_WINDUP : this.s5Follow ? S5_FOLLOW_WINDUP : S5_NEXT_WINDUP;
-    this.fx.warnLine(this.s5BossFrom.x, this.s5BossFrom.z, this.s5BossTo.x, this.s5BossTo.z, 0.6, windup, windup + S5_DASH_SEC, COLOR_WARN);
-    this.fx.warnLine(this.s5CloneFrom.x, this.s5CloneFrom.z, this.s5CloneTo.x, this.s5CloneTo.z, 0.6, windup, windup + S5_DASH_SEC, COLOR_CLONE);
+    this.s5DecalBoss = this.fx.warnLine(this.s5BossFrom.x, this.s5BossFrom.z, this.s5BossTo.x, this.s5BossTo.z, S5_HIT_R, windup, windup + S5_DASH_SEC, COLOR_WARN);
+    this.s5DecalClone = this.fx.warnLine(this.s5CloneFrom.x, this.s5CloneFrom.z, this.s5CloneTo.x, this.s5CloneTo.z, S5_HIT_R, windup, windup + S5_DASH_SEC, COLOR_CLONE);
     // 分身花瓣成形 (舊位置先散)
     if (this.clone.visible) this.fx.petalBurst(this.clone.position.x, 1.1, this.clone.position.z, 14, 3, PETAL_PALETTE_SHADOW, 2);
     this.clone.position.set(_clonePos.x, 0, _clonePos.z);
@@ -1337,24 +1470,42 @@ export class FencerBoss {
     if (first || this.s5Follow) slashFX.hitFlash(this.position.x + Math.sin(this.rotY) * 0.9, 1.0, this.position.z + Math.cos(this.rotY) * 0.9, 0xffffff);
     this.s5Hit = false;
     this.s5Windup = windup;
+    this.s5Lead = first ? S5_LOCK_FIRST : S5_LOCK_NEXT;
+    this.s5Locked = this.s5Follow;
     this.atkStep = 0;
     this.atkTimer = 0;
   }
 
-  /** 由 (x, z) 穿過玩家再前進 S5_OVERSHOOT 的突刺線段 (終點夾回結界內) */
+  /** 由 (x, z) 穿過玩家、一路刺到結界牆的突刺線段 */
   private planThrust(x: number, z: number, p: THREE.Vector3, from: THREE.Vector3, to: THREE.Vector3) {
     from.set(x, 0, z);
     let dx = p.x - x;
     let dz = p.z - z;
     const d = Math.hypot(dx, dz);
     if (d < 1e-3) { dx = Math.sin(this.rotY); dz = Math.cos(this.rotY); } else { dx /= d; dz /= d; }
-    const len = Math.max(4, Math.min(10, d + S5_OVERSHOOT));
+    const len = Math.max(4, rayCircleDistance(x, z, dx, dz, FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD));
     to.set(x + dx * len, 0, z + dz * len);
     this.clampPoint(to, FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD);
   }
 
   private updateS5(_dt: number) {
     if (this.atkStep === 0) {
+      if (!this.s5Locked) {
+        if (this.s5Windup - this.atkTimer > this.s5Lead) {
+          // 追蹤：本體與分身原地轉向玩家，預警線跟著轉
+          const p = this.host.playerPos;
+          this.planThrust(this.s5BossFrom.x, this.s5BossFrom.z, p, this.s5BossFrom, this.s5BossTo);
+          this.planThrust(this.s5ClonePos.x, this.s5ClonePos.z, p, this.s5CloneFrom, this.s5CloneTo);
+          this.rotY = Math.atan2(p.x - this.s5BossFrom.x, p.z - this.s5BossFrom.z);
+          this.cloneYaw = Math.atan2(p.x - this.s5ClonePos.x, p.z - this.s5ClonePos.z);
+          this.fx.moveLine(this.s5DecalBoss, this.s5BossFrom.x, this.s5BossFrom.z, this.s5BossTo.x, this.s5BossTo.z);
+          this.fx.moveLine(this.s5DecalClone, this.s5CloneFrom.x, this.s5CloneFrom.z, this.s5CloneTo.x, this.s5CloneTo.z);
+        } else {
+          this.s5Locked = true;
+          this.fx.setDecalColor(this.s5DecalBoss, COLOR_LOCK);
+          this.fx.setDecalColor(this.s5DecalClone, COLOR_LOCK);
+        }
+      }
       if (this.atkTimer >= this.s5Windup) {
         this.atkStep = 1;
         this.atkTimer = 0;
@@ -1371,9 +1522,9 @@ export class FencerBoss {
       this.clone.position.set(cf.x + (ct.x - cf.x) * k, 0, cf.z + (ct.z - cf.z) * k);
       this.checkPinchHit(bf.x, bf.z, this.position.x, this.position.z, cf.x, cf.z, this.clone.position.x, this.clone.position.z);
       if (k >= 1) {
-        slashFX.dashBand(bf.x, bf.z, bt.x, bt.z, 1.05, 0.3, 0xff5c8a);
-        slashFX.dashBand(cf.x, cf.z, ct.x, ct.z, 1.05, 0.3, 0xc04dff);
-        this.fx.petalBurst(bt.x, 1.0, bt.z, 10, 2.5, PETAL_PALETTE_ROSE, 1.5);
+        slashFX.dashBand(bf.x, bf.z, bt.x, bt.z, S5_HIT_R * 2, 0.4, 0xff5c8a);
+        slashFX.dashBand(cf.x, cf.z, ct.x, ct.z, S5_HIT_R * 2, 0.4, 0xc04dff);
+        this.fx.petalBurst(bt.x, 1.0, bt.z, 20, 4, PETAL_PALETTE_ROSE, 1.8);
         this.s5Round++;
         if (this.s5Round < S5_ROUNDS) {
           this.beginPinchAim(false);
@@ -1391,7 +1542,7 @@ export class FencerBoss {
     if (this.s5Hit) return;
     const p = this.host.playerPos;
     if (p.y > 1.8) return;
-    const mask = pinchHitMask(ax, az, bx, bz, cx, cz, ex, ez, p.x, p.z, S1_HIT_R);
+    const mask = pinchHitMask(ax, az, bx, bz, cx, cz, ex, ez, p.x, p.z, S5_HIT_R);
     if (mask === 0) return;
     this.s5Hit = true;
     const last = this.s5Round === S5_ROUNDS - 1;
@@ -1429,10 +1580,65 @@ export class FencerBoss {
   private queueRing(x: number, z: number, r: number, warn: number, dmg: number, big: boolean) {
     for (const ring of this.rings) {
       if (ring.active) continue;
-      ring.active = true; ring.x = x; ring.z = z; ring.t = warn; ring.r = r; ring.dmg = dmg; ring.big = big;
+      ring.active = true; ring.x = x; ring.z = z; ring.t = warn; ring.r = r; ring.dmg = dmg; ring.big = big; ring.field = false;
       this.fx.warnCircle(x, z, r, warn, warn + 0.05, big ? COLOR_WARN_BIG : COLOR_WARN, big);
       return;
     }
+  }
+
+  /**
+   * 全場終幕安全圈：第一圈距玩家 nearMin~nearMax (隨機方向，結界內)，其餘隨機、距玩家 ≥ nearMin、彼此 ≥ S3_FIELD_SPACING；
+   * 全部完全落在結界內 (圈緣距牆 ≥ 0.5m)。寫入 s3Safe / s3SafeCount / s3SafeR。
+   */
+  private planSafeZones(px: number, pz: number, n: number, r: number, nearMin: number, nearMax: number) {
+    const lim = FENCER.ARENA_R - r - 0.5;
+    this.s3SafeR = r;
+    this.s3SafeCount = 0;
+    const put = (x: number, z: number) => { const c = this.s3Safe[this.s3SafeCount++]; c.x = x; c.z = z; };
+    // 第一圈：最多試 12 個方向，取第一個不用夾回的 (夾回會改變距離)；都不行就夾回
+    let placed = false;
+    const a0 = Math.random() * Math.PI * 2;
+    for (let i = 0; i < 12 && !placed; i++) {
+      const a = a0 + i * 0.5236;
+      const d = nearMin + Math.random() * (nearMax - nearMin);
+      _v.set(px + Math.sin(a) * d, 0, pz + Math.cos(a) * d);
+      if (Math.hypot(_v.x - FENCER.ARENA_X, _v.z - FENCER.ARENA_Z) <= lim) { put(_v.x, _v.z); placed = true; }
+    }
+    if (!placed) {
+      // 玩家貼牆：往結界中心方向放
+      const dx = FENCER.ARENA_X - px;
+      const dz = FENCER.ARENA_Z - pz;
+      const d = Math.hypot(dx, dz) || 1;
+      _v.set(px + (dx / d) * nearMin, 0, pz + (dz / d) * nearMin);
+      this.clampPoint(_v, lim);
+      put(_v.x, _v.z);
+    }
+    for (let tries = 0; this.s3SafeCount < n && tries < 60; tries++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * lim;
+      const x = FENCER.ARENA_X + Math.sin(a) * d;
+      const z = FENCER.ARENA_Z + Math.cos(a) * d;
+      let ok = Math.hypot(x - px, z - pz) >= nearMin; // 其餘安全圈不比第一圈近 (不落在玩家腳邊)
+      for (let k = 0; k < this.s3SafeCount; k++) if (Math.hypot(this.s3Safe[k].x - x, this.s3Safe[k].z - z) < S3_FIELD_SPACING) { ok = false; break; }
+      if (ok) put(x, z);
+    }
+  }
+
+  /** 全場終幕：全場預警 (安全圈挖洞) + 金色安全圈；warn 秒後安全圈外全場爆發 */
+  private queueField(warn: number, dmg: number) {
+    for (const ring of this.rings) {
+      if (ring.active) continue;
+      ring.active = true; ring.x = FENCER.ARENA_X; ring.z = FENCER.ARENA_Z; ring.t = warn; ring.r = FENCER.ARENA_R; ring.dmg = dmg; ring.big = true; ring.field = true;
+      this.fx.warnField(FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R, this.s3Safe, this.s3SafeCount, this.s3SafeR, warn, warn + 0.05, COLOR_WARN_BIG);
+      for (let k = 0; k < this.s3SafeCount; k++) this.fx.warnCircle(this.s3Safe[k].x, this.s3Safe[k].z, this.s3SafeR, 0.35, warn + 0.05, COLOR_SAFE);
+      return;
+    }
+  }
+
+  /** 玩家是否站在任一全場終幕安全圈內 (圈心距 ≤ 半徑) */
+  private inSafeZone(x: number, z: number): boolean {
+    for (let k = 0; k < this.s3SafeCount; k++) if (Math.hypot(this.s3Safe[k].x - x, this.s3Safe[k].z - z) <= this.s3SafeR) return true;
+    return false;
   }
 
   private updateRings(dt: number) {
@@ -1444,6 +1650,10 @@ export class FencerBoss {
       ring.active = false;
       const dx = p.x - ring.x;
       const dz = p.z - ring.z;
+      if (ring.field) {
+        this.fireField(ring.dmg);
+        continue;
+      }
       const inside = dx * dx + dz * dz <= (ring.r + 0.3) * (ring.r + 0.3) && p.y < 2.5;
       _fxPoint.set(ring.x, 0, ring.z);
       if (ring.big) {
@@ -1467,15 +1677,45 @@ export class FencerBoss {
     }
   }
 
+  /** 全場終幕爆發：安全圈外全場花瓣柱 + Boss 落點衝擊；不在安全圈內 (且未跳過 2.5m) 即命中 */
+  private fireField(dmg: number) {
+    const R = FENCER.ARENA_R;
+    // 花瓣柱：兩圈環狀分布 (避開安全圈)
+    for (let ring = 0; ring < 2; ring++) {
+      const rr = ring === 0 ? R * 0.4 : R * 0.78;
+      const n = ring === 0 ? 5 : 9;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + ring * 0.3;
+        const x = FENCER.ARENA_X + Math.sin(a) * rr;
+        const z = FENCER.ARENA_Z + Math.cos(a) * rr;
+        if (this.inSafeZone(x, z)) continue;
+        this.fx.pillar(x, z, 2.4, 0xff3d6e);
+      }
+    }
+    _fxPoint.set(this.s3Land.x, 0, this.s3Land.z);
+    comboFinisherFX.groundSlam(_fxPoint, 6, ROSE_STYLE, false, true);
+    comboFinisherFX.spinWave(_fxPoint, 7, 1.0, ROSE_STYLE, 0, 0, 0);
+    this.fx.petalBurst(this.s3Land.x, 0.4, this.s3Land.z, 90, 9, PETAL_PALETTE_ROSE, 5);
+    this.host.shake(0.5);
+    this.host.hitStop(0.06);
+    soundManager.playFinaleChime(_fxPoint);
+    const p = this.host.playerPos;
+    if (p.y >= 2.5 || this.inSafeZone(p.x, p.z)) return;
+    _dir.set(p.x - this.s3Land.x, 0, p.z - this.s3Land.z);
+    if (_dir.lengthSq() < 1e-4) _dir.set(Math.sin(this.rotY), 0, Math.cos(this.rotY));
+    _dir.normalize();
+    this.host.damagePlayer(dmg, _dir, 9, 6, '萬花華爾滋・終幕');
+  }
+
   // ===== 位置 / 動畫 =====
 
   private clampPoint(v: THREE.Vector3, r: number) {
-    const dx = v.x - FENCER.CENTER_X;
-    const dz = v.z - FENCER.CENTER_Z;
+    const dx = v.x - FENCER.ARENA_X;
+    const dz = v.z - FENCER.ARENA_Z;
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d <= r) return;
-    v.x = FENCER.CENTER_X + (dx / d) * r;
-    v.z = FENCER.CENTER_Z + (dz / d) * r;
+    v.x = FENCER.ARENA_X + (dx / d) * r;
+    v.z = FENCER.ARENA_Z + (dz / d) * r;
   }
 
   private clampToArena() {

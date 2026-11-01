@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
-// 玫瑰荊棘結界：開口圓柱牆 (下 7m 不透明荊棘紋、上 3m 加法發光帶，單一 shader 1 call)、
+// 玫瑰荊棘結界：開口圓柱牆 (高 12m：下 70% 不透明荊棘紋、上 30% 加法發光帶，單一 shader 1 call)、
 // 頂緣金色光環 + 地面荊棘環 (加法 1 call)、結界內草皮地板 + 中央玫瑰紋章 (1 call)。
 // 升降只動根節點 position.y (不改幾何)；碰撞一律由呼叫端以圓形解析式夾回 (fencerRules.clampToCircle)。
 
-const WALL_H = 10;
+export const WALL_H = 12;
+const WALL_SEGS = 48;
 const RISE_SEC = 1.5;
 const LOWER_SEC = 1.2;
 
@@ -20,7 +21,7 @@ uniform float uTime;
 varying vec2 vUv;
 void main() {
   float h = vUv.y;
-  float u = vUv.x * 32.0;
+  float u = vUv.x * 48.0;
   vec3 deep = vec3(0.32, 0.03, 0.09);
   vec3 gold = vec3(0.55, 0.36, 0.08);
   float vine = abs(sin(u * 3.14159 + h * 9.0 + uTime * 0.6)) ;
@@ -78,7 +79,7 @@ export class BossArena {
       side: THREE.DoubleSide, fog: false, toneMapped: false, transparent: true,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation
     });
-    const wall = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, WALL_H, 32, 1, true).translate(0, WALL_H / 2, 0), this.wallMat);
+    const wall = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, WALL_H, WALL_SEGS, 1, true).translate(0, WALL_H / 2, 0), this.wallMat);
     wall.renderOrder = 0;
 
     // 頂緣光環 + 地面荊棘環合併 (加法)
@@ -86,8 +87,8 @@ export class BossArena {
       vertexShader: RIM_VERT, fragmentShader: RIM_FRAG, uniforms: { uTime: { value: 0 } },
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false, blending: THREE.AdditiveBlending
     });
-    const top = new THREE.TorusGeometry(radius, 0.12, 6, 48).rotateX(Math.PI / 2).translate(0, WALL_H, 0);
-    const ground = new THREE.RingGeometry(radius - 0.6, radius - 0.05, 48, 1).rotateX(-Math.PI / 2).translate(0, 0.07, 0);
+    const top = new THREE.TorusGeometry(radius, 0.14, 6, 64).rotateX(Math.PI / 2).translate(0, WALL_H, 0);
+    const ground = new THREE.RingGeometry(radius - 0.8, radius - 0.05, 64, 1).rotateX(-Math.PI / 2).translate(0, 0.07, 0);
     const rimGeo = new THREE.BufferGeometry();
     const tA = top.toNonIndexed();
     const gA = ground.toNonIndexed();
@@ -115,10 +116,10 @@ export class BossArena {
 
   // 圓盤地板：依半徑 / 角度上色 (草皮、中央玫瑰花紋、外圈暗紅)
   private static buildFloor(r: number): THREE.BufferGeometry {
-    const geo = new THREE.CircleGeometry(r, 64, 0, Math.PI * 2);
-    // 增加環狀細分以承載頂點色紋章
-    const rings = 14;
-    const segs = 64;
+    const geo = new THREE.CircleGeometry(r, 96, 0, Math.PI * 2);
+    // 增加環狀細分以承載頂點色紋章 (R23：20 環 × 96 段 ≈ 2k 頂點)
+    const rings = 20;
+    const segs = 96;
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];

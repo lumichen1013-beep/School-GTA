@@ -52,7 +52,7 @@ const DEFEAT_RESTORE_AT = 1.2;
 const DEFEAT_END_AT = 2.6;
 const DUSK_SKY = 0x3a1222;
 const DUSK_FOG = 0x4a1830;
-const DUSK_FOG_DENSITY = 0.018;
+const DUSK_FOG_DENSITY = 0.014; // R23：對面牆約 40m 外，霧太濃會吃掉遠端預警
 const BATTLE_SHADOW_EXTENT = 20;
 const SPROUT_PETALS_GREEN = [0x6ccf5a, 0x8fd66b, 0x4fa642] as const;
 const SEPARATION = 0.95;
@@ -148,7 +148,7 @@ export class FencerBossFight {
     };
     world.colliders.push(sunflowerBox);
     this.sunflower.bindCollider(sunflowerBox); // 碰撞盒隨成長調整 (小苗幾乎不擋路)
-    this.arena = new BossArena(FENCER.CENTER_X, FENCER.CENTER_Z, FENCER.ARENA_R);
+    this.arena = new BossArena(FENCER.ARENA_X, FENCER.ARENA_Z, FENCER.ARENA_R);
     this.fx = new BossFX();
     this.boss = new FencerBoss(this.bossHost, this.fx);
     this.awakening = new PlayerAwakening(engine.scene, player);
@@ -340,8 +340,8 @@ export class FencerBossFight {
     hud.hidePrompt();
     player.isCinematicLocked = true;
     player.poisonTimer = 0;
-    // 玩家站到太陽花南側 11m 面向花
-    player.position.set(FENCER.CENTER_X, 0, FENCER.CENTER_Z + 11);
+    // 玩家站到太陽花南側 14m 面向花 (結界內)
+    player.position.set(FENCER.CENTER_X, 0, FENCER.CENTER_Z + 14);
     player.velocity.set(0, 0, 0);
     player.knockVelocity.set(0, 0, 0);
     player.isKnockedFlying = false;
@@ -528,14 +528,14 @@ export class FencerBossFight {
     if (this.arena.anim === 'DOWN') return;
     const player = this.ctx.player;
     const r = FENCER.ARENA_R - FENCER.PLAYER_CLAMP_PAD;
-    const dx = player.position.x - FENCER.CENTER_X;
-    const dz = player.position.z - FENCER.CENTER_Z;
+    const dx = player.position.x - FENCER.ARENA_X;
+    const dz = player.position.z - FENCER.ARENA_Z;
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d > r) {
       const nx = dx / d;
       const nz = dz / d;
-      player.position.x = FENCER.CENTER_X + nx * r;
-      player.position.z = FENCER.CENTER_Z + nz * r;
+      player.position.x = FENCER.ARENA_X + nx * r;
+      player.position.z = FENCER.ARENA_Z + nz * r;
       // 歸零徑向速度 (擊飛中也夾)
       const vr = player.velocity.x * nx + player.velocity.z * nz;
       if (vr > 0) { player.velocity.x -= nx * vr; player.velocity.z -= nz * vr; }
@@ -637,7 +637,7 @@ export class FencerBossFight {
     }
   }
 
-  // 回血：基礎 0.8/s + 脫戰 12/s (80% 以下)；HUD 綠環 / 腳下光圈 / 首次橫幅
+  // 回血：基礎 0.8/s + 脫戰 8/s (80% 以下)；HUD 綠環 / 腳下光圈 / 首次橫幅
   private updateRegen(delta: number) {
     const { player, hud, wantedSystem } = this.ctx;
     if (player.isDead) {
@@ -874,7 +874,7 @@ export class FencerBossFight {
       _vicMid.set(dx / d, d, dz / d);
       let nx = -dz / d;
       let nz = dx / d;
-      if ((p.x + nx - FENCER.CENTER_X) ** 2 + (p.z + nz - FENCER.CENTER_Z) ** 2 > (p.x - nx - FENCER.CENTER_X) ** 2 + (p.z - nz - FENCER.CENTER_Z) ** 2) { nx = -nx; nz = -nz; }
+      if ((p.x + nx - FENCER.ARENA_X) ** 2 + (p.z + nz - FENCER.ARENA_Z) ** 2 > (p.x - nx - FENCER.ARENA_X) ** 2 + (p.z - nz - FENCER.ARENA_Z) ** 2) { nx = -nx; nz = -nz; }
       _vicSide.set(nx, 0, nz);
     }
     const ux = _vicMid.x;
@@ -882,11 +882,11 @@ export class FencerBossFight {
     const back = 3.8 - Math.min(1, t / VICTORY_FIRST.end) * 0.8; // 緩慢推近
     _cam.set(p.x - ux * back + _vicSide.x * 1.7, 2.1, p.z - uz * back + _vicSide.z * 1.7);
     // 留在結界內 (看不到牆外)
-    const ox = _cam.x - FENCER.CENTER_X;
-    const oz = _cam.z - FENCER.CENTER_Z;
+    const ox = _cam.x - FENCER.ARENA_X;
+    const oz = _cam.z - FENCER.ARENA_Z;
     const od = Math.hypot(ox, oz);
     const maxR = FENCER.ARENA_R - 1.2;
-    if (od > maxR) { _cam.x = FENCER.CENTER_X + (ox / od) * maxR; _cam.z = FENCER.CENTER_Z + (oz / od) * maxR; }
+    if (od > maxR) { _cam.x = FENCER.ARENA_X + (ox / od) * maxR; _cam.z = FENCER.ARENA_Z + (oz / od) * maxR; }
     const ahead = Math.min(_vicMid.y * 0.6, 4);
     _look.set(p.x + ux * ahead, 1.0, p.z + uz * ahead);
     const blendFrom = VICTORY_FIRST.end - VICTORY_CAM_BLEND;
@@ -1076,5 +1076,5 @@ export class FencerBossFight {
   }
 }
 
-const ARENA_BOUND = { x: FENCER.CENTER_X, z: FENCER.CENTER_Z, r: FENCER.ARENA_R - 0.15 };
-const ARENA_CAMERA_BOUND = { x: FENCER.CENTER_X, z: FENCER.CENTER_Z, r: FENCER.ARENA_R - 0.4 };
+const ARENA_BOUND = { x: FENCER.ARENA_X, z: FENCER.ARENA_Z, r: FENCER.ARENA_R - 0.15 };
+const ARENA_CAMERA_BOUND = { x: FENCER.ARENA_X, z: FENCER.ARENA_Z, r: FENCER.ARENA_R - 0.4 };

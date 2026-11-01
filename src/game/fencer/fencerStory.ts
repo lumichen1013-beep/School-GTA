@@ -142,7 +142,7 @@ export const INTRO_REMATCH_BEATS = {
 export const PLAYER_AWAKEN_BUBBLE = '☀️ 向陽覺醒';
 
 /** 開戰後系統橫幅 (拆兩則，手機不捲動) */
-export const AWAKEN_BANNERS = ['☀️ 向陽覺醒！體力上限 200', '🍃 離他 8 公尺以上可快速回氣'] as const;
+export const AWAKEN_BANNERS = ['☀️ 向陽覺醒！體力上限 200', '🍃 離他 10 公尺以上可快速回氣'] as const;
 /** 第二則距第一則秒數 */
 export const AWAKEN_BANNER_GAP = 2.5;
 
@@ -189,7 +189,7 @@ export const MOVEMENT_BANNERS = ['', '🎵 第二樂章（2/3）・喘口氣回�
 export type HeartLineId = 'H1' | 'H2' | 'H3' | 'H4';
 export const HEART_LINES: Readonly<Record<HeartLineId, { text: string; ms: number }>> = {
   H1: { text: '☀️ 向陽之心：他在致意！現在打！', ms: 2000 },
-  H2: { text: '☀️ 向陽之心：退到 8 公尺外回氣！', ms: 2500 },
+  H2: { text: '☀️ 向陽之心：退到 10 公尺外回氣！', ms: 2500 },
   H3: { text: '🍃 向陽之心：深呼吸——光回來了。', ms: 1600 },
   H4: { text: '☀️ 向陽之心：我的光還在，別放棄！', ms: 2200 }
 };

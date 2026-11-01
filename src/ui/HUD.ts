@@ -26,6 +26,7 @@ import { qualityManager } from '../core/QualityManager';
 import { QUALITY_PRESETS } from '../core/quality';
 import { getDiagFlags } from '../core/diagFlags';
 import { fencerQuestText } from '../game/fencer/fencerStory';
+import { FENCER } from '../game/fencer/fencerRules';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
 import { setConcealedById } from './uiConceal';
 
@@ -1690,8 +1691,8 @@ export class HUD {
     if (!suspended) this.minimapDeltaAccumulator = 999;
   }
 
-  // 血量環脫戰快速回血：綠色呼吸 + 「+12/s」標籤 (狀態切換時才改 class)
-  public setHpRegen(on: boolean, label: string = '+12/s') {
+  // 血量環脫戰快速回血：綠色呼吸 + 「+8/s」標籤 (狀態切換時才改 class)
+  public setHpRegen(on: boolean, label: string = `+${FENCER.OOC_REGEN}/s`) {
     if (this.hpRegenOn === on) return;
     this.hpRegenOn = on;
     this.hpRingEl?.classList.toggle('hp-ring--regen', on);

@@ -4,10 +4,13 @@ import { SUNFLOWER_LINES, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS, SUNFL
 // 數值常數、太陽花台詞計數與再戰規則、劇情台詞頻率規則 (文字本身在 fencerStory.ts)、三管血與換樂章、戰鬥中回血 (基礎 + 脫離戰鬥快速回氣)、獎勵。
 
 export const FENCER = {
-  /** 操場草皮中央：結界中心 (= 太陽花 / Boss 現身點) */
+  /** 太陽花位置 (= 開場 Boss 現身點；操場草皮中央) */
   CENTER_X: -55,
   CENTER_Z: 34,
-  ARENA_R: 16,
+  /** 結界中心 (操場正中央)：半徑 23m 時兩座足球門 (z 5.9 / 54.1，碰撞盒深 ±0.4) 都在結界外，牆落在 PU 跑道平地上 */
+  ARENA_X: -55,
+  ARENA_Z: 30.5,
+  ARENA_R: 23,
   PLAYER_CLAMP_PAD: 0.6,
   BOSS_CLAMP_PAD: 0.8,
   /** 三管血 × 2100 (三個樂章) */
@@ -19,12 +22,12 @@ export const FENCER = {
   /** 基礎回血 (任何狀態都在回，受擊也不暫停) */
   BASE_REGEN: 0.8,
   /** 脫離戰鬥快速回血 (僅於上限 80% 以下) */
-  OOC_REGEN: 12,
+  OOC_REGEN: 8,
   OOC_CAP_RATIO: 0.8,
   /** 脫戰條件：N 秒內沒被 Boss 打中、N 秒內沒攻擊 Boss (遠程也算)、與 Boss 距離大於 M 公尺 */
   OOC_NO_HIT_SEC: 2,
   OOC_NO_ATTACK_SEC: 2,
-  OOC_MIN_DIST: 8,
+  OOC_MIN_DIST: 10,
   /** 太陽花：戳 10 次開戰；每次間隔冷卻防連點 */
   TAUNT_COUNT: 10,
   POKE_COOLDOWN: 1.0,
@@ -300,7 +303,7 @@ export function bossBarLabel(bar: number): string {
   return `花劍客・${MOVEMENT_NAMES[i]} (${i + 1}/${FENCER.BARS})`;
 }
 
-// ===== 戰鬥中回血：基礎 0.8/s + 脫離戰鬥 12/s (僅 80% 以下) =====
+// ===== 戰鬥中回血：基礎 0.8/s + 脫離戰鬥 8/s (僅 80% 以下) =====
 
 export interface RegenInput {
   hp: number;
@@ -312,7 +315,7 @@ export interface RegenInput {
 
 /**
  * 脫離戰鬥追蹤：記錄距上次被 Boss 打中 / 距上次攻擊 Boss 的秒數，判定脫戰並回傳本幀回血量。
- * 脫戰 = 2 秒內沒被打、2 秒內沒出手 (含遠程)、且距 Boss > 8m；換樂章過場一律算脫戰。
+ * 脫戰 = 2 秒內沒被打、2 秒內沒出手 (含遠程)、且距 Boss > 10m；換樂章過場一律算脫戰。
  */
 export class CombatRegen {
   public sinceHit = Infinity;
@@ -415,28 +418,28 @@ export function rayCircleDistance(ax: number, az: number, dx: number, dz: number
   return -b + Math.sqrt(Math.max(0, b * b - c));
 }
 
-/** S4 十字第 k 臂的朝向 (yaw：方向 = (sin, cos))；四臂間隔 90° */
-export function thornArmYaw(baseYaw: number, k: number): number {
-  return baseYaw + k * Math.PI * 0.5;
+/** S4 荊棘第 k 臂的朝向 (yaw：方向 = (sin, cos))；arms 臂等分一圈 (四臂間隔 90°、六臂 60°) */
+export function thornArmYaw(baseYaw: number, k: number, arms: number = 4): number {
+  return baseYaw + (k * Math.PI * 2) / arms;
 }
 
-/** S4 十字旋轉角：t 秒內由 baseYaw 線性轉 90° (dirSign = ±1)，t 超出範圍則夾住 */
-export function thornCrossYaw(baseYaw: number, dirSign: number, t: number, dur: number): number {
+/** S4 旋轉角：t 秒內由 baseYaw 線性轉一個臂距 (四臂 90°、六臂 60°；dirSign = ±1)，t 超出範圍則夾住 */
+export function thornCrossYaw(baseYaw: number, dirSign: number, t: number, dur: number, arms: number = 4): number {
   const k = dur > 0 ? Math.max(0, Math.min(1, t / dur)) : 1;
-  return baseYaw + dirSign * k * Math.PI * 0.5;
+  return baseYaw + (dirSign * k * Math.PI * 2) / arms;
 }
 
 /**
- * S4 玫瑰荊棘十字判定 (解析式)：以 (ax, az) 為中心、四臂各朝 yaw + k·90° 延伸到結界牆 (圓 cx, cz, r)，
- * reach (0~1) 為荊棘生長比例；玩家 (px, pz) 到任一臂線段距離 ≤ halfW 時回傳臂索引 (0~3)，否則 -1。
+ * S4 玫瑰荊棘十字判定 (解析式)：以 (ax, az) 為中心、arms 臂各朝 yaw + k·(360°/arms) 延伸到結界牆 (圓 cx, cz, r)，
+ * reach (0~1) 為荊棘生長比例；玩家 (px, pz) 到任一臂線段距離 ≤ halfW 時回傳臂索引，否則 -1。
  */
 export function thornCrossHit(
   ax: number, az: number, yaw: number, reach: number,
   cx: number, cz: number, r: number,
-  px: number, pz: number, halfW: number
+  px: number, pz: number, halfW: number, arms: number = 4
 ): number {
-  for (let k = 0; k < 4; k++) {
-    const a = thornArmYaw(yaw, k);
+  for (let k = 0; k < arms; k++) {
+    const a = thornArmYaw(yaw, k, arms);
     const dx = Math.sin(a);
     const dz = Math.cos(a);
     const len = rayCircleDistance(ax, az, dx, dz, cx, cz, r) * reach;
@@ -444,6 +447,19 @@ export function thornCrossHit(
     if (segmentPointDistance(ax, az, ax + dx * len, az + dz * len, px, pz) <= halfW) return k;
   }
   return -1;
+}
+
+/**
+ * S1 玫瑰衝擊波扇形判定：起點 (ox, oz)、單位方向 (ux, uz)、起點半寬 w0、半角正切 tan、長度 len；
+ * 點 (px, pz) 沿方向距離 along ∈ [-0.5, len] 且橫向距離 ≤ w0 + max(0, along)·tan 即在扇形內 (起點後方 0.5m 也算，涵蓋貼身)。
+ */
+export function inFan(ox: number, oz: number, ux: number, uz: number, w0: number, tan: number, len: number, px: number, pz: number): boolean {
+  const dx = px - ox;
+  const dz = pz - oz;
+  const along = dx * ux + dz * uz;
+  if (along < -0.5 || along > len) return false;
+  const lat = Math.abs(dx * uz - dz * ux);
+  return lat <= w0 + Math.max(0, along) * tan;
 }
 
 /**
