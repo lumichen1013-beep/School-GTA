@@ -443,7 +443,7 @@ export class Progression {
   };
 
   // 被動自動閃避 (升級獎勵，與主動技能分開)：已習得閃身步/狗熊哆嗦毛 (level >= 1) 時，被敵人攻擊命中瞬間
-  // 有 AUTO_DODGE_CHANCE (花劍客戰 AUTO_DODGE_CHANCE_BOSS) 機率自動施放對應等級的位移；使用獨立冷卻，不檢查也不消耗主動技能冷卻
+  // 有 AUTO_DODGE_CHANCE (花劍客戰 AUTO_DODGE_CHANCE_BOSS) 機率自動施放位移 (第一世界固定閃身步，第二世界依等級)；使用獨立冷卻，不檢查也不消耗主動技能冷卻
   // 成功回傳 true，呼叫端應視為完全閃掉此次攻擊
   public readonly tryAutoDodge = (): boolean => {
     const { player, wantedSystem } = this.ctx;
@@ -453,7 +453,8 @@ export class Progression {
     const chance = this.ctx.fencerBossFight?.isActive ? AUTO_DODGE_CHANCE_BOSS : AUTO_DODGE_CHANCE;
     if (Math.random() >= chance) return false;
     this.autoDodgeCooldownTimer = AUTO_DODGE_COOLDOWN;
-    const isAdvanced = this.dodgeSkillLevel === 2;
+    // 第一世界 (校園含花劍客戰) 一律自動閃身步，不受已學哆嗦毛影響；第二世界維持依等級
+    const isAdvanced = this.dodgeSkillLevel === 2 && this.ctx.currentWorldType !== 'CAMPUS';
     // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行位移，避免中斷招式
     if (!player.isLunging) {
       if (isAdvanced) player.performBearShake(this.ctx.activeColliders);
