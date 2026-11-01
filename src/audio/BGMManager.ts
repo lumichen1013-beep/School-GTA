@@ -208,6 +208,16 @@ export class BGMManager {
     this.masterGain.gain.linearRampToValueAtTime(0.42, now + durationSec);
   }
 
+  /** 完全靜音 sec 秒後淡回 (花劍客第 10 戳：靜一拍再爆開) */
+  public silence(sec: number) {
+    if (!this.masterGain || !this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.linearRampToValueAtTime(0.0001, now + 0.08);
+    this.masterGain.gain.setValueAtTime(0.0001, now + Math.max(0.1, sec - 0.4));
+    this.masterGain.gain.linearRampToValueAtTime(0.42, now + sec);
+  }
+
   // Precise Web Audio lookahead scheduler
   private scheduler() {
     if (!this.ctx) return;

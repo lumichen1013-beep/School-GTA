@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { soundManager } from '../../audio/SoundEffects';
+import { bgmManager } from '../../audio/BGMManager';
+import { getFxTier } from '../../effects/fxQuality';
 import { slashFX } from '../../effects/SlashFX';
 import { comboFinisherFX } from '../../effects/ComboFinisherFX';
 import { swingTrail } from '../../effects/SwingTrail';
@@ -29,7 +31,7 @@ import {
   MOVEMENT_BANNERS, DAWN_BOSS_LINE, FINAL_LOW_BOSS_LINE, DAWN_AT, FINAL_LOW_AT, HEART_LINES, HEART_TEACH_2, HEART_LOW_HP,
   HEART_CRITICAL_HP, VICTORY_FIRST_BEATS, VICTORY_SLEEPY_LINE, VICTORY_BANNER, PLAYER_WIN_BUBBLE,
   REMATCH_WIN_BOSS_LINE, DISCOVER_BANNER, DEFEAT_BOSS_LINES_BY_BAR, RESPAWN_HEART_LINES_BY_BAR, SUNFLOWER_AFTER_LOSS_LINE, SUNFLOWER_AFTER_LOSS_RANGE,
-  SUNFLOWER_WATCH_RANGE, SUNFLOWER_DAILY_SEC, POKE_PROMPT, DODGE_TEACHER_EGG, BROADCAST,
+  SUNFLOWER_WATCH_RANGE, SUNFLOWER_DAILY_SEC, POKE_PROMPT, DODGE_TEACHER_EGG, BROADCAST, POKE_DUSK_TINT, POKE10_SILENCE_SEC, POKE10_INTRO_DELAY,
   type DailyLine, type HeartLineId
 } from './fencerStory';
 import { loadFencerSave, storeFencerSave, STORY_SEEN } from './fencerSave';
@@ -166,6 +168,8 @@ export class FencerBossFight {
   private victoryDawn = false;
   private readonly music = { movement: 0, dawn: false, interlude: false };
   private readonly voice = new FencerVoiceStrip();
+  private duskTintEl: HTMLDivElement | null = null;
+  private introDelay = 0;            // 第 10 戳：靜一拍後才開場
   private typeChars: string[] = [];   // 打字機：目前字幕 (code points)
   private typeShown = 0;              // 已顯示字數 (浮點)
   private typeDrawn = -1;
@@ -354,7 +358,7 @@ export class FencerBossFight {
   // ===== 太陽花互動 =====
 
   public canPoke(pos: THREE.Vector3): boolean {
-    if (!this.initialized || this.phase !== 'IDLE' || !this.sunflower.root.visible) return false;
+    if (!this.initialized || this.phase !== 'IDLE' || this.introDelay > 0 || !this.sunflower.root.visible) return false;
     const { player, racingGame, tennisGame, campus } = this.ctx;
     if (player.isDead || player.isSwimming || this.ctx.currentRidingBike) return false;
     if (racingGame.isRacingTrack || racingGame.isSwimmingRace || tennisGame.tennisState !== 'IDLE' || campus.elevatorTransition) return false;
@@ -401,13 +405,49 @@ export class FencerBossFight {
     this.sunflower.say(res.line.text, res.startFight ? 2.2 : res.daily ? SUNFLOWER_DAILY_SEC : 3.0);
     if (res.line.reaction === 'STIFFEN_HUM') soundManager.playBarrierHum(this.sunflower.position);
     else soundManager.playPetalBloom(this.sunflower.position);
+    // 第 7~9 下：暮色從畫面四周滲出 (一閃即退)；第 9 下 BGM 壓低一拍
+    const tint = POKE_DUSK_TINT[res.index];
+    if (tint) this.duskPulse(tint);
+    if (res.index === 9) bgmManager.duckVolume(1.2);
     // 首勝後日常台詞：溫情句 2.6s 後接話；溫情句只出現一次 (存檔)
     this.followUp = res.followUp;
     this.followUpTimer = SUNFLOWER_DAILY_SEC;
     if (res.followUp || res.index > 0) this.persist();
     // 第 10 句不另出橫幅 (開場字幕第一拍即同一句；過場期間橫幅一律暫存)
-    if (res.startFight) this.startIntro();
+    if (res.startFight) {
+      if (res.index === FENCER.TAUNT_COUNT) {
+        // 第 10 下：BGM 靜音、靜一拍再爆開 (期間鎖操作)
+        bgmManager.silence(POKE10_SILENCE_SEC);
+        this.duskPulse(0.85);
+        this.introDelay = POKE10_INTRO_DELAY;
+        this.ctx.player.isCinematicLocked = true;
+        this.ctx.hud.hidePrompt();
+      } else this.startIntro();
+    }
     return true;
+  }
+
+  /** 暮色滲出：畫面四周暮紅暈影 (預建常駐合成層，只動 opacity) */
+  private duskPulse(k: number) {
+    const el = this.ensureDuskTintEl();
+    if (!el) return;
+    el.style.transition = 'none';
+    el.style.opacity = String(k);
+    void el.offsetWidth;
+    el.style.transition = 'opacity 1.4s ease-out';
+    el.style.opacity = '0';
+  }
+
+  private ensureDuskTintEl(): HTMLDivElement | null {
+    if (typeof document === 'undefined' || !document.body) return null;
+    if (!this.duskTintEl) {
+      this.duskTintEl = document.createElement('div');
+      this.duskTintEl.setAttribute('aria-hidden', 'true');
+      this.duskTintEl.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:8990;opacity:0;will-change:opacity;'
+        + 'background:radial-gradient(ellipse at center, rgba(140,12,48,0) 30%, rgba(140,12,48,0.7) 70%, rgba(80,4,28,0.95) 100%);';
+      document.body.appendChild(this.duskTintEl);
+    }
+    return this.duskTintEl;
   }
 
   // ===== 開戰過場 =====
@@ -537,6 +577,50 @@ export class FencerBossFight {
       } else if (id === 'BLEND') {
         this.setCamStage('BLEND');
       }
+    } else if (this.cutKind === 'TRANSITION') {
+      this.onTransitionEvent(id);
+    }
+  }
+
+  // 換樂章演出：〈舊夢〉老師的金色記憶剪影 (重用分身網格) 埋種子、插劍；〈落日〉一圈嫩芽冒出又被壓平
+  private onTransitionEvent(id: string) {
+    if (this.skipping && id !== 'MEMORY_OFF') return;
+    const b = this.boss.position;
+    const p = this.ctx.player.position;
+    let ux = p.x - b.x;
+    let uz = p.z - b.z;
+    const d = Math.hypot(ux, uz) || 1;
+    ux /= d; uz /= d;
+    // 記憶剪影站在 Boss 側邊 3m、面向玩家；種子在剪影前方 1m
+    const mx = b.x - uz * 3 + ux * 0.6;
+    const mz = b.z + ux * 3 + uz * 0.6;
+    const sx = mx + ux * 1.1;
+    const sz = mz + uz * 1.1;
+    if (id === 'MEMORY') {
+      this.boss.showMemory(mx, mz, Math.atan2(p.x - mx, p.z - mz), getFxTier() === 'low');
+      soundManager.playPetalBloom(_v.set(mx, 1, mz));
+    } else if (id === 'SEED') {
+      this.fx.pillar(sx, sz, 0.35, 0xffd27a);
+      this.fx.petalBurst(sx, 0.15, sz, 18, 1.2, PETAL_PALETTE_SUN, 1.0, 0.6);
+      soundManager.playFinaleChime(_v.set(sx, 0.2, sz));
+    } else if (id === 'SWORD') {
+      const wx = sx - uz * 0.5;
+      const wz = sz + ux * 0.5;
+      this.fx.pillar(wx, wz, 0.12, 0xfff0c8);
+      slashFX.hitFlash(wx, 0.6, wz, 0xfff0c8);
+      soundManager.playRapierThrust(_v.set(wx, 0.4, wz));
+    } else if (id === 'MEMORY_OFF') {
+      this.boss.hideMemory();
+    } else if (id === 'SPROUT') {
+      // 嫩芽在 Boss 四周冒出 → 暮色壓下 (向下的玫瑰花瓣)
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const x = b.x + Math.sin(a) * 2.6;
+        const z = b.z + Math.cos(a) * 2.6;
+        this.fx.petalBurst(x, 0.1, z, 8, 0.8, SPROUT_PETALS_GREEN, 1.2, 0.6);
+      }
+      this.fx.petalBurst(b.x, 3.2, b.z, 40, 3, PETAL_PALETTE_ROSE, -1.5);
+      soundManager.playBarrierHum(_v.set(b.x, 0, b.z));
     }
   }
 
@@ -653,8 +737,10 @@ export class FencerBossFight {
     if (!this.canSkip) return;
     this.cutInput.reset();
     if (this.cutKind === 'TRANSITION') {
+      this.skipping = true; // 跳過時不補放記憶演出
       this.story?.finish();
       this.endTransitionCut();
+      this.skipping = false;
     } else if (this.phase === 'INTRO') {
       this.skippedIntro = true;
       this.skipping = true;
@@ -774,6 +860,12 @@ export class FencerBossFight {
   public update(delta: number) {
     if (!this.initialized) return;
     if (this.phase === 'IDLE') {
+      if (this.introDelay > 0) {
+        this.introDelay -= delta;
+        this.sunflower.update(delta);
+        if (this.introDelay <= 0) { this.introDelay = 0; this.startIntro(); }
+        return;
+      }
       if (this.followUp) {
         this.followUpTimer -= delta;
         if (this.followUpTimer <= 0) {
@@ -1195,6 +1287,7 @@ export class FencerBossFight {
     this.cutKind = null;
     this.cutInput.reset();
     if (this.pushT < 1) { player.position.copy(_pushTo); player.mesh.position.copy(player.position); this.pushT = 1; }
+    this.boss.hideMemory();
     this.boss.endTransitionNow();
     player.isCinematicLocked = false;
     this.setCutsceneUi(false);
@@ -1428,6 +1521,7 @@ export class FencerBossFight {
 
   /** 立即中止 (切換世界 / 復活保險)：同一幀全部還原，不播降下動畫 */
   public abort() {
+    if (this.introDelay > 0) { this.introDelay = 0; this.ctx.player.isCinematicLocked = false; }
     if (!this.initialized || this.phase === 'IDLE') return;
     const wasFighting = this.phase !== 'VICTORY';
     this.restorePlayerHp(this.phase === 'VICTORY');
@@ -1622,6 +1716,7 @@ export class FencerBossFight {
   public prewarm(compile: () => void) {
     if (!this.initialized) return;
     this.ensureFlashEl();
+    this.ensureDuskTintEl();
     this.voice.ensure();
     this.rapierProp.visible = true; // 細劍材質隨下列任一次編譯預熱
     this.arena.prewarm(compile);

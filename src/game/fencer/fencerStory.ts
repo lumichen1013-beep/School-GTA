@@ -11,7 +11,8 @@ import type { StoryLine } from './storyPlayer';
 //   開場：PETALS 花心爆花瓣、FLASH 白閃 + 清場 + 結界升起、WALL_UP 結界升滿卸載校園、BOSS 花劍客現身、AWAKEN 向陽覺醒、BLEND 鏡頭混回玩家身後
 //   首勝：FACE 玩家轉向回禮、DISSOLVE Boss 化花瓣 (天色轉晨金)、OUTRO 光飛回太陽花、RESTORE 恢復校園、RAPIER 細劍自土裡升起、
 //         FLOWER 太陽花轉頭看玩家、BLEND 鏡頭混回
-//   換樂章：無 (Boss 回中央由固定前導 TRANSITION_LEAD_SEC 處理；天色在過場開始時轉往下一段)
+//   換樂章：MEMORY 老師的金色記憶剪影浮現、SEED 埋下種子 (金光點)、SWORD 佩劍插地 (光影)、MEMORY_OFF 剪影散成花瓣、
+//           SPROUT 一圈嫩芽冒出又被壓平 (Boss 回中央由固定前導 TRANSITION_LEAD_SEC 處理；天色在過場開始時轉往下一段；短版無事件)
 // 世界觀 (劇情 v2，fencer-story-v2-proposal.md)：爵士老師退休時在操場埋下種子、把佩劍插在一旁當支架；
 //   種子三十年來每年冒芽就被踩扁 / 割掉，靠「被注視」才會長大 → 玩家戳十下 = 十次注視；三十年的暮色借老師的模樣成形 = 向日爵士；
 //   向陽之心 = 那朵花最後的好脾氣 (它的光 = 戰鬥中幫玩家回血)；首勝時細劍從土裡升起。
@@ -212,17 +213,17 @@ export const BOSS_BARK_SEC = 2.4;
 export const TRANSITION_BEATS: readonly [readonly StoryBeat[], readonly StoryBeat[]] = [
   [
     { who: 'BOSS', text: '……好劍。有點意思。' },
-    { who: 'BOSS', text: '三十年前，這裡有個西洋劍社。' },
+    { who: 'BOSS', text: '三十年前，這裡有個西洋劍社。', events: [{ id: 'MEMORY', at: 0.3 }] },
     { who: 'BOSS', text: '指導老師總戴高帽，人稱『爵士』。' },
-    { who: 'BOSS', text: '他退休那天，在這裡埋了一顆種子。' },
-    { who: 'BOSS', text: '還把佩劍插在一旁，替它當支架。' },
-    { who: 'BOSS', text: '他說：『替我看著操場。』' },
+    { who: 'BOSS', text: '他退休那天，在這裡埋了一顆種子。', events: [{ id: 'SEED', at: 0.9 }] },
+    { who: 'BOSS', text: '還把佩劍插在一旁，替它當支架。', events: [{ id: 'SWORD', at: 0.7 }] },
+    { who: 'BOSS', text: '他說：『替我看著操場。』', events: [{ id: 'MEMORY_OFF', at: -0.3 }] },
     { text: '☀️「……那顆種子，就是我們。」' },
     { who: 'BOSS', text: '第二樂章〈舊夢〉——請。' }
   ],
   [
     { who: 'BOSS', text: '……閣下一直看著我呢。' },
-    { who: 'BOSS', text: '每年春天，我都想長大給他看。' },
+    { who: 'BOSS', text: '每年春天，我都想長大給他看。', events: [{ id: 'SPROUT', at: 0.5 }] },
     { who: 'BOSS', text: '然後割草機來了。一年，又一年。' },
     { who: 'BOSS', text: '放學後，大家都背對我離開。' },
     { text: '☀️「所以你戳我第一下的時候……」' },
@@ -237,6 +238,11 @@ export const TRANSITION_BEATS_SHORT: readonly [readonly StoryBeat[], readonly St
   [TRANSITION_BEATS[0][0], TRANSITION_BEATS[0][TRANSITION_BEATS[0].length - 1]],
   [TRANSITION_BEATS[1][0], TRANSITION_BEATS[1][TRANSITION_BEATS[1].length - 1]]
 ];
+
+/** 戳第 7 / 8 / 9 下：畫面四周泛起暮紅 (不透明度)；第 10 下：BGM 靜音秒數、開場延遲秒數 (靜一拍再爆開) */
+export const POKE_DUSK_TINT: Readonly<Record<number, number>> = { 7: 0.3, 8: 0.45, 9: 0.6 };
+export const POKE10_SILENCE_SEC = 1.9;
+export const POKE10_INTRO_DELAY = 0.4;
 
 /** 換樂章系統橫幅 (index = 進入的樂章) */
 export const MOVEMENT_BANNERS = ['', '🎵 第二樂章〈舊夢〉・喘口氣回血', '🎵 終樂章〈落日〉・喘口氣回血'] as const;

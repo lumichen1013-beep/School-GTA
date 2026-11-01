@@ -356,6 +356,7 @@ export class FencerBoss {
   private readonly cloneMat: THREE.ShaderMaterial;
   private cloneDissolve = 1;
   private cloneFade = 0;         // >0 淡入、<0 淡出 (每秒)
+  private memoryOn = false;      // 分身網格目前當作〈舊夢〉記憶剪影
   private s5Round = 0;
   private s5Hit = false;
   private s5Windup = S5_FIRST_WINDUP;
@@ -591,6 +592,7 @@ export class FencerBoss {
     }
     this.cloneFade = 0;
     this.cloneDissolve = 1;
+    this.memoryOn = false;
   }
 
   private resetHats() {
@@ -736,6 +738,43 @@ export class FencerBoss {
   /** 宿主設定本次換樂章過場總長 (擊破亮相 + 回中央 + 台詞) */
   public setTransitionDuration(sec: number) {
     this.transitionSec = Math.max(FENCER.BAR_BREAK_POSE_SEC + 0.5, sec);
+  }
+
+  /** 分身剪影配色：花影 (紫) / 記憶 (老師的金色剪影) */
+  private setCloneTint(memory: boolean) {
+    (this.cloneMat.uniforms.uCore.value as THREE.Color).setHex(memory ? 0x5a3a0a : 0x3d0a52);
+    (this.cloneMat.uniforms.uRim.value as THREE.Color).setHex(memory ? 0xffd27a : 0xff3fd2);
+  }
+
+  /**
+   * 換樂章〈舊夢〉的記憶剪影：重用 S5 分身網格 (已預建 / 預熱，0 新 draw call) 改成金色、戴高帽的老師，
+   * 站在 (x, z) 面向 yaw；低畫質只撒花瓣。換樂章期間 S5 不會出招，不衝突
+   */
+  public showMemory(x: number, z: number, yaw: number, lowTier: boolean) {
+    this.fx.petalTornado(x, z, 0.9, lowTier ? 16 : 36, PETAL_PALETTE_SUN, 0.8);
+    if (lowTier) return;
+    this.setCloneTint(true);
+    this.clone.position.set(x, 0, z);
+    this.cloneYaw = yaw;
+    this.clone.rotation.set(0, yaw, 0);
+    this.clone.visible = true;
+    this.cloneDissolve = 1;
+    this.cloneFade = 1.2;
+    this.memoryOn = true;
+  }
+
+  /** 記憶剪影散成花瓣 */
+  public hideMemory() {
+    if (!this.memoryOn) return;
+    this.memoryOn = false;
+    if (this.clone.visible) {
+      this.fx.petalBurst(this.clone.position.x, 1.1, this.clone.position.z, 30, 3, PETAL_PALETTE_SUN, 2.5);
+      this.cloneFade = -1.5;
+    }
+  }
+
+  public get memoryVisible(): boolean {
+    return this.memoryOn && this.clone.visible;
   }
 
   /** 宿主結束換樂章過場 (跳過 / 台詞播完) */
@@ -1504,6 +1543,7 @@ export class FencerBoss {
     if (this.clone.visible) this.fx.petalBurst(this.clone.position.x, 1.1, this.clone.position.z, 14, 3, PETAL_PALETTE_SHADOW, 2);
     this.clone.position.set(_clonePos.x, 0, _clonePos.z);
     this.clone.rotation.set(0, this.cloneYaw, 0);
+    this.setCloneTint(false);
     this.clone.visible = true;
     this.cloneDissolve = 1;
     this.cloneFade = first ? 3 : 6;

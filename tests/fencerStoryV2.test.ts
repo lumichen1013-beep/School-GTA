@@ -122,3 +122,49 @@ describe('換樂章長度 (宿主在擊破回呼中設定)', () => {
     expect(boss.transitionTotal).toBe(FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC);
   });
 });
+
+describe('三期演出：記憶剪影 / 嫩芽 / 戳戳暮色', async () => {
+  const STORY = await import('../src/game/fencer/fencerStory');
+  const ids = (lines: readonly { events?: readonly { id: string }[] }[]) => lines.flatMap((l) => (l.events ?? []).map((e) => e.id));
+
+  it('換樂章完整版掛演出事件 (舊夢：剪影 → 種子 → 插劍 → 散去；落日：嫩芽)，短版沒有', () => {
+    expect(ids(STORY.TRANSITION_BEATS[0])).toEqual(['MEMORY', 'SEED', 'SWORD', 'MEMORY_OFF']);
+    expect(ids(STORY.TRANSITION_BEATS[1])).toEqual(['SPROUT']);
+    for (const lines of STORY.TRANSITION_BEATS_SHORT) expect(ids(lines)).toEqual([]);
+  });
+
+  it('戳第 7~9 下暮色漸強、第 10 下靜一拍', () => {
+    expect(STORY.POKE_DUSK_TINT[7]).toBeLessThan(STORY.POKE_DUSK_TINT[8]);
+    expect(STORY.POKE_DUSK_TINT[8]).toBeLessThan(STORY.POKE_DUSK_TINT[9]);
+    expect(STORY.POKE_DUSK_TINT[6]).toBeUndefined();
+    expect(STORY.POKE10_INTRO_DELAY).toBeGreaterThan(0.2);
+    expect(STORY.POKE10_INTRO_DELAY).toBeLessThan(STORY.POKE10_SILENCE_SEC);
+  });
+
+  it('記憶剪影：重用分身網格改金色、淡入；散去後隱藏；低畫質只撒花瓣', async () => {
+    const THREE = await import('three');
+    const { FencerBoss } = await import('../src/entities/FencerBoss');
+    const { BossFX } = await import('../src/effects/BossFX');
+    const { FENCER } = await import('../src/game/fencer/fencerRules');
+    const host = {
+      playerPos: new THREE.Vector3(FENCER.ARENA_X, 0, FENCER.ARENA_Z + 8), playerVel: new THREE.Vector3(), playerDead: false, isTouch: false,
+      playerOutOfCombat: false, damagePlayer: () => undefined, shake: () => undefined, hitStop: () => undefined, onBossDamaged: () => undefined
+    };
+    const boss = new FencerBoss(host, new BossFX());
+    boss.resetForFight(FENCER.ARENA_X, FENCER.ARENA_Z);
+    boss.startFight(99);
+    const before = boss.container.children.length;
+    boss.showMemory(FENCER.ARENA_X + 3, FENCER.ARENA_Z, 0, false);
+    expect(boss.memoryVisible).toBe(true);
+    expect(boss.clone.visible).toBe(true);
+    const mat = boss.clone.material as THREE.ShaderMaterial;
+    expect((mat.uniforms.uRim.value as THREE.Color).getHex()).toBe(0xffd27a);
+    expect(boss.container.children.length).toBe(before); // 沒有新增物件
+    boss.hideMemory();
+    for (let i = 0; i < 20; i++) boss.update(0.1);
+    expect(boss.clone.visible).toBe(false);
+    // 低畫質：只撒花瓣
+    boss.showMemory(FENCER.ARENA_X + 3, FENCER.ARENA_Z, 0, true);
+    expect(boss.clone.visible).toBe(false);
+  });
+});
