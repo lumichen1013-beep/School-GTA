@@ -18,12 +18,13 @@ void main() {
 // 下 70% 不透明：深紅→暗金漸層 + 滾動荊棘紋；上 30% 加法發光帶 (以 alpha 輸出，混色 ONE / ONE_MINUS_SRC_ALPHA)
 const WALL_FRAG = /* glsl */`
 uniform float uTime;
+uniform float uDawn;
 varying vec2 vUv;
 void main() {
   float h = vUv.y;
   float u = vUv.x * 48.0;
-  vec3 deep = vec3(0.32, 0.03, 0.09);
-  vec3 gold = vec3(0.55, 0.36, 0.08);
+  vec3 deep = mix(vec3(0.32, 0.03, 0.09), vec3(0.45, 0.2, 0.08), uDawn);
+  vec3 gold = mix(vec3(0.55, 0.36, 0.08), vec3(0.85, 0.62, 0.22), uDawn);
   float vine = abs(sin(u * 3.14159 + h * 9.0 + uTime * 0.6)) ;
   vine = smoothstep(0.92, 1.0, vine) + smoothstep(0.94, 1.0, abs(sin(u * 3.14159 * 0.5 - h * 7.0 - uTime * 0.4)));
   float thorn = step(0.82, fract(u * 2.0 + h * 14.0)) * step(0.6, fract(h * 9.0 + u * 0.3)) * 0.6;
@@ -34,7 +35,7 @@ void main() {
   } else {
     float k = (h - 0.7) / 0.3;
     float a = (1.0 - k) * (0.75 + 0.25 * sin(uTime * 2.0 + vUv.x * 60.0));
-    vec3 col = mix(vec3(1.0, 0.45, 0.35), vec3(1.0, 0.85, 0.4), k);
+    vec3 col = mix(mix(vec3(1.0, 0.45, 0.35), vec3(1.0, 0.82, 0.35), uDawn), vec3(1.0, 0.85, 0.4), k);
     gl_FragColor = vec4(col * a, a * 0.6);
   }
 }`;
@@ -42,10 +43,11 @@ void main() {
 const RIM_VERT = WALL_VERT;
 const RIM_FRAG = /* glsl */`
 uniform float uTime;
+uniform float uDawn;
 varying vec2 vUv;
 void main() {
   float a = 0.7 + 0.3 * sin(uTime * 3.0 + vUv.x * 50.0);
-  gl_FragColor = vec4(vec3(1.0, 0.78, 0.35) * a, a);
+  gl_FragColor = vec4(mix(vec3(1.0, 0.78, 0.35), vec3(1.0, 0.95, 0.75), uDawn) * a * (1.0 + 0.4 * uDawn), a);
 }`;
 
 function easeOutBack(t: number): number {
@@ -75,7 +77,7 @@ export class BossArena {
     this.group.position.set(cx, 0, cz);
 
     this.wallMat = new THREE.ShaderMaterial({
-      vertexShader: WALL_VERT, fragmentShader: WALL_FRAG, uniforms: { uTime: { value: 0 } },
+      vertexShader: WALL_VERT, fragmentShader: WALL_FRAG, uniforms: { uTime: { value: 0 }, uDawn: { value: 0 } },
       side: THREE.DoubleSide, fog: false, toneMapped: false, transparent: true,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation
     });
@@ -84,7 +86,7 @@ export class BossArena {
 
     // 頂緣光環 + 地面荊棘環合併 (加法)
     this.rimMat = new THREE.ShaderMaterial({
-      vertexShader: RIM_VERT, fragmentShader: RIM_FRAG, uniforms: { uTime: { value: 0 } },
+      vertexShader: RIM_VERT, fragmentShader: RIM_FRAG, uniforms: { uTime: { value: 0 }, uDawn: { value: 0 } },
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false, blending: THREE.AdditiveBlending
     });
     const top = new THREE.TorusGeometry(radius, 0.14, 6, 64).rotateX(Math.PI / 2).translate(0, WALL_H, 0);
@@ -181,6 +183,13 @@ export class BossArena {
   }
 
   /** 地板顯示 (卸載校園草皮時接手) */
+  /** 黎明程度 0~1 (牆與頂緣光環由暮紅轉晨金；只改 uniform) */
+  public setDawn(k: number) {
+    const v = Math.max(0, Math.min(1, k));
+    this.wallMat.uniforms.uDawn.value = v;
+    this.rimMat.uniforms.uDawn.value = v;
+  }
+
   public setFloorVisible(v: boolean) {
     this.floor.visible = v;
   }

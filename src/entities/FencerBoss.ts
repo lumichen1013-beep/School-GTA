@@ -827,6 +827,7 @@ export class FencerBoss {
     if (this.host.playerDead) return;
     if (this.move === 'NONE' && this.movePause <= 0 && (this.closeTimer > 1.2 || this.hitsInLast(2) >= 5)) {
       this.startBackflip();
+      this.host.onCue?.('BACKFLIP');
       this.closeTimer = 0;
       this.recentHits.fill(-99);
       return;

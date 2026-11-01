@@ -87,7 +87,7 @@ const buildPoiSlots = (): PoiSlot[] => [
   // 中央花台邊緣 (背對花台坐在邊緣)
   ...[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((a) => ({
     x: Math.sin(a) * 4.7, z: 15 + Math.cos(a) * 4.7, faceX: Math.sin(a) * 9, faceZ: 15 + Math.cos(a) * 9,
-    hold: 'SIT' as NPCIdleBehavior, holdTime: 10, sitBack: 0.55, lines: ['今天天氣真好～', '花開得好漂亮', '午休好短喔', RUMOR.bench], occupant: null
+    hold: 'SIT' as NPCIdleBehavior, holdTime: 10, sitBack: 0.55, lines: ['今天天氣真好～', '花開得好漂亮', '午休好短喔', RUMOR.bench, RUMOR.benchLore], occupant: null
   })),
   // 洗手台 (面向洗手台)
   ...mkSlots([[18.5, -6.3], [21.5, -6.3]], 20, -5, 'WASH', 3.5, ['洗手洗手～', '水好冰！'])

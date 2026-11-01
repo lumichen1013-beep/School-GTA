@@ -1,5 +1,6 @@
 // 花劍客劇情進度存檔 (localStorage，獨立鍵；專案原本沒有 Progression 存檔，零用錢等仍為單次遊玩)：
-// 開戰次數 (= 任務揭露段)、首勝、勝場、上場結果、10 句進度、溫情句已播、閃身步老師彩蛋已看。
+// 開戰次數 (= 任務揭露段)、首勝、勝場、上場結果、10 句進度、溫情句已播、閃身步老師彩蛋已看、
+// 上場倒下 / 離開時的樂章、劇情已看位元 (換樂章完整版 / 回血教學)、社旗收線廣播已播。
 // 解析容錯：缺欄位 / 型別錯 / 壞 JSON 一律回預設值 (舊存檔或首次啟動 = 全新進度)。
 
 import type { FightResult } from './fencerRules';
@@ -17,10 +18,19 @@ export interface FencerSave {
   dodgeEggShown: boolean;
   /** 已發現怪苗 (第一次戳到)；發現前大地圖 / 任務看板不顯示 */
   discovered: boolean;
+  /** 上一場結束時所在樂章 (0~2；戰敗台詞 / 再戰開場依此挑選) */
+  lastBar: number;
+  /** 劇情已看位元：STORY_SEEN.* */
+  storySeen: number;
+  /** 首勝後社旗收線廣播已播 */
+  flagNews: boolean;
 }
 
+/** 劇情已看位元 */
+export const STORY_SEEN = { TRANSITION_1: 1, TRANSITION_2: 2, REGEN_TAUGHT: 4 } as const;
+
 export function defaultFencerSave(): FencerSave {
-  return { fightsStarted: 0, defeated: false, wins: 0, lastResult: 'NONE', pokes: 0, warmLineShown: false, dodgeEggShown: false, discovered: false };
+  return { fightsStarted: 0, defeated: false, wins: 0, lastResult: 'NONE', pokes: 0, warmLineShown: false, dodgeEggShown: false, discovered: false, lastBar: 0, storySeen: 0, flagNews: false };
 }
 
 const int = (v: unknown, max: number): number => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(max, Math.floor(v)) : 0);
@@ -44,6 +54,9 @@ export function parseFencerSave(raw: string | null | undefined): FencerSave {
   s.warmLineShown = bool(o.warmLineShown);
   s.dodgeEggShown = bool(o.dodgeEggShown);
   s.discovered = bool(o.discovered);
+  s.lastBar = int(o.lastBar, FENCER.BARS - 1);
+  s.storySeen = int(o.storySeen, 7);
+  s.flagNews = bool(o.flagNews);
   s.lastResult = o.lastResult === 'WIN' || o.lastResult === 'LOSS' ? o.lastResult : 'NONE';
   // 一致性：贏過 → 至少開戰 1 次、勝場 ≥ 1；開戰過但沒結果 (中途關閉) → 視為敗；從未開戰 → 無結果
   if (s.defeated) {
@@ -52,7 +65,7 @@ export function parseFencerSave(raw: string | null | undefined): FencerSave {
   }
   if (s.fightsStarted > 0 && s.lastResult === 'NONE') s.lastResult = s.defeated ? 'WIN' : 'LOSS';
   if (s.fightsStarted === 0) s.lastResult = 'NONE';
-  if (!s.defeated) s.warmLineShown = false;
+  if (!s.defeated) { s.warmLineShown = false; s.flagNews = false; }
   // 舊存檔 (無 discovered 欄位)：戳過 / 開過戰 / 贏過必定已發現
   if (s.pokes > 0 || s.fightsStarted > 0 || s.defeated) s.discovered = true;
   return s;
@@ -61,7 +74,8 @@ export function parseFencerSave(raw: string | null | undefined): FencerSave {
 export function serializeFencerSave(s: FencerSave): string {
   return JSON.stringify({
     v: 1, fightsStarted: s.fightsStarted, defeated: s.defeated, wins: s.wins, lastResult: s.lastResult,
-    pokes: s.pokes, warmLineShown: s.warmLineShown, dodgeEggShown: s.dodgeEggShown, discovered: s.discovered
+    pokes: s.pokes, warmLineShown: s.warmLineShown, dodgeEggShown: s.dodgeEggShown, discovered: s.discovered,
+    lastBar: s.lastBar, storySeen: s.storySeen, flagNews: s.flagNews
   });
 }
 
