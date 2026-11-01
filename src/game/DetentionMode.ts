@@ -4,6 +4,7 @@ import type { NPC } from '../entities/NPC';
 import type { DetentionRadarData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { SurroundCoordinator } from './SurroundCoordinator';
+import { worldNow } from '../core/worldClock';
 
 const _scratchCqcScreenPos = new THREE.Vector3();
 
@@ -80,15 +81,10 @@ export class DetentionMode {
 
   constructor(private readonly ctx: GameContext) {}
 
-  /** 選單暫停：越獄計時以實際時間計算，起點順延暫停的毫秒數 (暫停期間計時不前進) */
-  public shiftClock(ms: number) {
-    this.escapeStartTime += ms;
-  }
-
   // 進入特訓院 (首次進入與「重新挑戰」共用) 時完整重置越獄進度：
   // 門禁、鑰匙卡、萬能卡、存檔點、全體守衛與總教官 (含永久擊昏者)，確保每次都是乾淨的新局
   public reset() {
-    this.escapeStartTime = performance.now();
+    this.escapeStartTime = worldNow();
     this.takedownCount = 0;
     this.frontalKoCount = 0;
     this.usedGymStations.clear();
@@ -146,7 +142,7 @@ export class DetentionMode {
   public startEscape() {
     this.applyLoadout();
     this.spawnGraceTimer = 5.0;
-    this.escapeStartTime = performance.now();
+    this.escapeStartTime = worldNow();
   }
 
   // 總教官被擊敗 (暗殺或一般攻擊皆適用)：只觸發一次，掉落萬能逃脫鑰匙卡
@@ -413,7 +409,7 @@ export class DetentionMode {
   public checkEscapeVictory(targetPosition: THREE.Vector3) {
     if (!this.ctx.detentionWorld.isSouthGateOpen || targetPosition.z < 95.0 || this.isEscapeComplete) return;
     this.isEscapeComplete = true;
-    const totalTime = (performance.now() - this.escapeStartTime) / 1000;
+    const totalTime = (worldNow() - this.escapeStartTime) / 1000;
     this.ctx.hud.showDetentionVictory(
       totalTime,
       this.takedownCount,

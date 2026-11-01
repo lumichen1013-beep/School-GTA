@@ -4,6 +4,7 @@ import type { WeaponModelHandle } from '../types';
 import { mountOnHand } from './batModels';
 import { createTrailMaterial } from '../../effects/SwingTrail';
 import { getFxTier, type FxTier } from '../../effects/fxQuality';
+import { worldNow } from '../../core/worldClock';
 
 /**
  * 綁帶捆書 (溜溜球式長鞭)：平常手裡直接拿著一疊用綁帶捆好的書 (綁帶收起)；出招時鬆手抓住綁帶末端把書甩出去，
@@ -224,7 +225,7 @@ export function buildBookWhip(): WeaponModelHandle {
   };
 
   const simulate = () => {
-    const now = performance.now() * 0.001;
+    const now = worldNow() * 0.001;
     let dt = now - lastTime;
     if (lastTime >= 0 && dt < 0.0005) return; // 同一幀多次渲染只算一次
     const fresh = lastTime < 0 || dt > 0.25;

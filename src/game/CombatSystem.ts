@@ -18,6 +18,7 @@ import { PlantAoeShape, type PlantHitResult } from '../world/EcologicalGarden';
 import { isAttackFromBehind, isBehindNpc, isBossStunOpening } from './DetentionMode';
 import type { LaunchCap } from '../weapons/launch';
 import { SerialSlot } from './serialSlot';
+import { worldNow } from '../core/worldClock';
 
 const _scratchPlayerForward = new THREE.Vector3();
 const _scratchImpactDir = new THREE.Vector3();
@@ -260,11 +261,6 @@ export class CombatSystem {
   }
 
   // 推進暗殺動作階段 (真實時間) 並回傳套用時間倍率後的模擬時間步長
-  /** 選單暫停：處決時機計量表以實際時間擺動，起點順延暫停的毫秒數 (游標停住、不會逾時) */
-  public shiftClock(ms: number) {
-    if (this.qteRunning) this.qteStartMs += ms;
-  }
-
   public scaleDelta(rawDelta: number): number {
     if (this.execPhase === 'NONE') {
       if (this.hitStop > 0) {
@@ -573,7 +569,7 @@ export class CombatSystem {
     const isBoss = this.execMode === 'BOSS';
     this.qtePending = false;
     this.qteRunning = true;
-    this.qteStartMs = performance.now();
+    this.qteStartMs = worldNow();
     this.qteSweep = isBoss && target ? getTakedownQteSweep(target.hp) : MINION_QTE_SWEEP;
     this.qteZoneWidth = isBoss ? BOSS_QTE_ZONE : MINION_QTE_ZONE;
     this.qteZone = TAKEDOWN_QTE_ZONE_MIN + Math.random() * (TAKEDOWN_QTE_ZONE_MAX - this.qteZoneWidth - TAKEDOWN_QTE_ZONE_MIN);
@@ -596,7 +592,7 @@ export class CombatSystem {
   // 每幀更新計量表 (真實時間)：發動按鍵放開後才接受判定，逾時判定失誤
   private updateTakedownQte() {
     const { input, hud } = this.ctx;
-    const now = performance.now();
+    const now = worldNow();
     if (!this.qteArmed && !input.keys['KeyF'] && !input.mouseButtons.left) this.qteArmed = true;
     hud.updateTakedownMeter(this.getQteCursor(now));
     if ((now - this.qteStartMs) / 1000 >= TAKEDOWN_QTE_TIMEOUT) this.resolveTakedownQte(false);
@@ -765,7 +761,7 @@ export class CombatSystem {
     }
     // 時機計量表：再按攻擊鍵停住游標判定
     if (this.qteRunning) {
-      if (this.qteArmed) this.resolveTakedownQte(this.isQteCursorInZone(performance.now()));
+      if (this.qteArmed) this.resolveTakedownQte(this.isQteCursorInZone(worldNow()));
       return;
     }
     // 暗殺動作期間鎖定攻擊；出招中提早按下則預先輸入下一段連招

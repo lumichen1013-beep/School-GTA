@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { soundManager } from '../audio/SoundEffects';
 import type { GameContext, WorldType } from './GameContext';
+import { worldTimeout } from '../core/worldClock';
 
 // 互動距離常數 (提示與 E 鍵判定共用同一張表，結構上杜絕「看得到提示卻按不出動作」)
 const KEYCARD_PICKUP_RANGE = 2.5;
@@ -224,7 +225,7 @@ export class InteractionSystem {
           player.hp = Math.min(player.maxHp, player.hp + 15);
           ctx.wantedSystem.showBanner('🛞【巨型輪胎翻滾特訓】重裝肌耐力翻滾！體力 +15 HP，解鎖 8 秒狂暴極速衝刺！', 3000);
           player.sprintSpeed = 14.0;
-          setTimeout(() => { player.sprintSpeed = 10.0; }, 8000);
+          worldTimeout(() => { player.sprintSpeed = 10.0; }, 8000);
           soundManager.playBanditSlash(ctx.player.position);
         }
       }
@@ -412,7 +413,7 @@ export class InteractionSystem {
         player.takeDamage(8, '麻痺孢子');
         player.walkSpeed = 2.5;
         player.sprintSpeed = 5.0;
-        setTimeout(() => {
+        worldTimeout(() => {
           player.walkSpeed = 5.0;
           player.sprintSpeed = 10.0;
         }, 5000);
@@ -424,7 +425,7 @@ export class InteractionSystem {
         break;
       case 'SUPER_JUMP':
         player.jumpStrength = 14.5;
-        setTimeout(() => {
+        worldTimeout(() => {
           player.jumpStrength = 8.5;
         }, 8000);
         break;
@@ -448,7 +449,7 @@ export class InteractionSystem {
       if (pondResult.speedBoostDuration > 0) {
         player.walkSpeed = 8.5;
         player.sprintSpeed = 16.0;
-        setTimeout(() => {
+        worldTimeout(() => {
           player.walkSpeed = 5.0;
           player.sprintSpeed = 10.0;
         }, pondResult.speedBoostDuration * 1000);

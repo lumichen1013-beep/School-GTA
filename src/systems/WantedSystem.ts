@@ -1,4 +1,5 @@
 import { soundManager } from '../audio/SoundEffects';
+import { worldNow, worldTimeout, clearWorldTimeout } from '../core/worldClock';
 
 export class WantedSystem {
   public stars: number = 0; // 0 ~ 5 級記過懲戒
@@ -189,7 +190,7 @@ export class WantedSystem {
     }
 
     const key = WantedSystem.bannerKey(text);
-    const now = performance.now();
+    const now = worldNow();
 
     // 1. 與目前顯示中的橫幅相同 (或僅數字不同)：原地更新文字並延長顯示
     if (this.bannerCurrentKey === key) {
@@ -245,7 +246,7 @@ export class WantedSystem {
     this.bannerHeld = true;
     this.bannerHeldList = [];
     this.bannerQueue = [];
-    if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
+    clearWorldTimeout(this.bannerTimeout);
     this.bannerTimeout = 0;
     this.bannerCurrentKey = null;
     document.getElementById('hud-banner')?.classList.remove('show');
@@ -315,7 +316,7 @@ export class WantedSystem {
     this.bannerCurrentKey = key;
     this.bannerCurrentText = text;
     this.bannerCurrentMinMs = Math.max(WantedSystem.BANNER_MIN_SHOW_MS, marqueeMs);
-    this.bannerShownAt = performance.now();
+    this.bannerShownAt = worldNow();
     // 後方仍有排隊訊息時僅停留最短時間，加速輪替避免訊息過時；跑馬燈訊息至少停留到完整捲完
     const baseMs = this.bannerQueue.length > 0 ? Math.min(duration, WantedSystem.BANNER_MIN_SHOW_MS) : duration;
     const showMs = Math.max(baseMs, marqueeMs);
@@ -324,8 +325,8 @@ export class WantedSystem {
   }
 
   private scheduleBannerEnd(banner: HTMLElement, ms: number) {
-    if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
-    this.bannerTimeout = window.setTimeout(() => {
+    clearWorldTimeout(this.bannerTimeout);
+    this.bannerTimeout = worldTimeout(() => {
       const next = this.bannerQueue.shift();
       if (next) {
         this.displayBanner(banner, next.text, next.key, next.duration);

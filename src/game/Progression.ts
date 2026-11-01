@@ -6,6 +6,7 @@ import { getCommissaryPrice, type CommissaryItem } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { getWeaponSummary, type WeaponSummary } from './weaponStats';
 import { RAPIER_UNLOCK_TEXT } from '../weapons/defs/rapier';
+import { worldNow } from '../core/worldClock';
 
 // 身法技能冷卻 (閃身步 / 狗熊哆嗦毛共用，秒) 與被動自動閃避機率 (被敵人攻擊命中瞬間)
 const DODGE_SKILL_COOLDOWN = 1.0;
@@ -334,7 +335,7 @@ export class Progression {
     st.takedowns = detention.takedownCount;
     st.frontalKos = detention.frontalKoCount;
     st.alerts = detention.alertCount;
-    st.escapeSeconds = detention.isEscapeComplete ? -1 : Math.max(0, Math.floor((performance.now() - detention.escapeStartTime) / 1000));
+    st.escapeSeconds = detention.isEscapeComplete ? -1 : Math.max(0, Math.floor((worldNow() - detention.escapeStartTime) / 1000));
     return st;
   }
 

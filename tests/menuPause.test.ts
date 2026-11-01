@@ -9,13 +9,11 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf-8');
 // 模擬 main.tick：暫停幀 (enter / hold) 不推進世界時間，恢復第一幀 delta 夾制
 function simulate(frames: { open: boolean; dt: number }[]) {
   const wp = new WorldPause();
-  let now = 0;
   let worldTime = 0;
   const steps: string[] = [];
   const deltas: number[] = [];
   for (const f of frames) {
-    now += f.dt * 1000;
-    const step = wp.step(f.open, now);
+    const step = wp.step(f.open);
     steps.push(step);
     if (step === 'enter' || step === 'hold') continue;
     const d = step === 'resume' ? WorldPause.clampResumeDelta(f.dt) : f.dt;
@@ -49,31 +47,25 @@ describe('WorldPause：選單暫停狀態機', () => {
     expect(WorldPause.clampResumeDelta(0.005)).toBe(0.005);
   });
 
-  it('heldMs：hold / resume 幀回報距上一暫停幀的實際毫秒 (供實際時間計時平移)', () => {
+  it('paused 旗標隨狀態切換', () => {
     const wp = new WorldPause();
-    expect(wp.step(true, 1000)).toBe('enter');
-    expect(wp.heldMs).toBe(0);
-    wp.step(true, 1500);
-    expect(wp.heldMs).toBe(500);
-    wp.step(true, 4000);
-    expect(wp.heldMs).toBe(2500);
-    expect(wp.step(false, 4016)).toBe('resume');
-    expect(wp.heldMs).toBe(16);
-    expect(wp.step(false, 4032)).toBe('run');
-    expect(wp.heldMs).toBe(0);
+    expect(wp.step(true)).toBe('enter');
+    expect(wp.paused).toBe(true);
+    expect(wp.step(false)).toBe('resume');
+    expect(wp.step(false)).toBe('run');
     expect(wp.paused).toBe(false);
   });
 
   it('暫停中 3D 只在進入後第一幀與繪圖緩衝尺寸改變時重繪', () => {
     const wp = new WorldPause();
-    wp.step(true, 0);
+    wp.step(true);
     expect(wp.needsRender('800x600')).toBe(true);
-    wp.step(true, 16);
+    wp.step(true);
     expect(wp.needsRender('800x600')).toBe(false);
     expect(wp.needsRender('600x800')).toBe(true); // 翻轉 / 畫質改像素比
     expect(wp.needsRender('600x800')).toBe(false);
-    wp.step(false, 32);
-    wp.step(true, 48); // 再次開啟：重新繪製一幀
+    wp.step(false);
+    wp.step(true); // 再次開啟：重新繪製一幀
     expect(wp.needsRender('600x800')).toBe(true);
   });
 });
@@ -156,7 +148,7 @@ describe('main.tick：選單暫停經由單一暫停路徑', () => {
   });
 
   it('暫停 / 恢復時放開輸入、BGM 壓低 / 淡回、畫質量測中止 / 重排', () => {
-    const paused = main.slice(main.indexOf('private tickMenuPaused'), main.indexOf('private shiftWallClocks'));
+    const paused = main.slice(main.indexOf('private tickMenuPaused'), main.indexOf('private readonly diag'));
     expect(paused.match(/this\.input\.releaseAll\(\)/g)?.length).toBe(2);
     expect(paused).toContain('bgmManager.setMenuDuck(true)');
     expect(paused).toContain('bgmManager.setMenuDuck(false)');
@@ -171,15 +163,103 @@ describe('main.tick：選單暫停經由單一暫停路徑', () => {
   });
 });
 
-describe('實際時間計時於暫停期間不前進', () => {
-  afterEach(() => vi.unstubAllGlobals());
+describe('worldClock：實際時間計時於選單暫停期間不前進', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  it('DetentionMode.shiftClock：越獄計時起點順延暫停毫秒', async () => {
-    installFakeDom();
-    const { DetentionMode } = await import('../src/game/DetentionMode');
-    const d = new DetentionMode({} as never);
-    d.escapeStartTime = 1000;
-    d.shiftClock(2500);
-    expect(d.escapeStartTime).toBe(3500);
+  async function freshClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    vi.resetModules();
+    return import('../src/core/worldClock');
+  }
+
+  it('worldNow：暫停期間停住，恢復後扣除暫停時長接續', async () => {
+    const c = await freshClock();
+    const t0 = c.worldNow();
+    vi.advanceTimersByTime(1000);
+    expect(c.worldNow() - t0).toBe(1000);
+    c.setWorldClockPaused(true);
+    vi.advanceTimersByTime(5000);
+    expect(c.worldNow() - t0).toBe(1000);
+    c.setWorldClockPaused(false);
+    vi.advanceTimersByTime(250);
+    expect(c.worldNow() - t0).toBe(1250);
+  });
+
+  it('worldTimeout：暫停期間不觸發 (如死亡 3 秒復活)，恢復後只等剩餘時間', async () => {
+    const c = await freshClock();
+    const fn = vi.fn();
+    c.worldTimeout(fn, 3000);
+    vi.advanceTimersByTime(1000);
+    c.setWorldClockPaused(true);
+    vi.advanceTimersByTime(10000);
+    expect(fn).not.toHaveBeenCalled();
+    c.setWorldClockPaused(false);
+    vi.advanceTimersByTime(1999);
+    expect(fn).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('暫停中排程的計時從恢復後才開始走；clearWorldTimeout 可取消 (暫停中亦可)', async () => {
+    const c = await freshClock();
+    c.setWorldClockPaused(true);
+    const a = vi.fn();
+    const b = vi.fn();
+    c.worldTimeout(a, 500);
+    const idB = c.worldTimeout(b, 500);
+    vi.advanceTimersByTime(2000);
+    c.clearWorldTimeout(idB);
+    c.setWorldClockPaused(false);
+    vi.advanceTimersByTime(499);
+    expect(a).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).not.toHaveBeenCalled();
+  });
+
+  it('重複呼叫暫停 / 恢復不重複累計', async () => {
+    const c = await freshClock();
+    const t0 = c.worldNow();
+    c.setWorldClockPaused(true);
+    c.setWorldClockPaused(true);
+    vi.advanceTimersByTime(300);
+    c.setWorldClockPaused(false);
+    c.setWorldClockPaused(false);
+    vi.advanceTimersByTime(100);
+    expect(c.worldNow() - t0).toBe(100);
+  });
+});
+
+describe('遊戲邏輯的實際時間計時皆改用 worldClock', () => {
+  const files: [string, RegExp][] = [
+    ['src/main.ts', /worldTimeout\(\(\) => \{\n\s*\/\/ 復活點/],                               // 死亡 3 秒復活
+    ['src/main.ts', /if \(fencerNote\) worldTimeout\(/],                                         // 復活後向陽之心打氣
+    ['src/game/InteractionSystem.ts', /worldTimeout\(\(\) => \{ player\.sprintSpeed = 10\.0; \}, 8000\)/], // 輪胎特訓 8 秒衝刺
+    ['src/game/InteractionSystem.ts', /player\.jumpStrength = 8\.5;/],                           // 寶箱超級跳躍
+    ['src/world/EcologicalGarden.ts', /worldTimeout\(step, 50\)/],                               // 食人花王死亡傾倒
+    ['src/game/fencer/FencerBossFight.ts', /this\.taunt\.poke\(worldNow\(\) \/ 1000\)/],          // 向日葵再戳時窗
+    ['src/systems/WantedSystem.ts', /this\.bannerTimeout = worldTimeout\(/],                     // 提示橫幅
+    ['src/game/DetentionMode.ts', /\(worldNow\(\) - this\.escapeStartTime\)/],                   // 越獄計時
+    ['src/game/CombatSystem.ts', /this\.qteStartMs = worldNow\(\)/],                             // 處決計量表
+  ];
+  it.each(files)('%s', (file, re) => {
+    expect(read(file)).toMatch(re);
+  });
+
+  it('上述檔案不再以 setTimeout / setInterval / performance.now 計時遊戲邏輯', () => {
+    for (const f of ['src/game/InteractionSystem.ts', 'src/world/EcologicalGarden.ts', 'src/systems/WantedSystem.ts', 'src/game/DetentionMode.ts', 'src/game/Progression.ts', 'src/systems/BasketballGame.ts']) {
+      expect(read(f)).not.toMatch(/\bsetTimeout\(|setInterval\(|performance\.now\(\)|Date\.now\(\)/);
+    }
+    const combat = read('src/game/CombatSystem.ts');
+    expect(combat).not.toMatch(/performance\.now\(\)/);
+  });
+
+  it('main 於進入 / 結束選單暫停時停住 / 恢復世界時鐘', () => {
+    const main = read('src/main.ts');
+    const paused = main.slice(main.indexOf('private tickMenuPaused'), main.indexOf('private readonly diag'));
+    expect(paused).toContain('setWorldClockPaused(true)');
+    expect(paused).toContain('setWorldClockPaused(false)');
   });
 });

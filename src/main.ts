@@ -56,6 +56,7 @@ import { FencerBossFight } from './game/fencer/FencerBossFight';
 import { BossCameraLink } from './game/fencer/BossCameraLink';
 import { RESPAWN_HEART_DELAY_MS } from './game/fencer/fencerStory';
 import { showCutsceneOverlay } from './ui/uiConceal';
+import { worldTimeout, setWorldClockPaused } from './core/worldClock';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -632,7 +633,7 @@ class SchoolGTASandbox implements GameContext {
       this.detention.resetGuards();
     }
 
-    setTimeout(() => {
+    worldTimeout(() => {
       // 復活點於復活當下依所在世界計算 (死亡 3 秒內切換世界時避免在另一世界的座標重生)
       const respawnPos = this.currentWorldType === 'CAMPUS' ? _campusRespawnPos : this.detentionWorld.spawnPos;
       this.fencerBossFight.beforeRespawn(); // 保險：上限與校園未還原時立即完成
@@ -655,7 +656,7 @@ class SchoolGTASandbox implements GameContext {
       this.wantedSystem.showBanner(recoverMsg, 4000);
       // 剛輸給花劍客：復活 1 秒後向陽之心打氣
       const fencerNote = this.fencerBossFight.consumeDefeatNotice();
-      if (fencerNote) setTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
+      if (fencerNote) worldTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
     }, 3000);
   }
 
@@ -749,14 +750,14 @@ class SchoolGTASandbox implements GameContext {
   }
 
   // 選單暫停幀：世界邏輯全部不跑 (玩家 / NPC / Boss / 投射物 / 特效 / 計時 / 天氣 / 警戒)，只更新選單面板；
+  // 以實際時間計時者 (復活、增益、橫幅、越獄計時、處決計量表…) 改用 worldClock，於此停住
   // 3D 畫面只在進入暫停與繪圖緩衝尺寸改變時重繪一次 (選單背景為靜止畫面，省電且不重配畫布)
   private tickMenuPaused(step: WorldPauseStep) {
     if (step === 'enter') {
       this.input.releaseAll();
       bgmManager.setMenuDuck(true);
       qualityManager.setWorldPaused(true);
-    } else {
-      this.shiftWallClocks(this.worldPause.heldMs);
+      setWorldClockPaused(true);
     }
     this.input.consumeMouseDelta();
     const bike = this.currentRidingBike;
@@ -773,17 +774,10 @@ class SchoolGTASandbox implements GameContext {
 
   // 關閉選單恢復：放開暫停前後殘留的按鍵 / 搖桿、BGM 淡回、畫質量測可重新開始
   private onMenuResume() {
-    this.shiftWallClocks(this.worldPause.heldMs);
+    setWorldClockPaused(false);
     this.input.releaseAll();
     bgmManager.setMenuDuck(false);
     qualityManager.setWorldPaused(false);
-  }
-
-  // 以 performance.now() 計時的系統 (越獄計時、處決時機計量表)：起點順延暫停的實際毫秒
-  private shiftWallClocks(ms: number) {
-    if (ms <= 0) return;
-    this.detention.shiftClock(ms);
-    this.combat.shiftClock(ms);
   }
 
   private readonly diag = getDiagFlags();
@@ -802,7 +796,7 @@ class SchoolGTASandbox implements GameContext {
     this.lastRunAt = now;
     // 選單暫停 (大地圖選單開啟中；過場劇情進行中依現況不暫停)
     const pauseStep = this.worldPause.step(
-      this.isGameRunning && this.isMenuOpen && !this.detentionCutscene.isActive && !this.fencerBossFight.isCutscene, now);
+      this.isGameRunning && this.isMenuOpen && !this.detentionCutscene.isActive && !this.fencerBossFight.isCutscene);
     qualityManager.onFrame(now, pauseStep !== 'run' || this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
     if (diagOn) {
       perfProbe.onFrameRun(now);

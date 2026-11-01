@@ -29,6 +29,7 @@ import { fencerQuestText, REGEN_TAG } from '../game/fencer/fencerStory';
 import { FENCER } from '../game/fencer/fencerRules';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
 import { setConcealedById } from './uiConceal';
+import { worldTimeout, clearWorldTimeout } from '../core/worldClock';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -810,7 +811,7 @@ export class HUD {
         this.shotFeedbackEl.textContent = '❌ EARLY! 蓄力不足！';
         this.shotFeedbackEl.classList.add('bad');
       }
-      setTimeout(() => {
+      worldTimeout(() => {
         this.hideShotMeter();
       }, 1000);
     } else {
@@ -953,18 +954,18 @@ export class HUD {
       this.missionCenterSubEl.textContent = subtitle;
     }
     if (this.missionCenterTimer) {
-      clearTimeout(this.missionCenterTimer);
+      clearWorldTimeout(this.missionCenterTimer);
       this.missionCenterTimer = null;
     }
 
     this.missionCenterPromptEl.classList.remove('fade-out');
     this.missionCenterPromptEl.classList.add('show');
 
-    this.missionCenterTimer = setTimeout(() => {
+    this.missionCenterTimer = worldTimeout(() => {
       if (this.missionCenterPromptEl) {
         this.missionCenterPromptEl.classList.remove('show');
         this.missionCenterPromptEl.classList.add('fade-out');
-        setTimeout(() => {
+        worldTimeout(() => {
           if (this.missionCenterPromptEl) {
             this.missionCenterPromptEl.classList.remove('fade-out');
           }
@@ -2147,14 +2148,14 @@ export class HUD {
     if (!this.cinematicBarsEl) return;
     if (this.cinemaQteBadgeEl) this.cinemaQteBadgeEl.textContent = title;
     if (this.cinemaQteSubEl) this.cinemaQteSubEl.textContent = subtitle;
-    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    clearWorldTimeout(this.cinemaDismissTimer);
     this.cinemaDismissTimer = null;
 
     this.cinematicBarsEl.classList.remove('qte-show');
     this.cinematicBarsEl.classList.add('active');
     if (this.cinemaFlashEl) {
       this.cinemaFlashEl.classList.add('flash');
-      setTimeout(() => {
+      worldTimeout(() => {
         if (this.cinemaFlashEl) this.cinemaFlashEl.classList.remove('flash');
       }, 140);
     }
@@ -2162,7 +2163,7 @@ export class HUD {
 
   // 處決特寫結束：收起黑邊，恢復操控後短暫顯示 QTE 打擊橫幅 (resultMs 為 0 則不顯示)，結束後呼叫 onDone
   public endCinematicExecution(resultMs: number, onDone?: () => void) {
-    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    clearWorldTimeout(this.cinemaDismissTimer);
     this.cinemaDismissTimer = null;
     const bars = this.cinematicBarsEl;
     if (!bars) {
@@ -2176,7 +2177,7 @@ export class HUD {
       return;
     }
     bars.classList.add('qte-show');
-    this.cinemaDismissTimer = setTimeout(() => {
+    this.cinemaDismissTimer = worldTimeout(() => {
       this.cinemaDismissTimer = null;
       bars.classList.remove('qte-show');
       onDone?.();
