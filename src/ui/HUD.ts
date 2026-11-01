@@ -306,6 +306,7 @@ export class HUD {
     if (this.weatherBadgeEl) {
       this.weatherBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this.radarSuspended) return; // 花劍客戰中不可切換天氣
         if (this.onWeatherToggle) this.onWeatherToggle();
       });
     }
@@ -337,6 +338,7 @@ export class HUD {
       // 大地圖工具列的「切換世界」：先關閉大地圖再開啟世界選擇視窗 
       this.worldBadgeEl.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this.radarSuspended) return; // 花劍客戰中不可切換世界
         this.closeFullMap(false); // 接著開啟世界選擇視窗，維持滑鼠解鎖以便點選
         if (this.onWorldToggle) this.onWorldToggle();
       });
@@ -449,6 +451,7 @@ export class HUD {
         this.canvas.height = px;
       }
       this.minimapPixelScale = px / HUD.MINIMAP_LOGICAL_SIZE;
+      if (this.radarSuspended) this.drawRadarOffline(); // 尺寸變動會清空畫布，停用狀態下補畫靜態圖面
     };
     if ('ResizeObserver' in window) new ResizeObserver(syncMinimapResolution).observe(this.canvas);
     window.addEventListener('app-layout-change', syncMinimapResolution);
@@ -473,7 +476,9 @@ export class HUD {
     if (this.minimapWrapperEl) {
       this.minimapWrapperEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.toggleFullMap();
+        // 花劍客戰中雷達停用：點擊直接開【裝備】分頁 (換裝備)；地圖分頁的世界切換 / 天氣已停用
+        if (this.radarSuspended && !this.isFullMapOpen) this.openFullMap('gear');
+        else this.toggleFullMap();
       });
     }
 
@@ -1682,13 +1687,44 @@ export class HUD {
     }
   }
 
-  // 雷達暫停：隱藏小地圖畫布並停止重繪 (血量環照常)；恢復時下一幀立即重繪
+  // 雷達停用 (花劍客戰)：不隱藏、仍可點擊開選單；畫布只畫一次靜態「無訊號」圖面並停止重繪 (血量環照常)。
+  // 只切 class (不切 display / visibility)；世界 / 天氣按鈕同步停用。恢復時下一幀立即重繪
   public setRadarSuspended(suspended: boolean) {
     if (this.radarSuspended === suspended) return;
     this.radarSuspended = suspended;
-    // 只切 opacity + 不可點擊 (容器常駐合成層)，不切 visibility，避免 GPU 執行緒重新配置圖層貼圖
-    setConcealedById('minimap-wrapper', suspended);
-    if (!suspended) this.minimapDeltaAccumulator = 999;
+    this.minimapWrapperEl?.classList.toggle('radar-offline', suspended);
+    for (const el of [this.worldBadgeEl, this.weatherBadgeEl]) {
+      if (!el) continue;
+      el.classList.toggle('fm-tool-disabled', suspended);
+      el.setAttribute('aria-disabled', suspended ? 'true' : 'false');
+    }
+    if (suspended) this.drawRadarOffline();
+    else this.minimapDeltaAccumulator = 999;
+  }
+
+  // 靜態「異空間無訊號」圖面：暮紅暗底 + 斜紋 + 叉號，無動畫
+  private drawRadarOffline() {
+    const ctx = this.ctx;
+    const w = HUD.MINIMAP_LOGICAL_SIZE;
+    ctx.setTransform(this.minimapPixelScale, 0, 0, this.minimapPixelScale, 0, 0);
+    ctx.clearRect(0, 0, w, w);
+    ctx.fillStyle = '#1a0a10';
+    ctx.fillRect(0, 0, w, w);
+    ctx.strokeStyle = 'rgba(190, 60, 70, 0.22)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = -w; i < w * 2; i += 14) {
+      ctx.moveTo(i, w);
+      ctx.lineTo(i + w, 0);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(244, 114, 94, 0.75)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(w / 2, w / 2, 20, 0, Math.PI * 2);
+    ctx.moveTo(w / 2 - 14, w / 2 + 14);
+    ctx.lineTo(w / 2 + 14, w / 2 - 14);
+    ctx.stroke();
   }
 
   // 血量環脫戰快速回血：綠色呼吸 + 「+8/s」標籤 (狀態切換時才改 class)

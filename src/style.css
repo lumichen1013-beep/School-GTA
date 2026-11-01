@@ -4767,3 +4767,16 @@ body.touch-controls-hidden #mobile-controls-container {
   background: rgba(13, 19, 33, 0.6);
   color: #fff;
 }
+
+/* 花劍客戰雷達停用：暮紅無訊號樣式 (仍可點擊開選單)；選單中的世界 / 天氣按鈕停用 */
+.minimap-wrapper.radar-offline {
+  border-color: rgba(220, 80, 80, 0.55);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65), 0 0 12px rgba(190, 40, 60, 0.35);
+}
+.minimap-wrapper.radar-offline .radar-center-ring { opacity: 0; }
+.fullmap-tool-btn.fm-tool-disabled {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+  pointer-events: none;
+}
