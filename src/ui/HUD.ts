@@ -867,14 +867,14 @@ export class HUD {
 
   // BGM 標籤依所在世界顯示 (切換世界時以上次狀態重繪)
   private bgmWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
-  private lastBgmMode: 'EXPLORE' | 'PURSUIT' = 'EXPLORE';
+  private lastBgmMode: 'EXPLORE' | 'PURSUIT' | 'DUEL' = 'EXPLORE';
   private lastBgmMuted = false;
   public setBGMWorld(world: 'CAMPUS' | 'DETENTION') {
     this.bgmWorld = world;
     this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted);
   }
 
-  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT', isMuted: boolean) {
+  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT' | 'DUEL', isMuted: boolean) {
     this.lastBgmMode = mode;
     this.lastBgmMuted = isMuted;
     const isDetention = this.bgmWorld === 'DETENTION';
@@ -885,6 +885,11 @@ export class HUD {
       this.bgmIconEl.textContent = '🔇';
       this.bgmTextEl.textContent = 'BGM: 靜音';
       this.bgmToggleBtnEl.textContent = '[關]';
+    } else if (mode === 'DUEL') {
+      this.bgmBadgeEl.className = 'bgm-badge pursuit';
+      this.bgmIconEl.textContent = '🎻';
+      this.bgmTextEl.textContent = 'BGM: 向日圓舞曲';
+      this.bgmToggleBtnEl.textContent = '[開]';
     } else if (mode === 'PURSUIT') {
       this.bgmBadgeEl.className = 'bgm-badge pursuit';
       this.bgmIconEl.textContent = '🚨';

@@ -2139,6 +2139,47 @@ body.boss-fight-hud :is(.hud-info-group, .cash-badge, .demerit-container) { disp
   pointer-events: none;
 }
 
+/* 花劍客過場字幕：依說話者配色 (🎩 玫瑰粉 / ☀️ 朝陽金 / 🌻 嫩綠 / 玩家白)，只換屬性不影響版面 */
+.cutscene-subtitle-text[data-spk="boss"] { color: #ffb3c8; border-color: rgba(255, 157, 184, 0.65); }
+.cutscene-subtitle-text[data-spk="heart"] { color: #ffd45a; border-color: rgba(255, 212, 90, 0.7); }
+.cutscene-subtitle-text[data-spk="flower"] { color: #c8f58a; border-color: rgba(184, 240, 112, 0.65); }
+.cutscene-subtitle-text[data-spk="player"] { color: #ffffff; border-color: rgba(255, 255, 255, 0.45); }
+
+/* 花劍客戰鬥字幕條：下方中央單行 (向陽之心 / 遠處的 Boss)；常駐合成層，只切 opacity */
+.fencer-voice {
+  position: absolute;
+  left: 50%;
+  bottom: max(17vh, 118px);
+  transform: translateX(-50%);
+  max-width: 88vw;
+  width: max-content;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: rgba(12, 10, 22, 0.78);
+  border: 1px solid rgba(255, 212, 90, 0.55);
+  color: #ffd45a;
+  font-size: clamp(13px, 2.1vw, 17px);
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity 0.25s ease-out;
+  z-index: 40;
+}
+.fencer-voice--on { opacity: 1; }
+/* 觸控：避開下方搖桿與技能按鈕 */
+@media (pointer: coarse) {
+  .fencer-voice { bottom: 31vh; font-size: 13px; max-width: 92vw; }
+}
+.fencer-voice[data-spk="boss"] { color: #ffb3c8; border-color: rgba(255, 157, 184, 0.6); }
+.fencer-voice[data-spk="flower"] { color: #c8f58a; border-color: rgba(184, 240, 112, 0.6); }
+
 .cutscene-subtitle-text {
   display: inline-block;
   background: rgba(10, 15, 25, 0.88);

@@ -512,6 +512,7 @@ export class FencerBoss {
   /** 重置為新一場 (三管血全滿)；位置 = 結界中心 */
   public resetForFight(x: number, z: number) {
     this.bars.reset();
+    this.transitionSec = FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
     this.phase = 0;
     this.rotationIdx = 0;
     for (const k of Object.keys(this.cooldown) as AttackId[]) this.cooldown[k] = 0;
@@ -671,7 +672,7 @@ export class FencerBoss {
     this.bars.invulnerable = true;
     this.act = 'TRANSITION';
     this.actTimer = 0;
-    this.transitionSec = FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
+    // transitionSec 不在此重設：宿主於 onBossDamaged (本函式之前) 已依台詞長度設定；用完於 endTransition 還原預設
     this._transitionCentered = false;
     this.attack = null;
     this.move = 'NONE';
@@ -702,6 +703,7 @@ export class FencerBoss {
   }
 
   private endTransition() {
+    this.transitionSec = FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
     this.bars.advanceBar();
     this.bars.invulnerable = false;
     this.phase = this.bars.bar;
@@ -1801,7 +1803,13 @@ export class FencerBoss {
     } else if (this.act === 'BOW' || this.act === 'TRIUMPH') {
       bodyPitch = 0.7; armL = -1.1; armLz = 0.1; armR = -0.4; legL = 0.05; legR = -0.05; hatTilt = -0.4;
     } else if (this.act === 'TRANSITION') {
-      armR = -2.9; armL = -0.3; armLz = 0.6; bodyPitch = -0.1;
+      // 換樂章姿勢：擊破亮相 (舉劍) → 回中央後說話 (進終樂章前先以劍拄地單膝喘氣) → 最後 2.4s 劍禮
+      const tt = this.actTimer;
+      const total = this.transitionTotal;
+      if (tt < TRANSITION_BLINK_AT) { armR = -2.9; armL = -0.3; armLz = 0.6; bodyPitch = -0.1; }
+      else if (tt > total - 2.4) { armR = -1.5; armL = -0.2; armLz = 0.4; bodyPitch = 0.12; legL = 0.05; legR = -0.05; }
+      else if (this.bars.bar === 1 && tt < TRANSITION_BLINK_AT + 3.2) { hipY = 0.55; bodyPitch = 0.12; armR = -0.75; armL = 0.1; legL = -1.4; legR = 0.2; }
+      else { armR = -0.5; armL = -0.4; armLz = 0.25; legL = 0.05; legR = -0.05; }
     } else if (this.act === 'DEFEATED') {
       hipY = 0.55; bodyPitch = 0.5; armR = 0.2; armL = 0.1; legL = -1.4; legR = 0.2;
       // 長過場 1.6s 起：抬頭、以劍拄地

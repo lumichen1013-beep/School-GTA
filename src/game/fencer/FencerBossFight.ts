@@ -36,6 +36,7 @@ import { loadFencerSave, storeFencerSave, STORY_SEEN } from './fencerSave';
 import { safeTopNdc, shouldFitBubble } from './bubbleSafeArea';
 import { buildRapier } from '../../weapons/models/rapierModel';
 import { setConcealedById, showCutsceneOverlay } from '../../ui/uiConceal';
+import { FencerVoiceStrip, subtitleSpeaker } from '../../ui/fencerVoice';
 
 // 世界 Boss【花劍客】總控：太陽花戳戳 → 開戰過場 (清場 / 結界 / 暮紅異空間 / Boss 亮相 / 玩家向陽覺醒)
 // → 三樂章戰鬥 (回血 / 脫戰快速回氣 / HUD) → 勝利 (獎勵、恢復) / 戰敗 (死亡前還原上限、恢復) / 中止 (切換世界)。
@@ -82,6 +83,11 @@ const SOIL_PETALS = [0x7a5a3a, 0x5e8f3a, 0x8fd66b] as const;
 const DUSK_RATE = 0.35;
 const DUSK_RATE_VICTORY = 0.9;
 const BIG_HIT_REASONS = ['萬花華爾滋・終幕', '玫瑰荊棘十字'];
+// 過場字幕打字機速度 (字 / 秒)；點擊時若還在打字先顯示整句
+const TYPE_CPS = 40;
+// Boss 離玩家超過這個距離 (或不在畫面內) 時，台詞同步顯示在戰鬥字幕條
+const VOICE_MIRROR_DIST = 10;
+const _ndc = new THREE.Vector3();
 
 const smooth = (t: number) => {
   const c = Math.max(0, Math.min(1, t));
@@ -124,6 +130,7 @@ export class FencerBossFight {
   private cutFirstFrame = false;
   private skipping = false;
   private rapierAt = 0;
+  private saluteAt = -1;           // 首勝：玩家擊劍禮開始的過場時間 (-1 = 未開始)
   private pushPending = false;
   private pushT = 1;
   private defeatEnd = DEFEAT_END_MIN;
@@ -157,6 +164,11 @@ export class FencerBossFight {
   private duskLevel = 0;
   private duskApplied = -1;
   private victoryDawn = false;
+  private readonly music = { movement: 0, dawn: false, interlude: false };
+  private readonly voice = new FencerVoiceStrip();
+  private typeChars: string[] = [];   // 打字機：目前字幕 (code points)
+  private typeShown = 0;              // 已顯示字數 (浮點)
+  private typeDrawn = -1;
   private promptN = -1;
   private promptText = '';
 
@@ -288,6 +300,26 @@ export class FencerBossFight {
   }
 
   // ===== 狀態 =====
+
+  /**
+   * 向日圓舞曲狀態 (main 每幀交給 bgmManager.setDuel)：花劍客現身起到戰鬥結束；開場與換樂章過場 = 音樂盒 (interlude)，
+   * 終樂章黎明 = 大調；勝利 / 戰敗 / 閒置 = null (回校園 BGM)
+   */
+  public musicState(): { movement: number; dawn: boolean; interlude: boolean } | null {
+    if (!this.initialized) return null;
+    const m = this.music;
+    if (this.phase === 'INTRO') {
+      if (!(this.introSteps & 8)) return null;
+      m.movement = 0; m.dawn = false; m.interlude = true;
+      return m;
+    }
+    if (this.phase !== 'FIGHT') return null;
+    const transition = this.cutKind === 'TRANSITION';
+    m.movement = transition ? this.transBar : this.boss.currentBar;
+    m.dawn = !transition && this.dawnDone;
+    m.interlude = transition;
+    return m;
+  }
 
   public get isActive(): boolean {
     return this.phase !== 'IDLE';
@@ -430,6 +462,7 @@ export class FencerBossFight {
   public updateCutscene(dt: number) {
     if (this.cutInput.update(cutNow()) === 'SKIP') { this.skipCutscene(); return; }
     this.updateSkipBadge();
+    this.updateTypewriter(dt);
     if (this.cutKind === 'TRANSITION') { this.updateTransitionCut(dt); return; }
     if (this.phase === 'VICTORY' && this.longVictory) { this.updateVictoryCutscene(dt); return; }
     if (this.phase !== 'INTRO') return;
@@ -487,6 +520,7 @@ export class FencerBossFight {
         const player = this.ctx.player;
         player.rotationY = Math.atan2(this.boss.position.x - player.position.x, this.boss.position.z - player.position.z);
         player.mesh.rotation.set(0, player.rotationY, 0);
+        this.saluteAt = this.cutT; // 擊劍禮動作
       } else if (id === 'DISSOLVE') {
         this.boss.dissolveNow();
         this.victoryDawn = true; // 暮色散去：天色轉晨金
@@ -789,6 +823,7 @@ export class FencerBossFight {
       this.updateFightStory();
       this.updateRegen(delta);
       this.updateDusk(delta);
+      this.voice.update(delta);
       const bars = this.boss.bars;
       hud.setFencerBossHealth(bars.totalRemaining, FENCER.BAR_HP * FENCER.BARS, bars.bar, !this.boss.isDefeated);
     } else if (this.phase === 'VICTORY') {
@@ -848,10 +883,11 @@ export class FencerBossFight {
   private pollHeart() {
     const id = this.heart.poll(this.timer, this.lineGate.lastSayAt);
     if (!id) return;
-    const { wantedSystem } = this.ctx;
-    wantedSystem.showBanner(HEART_LINES[id].text, HEART_LINES[id].ms);
+    // 向陽之心的話走戰鬥字幕條 (不擠系統橫幅佇列)；🌻 開頭 = 小花回血確認
+    const line = HEART_LINES[id];
+    this.voice.show(line.text, line.ms / 1000, line.text.startsWith('🌻') ? 'flower' : 'heart');
     if (id === 'TEACH') {
-      wantedSystem.showBanner(HEART_TEACH_2.text, HEART_TEACH_2.ms);
+      this.voice.show(HEART_TEACH_2.text, HEART_TEACH_2.ms / 1000, 'heart');
       this.storySeen |= STORY_SEEN.REGEN_TAUGHT;
       this.persist();
     }
@@ -862,6 +898,18 @@ export class FencerBossFight {
     if (!text) return;
     this.boss.say(text, dur);
     this.lineGate.noteSay(this.timer);
+    this.mirrorBossLine(text, dur);
+  }
+
+  /** Boss 離玩家遠 / 不在畫面內：台詞同步顯示在戰鬥字幕條 (手機直屏遠景頭頂框太小) */
+  private mirrorBossLine(text: string, dur: number) {
+    if (this.phase !== 'FIGHT' || this.isCutscene) return;
+    const p = this.ctx.player.position;
+    const b = this.boss.position;
+    const far = Math.hypot(b.x - p.x, b.z - p.z) > VOICE_MIRROR_DIST;
+    _ndc.set(b.x, b.y + 2.2, b.z).project(this.ctx.cameraCtrl.camera);
+    const off = _ndc.z > 1 || Math.abs(_ndc.x) > 0.95 || Math.abs(_ndc.y) > 0.95;
+    if (far || off) this.voice.show(`🎩「${text}」`, dur, 'boss');
   }
 
   /** 反應台詞 (依樂章 / 每場一次；頻率見 BossLineGate.allowBark)；回傳是否有說 */
@@ -871,6 +919,7 @@ export class FencerBossFight {
     const text = kind in BOSS_BARK_LINES ? BOSS_BARK_LINES[kind as keyof typeof BOSS_BARK_LINES][bar] : BOSS_ONCE_LINES[kind as keyof typeof BOSS_ONCE_LINES];
     if (!text || !this.lineGate.allowBark(kind, bar, this.timer)) return false;
     this.boss.say(text, BOSS_BARK_SEC);
+    this.mirrorBossLine(text, BOSS_BARK_SEC);
     return true;
   }
 
@@ -1030,6 +1079,7 @@ export class FencerBossFight {
     this.story = new StoryPlayer(lines, this.storyHandler, TRANSITION_LEAD_SEC, TRANSITION_TAIL_SEC);
     this.boss.setTransitionDuration(this.story.total);
     this.cutKind = 'TRANSITION';
+    this.voice.clear();
     this.cutT = 0;
     this.cutFirstFrame = true;
     this.pushPending = true;
@@ -1208,6 +1258,7 @@ export class FencerBossFight {
     hud.hidePrompt();
     this.cutKind = 'VICTORY';
     this.cutT = 0;
+    this.saluteAt = -1;
     this.camStage = 'ORBIT'; // 首勝鏡頭只用 BLEND 段
     this.camStageAt = 0;
     this.cutInput.reset();
@@ -1237,6 +1288,7 @@ export class FencerBossFight {
     player.updateSkillBubble(dt);
     if (t >= VICTORY_FIRST.freeze) this.story?.update(dt);
     this.updateRapierRise(this.cutT);
+    if (this.saluteAt >= 0) player.setSalutePose(this.cutT - this.saluteAt);
     this.updateDusk(dt);
     this.updateVictoryCamera();
     if (this.story?.done) this.finishVictoryCutscene();
@@ -1408,6 +1460,7 @@ export class FencerBossFight {
     this.fx.reset();
     this.arena.setDawn(0);
     this.victoryDawn = false;
+    this.voice.clear();
     this.ctx.hud.setBossHealth(0, FENCER.BAR_HP, false);
     this.ctx.hud.setBossFightHud(false);
     this.ctx.hud.setHpRegen(false);
@@ -1482,7 +1535,7 @@ export class FencerBossFight {
     if (typeof window === 'undefined') return;
     const isKey = (e: KeyboardEvent) => e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyE';
     const release = () => {
-      if (this.cutInput.release(cutNow()) === 'ADVANCE') this.story?.advance();
+      if (this.cutInput.release(cutNow()) === 'ADVANCE' && !this.completeTypewriter()) this.story?.advance();
     };
     window.addEventListener('keydown', (e) => {
       if (!this.isCutscene || e.repeat || !isKey(e)) return;
@@ -1502,13 +1555,44 @@ export class FencerBossFight {
     window.addEventListener('pointercancel', () => this.cutInput.reset());
   }
 
+  /** 過場字幕：依說話者配色 (首字 🎩 / ☀️ / 🌻 / 玩家括號)，以打字機逐字顯示 (updateTypewriter) */
   private subtitle(text: string) {
     if (typeof document === 'undefined') return;
     const sub = document.getElementById('cutscene-subtitle-text');
-    if (sub) {
-      sub.textContent = text;
-      sub.style.opacity = text ? '' : '0'; // 前導 (Boss 回中央) 期間不留空字幕框
-    }
+    if (!sub) return;
+    sub.dataset.spk = subtitleSpeaker(text);
+    sub.style.opacity = text ? '' : '0'; // 前導 (Boss 回中央) 期間不留空字幕框
+    this.typeChars = Array.from(text);
+    // 說話者標記 (emoji) 與開頭引號直接顯示，從台詞本文開始打字
+    let lead = 0;
+    while (lead < this.typeChars.length && /[\p{Extended_Pictographic}\u{FE0F}「（\s]/u.test(this.typeChars[lead])) lead++;
+    this.typeShown = Math.min(lead, this.typeChars.length);
+    this.typeDrawn = -1;
+    this.drawTypewriter(sub);
+  }
+
+  /** 打字機每幀推進 (過場更新內呼叫)；字數有變才寫 DOM */
+  private updateTypewriter(dt: number) {
+    if (this.typeDrawn >= this.typeChars.length || typeof document === 'undefined') return;
+    this.typeShown = Math.min(this.typeChars.length, this.typeShown + TYPE_CPS * dt);
+    const sub = document.getElementById('cutscene-subtitle-text');
+    if (sub) this.drawTypewriter(sub);
+  }
+
+  private drawTypewriter(sub: HTMLElement) {
+    const n = Math.floor(this.typeShown);
+    if (n === this.typeDrawn) return;
+    this.typeDrawn = n;
+    sub.textContent = n >= this.typeChars.length ? this.typeChars.join('') : this.typeChars.slice(0, n).join('');
+  }
+
+  /** 打字中：直接顯示整句 (回傳 true = 已處理，不前進) */
+  private completeTypewriter(): boolean {
+    if (this.typeDrawn >= this.typeChars.length || this.typeChars.length === 0) return false;
+    this.typeShown = this.typeChars.length;
+    const sub = typeof document !== 'undefined' ? document.getElementById('cutscene-subtitle-text') : null;
+    if (sub) this.drawTypewriter(sub);
+    return true;
   }
 
   // 全螢幕閃白層：預熱時預先建立 (opacity 0 + will-change 常駐合成層)，閃白時只動 opacity
@@ -1538,6 +1622,7 @@ export class FencerBossFight {
   public prewarm(compile: () => void) {
     if (!this.initialized) return;
     this.ensureFlashEl();
+    this.voice.ensure();
     this.rapierProp.visible = true; // 細劍材質隨下列任一次編譯預熱
     this.arena.prewarm(compile);
     this.boss.prewarm(compile);
@@ -1549,3 +1634,4 @@ export class FencerBossFight {
 
 const ARENA_BOUND = { x: FENCER.ARENA_X, z: FENCER.ARENA_Z, r: FENCER.ARENA_R - 0.15 };
 const ARENA_CAMERA_BOUND = { x: FENCER.ARENA_X, z: FENCER.ARENA_Z, r: FENCER.ARENA_R - 0.4 };
+

@@ -805,6 +805,20 @@ export class Player {
     this.afterimagePool.update(delta);
   }
 
+  /**
+   * 過場擊劍禮 (鎖操作過場中由呼叫端每幀驅動；一般 update 不跑時才有效，解鎖後由一般動畫接手)：
+   * t 秒 = 0~0.35 右臂舉到面前 (劍立於鼻前)、~0.8 停住、~1.25 向斜下揮開；左臂收在身後。
+   */
+  public setSalutePose(t: number) {
+    const ease = (k: number) => { const c = Math.max(0, Math.min(1, k)); return c * c * (3 - 2 * c); };
+    const up = ease(t / 0.35);
+    const down = ease((t - 0.8) / 0.45);
+    const ra = this.rightArm.rotation;
+    ra.set(-0.2 - 2.4 * up + 1.9 * down, 0, 0.05 + 0.35 * down);
+    const la = this.leftArm.rotation;
+    la.set(0.35 * up, 0, -0.25 * up);
+  }
+
   public showSkillBubble(text: string, isAdvanced: boolean) {
     this.skillBubble.show(text, isAdvanced);
   }
