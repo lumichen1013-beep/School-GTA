@@ -1,37 +1,10 @@
-import type { Box, Mode, World } from './types';
-import { MSG_SQUEEZE, PLAYER_HW, SEARCH_RADIUS, SEARCH_STEP } from './constants';
-import { boxAt, clamp, objBox, overlaps, solidsFor, supportsOf } from './geometry';
+import type { World } from './types';
+import { MSG_SQUEEZE, PLAYER_HW } from './constants';
+import { activeIn, boxAt, clamp, objBox, overlapsXZ, solidsFor, supportsAt, supportsOf } from './geometry';
+import { hits, inBounds, nearestFree } from './place';
 import { say } from './world';
 
 export interface SwitchResult { ok: boolean }
-
-function inBounds(w: World, x: number, z: number, mode: Mode): boolean {
-  const b = w.level.bounds;
-  if (x < b.minX + PLAYER_HW - 1e-6 || x > b.maxX - PLAYER_HW + 1e-6) return false;
-  return mode === '2d' || (z >= b.minZ + PLAYER_HW - 1e-6 && z <= b.maxZ - PLAYER_HW + 1e-6);
-}
-
-/** 在 (a,b) 平面上由近到遠找第一個無重疊點；找不到回傳 null */
-function nearestFree(free: (a: number, b: number) => boolean, a0: number, b0: number, bMinOffset = -SEARCH_RADIUS): [number, number] | null {
-  if (free(a0, b0)) return [a0, b0];
-  const n = Math.round(SEARCH_RADIUS / SEARCH_STEP);
-  let best: [number, number] | null = null;
-  let bestD = Infinity;
-  for (let i = -n; i <= n; i++) {
-    for (let j = Math.round(bMinOffset / SEARCH_STEP); j <= n; j++) {
-      const d = i * i + j * j;
-      if (d >= bestD) continue;
-      const a = a0 + i * SEARCH_STEP;
-      const b = b0 + j * SEARCH_STEP;
-      if (free(a, b)) { best = [a, b]; bestD = d; }
-    }
-  }
-  return best;
-}
-
-function hits(boxes: Box[], box: Box, mode: Mode): boolean {
-  return boxes.some(s => overlaps(box, s, mode));
-}
 
 /** F / Q：切換 3D 現實 ↔ 2D 圖紙；塞不下則拒絕並提示 */
 export function trySwitchMode(w: World): SwitchResult {
@@ -45,9 +18,10 @@ export function trySwitchMode(w: World): SwitchResult {
     p.z = 0;
     p.mode = '2d';
   } else {
-    // 站在某物體上就採用該支撐物的 z (落在其 z 範圍內)
+    const sup2d = supportsOf(w, p, '2d');
+    // 站在某物體上就採用該支撐物的 z (落在其 z 範圍內)；noLand3d 的支撐物不採用
     let z = p.z3d;
-    const sup = supportsOf(w, p, '2d');
+    const sup = sup2d.filter(s => activeIn(s.def.visible, '3d') && !s.def.noLand3d);
     if (sup.length) {
       let bestDist = Infinity;
       let bestZ = z;
@@ -62,7 +36,15 @@ export function trySwitchMode(w: World): SwitchResult {
     const b = w.level.bounds;
     z = clamp(z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
     const boxes = solidsFor(w, '3d').map(objBox);
-    const spot = nearestFree((x, zz) => inBounds(w, x, zz, '3d') && !hits(boxes, boxAt(x, p.y, zz), '3d'), p.x, z);
+    const noLand = w.objs.filter(o => !o.gone && o.def.noLand3d && activeIn(o.def.visible, '3d')).map(objBox);
+    const free = (x: number, zz: number): boolean => {
+      const pb = boxAt(x, p.y, zz);
+      return inBounds(w, x, zz, '3d') && !hits(boxes, pb, '3d') && !noLand.some(nb => overlapsXZ(pb, nb));
+    };
+    // 圖紙裡踩著東西 → 回到現實也要踩得到東西 (避免切回 3D 就掉進坑或落在被圍住的書架上)
+    const landable = (x: number, zz: number): boolean =>
+      free(x, zz) && supportsAt(w, x, p.y, zz, '3d').some(s => !s.def.noLand3d);
+    const spot = (sup2d.length ? nearestFree(landable, p.x, z) : null) ?? nearestFree(free, p.x, z);
     if (!spot) { say(w, MSG_SQUEEZE); return { ok: false }; }
     [p.x, p.z] = spot;
     p.mode = '3d';

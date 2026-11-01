@@ -22,9 +22,17 @@ export function overlaps(a: Box, b: Box, mode: Mode): boolean {
   return true;
 }
 
-/** 目前模式下生效的實體 (可見模式吻合、未被拾取、solid) */
+/** 只看水平投影 (x、z) 是否相交 */
+export function overlapsXZ(a: Box, b: Box): boolean {
+  return a.min[0] < b.max[0] - EPS && a.max[0] > b.min[0] + EPS && a.min[2] < b.max[2] - EPS && a.max[2] > b.min[2] + EPS;
+}
+
+/** 已開啟的閘門不再擋路 */
+export const isOpenGate = (o: ObjState): boolean => o.def.type === 'gate' && o.used;
+
+/** 目前模式下生效的實體 (可見模式吻合、未被拾取、solid、閘門未開) */
 export function solidsFor(w: World, mode: Mode): ObjState[] {
-  return w.objs.filter(o => !o.gone && o.def.solid && activeIn(o.def.visible, mode));
+  return w.objs.filter(o => !o.gone && o.def.solid && !isOpenGate(o) && activeIn(o.def.visible, mode));
 }
 
 /** 沿單軸掃掠：回傳可移動距離 (含正負號) 與擋住的物件 */
@@ -51,14 +59,16 @@ export function sweepAxis(box: Box, axis: 0 | 1 | 2, delta: number, solids: ObjS
   return { allowed, hit };
 }
 
-/** 腳下的支撐物 (頂面約等於腳底且水平投影重疊) */
-export function supportsOf(w: World, p: Player, mode: Mode): ObjState[] {
-  const pb = boxAt(p.x, p.y - 0.05, p.z);
+/** 位於 (x,y,z) 的玩家腳下的支撐物 (頂面約等於腳底且投影重疊) */
+export function supportsAt(w: World, x: number, y: number, z: number, mode: Mode): ObjState[] {
+  const pb = boxAt(x, y - 0.05, z);
   return solidsFor(w, mode).filter(s => {
     const sb = objBox(s);
-    return Math.abs(sb.max[1] - p.y) < 0.02 && overlaps(pb, sb, mode);
+    return Math.abs(sb.max[1] - y) < 0.02 && overlaps(pb, sb, mode);
   });
 }
+
+export const supportsOf = (w: World, p: Player, mode: Mode): ObjState[] => supportsAt(w, p.x, p.y, p.z, mode);
 
 export const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 export const toV3 = (x: number, y: number, z: number): V3 => [x, y, z];

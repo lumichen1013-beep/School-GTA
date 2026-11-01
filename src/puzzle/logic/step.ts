@@ -2,7 +2,10 @@ import type { InputState, World } from './types';
 import { GRAVITY, JUMP_V_2D, JUMP_V_3D, SPEED, PLAYER_HW } from './constants';
 import { clamp, playerBox, solidsFor, sweepAxis } from './geometry';
 import { pushCrate } from './push';
-import { respawn } from './world';
+import { updatePlates } from './mechanisms';
+import { respawn, updateCheckpoint } from './world';
+
+export const MSG_FELL = '你掉進了縫隙裡……醒來時，又回到了熟悉的地方。';
 
 function moveAxis(w: World, axis: 0 | 2, delta: number): void {
   const p = w.player;
@@ -49,5 +52,7 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
   p.x = clamp(p.x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW);
   if (p.mode === '3d') p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
 
-  if (p.y < w.level.voidY) respawn(w, '你掉進了縫隙裡……醒來時，又回到了門邊。');
+  updatePlates(w);
+  updateCheckpoint(w);
+  if (p.y < w.level.voidY) respawn(w, MSG_FELL);
 }

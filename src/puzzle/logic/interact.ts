@@ -3,6 +3,9 @@ import { INTERACT_RANGE } from './constants';
 import { activeIn, objBox } from './geometry';
 import { say } from './world';
 
+export const MSG_KEY = '拿到了「筆尖」。它還帶著一點未乾的墨。';
+export const MSG_GATE = '閘門紋絲不動。門軸上沾著墨，像在等紙上的什麼。';
+
 function canUse(o: ObjState, mode: Mode): boolean {
   const d = o.def;
   return !o.gone && !o.used && !!d.interactable && activeIn(d.visible, mode) && activeIn(d.interactIn ?? d.visible, mode);
@@ -22,8 +25,9 @@ function distanceTo(w: World, o: ObjState): number {
   return Math.sqrt(sum);
 }
 
-/** 範圍 (約 1.5) 內最近、目前模式可互動的物件 */
+/** 範圍 (約 1.5) 內最近、目前模式可互動的物件；必須雙腳站穩 (空中不能互動，避免跳躍途中搆到高處) */
 export function findTarget(w: World): ObjState | null {
+  if (!w.player.onGround) return null;
   let best: ObjState | null = null;
   let bd = INTERACT_RANGE;
   for (const o of w.objs) {
@@ -38,7 +42,7 @@ export function findTarget(w: World): ObjState | null {
 export function interact(w: World): void {
   const t = findTarget(w);
   if (!t) {
-    const unreachable = w.objs.some(o => !o.gone && !o.used && o.def.interactable && activeIn(o.def.visible, w.player.mode)
+    const unreachable = w.player.onGround && w.objs.some(o => !o.gone && !o.used && o.def.interactable && activeIn(o.def.visible, w.player.mode)
       && !canUse(o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
     if (unreachable) say(w, '看得見，卻碰不到。換個角度試試。');
     return;
@@ -47,8 +51,9 @@ export function interact(w: World): void {
     case 'note': say(w, t.def.text ?? ''); break;
     case 'key':
       t.gone = true; w.hasKey = true;
-      say(w, '拿到了「筆尖」。它還帶著一點未乾的墨。');
+      say(w, MSG_KEY);
       break;
+    case 'gate': say(w, MSG_GATE); break;
     case 'valve':
       if (!w.hasKey) { say(w, '墨水閥乾涸了。需要一支能引墨的東西。'); break; }
       t.used = true; w.sealed = false;
@@ -59,5 +64,6 @@ export function interact(w: World): void {
       w.cleared = true;
       say(w, '門開了。');
       break;
+    default: break;
   }
 }
