@@ -1595,15 +1595,7 @@ export class HUD {
 
     // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
     // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪；畫布僅在【地圖】分頁繪製，學生證 / 戰績同節流且值變才寫 DOM
-    if (this.isFullMapOpen) {
-      const nowMs = performance.now();
-      // 頻率依畫質檔位 (中高 20Hz / 低 10Hz)，容差 4ms 避免 30fps 鎖幀時因差一點點而多等一幀
-      if (nowMs - this.lastFullmapRenderAt >= 1000 / QUALITY_PRESETS[qualityManager.tier].fullmapHz - 4) {
-        this.lastFullmapRenderAt = nowMs;
-        this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
-        if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
-      }
-    }
+    this.updateFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
 
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
     if (this.pursuitVignetteEl) {
@@ -1621,6 +1613,25 @@ export class HUD {
           this.pursuitVignetteEl.classList.remove('active', 'danger');
         }
       }
+    }
+  }
+
+  /** 全螢幕大地圖選單 (開啟中才繪製，節流)；選單暫停期間 main 只呼叫這裡，世界與雷達不更新 */
+  public updateFullMap(
+    playerPos: THREE.Vector3,
+    playerRotY: number,
+    npcs: NPC[],
+    bicycles: Bicycle[],
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
+    detentionData?: DetentionRadarData
+  ) {
+    if (!this.isFullMapOpen) return;
+    const nowMs = performance.now();
+    // 頻率依畫質檔位 (中高 20Hz / 低 10Hz)，容差 4ms 避免 30fps 鎖幀時因差一點點而多等一幀
+    if (nowMs - this.lastFullmapRenderAt >= 1000 / QUALITY_PRESETS[qualityManager.tier].fullmapHz - 4) {
+      this.lastFullmapRenderAt = nowMs;
+      this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
+      if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
     }
   }
 

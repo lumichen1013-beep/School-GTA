@@ -56,6 +56,9 @@ export class InputManager {
 
   private initListeners() {
     window.addEventListener('keydown', (e) => {
+      // releaseAll 時仍按住的鍵：自動重複的 keydown 不再視為按住 (需放開重按)，避免關閉選單後角色續走
+      if (e.repeat && this.heldAtRelease.has(e.code)) return;
+      this.heldAtRelease.delete(e.code);
       this.keys[e.code] = true;
       // 長按自動重複的 keydown 不重複觸發動作 (F 保留長按連續攻擊)
       if (e.repeat && e.code !== 'KeyF') return;
@@ -72,6 +75,7 @@ export class InputManager {
     });
 
     window.addEventListener('keyup', (e) => {
+      this.heldAtRelease.delete(e.code);
       this.keys[e.code] = false;
       if (e.code === 'KeyF') {
         if (this.onAttackReleaseCallback) this.onAttackReleaseCallback();
@@ -116,15 +120,8 @@ export class InputManager {
     window.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // 視窗失焦防按鍵與滑鼠卡死
-    window.addEventListener('blur', () => {
-      this.mouseButtons.left = false;
-      this.mouseButtons.right = false;
-      // 失焦時收不到 keyup：清空按鍵與虛擬搖桿，避免角色持續移動
-      for (const code in this.keys) this.keys[code] = false;
-      this.setVirtualAxis(0, 0);
-      this.virtualSprint = false;
-      this.virtualJump = false;
-    });
+    // 失焦時收不到 keyup：清空按鍵與虛擬搖桿，避免角色持續移動
+    window.addEventListener('blur', () => this.releaseAll());
 
     // Mouse movement
     window.addEventListener('mousemove', (e) => {
@@ -220,6 +217,32 @@ export class InputManager {
         this.resetTouchLook();
       }
     });
+  }
+
+  /**
+   * 放開所有按住中的輸入 (按鍵、滑鼠鍵、虛擬搖桿 / 衝刺 / 跳躍、累積視角位移)：視窗失焦、選單暫停開關時呼叫。
+   * 手機搖桿 UI 由 onReleaseAll 註冊的回呼歸位 (放開後需重新按住才會再移動)。
+   */
+  public releaseAll() {
+    this.mouseButtons.left = false;
+    this.mouseButtons.right = false;
+    for (const code in this.keys) {
+      if (this.keys[code]) this.heldAtRelease.add(code);
+      this.keys[code] = false;
+    }
+    this.setVirtualAxis(0, 0);
+    this.virtualSprint = false;
+    this.virtualJump = false;
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
+    this.touchLookId = null;
+    for (const fn of this.releaseListeners) fn();
+  }
+
+  private readonly releaseListeners: (() => void)[] = [];
+  private readonly heldAtRelease = new Set<string>();
+  public onReleaseAll(fn: () => void) {
+    this.releaseListeners.push(fn);
   }
 
   // 消耗跳躍輸入 (空白鍵跳過開場時避免同一按鍵讓主角跳起)：需放開再按才會再次觸發

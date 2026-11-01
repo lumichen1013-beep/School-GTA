@@ -80,6 +80,11 @@ export class DetentionMode {
 
   constructor(private readonly ctx: GameContext) {}
 
+  /** 選單暫停：越獄計時以實際時間計算，起點順延暫停的毫秒數 (暫停期間計時不前進) */
+  public shiftClock(ms: number) {
+    this.escapeStartTime += ms;
+  }
+
   // 進入特訓院 (首次進入與「重新挑戰」共用) 時完整重置越獄進度：
   // 門禁、鑰匙卡、萬能卡、存檔點、全體守衛與總教官 (含永久擊昏者)，確保每次都是乾淨的新局
   public reset() {

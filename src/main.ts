@@ -34,6 +34,7 @@ import { setupDiagPanel } from './ui/DiagPanel';
 import { getDiagFlags } from './core/diagFlags';
 import { perfProbe } from './core/perfProbe';
 import { shouldSkipFrame } from './core/quality';
+import { WorldPause, type WorldPauseStep } from './core/worldPause';
 import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
@@ -317,7 +318,7 @@ class SchoolGTASandbox implements GameContext {
     installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
-      onDodge: this.progression.triggerDodgeSkill
+      onDodge: () => { if (!this.isMenuOpen) this.progression.triggerDodgeSkill(); }
     });
     // 滑鼠滾輪循環切換武器 (鏡頭無滾輪縮放，無衝突；僅畫布上觸發，大地圖開啟時略過)
     this.engine.canvas.addEventListener('wheel', (e) => {
@@ -542,7 +543,7 @@ class SchoolGTASandbox implements GameContext {
 
   // 投籃出手 (滑鼠左鍵鬆開 / 手機攻擊鍵放開，僅天天國中)
   private readonly releaseBasketballShot = () => {
-    if (!this.isGameRunning) return;
+    if (!this.isGameRunning || this.isMenuOpen) return;
     if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
       this.basketballGame.releaseShot(this.player, this.cameraCtrl.camera, this.hud, this.world.hoopTargets);
     }
@@ -551,14 +552,14 @@ class SchoolGTASandbox implements GameContext {
   private setupInputBindings() {
     // E 鍵互動：依互動表優先順序執行 (與每幀互動提示共用同一張表)
     this.input.onInteract(() => {
-      if (!this.isGameRunning || this.combat.isExecutionActive) return;
+      if (!this.isGameRunning || this.isMenuOpen || this.combat.isExecutionActive) return;
       if (this.fencerBossFight.isActive) return; // 花劍客戰鬥中隱藏所有校園互動
       this.interaction.interact();
     });
 
     // 滑鼠左鍵：投籃蓄力 / 單車鳴鈴 / 背後暗殺 / 揮動武器攻擊
     this.input.onAttack(() => {
-      if (!this.isGameRunning) return;
+      if (!this.isGameRunning || this.isMenuOpen) return;
       this.combat.onAttack();
     });
     this.input.onAttackRelease(this.releaseBasketballShot);
@@ -583,7 +584,7 @@ class SchoolGTASandbox implements GameContext {
 
     // Q 鍵身法技能
     this.input.onSkill(() => {
-      if (!this.combat.isExecutionActive) this.progression.triggerDodgeSkill();
+      if (!this.isMenuOpen && !this.combat.isExecutionActive) this.progression.triggerDodgeSkill();
     });
   }
 
@@ -740,6 +741,51 @@ class SchoolGTASandbox implements GameContext {
     perfProbe.render.push(t2, t2 - t1);
   }
 
+  private readonly worldPause = new WorldPause();
+
+  /** 大地圖選單 (雷達點擊 / J 鍵 / 任務小介面) 開啟中：遊戲世界暫停、操作輸入不觸發動作 */
+  private get isMenuOpen(): boolean {
+    return this.hud.isFullMapOpen;
+  }
+
+  // 選單暫停幀：世界邏輯全部不跑 (玩家 / NPC / Boss / 投射物 / 特效 / 計時 / 天氣 / 警戒)，只更新選單面板；
+  // 3D 畫面只在進入暫停與繪圖緩衝尺寸改變時重繪一次 (選單背景為靜止畫面，省電且不重配畫布)
+  private tickMenuPaused(step: WorldPauseStep) {
+    if (step === 'enter') {
+      this.input.releaseAll();
+      bgmManager.setMenuDuck(true);
+      qualityManager.setWorldPaused(true);
+    } else {
+      this.shiftWallClocks(this.worldPause.heldMs);
+    }
+    this.input.consumeMouseDelta();
+    const bike = this.currentRidingBike;
+    const pos = bike ? bike.position : this.player.position;
+    const isCampus = this.currentWorldType === 'CAMPUS';
+    this.hud.updateFullMap(pos, bike ? bike.rotationY : this.player.rotationY, this.npcs, this.bicycles,
+      this.currentWorldType, isCampus ? undefined : this.detention.getRadarData());
+    const c = this.engine.canvas;
+    if (this.worldPause.needsRender(`${c.width}x${c.height}`)) {
+      this.engine.updateShadowFocus(pos);
+      this.renderFrame();
+    }
+  }
+
+  // 關閉選單恢復：放開暫停前後殘留的按鍵 / 搖桿、BGM 淡回、畫質量測可重新開始
+  private onMenuResume() {
+    this.shiftWallClocks(this.worldPause.heldMs);
+    this.input.releaseAll();
+    bgmManager.setMenuDuck(false);
+    qualityManager.setWorldPaused(false);
+  }
+
+  // 以 performance.now() 計時的系統 (越獄計時、處決時機計量表)：起點順延暫停的實際毫秒
+  private shiftWallClocks(ms: number) {
+    if (ms <= 0) return;
+    this.detention.shiftClock(ms);
+    this.combat.shiftClock(ms);
+  }
+
   private readonly diag = getDiagFlags();
   private lastRunAt = 0;      // 上次實際執行邏輯 / 繪製的 rAF 時間戳
   private frameStartMs = 0;   // 診斷計時：本幀邏輯起點 (僅 ?diag= 時使用)
@@ -754,13 +800,24 @@ class SchoolGTASandbox implements GameContext {
     if (diagOn) perfProbe.onRaf(now);
     if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
     this.lastRunAt = now;
-    qualityManager.onFrame(now, this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
+    // 選單暫停 (大地圖選單開啟中；過場劇情進行中依現況不暫停)
+    const pauseStep = this.worldPause.step(
+      this.isGameRunning && this.isMenuOpen && !this.detentionCutscene.isActive && !this.fencerBossFight.isCutscene, now);
+    qualityManager.onFrame(now, pauseStep !== 'run' || this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
     if (diagOn) {
       perfProbe.onFrameRun(now);
       this.frameStartMs = performance.now();
     }
 
-    const rawDelta = this.engine.getDelta();
+    let rawDelta = this.engine.getDelta(); // 暫停中照常取用並丟棄，恢復時不累積
+    if (pauseStep === 'enter' || pauseStep === 'hold') {
+      this.tickMenuPaused(pauseStep);
+      return;
+    }
+    if (pauseStep === 'resume') {
+      rawDelta = WorldPause.clampResumeDelta(rawDelta);
+      this.onMenuResume();
+    }
     const delta = this.combat.scaleDelta(rawDelta);
 
     // -1. 少年院開場電影級劇情動畫更新與 Space 跳過

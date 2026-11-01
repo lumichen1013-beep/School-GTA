@@ -140,6 +140,11 @@ export function setupMobileControls(input: InputManager, handlers: MobileControl
     });
 
     let isMouseDown = false;
+    // 選單暫停開關 / 失焦：搖桿歸位並放開追蹤中的手指 (關閉選單後不殘留移動，需重新按住)
+    input.onReleaseAll(() => {
+      isMouseDown = false;
+      if (activeTouchId !== null || zoneRect) handleEnd();
+    });
     joystickZone.addEventListener('mousedown', (e) => {
       isMouseDown = true;
       captureZone();

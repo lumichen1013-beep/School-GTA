@@ -255,6 +255,16 @@ export class BGMManager {
     this.masterGain.gain.linearRampToValueAtTime(0.42, now + durationSec);
   }
 
+  /** 選單暫停：沿用 duckVolume 的壓低音量 (0.08) 持續到關閉選單才淡回；靜音中不動 */
+  public setMenuDuck(on: boolean) {
+    if (!this.masterGain || !this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const gain = this.masterGain.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(on ? 0.08 : 0.42, now + (on ? 0.2 : 0.35));
+  }
+
   /** 完全靜音 sec 秒後淡回 (花劍客第 10 戳：靜一拍再爆開) */
   public silence(sec: number) {
     if (!this.masterGain || !this.ctx || this.isMuted) return;

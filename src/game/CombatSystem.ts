@@ -260,6 +260,11 @@ export class CombatSystem {
   }
 
   // 推進暗殺動作階段 (真實時間) 並回傳套用時間倍率後的模擬時間步長
+  /** 選單暫停：處決時機計量表以實際時間擺動，起點順延暫停的毫秒數 (游標停住、不會逾時) */
+  public shiftClock(ms: number) {
+    if (this.qteRunning) this.qteStartMs += ms;
+  }
+
   public scaleDelta(rawDelta: number): number {
     if (this.execPhase === 'NONE') {
       if (this.hitStop > 0) {
