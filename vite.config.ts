@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // build 完成後將 dist/sw.js 的快取版本佔位符替換為本次建置時間戳，確保每次部署清除舊快取
 function injectServiceWorkerVersion(): Plugin {
@@ -30,6 +31,11 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // 多頁入口：GTA 主遊戲 + 《圖紙之間》獨立入口 (不共用程式碼)
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        puzzle: fileURLToPath(new URL('./puzzle.html', import.meta.url))
+      },
       output: {
         // three.js 獨立成 vendor chunk，遊戲程式更新時玩家不必重新下載引擎
         manualChunks: { three: ['three'] }

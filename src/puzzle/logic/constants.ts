@@ -1,0 +1,11 @@
+export const PLAYER_HW = 0.3;      // 半寬 (x、z)
+export const PLAYER_H = 0.9;
+export const SPEED = 3.2;
+export const GRAVITY = 30;
+export const JUMP_V_3D = 8.66;     // 跳高約 1.25：跳不上 2.5 高台，也跨不過寬 4 的缺口
+export const JUMP_V_2D = 9.8;      // 圖紙裡的身體較輕，跳高約 1.6：站上木箱 (1.1) 後可達 2.7
+export const INTERACT_RANGE = 1.5;
+export const EPS = 1e-4;
+export const SEARCH_RADIUS = 3;
+export const SEARCH_STEP = 0.05;
+export const MSG_SQUEEZE = '這裡塞不下';

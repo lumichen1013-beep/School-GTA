@@ -1,0 +1,31 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #2a2118; font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+#pz-root { position: fixed; inset: 0; color: #4a3a28; user-select: none; }
+#pz-canvas, #pz-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#pz-grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s;
+  background-image:
+    linear-gradient(rgba(255,255,255,.10) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.10) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+}
+#pz-root.mode2d #pz-grid { opacity: 1; }
+#pz-fade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #0d1b3a; }
+#pz-hud { position: absolute; inset: 0; pointer-events: none; }
+#pz-status { position: absolute; top: 14px; left: 14px; display: flex; gap: 12px; align-items: center; font-size: 15px; }
+#pz-status span { padding: 6px 14px; border-radius: 4px; background: rgba(250,240,220,.88); border: 1px solid rgba(74,58,40,.35); }
+#pz-mode { font-weight: 700; letter-spacing: .2em; }
+#pz-root.mode2d #pz-status span { background: rgba(14,36,84,.85); color: #e8f1ff; border-color: rgba(255,255,255,.5); }
+#pz-help { position: absolute; top: 14px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.7; border-radius: 4px; background: rgba(250,240,220,.8); border: 1px solid rgba(74,58,40,.3); }
+#pz-root.mode2d #pz-help { background: rgba(14,36,84,.8); color: #e8f1ff; border-color: rgba(255,255,255,.4); }
+#pz-prompt { position: absolute; bottom: 16%; left: 50%; transform: translateX(-50%); font-size: 15px; padding: 5px 14px; border-radius: 4px; background: rgba(40,30,20,.7); color: #fff3d6; opacity: 0; transition: opacity .15s; }
+#pz-prompt.show { opacity: 1; }
+#pz-toast { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%); max-width: 80%; text-align: center; font-size: 18px; letter-spacing: .08em; padding: 10px 22px; border-radius: 4px; background: rgba(30,22,14,.82); color: #fff3d6; opacity: 0; transition: opacity .4s; }
+#pz-toast.show { opacity: 1; }
+#pz-narration { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 12%; font: 26px/1.9 "Songti TC", "Noto Serif TC", serif; letter-spacing: .12em; color: #f6e9cd; background: rgba(20,14,8,.88); transition: opacity 1s; }
+#pz-narration.hide { opacity: 0; pointer-events: none; }
+#pz-clear { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(14,36,84,.92); color: #e8f1ff; text-align: center; }
+#pz-clear.show { display: flex; }
+#pz-clear h1 { margin: 0; font-weight: 400; letter-spacing: .3em; }
+#pz-clear p { margin: 0; font-size: 22px; letter-spacing: .15em; }
+#pz-replay { pointer-events: auto; margin-top: 12px; padding: 8px 28px; font-size: 16px; cursor: pointer; color: #e8f1ff; background: transparent; border: 1px solid #e8f1ff; border-radius: 4px; }
+#pz-replay:hover { background: rgba(255,255,255,.15); }
