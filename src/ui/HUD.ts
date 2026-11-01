@@ -869,14 +869,17 @@ export class HUD {
   private bgmWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   private lastBgmMode: 'EXPLORE' | 'PURSUIT' | 'DUEL' = 'EXPLORE';
   private lastBgmMuted = false;
+  private lastBgmLabel: string | undefined;
   public setBGMWorld(world: 'CAMPUS' | 'DETENTION') {
     this.bgmWorld = world;
-    this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted);
+    this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted, this.lastBgmLabel);
   }
 
-  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT' | 'DUEL', isMuted: boolean) {
+  /** label：特訓院「鐵窗夜行」段落名稱 (有值時取代預設文字) */
+  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT' | 'DUEL', isMuted: boolean, label?: string) {
     this.lastBgmMode = mode;
     this.lastBgmMuted = isMuted;
+    this.lastBgmLabel = label;
     const isDetention = this.bgmWorld === 'DETENTION';
     if (!this.bgmBadgeEl || !this.bgmIconEl || !this.bgmTextEl || !this.bgmToggleBtnEl) return;
 
@@ -893,12 +896,12 @@ export class HUD {
     } else if (mode === 'PURSUIT') {
       this.bgmBadgeEl.className = 'bgm-badge pursuit';
       this.bgmIconEl.textContent = '🚨';
-      this.bgmTextEl.textContent = isDetention ? 'BGM: 警戒追捕!' : 'BGM: 通緝追逐!';
+      this.bgmTextEl.textContent = label ? `BGM: ${label}` : isDetention ? 'BGM: 警戒追捕!' : 'BGM: 通緝追逐!';
       this.bgmToggleBtnEl.textContent = '[開]';
     } else {
       this.bgmBadgeEl.className = 'bgm-badge';
       this.bgmIconEl.textContent = '🎵';
-      this.bgmTextEl.textContent = isDetention ? 'BGM: 暗夜潛入' : 'BGM: 校園漫步';
+      this.bgmTextEl.textContent = label ? `BGM: ${label}` : isDetention ? 'BGM: 暗夜潛入' : 'BGM: 校園漫步';
       this.bgmToggleBtnEl.textContent = '[開]';
     }
   }

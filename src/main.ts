@@ -14,6 +14,7 @@ import { WantedSystem } from './systems/WantedSystem';
 import { HUD, DetentionRadarData } from './ui/HUD';
 import { soundManager } from './audio/SoundEffects';
 import { bgmManager } from './audio/BGMManager';
+import { detentionMusicPhase } from './audio/detentionTheme';
 import { EcologicalGarden } from './world/EcologicalGarden';
 import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
@@ -334,8 +335,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定背景音樂 (BGM)
     this.hud.setupBGMClick(() => this.toggleBGM());
-    bgmManager.onModeChange = (mode, isMuted) => {
-      this.hud.updateBGMStatus(mode, isMuted);
+    bgmManager.onModeChange = (mode, isMuted, label) => {
+      this.hud.updateBGMStatus(mode, isMuted, label);
     };
     await nextFrame();
 
@@ -409,6 +410,8 @@ class SchoolGTASandbox implements GameContext {
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
     this.hud.setBGMWorld(targetWorld);
+    // 第二世界專屬「鐵窗夜行」：進特訓院依開場與否切序曲 / 潛入，回校園恢復校園音樂
+    bgmManager.setDetention(targetWorld === 'DETENTION' ? (skipCutscene ? 'SNEAK' : 'INTRO') : null);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
       this.campusWeaponId = this.player.currentWeapon;
@@ -506,6 +509,19 @@ class SchoolGTASandbox implements GameContext {
     }
   }
 
+  // 特訓院 BGM 段落：總教官追擊中且在 38m 內 (同 Boss 血條距離) 切鐵面進行曲
+  private detentionMusicPhase() {
+    const boss = this.wardenBossNpc;
+    const bossEngaged = !!boss && !this.detention.isBossDefeated && !boss.isKnockedDown && !boss.isPermanentlyKnockedOut &&
+      (boss.isChasing || boss.alertState === 'ALERT') && this.player.position.distanceToSquared(boss.position) < 38 * 38;
+    return detentionMusicPhase({
+      cutscene: this.detentionCutscene.isActive,
+      escaped: this.detention.isEscapeComplete,
+      bossEngaged,
+      alertPhase: this.detention.alertPhase
+    });
+  }
+
   // 下車並恢復步行鏡頭
   public forceDismount() {
     if (!this.currentRidingBike) return;
@@ -577,9 +593,9 @@ class SchoolGTASandbox implements GameContext {
       this.wantedSystem.showBanner('🔇 背景音樂 (BGM) 已靜音', 2000);
     } else {
       const isDetention = this.currentWorldType === 'DETENTION';
-      const modeText = bgmManager.getMode() === 'DUEL' ? '花劍客向日圓舞曲' : bgmManager.getMode() === 'PURSUIT'
+      const modeText = bgmManager.getModeLabel() ?? (bgmManager.getMode() === 'DUEL' ? '花劍客向日圓舞曲' : bgmManager.getMode() === 'PURSUIT'
         ? (isDetention ? '警戒追捕熱血節奏' : '通緝逃亡熱血節奏')
-        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律');
+        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律'));
       this.wantedSystem.showBanner(`🎵 背景音樂 (BGM) 已開啟【${modeText}】`, 2500);
     }
   }
@@ -753,6 +769,7 @@ class SchoolGTASandbox implements GameContext {
         this.detentionCutscene.skip();
         this.input.consumeJump();
       } else {
+        bgmManager.setDetention('INTRO');
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
         this.engine.updateShadowFocus(this.player.position);
@@ -965,6 +982,7 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.setDuel(this.fencerBossFight.musicState());
     const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0);
     const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4;
+    bgmManager.setDetention(isCampus ? null : this.detentionMusicPhase());
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);
