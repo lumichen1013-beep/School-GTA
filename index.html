@@ -129,13 +129,8 @@
       </div>
     </div>
 
-    <!-- 秘境霸主：變異食人花王 Boss 血條 -->
-    <div id="boss-hud">
-      <div class="boss-title-row">
-        <span class="boss-icon" id="boss-icon-el">🌸</span>
-        <span class="boss-name" id="boss-name-text">秘境霸主：變異食人花王</span>
-        <span class="boss-hp-text" id="boss-hp-text">1200 / 1200</span>
-      </div>
+    <!-- 統一 Boss 血條：單條無文字無外框 (花劍客 / 變異食人花王 / 總教官鐵面總長共用)；data-seg>1 才顯示分隔線 -->
+    <div id="boss-hud" data-bar="0" data-seg="1">
       <div class="boss-bar-track">
         <div class="boss-bar-fill" id="boss-bar-fill" style="width: 100%;"></div>
         <i class="boss-bar-div" style="left: 33.333%;"></i><i class="boss-bar-div" style="left: 66.667%;"></i>

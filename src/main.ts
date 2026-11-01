@@ -971,7 +971,7 @@ class SchoolGTASandbox implements GameContext {
     } else if (!isCampus) {
       const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {
-        this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true, '總教官 Boss：鐵面總長', '🎖️');
+        this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true);
       } else {
         this.hud.setBossHealth(0, 1000, false);
       }

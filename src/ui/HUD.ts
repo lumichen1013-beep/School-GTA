@@ -174,10 +174,7 @@ export class HUD {
 
   // Boss HUD
   private bossHudEl: HTMLElement | null;
-  private bossHpTextEl: HTMLElement | null;
   private bossBarFillEl: HTMLElement | null;
-  private bossNameTextEl: HTMLElement | null;
-  private bossIconEl: HTMLElement | null;
 
   // Weapon HUD - 已整合至頂端任務看板與換武器功能
   // (保留介面屬性避免外部呼叫報錯)
@@ -234,9 +231,8 @@ export class HUD {
   private lastSkillKey: number = -1;
   private lastBossShown: boolean | null = null;
   private lastBossHp: number = -2;
-  private lastBossMaxHp: number = -1;
-  private lastBossName: string | undefined = undefined;
   private lastBossBar: number = -1;
+  private lastBossSeg: number = -1;
   // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
@@ -498,10 +494,7 @@ export class HUD {
     }
 
     this.bossHudEl = document.getElementById('boss-hud');
-    this.bossHpTextEl = document.getElementById('boss-hp-text');
     this.bossBarFillEl = document.getElementById('boss-bar-fill');
-    this.bossNameTextEl = document.getElementById('boss-name-text');
-    this.bossIconEl = document.getElementById('boss-icon-el');
 
     this.commissaryModalEl = document.getElementById('commissary-modal');
     this.commissaryCashValEl = document.getElementById('commissary-cash-val');
@@ -1038,69 +1031,48 @@ export class HUD {
     }
   }
 
-  // Boss 血條顯示與更新 (支援變異食人花王與體育老師林教頭)
-  public setBossHealth(currentHp: number, maxHp: number, visible: boolean, bossName?: string, bossIcon?: string) {
-    if (!this.bossHudEl || !this.bossHpTextEl || !this.bossBarFillEl) return;
-
-    // 髒檢查：每幀呼叫，僅在顯示狀態、血量 (取整) 或名稱變動時寫入 DOM
-    const shown = visible && currentHp > 0;
-    const hpKey = shown ? Math.ceil(currentHp) : -1;
-    if (shown === this.lastBossShown && hpKey === this.lastBossHp && maxHp === this.lastBossMaxHp && bossName === this.lastBossName) return;
-    this.lastBossShown = shown;
-    this.lastBossHp = hpKey;
-    this.lastBossMaxHp = maxHp;
-    this.lastBossName = bossName;
-    this.lastBossBar = -1;
-    this.bossHudEl.classList.remove('boss-hud-fencer', 'bar-flash');
-
-    if (!shown) {
-      this.bossHudEl.style.display = 'none';
-      return;
-    }
-
-    this.bossHudEl.style.display = 'block';
-    if (this.bossNameTextEl && bossName) {
-      this.bossNameTextEl.textContent = bossName;
-    }
-    if (this.bossIconEl && bossIcon) {
-      this.bossIconEl.textContent = bossIcon;
-    }
-    const pct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
-    this.bossBarFillEl.style.width = `${pct}%`;
-    this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
-  }
-
   /**
-   * 花劍客 Boss 血條：同一條血條呈現三管 (無文字)。fill = 整場剩餘 / 總量，兩條細分隔線標示三段，
-   * 顏色隨管數 (bar 0~2) 變化，換管時閃光一次。僅寫 class / width，並做髒檢查。
+   * 統一 Boss 血條 (單條、無文字、無外框)：每幀呼叫，只寫 class / dataset / width 並做髒檢查。
+   * pct = 0~100；bar = 顏色管數 0~2；segments = 3 時顯示兩條三管分隔線，其餘不顯示。
    */
-  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+  private applyBossBar(shown: boolean, pct: number, bar: number, segments: number) {
     if (!this.bossHudEl || !this.bossBarFillEl) return;
-    const shown = visible && totalHp > 0;
-    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : -1;
-    if (shown === this.lastBossShown && pct === this.lastBossHp && bar === this.lastBossBar && this.lastBossName === '__fencer') return;
-    const barChanged = bar !== this.lastBossBar;
+    const key = shown ? pct : -1;
+    if (shown === this.lastBossShown && key === this.lastBossHp && bar === this.lastBossBar && segments === this.lastBossSeg) return;
+    const barChanged = bar !== this.lastBossBar || segments !== this.lastBossSeg;
+    const wasShown = this.lastBossShown;
     this.lastBossShown = shown;
-    this.lastBossHp = pct;
+    this.lastBossHp = key;
     this.lastBossBar = bar;
-    this.lastBossMaxHp = totalMax;
-    this.lastBossName = '__fencer';
+    this.lastBossSeg = segments;
     const el = this.bossHudEl;
     if (!shown) {
-      el.style.display = 'none';
-      el.classList.remove('boss-hud-fencer');
-      this.lastBossBar = -1;
+      el.classList.remove('boss-hud-on', 'bar-flash');
       return;
     }
-    el.style.display = 'block';
-    el.classList.add('boss-hud-fencer');
+    el.classList.add('boss-hud-on');
     el.dataset.bar = String(bar);
+    el.dataset.seg = String(segments);
     this.bossBarFillEl.style.width = `${pct}%`;
-    if (barChanged) {
+    if (barChanged && wasShown && segments === 3) {
       el.classList.remove('bar-flash');
       void el.offsetWidth;
       el.classList.add('bar-flash');
     }
+  }
+
+  // 單管 Boss 血條 (變異食人花王 / 總教官鐵面總長)：無分隔線，固定第一管配色
+  public setBossHealth(currentHp: number, maxHp: number, visible: boolean) {
+    const shown = visible && currentHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((currentHp / maxHp) * 200) / 2)) : 0;
+    this.applyBossBar(shown, pct, 0, 1);
+  }
+
+  /** 花劍客三管 Boss 血條：fill = 整場剩餘 / 總量，兩條分隔線標示三段，顏色隨管數變化，換管閃光一次。 */
+  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+    const shown = visible && totalHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : 0;
+    this.applyBossBar(shown, pct, bar, 3);
   }
 
   /** 花劍客戰鬥中精簡 HUD：只切 body class (CSS 隱藏校園歷練 / 地點資訊 / 零用錢 / 校規處分) */

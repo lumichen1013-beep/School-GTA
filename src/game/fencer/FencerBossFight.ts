@@ -848,6 +848,7 @@ export class FencerBossFight {
       this.bubbleSafeTimer = 0.5;
       let bottom = 0;
       document.querySelectorAll('.hud-info-group, #boss-hud').forEach((el) => {
+        if (el.id === 'boss-hud' && !el.classList.contains('boss-hud-on')) return; // 血條以 opacity 隱藏，仍佔版面
         const r = el.getBoundingClientRect();
         if (r.height > 0) bottom = Math.max(bottom, r.bottom); // display:none 的高度為 0
       });
