@@ -67,7 +67,8 @@ describe('uiConceal：大型容器以 opacity 隱藏且不可點擊', () => {
     for (const src of [boss, det]) expect(src).not.toMatch(/style\.visibility/);
     const radar = hud.slice(hud.indexOf('public setRadarSuspended'), hud.indexOf('public setRadarSuspended') + 600);
     expect(radar).not.toMatch(/style\.visibility/);
-    expect(radar).toMatch(/setConcealedById\('minimap-wrapper'/);
+    expect(radar).toMatch(/radar-offline/);
+    expect(radar).not.toMatch(/setConcealedById/);
     expect(boss).toMatch(/setConcealedById\('hud-overlay', on\)/);
     expect(boss).toMatch(/setConcealedById\('mobile-controls-container', on\)/);
   });

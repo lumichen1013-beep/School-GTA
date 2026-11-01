@@ -1,13 +1,19 @@
-import { SUNFLOWER_LINES, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS, SUNFLOWER_DAILY_LINES, SUNFLOWER_WARM_LINES, HEART_MAX_PER_FIGHT, type DailyLine, type HeartLineId } from './fencerStory';
+import {
+  SUNFLOWER_LINES, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS, SUNFLOWER_DAILY_LINES, SUNFLOWER_DAILY_AFTER_FLAG, SUNFLOWER_WARM_LINES, HEART_MAX_PER_FIGHT, HEART_GAP_SEC,
+  type DailyLine, type HeartLineId, type RematchIntroKey, type RematchWinKey
+} from './fencerStory';
 
 // 世界 Boss【花劍客】的純規則 (無 three.js / DOM 依賴，可單元測試)：
 // 數值常數、太陽花台詞計數與再戰規則、劇情台詞頻率規則 (文字本身在 fencerStory.ts)、三管血與換樂章、戰鬥中回血 (基礎 + 脫離戰鬥快速回氣)、獎勵。
 
 export const FENCER = {
-  /** 操場草皮中央：結界中心 (= 太陽花 / Boss 現身點) */
+  /** 太陽花位置 (= 開場 Boss 現身點；操場草皮中央) */
   CENTER_X: -55,
   CENTER_Z: 34,
-  ARENA_R: 16,
+  /** 結界中心 (操場正中央)：半徑 23m 時兩座足球門 (z 5.9 / 54.1，碰撞盒深 ±0.4) 都在結界外，牆落在 PU 跑道平地上 */
+  ARENA_X: -55,
+  ARENA_Z: 30.5,
+  ARENA_R: 23,
   PLAYER_CLAMP_PAD: 0.6,
   BOSS_CLAMP_PAD: 0.8,
   /** 三管血 × 2100 (三個樂章) */
@@ -19,12 +25,12 @@ export const FENCER = {
   /** 基礎回血 (任何狀態都在回，受擊也不暫停) */
   BASE_REGEN: 0.8,
   /** 脫離戰鬥快速回血 (僅於上限 80% 以下) */
-  OOC_REGEN: 12,
+  OOC_REGEN: 8,
   OOC_CAP_RATIO: 0.8,
   /** 脫戰條件：N 秒內沒被 Boss 打中、N 秒內沒攻擊 Boss (遠程也算)、與 Boss 距離大於 M 公尺 */
   OOC_NO_HIT_SEC: 2,
   OOC_NO_ATTACK_SEC: 2,
-  OOC_MIN_DIST: 8,
+  OOC_MIN_DIST: 10,
   /** 太陽花：戳 10 次開戰；每次間隔冷卻防連點 */
   TAUNT_COUNT: 10,
   POKE_COOLDOWN: 1.0,
@@ -33,6 +39,7 @@ export const FENCER = {
   REPEAT_WIN_CASH: 200,
   /** 每管打空：無敵亮相 + 換樂章過場 (期間不出手、玩家算脫戰) */
   BAR_BREAK_POSE_SEC: 1.2,
+  /** 換樂章過場預設長度 (無宿主設定時；實際長度由 FencerBossFight 依台詞字數設定) */
   BAR_TRANSITION_SEC: 8.0
 } as const;
 
@@ -78,6 +85,8 @@ export class SunflowerTaunt {
   private lastPokeAt = -Infinity;
   private armedUntil = -Infinity;
   private lastDaily = -1;
+  /** 社旗收線廣播已播 (存檔)：日常台詞多一句 */
+  public flagNewsHeard = false;
 
   public get needsFullTaunt(): boolean {
     return this.lastResult === 'NONE';
@@ -110,11 +119,11 @@ export class SunflowerTaunt {
         return { accepted: true, line: { text: w.text, reaction: 'TURN_TO', face: w.face }, index: 0, startFight: false, daily: true, followUp: SUNFLOWER_WARM_LINES[1] };
       }
       // 日常 5 句隨機 (不連續重複)
-      const n = SUNFLOWER_DAILY_LINES.length;
+      const n = SUNFLOWER_DAILY_LINES.length + (this.flagNewsHeard ? 1 : 0);
       let i = Math.min(n - 1, Math.floor(rng() * n));
       if (i === this.lastDaily) i = (i + 1) % n;
       this.lastDaily = i;
-      const d = SUNFLOWER_DAILY_LINES[i];
+      const d = i < SUNFLOWER_DAILY_LINES.length ? SUNFLOWER_DAILY_LINES[i] : SUNFLOWER_DAILY_AFTER_FLAG;
       return { accepted: true, line: { text: d.text, reaction: 'TURN_TO', face: d.face }, index: 0, startFight: false, daily: true, followUp: null };
     }
     this.pokes = Math.min(FENCER.TAUNT_COUNT, this.pokes + 1);
@@ -151,90 +160,253 @@ export function fencerQuestStage(fightsStarted: number, defeated: boolean): 0 | 
   return fightsStarted > 0 ? 1 : 0;
 }
 
-// ===== 開場過場時間軸 (秒)：首戰 8.2s (向陽之心多 1.4s 台詞)、再戰 6.8s =====
+// ===== 過場 (時長依台詞字數，見 storyPlayer；事件掛在 fencerStory 的句子上) =====
 
-export interface IntroTimeline {
-  awaken: number;
-  blend: number;
-  end: number;
-}
-export const INTRO_FIRST: IntroTimeline = { awaken: 5.3, blend: 7.4, end: 8.2 };
-export const INTRO_REMATCH: IntroTimeline = { awaken: 4.5, blend: 6.0, end: 6.8 };
-export function introTimeline(fightsStarted: number): IntroTimeline {
-  return fightsStarted <= 1 ? INTRO_FIRST : INTRO_REMATCH;
-}
-
-/** 首勝才播 7s 長過場 (鎖操作)；之後的勝利一律短收尾 */
+/** 首勝才播長過場 (鎖操作)；之後的勝利一律短收尾 */
 export function victoryIsLong(alreadyDefeated: boolean): boolean {
   return !alreadyDefeated;
 }
 
-/** 首勝過場 (鎖操作)：總長、恢復校園時間點、Boss 化花瓣時間點 */
-export const VICTORY_FIRST = { end: 7.0, restoreAt: 4.6, outroAt: 4.4, rapierAt: 5.8, faceAt: 2.8, dissolveAt: 3.4, freeze: 0.25 } as const;
-/** 再戰勝利 (短收尾，不鎖操作) */
+/** 首勝過場：開頭停格秒數 (之後的時間點全部跟著台詞事件) */
+export const VICTORY_FIRST = { freeze: 0.25 } as const;
+/** 再戰勝利 (短收尾，不鎖操作)：恢復校園 / 結束 / Boss 化花瓣 秒數 */
 export const VICTORY_REPEAT = { end: 3.6, restoreAt: 2.2, dissolveAt: 1.4 } as const;
+/** 戰敗：恢復校園時間點；結束 = max(DEFEAT_END_MIN, Boss 台詞秒數 + 0.6) */
+export const DEFEAT_RESTORE_AT = 1.2;
+export const DEFEAT_END_MIN = 2.6;
+/** 換樂章小過場：擊破亮相 (BAR_BREAK_POSE_SEC) 後花瓣傳送回中央，前導共 TRANSITION_LEAD_SEC 秒才開始台詞；最後一句後 TRANSITION_TAIL_SEC 秒混回戰鬥鏡頭 */
+export const TRANSITION_LEAD_SEC = 1.8;
+export const TRANSITION_TAIL_SEC = 0.6;
+/** 換樂章：Boss 回中央的時間點 (擊破後秒數) 與玩家推離 (距中心 < PUSH_IN 時推到 PUSH_TO) */
+export const TRANSITION_BLINK_AT = 1.5;
+export const TRANSITION_PUSH_IN = 4;
+export const TRANSITION_PUSH_TO = 5;
 
 // ===== Boss 台詞頻率 =====
 
 /** 開戰後這段時間內不喊「追擊」台詞 (開場玩家本來就站在 11m 外) */
 export const CHASE_LINE_MIN_FIGHT_SEC = 6;
 
-export type BossCue = 'S1' | 'S2' | 'S3_JUMP' | 'S3_FINALE' | 'BOW' | 'S4' | 'S5' | 'CHASE';
+export type BossCue = 'S1' | 'S2' | 'S3_JUMP' | 'S3_FINALE' | 'BOW' | 'S4' | 'S5' | 'CHASE' | 'BACKFLIP';
+/** 反應台詞：每樂章各一次 (BAR_BARKS) / 每場一次 (ONCE_BARKS) */
+export type BarkKind = 'HALF' | 'CLEAN_DODGE' | 'BIG_HIT' | 'BACKFLIP' | 'PLAYER_LOW' | 'RANGED' | 'RAPIER' | 'IDLE' | 'COMEBACK';
+const BAR_BARKS: readonly BarkKind[] = ['HALF', 'CLEAN_DODGE', 'BIG_HIT', 'BACKFLIP'];
+const ONCE_BARKS: readonly BarkKind[] = ['PLAYER_LOW', 'RANGED', 'RAPIER', 'IDLE', 'COMEBACK'];
+
+export const LINE_RULES = {
+  /** 招式名第二次起的喊聲機率 (受全域間隔限制) */
+  REPEAT_CHANCE: 0.25,
+  /** 致意第二次起的機率 */
+  BOW_REPEAT_CHANCE: 0.35,
+  /** 反應台詞之間最少秒數 */
+  BARK_GAP: 8,
+  /** 反應台詞每樂章上限 */
+  BARK_PER_BAR: 3,
+  /** 任何 Boss 台詞後至少隔這麼久才說反應台詞 / 重複的招式名 (否則丟棄，不排隊) */
+  SAY_GAP: 2.5,
+  /** IDLE：開戰滿 N 秒且 N 秒內沒打中 Boss */
+  IDLE_SEC: 20,
+  /** COMEBACK：曾低於 LOW、之後回到 HIGH 以上 */
+  COMEBACK_LOW: 0.2,
+  COMEBACK_HIGH: 0.6
+} as const;
 
 /**
- * 招式宣言頻率：大招 (S3 / S4 / S5) 與收招致意每次都喊；小招 (S1 / S2) 每個樂章只喊第一次；追擊每場一次。
+ * Boss 台詞頻率 (now = 戰鬥秒數)：
+ * - 招式名 (S1 / S2 / S3_JUMP / S4 / S5)：每樂章第一次必喊；之後 25% 且距上一句 ≥ SAY_GAP
+ * - S3_FINALE (預警)：每次都喊；BOW：每樂章第一次必喊，之後 35% 且距上一句 ≥ SAY_GAP；CHASE：每場一次
+ * - 反應台詞：距上一則反應 ≥ BARK_GAP、距任何台詞 ≥ SAY_GAP、每樂章 ≤ BARK_PER_BAR；BAR_BARKS 每樂章各一次、ONCE_BARKS 每場一次。
+ *   不允許時不消耗 (下次同條件再試)
  */
 export class BossLineGate {
-  private perBar = 0;   // 位元：bar * 2 + (S1 0 / S2 1)
+  private perBar = 0;   // 位元：bar * 8 + cue 序號
   private once = 0;
+  private barkUsed = 0; // 位元：BAR_BARKS = bar * 4 + k；ONCE_BARKS = 16 + k
+  private barkCount = [0, 0, 0];
+  public lastSayAt = -Infinity;
+  private lastBarkAt = -Infinity;
 
   public resetFight() {
     this.perBar = 0;
     this.once = 0;
+    this.barkUsed = 0;
+    this.barkCount = [0, 0, 0];
+    this.lastSayAt = -Infinity;
+    this.lastBarkAt = -Infinity;
   }
 
-  public allow(cue: BossCue, bar: number): boolean {
-    if (cue === 'S1' || cue === 'S2') {
-      const bit = 1 << (Math.max(0, Math.min(7, bar)) * 2 + (cue === 'S1' ? 0 : 1));
-      if (this.perBar & bit) return false;
-      this.perBar |= bit;
-      return true;
-    }
+  /** 記錄 Boss 說了一句 (任何來源) */
+  public noteSay(now: number) {
+    this.lastSayAt = now;
+  }
+
+  public allow(cue: BossCue, bar: number, now: number = 0, rng: () => number = Math.random): boolean {
+    if (cue === 'S3_FINALE') return true;
     if (cue === 'CHASE') {
       if (this.once & 1) return false;
       this.once |= 1;
       return true;
     }
+    if (cue === 'BACKFLIP') return false; // 由反應台詞處理
+    const order = ['S1', 'S2', 'S3_JUMP', 'S4', 'S5', 'BOW'].indexOf(cue);
+    const bit = 1 << (Math.max(0, Math.min(2, bar)) * 8 + order);
+    if (!(this.perBar & bit)) {
+      this.perBar |= bit;
+      return true;
+    }
+    if (now - this.lastSayAt < LINE_RULES.SAY_GAP) return false;
+    return rng() < (cue === 'BOW' ? LINE_RULES.BOW_REPEAT_CHANCE : LINE_RULES.REPEAT_CHANCE);
+  }
+
+  public allowBark(kind: BarkKind, bar: number, now: number): boolean {
+    const b = Math.max(0, Math.min(2, bar));
+    const k = BAR_BARKS.indexOf(kind);
+    const bit = k >= 0 ? 1 << (b * 4 + k) : 1 << (16 + ONCE_BARKS.indexOf(kind));
+    if (this.barkUsed & bit) return false;
+    if (now - this.lastBarkAt < LINE_RULES.BARK_GAP || now - this.lastSayAt < LINE_RULES.SAY_GAP) return false;
+    if (this.barkCount[b] >= LINE_RULES.BARK_PER_BAR) return false;
+    this.barkUsed |= bit;
+    this.barkCount[b]++;
+    this.lastBarkAt = now;
+    this.lastSayAt = now;
     return true;
   }
 }
 
-/** 向陽之心：每場每句最多一次，合計最多 HEART_MAX_PER_FIGHT 句 */
+/** 向陽之心教學句 (計入每場上限)；其餘 (S2 / S3 / DAWN) 為劇情句 */
+const HEART_TUTORIAL: readonly HeartLineId[] = ['TEACH', 'H1', 'H2', 'H3', 'H4'];
+const HEART_IDS: readonly HeartLineId[] = ['TEACH', 'H1', 'H2', 'H3', 'H4', 'S2', 'S3', 'DAWN'];
+/** 緊急句 (致意破綻提示)：不等任何間隔 */
+const HEART_URGENT: readonly HeartLineId[] = ['H1'];
+/** 回血確認句：不等向陽之心間隔 (緊接教學句也要說到)，仍等 Boss 說完 */
+const HEART_NO_GAP: readonly HeartLineId[] = ['H3'];
+/** Boss 說話後這段時間內向陽之心先等 (最多等 HEART_DEFER_MAX 秒，逾時丟棄) */
+export const HEART_AFTER_BOSS_SEC = 1.5;
+export const HEART_DEFER_MAX = 3;
+
+/**
+ * 向陽之心：每場每句最多一次；教學句合計 ≤ HEART_MAX_PER_FIGHT；兩句間隔 ≥ HEART_GAP_SEC；
+ * Boss 剛說完 1.5s 內延後 (最多 3s，逾時丟棄)；H1 (致意破綻) 立即說、H3 (回血確認) 不等向陽之心間隔。request() 排入 (同時只保留一句)，poll() 取出要說的句子。
+ */
 export class HeartVoice {
   private fired = 0;
   private count = 0;
+  private lastAt = -Infinity;
+  private pending: HeartLineId | null = null;
+  private pendingUntil = 0;
 
   public resetFight() {
     this.fired = 0;
     this.count = 0;
+    this.lastAt = -Infinity;
+    this.pending = null;
   }
 
   public get spoken(): number {
     return this.count;
   }
 
-  public tryFire(id: HeartLineId): boolean {
-    const bit = 1 << (id.charCodeAt(1) - 49);
-    if ((this.fired & bit) || this.count >= HEART_MAX_PER_FIGHT) return false;
-    this.fired |= bit;
-    this.count++;
+  public hasFired(id: HeartLineId): boolean {
+    return (this.fired & (1 << HEART_IDS.indexOf(id))) !== 0;
+  }
+
+  /** 排入一句；回傳是否接受 (已說過 / 教學句額滿 / 已有待說句 → false) */
+  public request(id: HeartLineId, now: number): boolean {
+    if (this.hasFired(id) || this.pending === id) return false;
+    if (HEART_TUTORIAL.includes(id) && this.count >= HEART_MAX_PER_FIGHT) return false;
+    if (this.pending && !HEART_URGENT.includes(id)) return false;
+    this.pending = id;
+    this.pendingUntil = now + HEART_DEFER_MAX;
     return true;
+  }
+
+  /** 每幀：回傳此刻要說的句子 (或 null)；bossSaidAt = Boss 上一句台詞時間 */
+  public poll(now: number, bossSaidAt: number): HeartLineId | null {
+    const id = this.pending;
+    if (!id) return null;
+    const urgent = HEART_URGENT.includes(id);
+    if (!urgent && now > this.pendingUntil) { this.pending = null; return null; }
+    if (!urgent && ((!HEART_NO_GAP.includes(id) && now - this.lastAt < HEART_GAP_SEC) || now - bossSaidAt < HEART_AFTER_BOSS_SEC)) return null;
+    this.pending = null;
+    this.fired |= 1 << HEART_IDS.indexOf(id);
+    if (HEART_TUTORIAL.includes(id)) this.count++;
+    this.lastAt = now;
+    return id;
   }
 }
 
-/** 開場過場是否可跳過：第二次起 (曾經開戰過) */
-export function canSkipIntro(fightsStarted: number): boolean {
-  return fightsStarted >= 2;
+// ===== 劇情分支挑選 (純函式) =====
+
+/** 再戰開場 Boss 那句：帶細劍 > 上次輸在終樂章 > 上次輸 > 上次贏 (依勝場) */
+export function rematchIntroKey(o: { lastResult: FightResult; wins: number; lastBar: number; hasRapier: boolean }): RematchIntroKey {
+  if (o.hasRapier) return 'rapier';
+  if (o.lastResult === 'LOSS') return o.lastBar >= 2 ? 'lossFinal' : 'afterLoss';
+  if (o.wins >= 5) return 'veteran';
+  if (o.wins >= 3) return 'regular';
+  return 'afterWin';
+}
+
+/** 再戰勝利 Boss 那句：本場用細劍命中過 > 勝場 (含本場) */
+export function rematchWinKey(wins: number, usedRapier: boolean): RematchWinKey {
+  if (usedRapier) return 'rapier';
+  if (wins >= 5) return 'veteran';
+  if (wins >= 3) return 'regular';
+  return 'early';
+}
+
+/** 換樂章是否播完整版：bar = 進入的樂章 (1 / 2)，seen = 已看過完整版的位元 (1 = 第二樂章、2 = 終樂章) */
+export function transitionIsFull(bar: number, seen: number): boolean {
+  return (seen & (bar >= 2 ? 2 : 1)) === 0;
+}
+
+// ===== 異空間天色 (0 暮紅 → 1 紫暮 → 2 近夜 → 3 晨金) =====
+
+export interface DuskColors {
+  sky: number;
+  fog: number;
+  hemi: number;
+  ground: number;
+  dir: number;
+}
+export const DUSK_LEVELS: readonly DuskColors[] = [
+  { sky: 0x3a1222, fog: 0x4a1830, hemi: 0xffc4b0, ground: 0x3a1020, dir: 0xffb38a },
+  { sky: 0x2a1640, fog: 0x3a2152, hemi: 0xd8c0ff, ground: 0x2a1838, dir: 0xe8b0d8 },
+  { sky: 0x16091a, fog: 0x2a1024, hemi: 0xc49ab4, ground: 0x200a16, dir: 0xd08090 },
+  { sky: 0xe8a070, fog: 0xe0a880, hemi: 0xfff0d8, ground: 0x6a4630, dir: 0xffe2b0 }
+];
+
+/** 終樂章黎明進度 0~1：本管血量比例 ≤ dawnAt 起，依剩餘血量線性轉亮 (打空 = 1) */
+export function dawnProgress(bar: number, hpRatio: number, dawnAt: number): number {
+  if (bar < FENCER.BARS - 1) return 0;
+  const r = Math.max(0, Math.min(1, hpRatio));
+  return r >= dawnAt ? 0 : Math.min(1, (dawnAt - r) / dawnAt);
+}
+
+/** 目標天色等級：樂章 0 / 1 / 2，終樂章再加黎明進度 (最高 3) */
+export function duskTargetLevel(bar: number, dawnK: number): number {
+  const b = Math.max(0, Math.min(2, bar));
+  return b + (b === 2 ? Math.max(0, Math.min(1, dawnK)) : 0);
+}
+
+/** 天色等級 (0~3 浮點) → 單一顏色通道插值 (輸出 0xRRGGBB) */
+export function duskColorAt(level: number, key: keyof DuskColors): number {
+  const l = Math.max(0, Math.min(DUSK_LEVELS.length - 1, level));
+  const i = Math.min(DUSK_LEVELS.length - 2, Math.floor(l));
+  const t = l - i;
+  const a = DUSK_LEVELS[i][key];
+  const b = DUSK_LEVELS[i + 1][key];
+  let out = 0;
+  for (const sh of [16, 8, 0]) {
+    const ca = (a >> sh) & 0xff;
+    const cb = (b >> sh) & 0xff;
+    out |= Math.round(ca + (cb - ca) * t) << sh;
+  }
+  return out;
+}
+
+/** 開場過場是否可跳過：首戰起都可長按跳過 (首戰也可，點擊可逐句前進) */
+export function canSkipIntro(_fightsStarted: number): boolean {
+  return true;
 }
 
 /** 勝利獎金：首勝 1500，再戰勝利 200 */
@@ -300,7 +472,7 @@ export function bossBarLabel(bar: number): string {
   return `花劍客・${MOVEMENT_NAMES[i]} (${i + 1}/${FENCER.BARS})`;
 }
 
-// ===== 戰鬥中回血：基礎 0.8/s + 脫離戰鬥 12/s (僅 80% 以下) =====
+// ===== 戰鬥中回血：基礎 0.8/s + 脫離戰鬥 8/s (僅 80% 以下) =====
 
 export interface RegenInput {
   hp: number;
@@ -312,7 +484,7 @@ export interface RegenInput {
 
 /**
  * 脫離戰鬥追蹤：記錄距上次被 Boss 打中 / 距上次攻擊 Boss 的秒數，判定脫戰並回傳本幀回血量。
- * 脫戰 = 2 秒內沒被打、2 秒內沒出手 (含遠程)、且距 Boss > 8m；換樂章過場一律算脫戰。
+ * 脫戰 = 2 秒內沒被打、2 秒內沒出手 (含遠程)、且距 Boss > 10m；換樂章過場一律算脫戰。
  */
 export class CombatRegen {
   public sinceHit = Infinity;
@@ -415,28 +587,28 @@ export function rayCircleDistance(ax: number, az: number, dx: number, dz: number
   return -b + Math.sqrt(Math.max(0, b * b - c));
 }
 
-/** S4 十字第 k 臂的朝向 (yaw：方向 = (sin, cos))；四臂間隔 90° */
-export function thornArmYaw(baseYaw: number, k: number): number {
-  return baseYaw + k * Math.PI * 0.5;
+/** S4 荊棘第 k 臂的朝向 (yaw：方向 = (sin, cos))；arms 臂等分一圈 (四臂間隔 90°、六臂 60°) */
+export function thornArmYaw(baseYaw: number, k: number, arms: number = 4): number {
+  return baseYaw + (k * Math.PI * 2) / arms;
 }
 
-/** S4 十字旋轉角：t 秒內由 baseYaw 線性轉 90° (dirSign = ±1)，t 超出範圍則夾住 */
-export function thornCrossYaw(baseYaw: number, dirSign: number, t: number, dur: number): number {
+/** S4 旋轉角：t 秒內由 baseYaw 線性轉一個臂距 (四臂 90°、六臂 60°；dirSign = ±1)，t 超出範圍則夾住 */
+export function thornCrossYaw(baseYaw: number, dirSign: number, t: number, dur: number, arms: number = 4): number {
   const k = dur > 0 ? Math.max(0, Math.min(1, t / dur)) : 1;
-  return baseYaw + dirSign * k * Math.PI * 0.5;
+  return baseYaw + (dirSign * k * Math.PI * 2) / arms;
 }
 
 /**
- * S4 玫瑰荊棘十字判定 (解析式)：以 (ax, az) 為中心、四臂各朝 yaw + k·90° 延伸到結界牆 (圓 cx, cz, r)，
- * reach (0~1) 為荊棘生長比例；玩家 (px, pz) 到任一臂線段距離 ≤ halfW 時回傳臂索引 (0~3)，否則 -1。
+ * S4 玫瑰荊棘十字判定 (解析式)：以 (ax, az) 為中心、arms 臂各朝 yaw + k·(360°/arms) 延伸到結界牆 (圓 cx, cz, r)，
+ * reach (0~1) 為荊棘生長比例；玩家 (px, pz) 到任一臂線段距離 ≤ halfW 時回傳臂索引，否則 -1。
  */
 export function thornCrossHit(
   ax: number, az: number, yaw: number, reach: number,
   cx: number, cz: number, r: number,
-  px: number, pz: number, halfW: number
+  px: number, pz: number, halfW: number, arms: number = 4
 ): number {
-  for (let k = 0; k < 4; k++) {
-    const a = thornArmYaw(yaw, k);
+  for (let k = 0; k < arms; k++) {
+    const a = thornArmYaw(yaw, k, arms);
     const dx = Math.sin(a);
     const dz = Math.cos(a);
     const len = rayCircleDistance(ax, az, dx, dz, cx, cz, r) * reach;
@@ -444,6 +616,19 @@ export function thornCrossHit(
     if (segmentPointDistance(ax, az, ax + dx * len, az + dz * len, px, pz) <= halfW) return k;
   }
   return -1;
+}
+
+/**
+ * S1 玫瑰衝擊波扇形判定：起點 (ox, oz)、單位方向 (ux, uz)、起點半寬 w0、半角正切 tan、長度 len；
+ * 點 (px, pz) 沿方向距離 along ∈ [-0.5, len] 且橫向距離 ≤ w0 + max(0, along)·tan 即在扇形內 (起點後方 0.5m 也算，涵蓋貼身)。
+ */
+export function inFan(ox: number, oz: number, ux: number, uz: number, w0: number, tan: number, len: number, px: number, pz: number): boolean {
+  const dx = px - ox;
+  const dz = pz - oz;
+  const along = dx * ux + dz * uz;
+  if (along < -0.5 || along > len) return false;
+  const lat = Math.abs(dx * uz - dz * ux);
+  return lat <= w0 + Math.max(0, along) * tan;
 }
 
 /**

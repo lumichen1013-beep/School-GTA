@@ -236,11 +236,13 @@ export class Sunflower {
     return this.targetGrowth;
   }
 
-  /** 玩家距離 (dist < 0 = 不在附近)：小苗階段在 SPROUT_AWARE_RANGE 內才有細微反應 */
-  public setPlayerNear(dist: number, playerPos: THREE.Vector3, awareRange: number) {
+  /** 玩家距離 (dist < 0 = 不在附近)：小苗階段在 awareRange 內才有細微反應；
+   *  watchRange > 0 (首勝後) 時完整太陽花在範圍內緩慢轉頭看玩家 */
+  public setPlayerNear(dist: number, playerPos: THREE.Vector3, awareRange: number, watchRange: number = 0) {
     const near = dist >= 0 && dist < awareRange && this.targetGrowth < 4;
     this.awareTarget = near ? 1 : 0;
-    if (near) this.targetYaw = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+    const watch = watchRange > 0 && dist >= 0 && dist < watchRange && this.targetGrowth >= MAX_STAGE && this.spin === 0;
+    if (near || watch) this.targetYaw = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
   }
 
   /** 碰撞盒隨大小調整 (只縮不超出初始範圍，ColliderGrid 已依初始大小分格) */

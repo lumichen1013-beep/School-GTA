@@ -26,20 +26,20 @@ describe('Boss 戰鏡頭：裝置基準', () => {
 });
 
 describe('Boss 戰鏡頭：動態拉遠 (小幅、慢速、遲滯)', () => {
-  it('觸發條件與幅度：S3/S4 +20%、S5 / 拉開 +15%，S1/S2 與近身不變', () => {
-    expect(wantedBoost('S3', false)).toBe(0.2);
-    expect(wantedBoost('S4', true)).toBe(0.2);
+  it('觸發條件與幅度：S3/S4 +25%、S5 / 拉開 +15%，S1/S2 與近身不變', () => {
+    expect(wantedBoost('S3', false)).toBe(0.25);
+    expect(wantedBoost('S4', true)).toBe(0.25);
     expect(wantedBoost('S5', false)).toBe(0.15);
     expect(wantedBoost(null, true)).toBe(0.15);
     expect(wantedBoost('S1', false)).toBe(0);
     expect(wantedBoost('S2', false)).toBe(0);
   });
 
-  it('拉開判定有門檻遲滯 (>10 開、<8 關)', () => {
-    expect(updateFar(false, 9.5)).toBe(false);
-    expect(updateFar(false, 10.5)).toBe(true);
-    expect(updateFar(true, 9)).toBe(true);
-    expect(updateFar(true, 7.5)).toBe(false);
+  it('拉開判定有門檻遲滯 (>13 開、<10 關)', () => {
+    expect(updateFar(false, 12.5)).toBe(false);
+    expect(updateFar(false, 13.5)).toBe(true);
+    expect(updateFar(true, 11)).toBe(true);
+    expect(updateFar(true, 9.5)).toBe(false);
   });
 
   it('臨界阻尼：0.8s 內未完成、不過衝；觸發解除後至少維持 2s', () => {
@@ -67,7 +67,7 @@ describe('Boss 戰鏡頭：動態拉遠 (小幅、慢速、遲滯)', () => {
     let prev = 0;
     for (let i = 0; i < 60 * 20; i++) {
       const t = i * dt;
-      const dist = 9 + Math.sin(t * 7) * 1.6; // 7.4 ~ 10.6m 快速抖動
+      const dist = 11.5 + Math.sin(t * 7) * 1.8; // 9.7 ~ 13.3m 快速抖動
       const atk = Math.floor(t * 1.5) % 2 === 0 ? 'S5' : null; // 每 0.67s 開關一次
       d.update(dt, atk, dist, true);
       const s = Math.sign(Math.round((d.boost - prev) * 1e5));
@@ -214,7 +214,7 @@ describe('ThirdPersonCamera：Boss 戰鏡頭模式切換', () => {
     expect(cam.camera.fov).toBeCloseTo(65, 3);
   });
 
-  it('動態拉遠：S4 預警時距離最多 +20%，固定模式不變', () => {
+  it('動態拉遠：S4 預警時距離最多 +25%，固定模式不變', () => {
     const cam = new ThirdPersonCamera(65, 16 / 10, 0.1, 500);
     cam.updateAspect(16 / 10);
     const pos = new THREE.Vector3();
@@ -225,8 +225,8 @@ describe('ThirdPersonCamera：Boss 戰鏡頭模式切換', () => {
     cam.bossAttack = 'S4';
     let max = 0;
     run(cam, pos, 4, () => { max = Math.max(max, cam.distance); });
-    expect(max).toBeLessThanOrEqual(base * 1.2 + 0.02);
-    expect(cam.distance).toBeGreaterThan(base * 1.15);
+    expect(max).toBeLessThanOrEqual(base * 1.25 + 0.02);
+    expect(cam.distance).toBeGreaterThan(base * 1.2);
     const fixed = new ThirdPersonCamera(65, 16 / 10, 0.1, 500);
     fixed.updateAspect(16 / 10);
     fixed.bossCamDynamic = false;

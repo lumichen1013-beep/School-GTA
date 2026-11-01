@@ -151,7 +151,7 @@ class SchoolGTASandbox implements GameContext {
       if (this.detentionCutscene.isActive) {
         this.detentionCutscene.skip();
       }
-      this.fencerBossFight.skipIntro();
+      this.fencerBossFight.skipCutscene();
     }
   });
 
@@ -577,7 +577,7 @@ class SchoolGTASandbox implements GameContext {
       this.wantedSystem.showBanner('🔇 背景音樂 (BGM) 已靜音', 2000);
     } else {
       const isDetention = this.currentWorldType === 'DETENTION';
-      const modeText = bgmManager.getMode() === 'PURSUIT'
+      const modeText = bgmManager.getMode() === 'DUEL' ? '花劍客向日圓舞曲' : bgmManager.getMode() === 'PURSUIT'
         ? (isDetention ? '警戒追捕熱血節奏' : '通緝逃亡熱血節奏')
         : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律');
       this.wantedSystem.showBanner(`🎵 背景音樂 (BGM) 已開啟【${modeText}】`, 2500);
@@ -761,16 +761,14 @@ class SchoolGTASandbox implements GameContext {
       }
     }
 
-    // -0.8 花劍客開戰過場 (清場 / 結界 / 亮相 / 向陽覺醒)：第二次起可按空白鍵跳過
+    // -0.8 花劍客過場 (開戰 / 換樂章 / 首勝)：點擊 / 空白鍵前進下一句、長按 1 秒跳過 (FencerBossFight 自行處理輸入)
     if (this.fencerBossFight.isCutscene) {
       this.input.consumeMouseDelta();
       this.bossCameraLink?.update(); // 過場中立即還原一般鏡頭 FOV (不干擾過場運鏡)
-      if (this.input.jump && this.fencerBossFight.canSkip) {
-        this.input.consumeJump();
-        this.fencerBossFight.skipIntro();
-      } else {
-        if (this.input.jump) this.input.consumeJump();
-        this.fencerBossFight.updateCutscene(rawDelta);
+      if (this.input.jump) this.input.consumeJump();
+      this.fencerBossFight.updateCutscene(rawDelta);
+      bgmManager.setDuel(this.fencerBossFight.musicState()); // 過場中也切換 (換樂章 = 音樂盒)
+      if (this.fencerBossFight.isCutscene) {
         this.engine.updateShadowFocus(this.player.position);
         this.renderFrame();
         return;
@@ -963,9 +961,10 @@ class SchoolGTASandbox implements GameContext {
     }
 
     // 15. 更新 HUD 介面與任務看板
-    const bossFight = this.fencerBossFight.phase === 'FIGHT';
-    const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0 || bossFight);
-    const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4 || bossFight;
+    // 花劍客戰：向日圓舞曲 (三樂章 / 黎明 / 過場音樂盒)；其餘依追捕狀態切校園模式
+    bgmManager.setDuel(this.fencerBossFight.musicState());
+    const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0);
+    const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4;
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);

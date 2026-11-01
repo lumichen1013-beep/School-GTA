@@ -1,7 +1,7 @@
 // 花劍客 Boss 戰鏡頭 (只在 FIGHT 階段啟用)：純函式與小型狀態機，零配置、可單元測試。
 // 設計原則「固定遠景為主、動態只做小幅慢速」：
 // - 基準：依裝置 (桌機 / 手機橫屏 / 直屏) 固定距離、俯角、FOV，看清結界大半；FOV 戰鬥中不做動態。
-// - 動態 (可在設定切成「固定」)：只在大事件拉遠 —— S3/S4 預警 +20%、S5 預警 / 與 Boss 拉開 +15%；
+// - 動態 (可在設定切成「固定」)：只在大事件拉遠 —— S3/S4 預警 +25%、S5 預警 / 與 Boss 拉開 +15%；
 //   臨界阻尼彈簧過渡 (單次 ≥ 0.8s)，觸發後至少維持 2s 才回復 (遲滯)。手動縮放後 5s 內不自動變化。
 // - 雙目標 soft lock：Boss 落在畫面內圈以外才以低增益轉向，角速度上限 60°/s；手動轉鏡頭後 3s 內不介入。
 
@@ -13,11 +13,11 @@ export interface BossCamProfile {
 }
 
 /** 桌機 (橫屏、非觸控) */
-export const BOSS_CAM_DESKTOP: Readonly<BossCamProfile> = { distance: 12, pitch: 0.8, fov: 70, lookAhead: 3.5 };
+export const BOSS_CAM_DESKTOP: Readonly<BossCamProfile> = { distance: 13.5, pitch: 0.8, fov: 70, lookAhead: 4.5 };
 /** 手機橫屏 (觸控、aspect ≥ 1)：畫面小，略近一點保留角色辨識度，俯角稍大 */
-export const BOSS_CAM_MOBILE_LANDSCAPE: Readonly<BossCamProfile> = { distance: 11.5, pitch: 0.82, fov: 68, lookAhead: 3.2 };
+export const BOSS_CAM_MOBILE_LANDSCAPE: Readonly<BossCamProfile> = { distance: 13, pitch: 0.82, fov: 68, lookAhead: 4.2 };
 /** 直屏 (portraitFactor = 1)：水平視野窄 → 更遠更高 */
-export const BOSS_CAM_PORTRAIT: Readonly<BossCamProfile> = { distance: 15, pitch: 0.88, fov: 78, lookAhead: 4.5 };
+export const BOSS_CAM_PORTRAIT: Readonly<BossCamProfile> = { distance: 17, pitch: 0.88, fov: 78, lookAhead: 5.5 };
 
 /** 依直屏係數 (0~1) 與是否觸控取得基準 (寫入 out) */
 export function bossCamProfile(portrait: number, isTouch: boolean, out: BossCamProfile): BossCamProfile {
@@ -33,11 +33,11 @@ export function bossCamProfile(portrait: number, isTouch: boolean, out: BossCamP
 
 // ===== 動態拉遠 (小幅、慢速、遲滯) =====
 
-export const BOOST_WARN_BIG = 0.2;   // S3 / S4 全場招預警
+export const BOOST_WARN_BIG = 0.25;  // S3 / S4 全場招預警 (全場終幕要看到安全圈)
 export const BOOST_WARN = 0.15;      // S5 夾擊預警
 export const BOOST_FAR = 0.15;       // 與 Boss 拉開
-export const FAR_ON = 10;            // 距離 > 10m 啟動拉遠
-export const FAR_OFF = 8;            // 距離 < 8m 才解除 (門檻遲滯)
+export const FAR_ON = 13;            // 距離 > 13m 啟動拉遠 (Boss 偏好距離 6~9m)
+export const FAR_OFF = 10;           // 距離 < 10m 才解除 (門檻遲滯)
 export const BOOST_HOLD = 2;         // 觸發後至少維持秒數
 export const BOOST_OMEGA = 4;        // 臨界阻尼角頻率 (步階 90% ≈ 0.97s)
 export const MANUAL_ZOOM_PRIORITY = 5; // 手動縮放後自動變化暫停秒數
@@ -195,8 +195,8 @@ export function arenaFit(
   return out;
 }
 
-/** 結界牆頂高 (與 BossArena WALL_H 一致) */
-export const ARENA_WALL_TOP = 10;
+/** 結界牆頂高 (與 BossArena WALL_H 一致；tests 檢查同步) */
+export const ARENA_WALL_TOP = 12;
 
 /**
  * 鏡頭高度上限：鏡頭水平離圓心 cr、邊界半徑 r。靠牆時壓在牆頂下 0.5m (不越過近側牆頂看到牆外)，

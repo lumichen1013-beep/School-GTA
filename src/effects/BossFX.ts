@@ -6,21 +6,27 @@ import { getFxTier, type FxTier } from './fxQuality';
 // 1. 地面預警 decal (長條 / 圓 / 虛線點 / 大圈 / 脫戰回血綠光圈)：程序化 shader，加法混色、貼地細長
 // 2. 花瓣粒子：剪裁 quad (discard，不透明、寫深度、無混合) → 數量大也幾乎不增加 overdraw
 // 3. 花瓣柱 (S3 綻放)：開口圓柱加法混色
-// 4. 荊棘十字 (S4)：塊狀荊棘節 (粗藤 + 三根尖刺)，不透明、寫深度、無混合 → 不增加 overdraw；四臂 × 每臂 N 節
+// 4. 荊棘十字 (S4)：塊狀荊棘節 (粗藤 + 三根尖刺)，不透明、寫深度、無混合 → 不增加 overdraw；最多六臂 × 每臂 N 節
+// 5. S1 玫瑰衝擊波：一片扇形弧牆 (開口圓柱的一段，加法混色)，由起點往外推進 (單一 mesh，1 draw call)
+// 地面 decal 另有扇形 (S1 衝擊波預警) 與全場 (S3 全場終幕，安全圈以 uniform 挖洞) 兩種
 // 另提供 S5 花影分身的剪影材質 (不透明 + 塊狀 discard 溶解，無混合)，幾何由 Boss 端以本體零件合併
 // 數量依 getFxTier() 降級；碰撞與命中判定一律在呼叫端以解析式計算，本模組只負責畫面。
 
 interface BossFxTierSpec { decals: number; petals: number; pillarLayers: number; hatDots: number; thornSegs: number }
 export const BOSS_FX_TIERS: Readonly<Record<FxTier, BossFxTierSpec>> = {
-  high: { decals: 24, petals: 240, pillarLayers: 2, hatDots: 16, thornSegs: 12 },
-  medium: { decals: 24, petals: 160, pillarLayers: 2, hatDots: 16, thornSegs: 10 },
-  low: { decals: 16, petals: 80, pillarLayers: 1, hatDots: 8, thornSegs: 6 }
+  high: { decals: 40, petals: 240, pillarLayers: 2, hatDots: 24, thornSegs: 18 },
+  medium: { decals: 36, petals: 160, pillarLayers: 2, hatDots: 20, thornSegs: 14 },
+  low: { decals: 28, petals: 80, pillarLayers: 1, hatDots: 12, thornSegs: 9 }
 };
-const MAX_DECALS = 24;
+const MAX_DECALS = 40;
 const MAX_PETALS = 240;
-const MAX_PILLARS = 18;
-const THORN_ARMS = 4;
-const MAX_THORN_SEGS = 12;
+const MAX_PILLARS = 32;
+const THORN_ARMS = 6;
+const MAX_THORN_SEGS = 18;
+const MAX_FIELD_HOLES = 3;
+const WAVE_SPEED = 45;
+const WAVE_ARC = Math.PI / 10; // 弧牆幾何半角 (18°)   // 衝擊波推進速度 m/s
+const WAVE_HEIGHT = 2.6;
 const MAX_THORNS = THORN_ARMS * MAX_THORN_SEGS;
 const REGEN_SLOT = 0; // 脫戰回血光圈固定佔用第 0 槽
 
@@ -29,6 +35,8 @@ export const DECAL_CIRCLE = 1;
 export const DECAL_DOT = 2;
 export const DECAL_REGEN = 3;
 export const DECAL_BIG = 4;
+export const DECAL_FAN = 5;
+export const DECAL_FIELD = 6;
 
 const DECAL_VERT = /* glsl */`
 attribute vec4 aFx;
@@ -36,23 +44,54 @@ attribute vec3 aCol;
 varying vec2 vUv;
 varying vec4 vFx;
 varying vec3 vCol;
+varying vec2 vWorld;
 void main() {
   vUv = uv; vFx = aFx; vCol = aCol;
-  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+  vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  vWorld = w.xz;
+  gl_Position = projectionMatrix * viewMatrix * w;
 }`;
-// aFx = (種類, 填充進度 0..1, 淡出, 時間)
+// aFx = (種類, 填充進度 0..1, 淡出, 時間 / 扇形起點寬比例)
 const DECAL_FRAG = /* glsl */`
 uniform float uOutline;
+uniform vec3 uHoles[${MAX_FIELD_HOLES}];
 varying vec2 vUv;
 varying vec4 vFx;
 varying vec3 vCol;
+varying vec2 vWorld;
 void main() {
   vec2 p = (vUv - 0.5) * 2.0;
   float kind = vFx.x;
   float prog = vFx.y;
   float a = 0.0;
   float edge = 0.0;
-  if (kind < 0.5) {
+  if (kind > 5.5) {
+    // 全場：圓內填滿 (由外往內收的亮環)，安全圈 (uHoles: x, z, r) 挖洞並描邊
+    float r = length(p);
+    float inside = step(r, 1.0);
+    float hole = 0.0;
+    float holeEdge = 0.0;
+    for (int i = 0; i < ${MAX_FIELD_HOLES}; i++) {
+      float d = length(vWorld - uHoles[i].xy) - uHoles[i].z;
+      hole = max(hole, step(d, 0.0) * step(0.01, uHoles[i].z));
+      holeEdge = max(holeEdge, max(1.0 - abs(d) / 0.35, 0.0) * step(0.01, uHoles[i].z));
+    }
+    float rim = max(1.0 - abs(r - (1.0 - prog)) / 0.04, 0.0);
+    float stripe = 0.5 + 0.5 * sin((vWorld.x + vWorld.y) * 1.6);
+    a = inside * (1.0 - hole) * (0.3 + 0.35 * prog + stripe * 0.1 + rim * 0.6) + holeEdge * 0.3;
+    edge = max(1.0 - abs(r - 0.985) / 0.02, 0.0) * 0.8;
+    a += edge;
+  } else if (kind > 4.5) {
+    // 扇形：x 為長度方向 (-1 起點 → 1 終點)；起點半寬比例 vFx.w → 終點 1
+    float u = p.x * 0.5 + 0.5;
+    float hw = mix(vFx.w, 1.0, u);
+    float side = abs(p.y) / hw;
+    float inFan = step(side, 1.0) * step(abs(p.x), 1.0);
+    edge = (smoothstep(0.88, 0.99, side) + smoothstep(0.97, 1.0, u)) * inFan;
+    float fill = step(u, prog) * 0.32;
+    float chevron = pow(max(sin((u * 14.0 - prog * 6.0) * 3.14159), 0.0), 6.0) * 0.25;
+    a = (edge * 0.9 + fill + chevron + 0.08) * inFan;
+  } else if (kind < 0.5) {
     // 長條：x 為長度方向 (-1 起點 → 1 終點)，邊框 + 由起點往終點填滿
     float u = p.x * 0.5 + 0.5;
     float bx = max(abs(p.x), abs(p.y));
@@ -82,7 +121,7 @@ void main() {
     float breathe = 0.75 + 0.25 * sin(vFx.w * 6.2831853);
     a = (max(1.0 - abs(r - 0.85) / 0.12, 0.0) * 0.8 + smoothstep(0.9, 0.2, r) * 0.18) * breathe;
   }
-  vec3 col = mix(vCol, vec3(1.0), clamp(edge * uOutline, 0.0, 1.0) * step(kind, 4.5) * (1.0 - step(2.5, kind) * step(kind, 3.5)));
+  vec3 col = mix(vCol, vec3(1.0), clamp(edge * uOutline, 0.0, 1.0) * (1.0 - step(2.5, kind) * step(kind, 3.5)));
   float A = clamp(a, 0.0, 1.0) * vFx.z;
   gl_FragColor = vec4(col * A, A);
 }`;
@@ -126,6 +165,27 @@ void main() {
   float streak = 0.6 + 0.4 * sin(vUv.x * 40.0 + h * 9.0 - t * 18.0);
   float a = (1.0 - h) * streak * vFx.z * 0.85;
   vec3 col = mix(vCol, vec3(1.0), (1.0 - h) * 0.35);
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+// 衝擊波弧牆：底部最亮、往上淡出，橫向條紋流動；uFade 由呼叫端控制
+const WAVE_VERT = /* glsl */`
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const WAVE_FRAG = /* glsl */`
+uniform vec3 uColor;
+uniform float uFade;
+uniform float uTime;
+varying vec2 vUv;
+void main() {
+  float h = vUv.y;
+  float streak = 0.65 + 0.35 * sin(vUv.x * 60.0 + h * 7.0 - uTime * 22.0);
+  float sideFade = smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.88, vUv.x);
+  float a = pow(1.0 - h, 1.4) * streak * sideFade * uFade;
+  vec3 col = mix(uColor, vec3(1.0), (1.0 - h) * 0.45);
   gl_FragColor = vec4(col * a, a);
 }`;
 
@@ -224,6 +284,7 @@ interface DecalSlot {
   life: number; max: number; kind: number;
   fillDur: number; // 填充時間 (秒；0 = 固定滿)
   x: number; y: number; z: number; yaw: number; sx: number; sz: number; color: number;
+  w0: number; tan: number; extra: number; // 扇形：起點半寬、半角正切、起點寬比例 (傳入 shader)
 }
 interface PetalSlot {
   life: number; max: number;
@@ -276,6 +337,11 @@ export class BossFX {
   private readonly thornMesh: THREE.InstancedMesh;
   private readonly thornMat: THREE.ShaderMaterial;
   private thornHot = 0;
+  private readonly waveMesh: THREE.Mesh;
+  private readonly waveMat: THREE.ShaderMaterial;
+  private waveLife = 0;
+  private waveLen = 0;
+  private readonly holes: THREE.Vector3[] = [];
   private time = 0;
   private regenOn = false;
   private readonly regenPos = new THREE.Vector3();
@@ -285,13 +351,14 @@ export class BossFX {
     this.group.name = 'boss_fx';
     // 1. 地面 decal
     const dGeo = new THREE.PlaneGeometry(2, 2);
+    for (let i = 0; i < MAX_FIELD_HOLES; i++) this.holes.push(new THREE.Vector3());
     this.decalFx = new THREE.InstancedBufferAttribute(new Float32Array(MAX_DECALS * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.decalCol = new THREE.InstancedBufferAttribute(new Float32Array(MAX_DECALS * 3), 3).setUsage(THREE.DynamicDrawUsage);
     dGeo.setAttribute('aFx', this.decalFx);
     dGeo.setAttribute('aCol', this.decalCol);
     this.decalMat = new THREE.ShaderMaterial({
       vertexShader: DECAL_VERT, fragmentShader: DECAL_FRAG,
-      uniforms: { uOutline: { value: 0.25 } },
+      uniforms: { uOutline: { value: 0.25 }, uHoles: { value: this.holes } },
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false,
       blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
     });
@@ -300,7 +367,7 @@ export class BossFX {
     this.decalMesh.frustumCulled = false;
     this.decalMesh.renderOrder = 1;
     for (let i = 0; i < MAX_DECALS; i++) {
-      this.decals.push({ life: 0, max: 1, kind: 0, fillDur: 0, x: 0, y: 0, z: 0, yaw: 0, sx: 1, sz: 1, color: 0 });
+      this.decals.push({ life: 0, max: 1, kind: 0, fillDur: 0, x: 0, y: 0, z: 0, yaw: 0, sx: 1, sz: 1, color: 0, w0: 0, tan: 0, extra: 0 });
       this.decalMesh.setMatrixAt(i, _zero);
     }
     this.decalMesh.visible = false;
@@ -349,7 +416,17 @@ export class BossFX {
     for (let i = 0; i < MAX_THORNS; i++) this.thornMesh.setMatrixAt(i, _zero);
     this.thornMesh.visible = false;
 
-    this.group.add(this.decalMesh, this.petalMesh, this.pillarMesh, this.thornMesh);
+    // 5. 衝擊波弧牆：開口圓柱的一段 (以 +Z 為中心、θ ∈ [-π/10, π/10]，半角於 waveFan 依比例縮放)，底在 y=0、高 1
+    this.waveMat = new THREE.ShaderMaterial({
+      vertexShader: WAVE_VERT, fragmentShader: WAVE_FRAG,
+      uniforms: { uColor: { value: new THREE.Color(0xff5c8a) }, uFade: { value: 0 }, uTime: { value: 0 } },
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false, blending: THREE.AdditiveBlending
+    });
+    this.waveMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true, -WAVE_ARC, WAVE_ARC * 2).translate(0, 0.5, 0), this.waveMat);
+    this.waveMesh.frustumCulled = false;
+    this.waveMesh.visible = false;
+
+    this.group.add(this.decalMesh, this.petalMesh, this.pillarMesh, this.thornMesh, this.waveMesh);
   }
 
   private get tier(): BossFxTierSpec {
@@ -396,6 +473,93 @@ export class BossFX {
     const len = Math.hypot(dx, dz);
     if (len < 0.1) return -1;
     return this.spawnDecal(DECAL_LINE, (ax + bx) / 2, (az + bz) / 2, Math.atan2(-dz, dx), len / 2, halfW, life, fill, color);
+  }
+
+  /** 移動既有長條預警 (追蹤中的突刺；保留填充進度 / 壽命) */
+  public moveLine(i: number, ax: number, az: number, bx: number, bz: number) {
+    if (i <= 0 || i >= MAX_DECALS) return;
+    const d = this.decals[i];
+    if (d.life <= 0 || d.kind !== DECAL_LINE) return;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.1) return;
+    d.x = (ax + bx) / 2; d.z = (az + bz) / 2; d.yaw = Math.atan2(-dz, dx); d.sx = len / 2;
+  }
+
+  /** 改變預警顏色 (鎖定瞬間變白：停止追蹤 = 現在閃) */
+  public setDecalColor(i: number, color: number) {
+    if (i <= 0 || i >= MAX_DECALS || this.decals[i].life <= 0) return;
+    this.decals[i].color = color;
+  }
+
+  /**
+   * 扇形預警：起點 (ox, oz)、朝向 yaw (方向 = (sin, cos))、起點半寬 w0、半角正切 tan、長度 len (S1 衝擊波)；
+   * fill 秒內由起點填滿，life 秒後消失
+   */
+  public warnFan(ox: number, oz: number, yaw: number, w0: number, tan: number, len: number, fill: number, life: number, color: number): number {
+    if (len < 0.5) return -1;
+    const i = this.spawnDecal(DECAL_FAN, 0, 0, 0, 1, 1, life, fill, color);
+    if (i < 0) return -1;
+    const d = this.decals[i];
+    d.w0 = w0; d.tan = tan;
+    this.placeFan(d, ox, oz, yaw, len);
+    return i;
+  }
+
+  public moveFan(i: number, ox: number, oz: number, yaw: number, len: number) {
+    if (i <= 0 || i >= MAX_DECALS) return;
+    const d = this.decals[i];
+    if (d.life <= 0 || d.kind !== DECAL_FAN) return;
+    this.placeFan(d, ox, oz, yaw, len);
+  }
+
+  private placeFan(d: DecalSlot, ox: number, oz: number, yaw: number, len: number) {
+    const ux = Math.sin(yaw);
+    const uz = Math.cos(yaw);
+    const wEnd = d.w0 + len * d.tan;
+    d.x = ox + ux * len * 0.5; d.z = oz + uz * len * 0.5;
+    d.yaw = Math.atan2(-uz, ux); d.sx = len / 2; d.sz = wEnd;
+    d.extra = d.w0 / wEnd;
+  }
+
+  /**
+   * 全場預警 (S3 全場終幕)：圓 (cx, cz, r) 全填，safe 前 n 個為半徑 safeR 的安全圈 (挖洞)；
+   * 同時只有一個 (安全圈存在 uniform)。
+   */
+  public warnField(cx: number, cz: number, r: number, safe: readonly { x: number; z: number }[], n: number, safeR: number, fill: number, life: number, color: number): number {
+    for (let k = 0; k < MAX_FIELD_HOLES; k++) {
+      if (k < n) this.holes[k].set(safe[k].x, safe[k].z, safeR);
+      else this.holes[k].set(0, 0, 0);
+    }
+    return this.spawnDecal(DECAL_FIELD, cx, cz, 0, r, r, life, fill, color);
+  }
+
+  // ===== S1 衝擊波弧牆 =====
+
+  /** 自 (ox, oz) 沿 yaw 推進到 len 的扇形弧牆 (半角 halfAngle)；推進後淡出 */
+  public waveFan(ox: number, oz: number, yaw: number, halfAngle: number, len: number, color: number) {
+    this.waveMesh.position.set(ox, 0.05, oz);
+    this.waveMesh.rotation.set(0, yaw, 0);
+    this.waveMesh.userData.arcScale = halfAngle / WAVE_ARC;
+    this.waveMat.uniforms.uColor.value.setHex(color);
+    this.waveLen = Math.max(1, len);
+    this.waveLife = this.waveLen / WAVE_SPEED + 0.25;
+    this.waveMesh.userData.max = this.waveLife;
+    this.waveMesh.visible = true;
+  }
+
+  private updateWave(dt: number) {
+    if (!this.waveMesh.visible) return;
+    this.waveLife -= dt;
+    if (this.waveLife <= 0) { this.waveMesh.visible = false; return; }
+    const elapsed = (this.waveMesh.userData.max as number) - this.waveLife;
+    const r = Math.min(this.waveLen, 1 + elapsed * WAVE_SPEED);
+    // 弧牆幾何半角固定 18°：等比縮放 (r, 高, r)；半角不同時以 x 向額外縮放近似
+    const arc = (this.waveMesh.userData.arcScale as number) || 1;
+    this.waveMesh.scale.set(r * arc, WAVE_HEIGHT * (0.6 + 0.4 * Math.min(1, elapsed / 0.15)), r);
+    this.waveMat.uniforms.uFade.value = Math.min(1, this.waveLife / 0.25) * 0.95;
+    this.waveMat.uniforms.uTime.value = this.time;
   }
 
   /** 圓形預警 (big = 終幕大圈，帶荊棘紋) */
@@ -473,7 +637,7 @@ export class BossFX {
       for (let i = 0; i < MAX_PILLARS; i++) if (this.pillars[i].life <= 0) { idx = i; break; }
       if (idx < 0) return;
       const s = this.pillars[idx];
-      s.x = x; s.z = z; s.r = r * (l === 0 ? 1 : 0.6); s.h = l === 0 ? 3.2 : 4.6; s.color = color;
+      s.x = x; s.z = z; s.r = r * (l === 0 ? 1 : 0.6); s.h = l === 0 ? 4.5 : 6.5; s.color = color;
       s.life = s.max = 0.55;
     }
     this.pillarMesh.visible = true;
@@ -487,14 +651,18 @@ export class BossFX {
   }
 
   /**
-   * 擺放十字荊棘：中心 (ax, az)、第一臂朝 yaw (方向 = (sin, cos))，lens[k] 為第 k 臂到結界牆的長度；
-   * grow 0~1 為由中心往外的生長 (每節 easeOutBack 彈出)，sink 0~1 為整體縮回地面。每幀由 Boss 呼叫。
+   * 擺放荊棘十字：中心 (ax, az)、第一臂朝 yaw (方向 = (sin, cos))，arms 臂等分一圈 (≤ 6)，lens[k] 為第 k 臂到結界牆的長度；
+   * grow 0~1 為由中心往外的生長 (每節 easeOutBack 彈出)，sink 0~1 為整體縮回地面，widthMul = 荊棘橫向放大 (配合判定半寬)。每幀由 Boss 呼叫。
    */
-  public setThornCross(ax: number, az: number, yaw: number, lens: ArrayLike<number>, grow: number, sink: number) {
+  public setThornCross(ax: number, az: number, yaw: number, lens: ArrayLike<number>, grow: number, sink: number, arms: number = 4, widthMul: number = 1) {
     const segs = this.tier.thornSegs;
     this.thornMesh.visible = true;
     for (let k = 0; k < THORN_ARMS; k++) {
-      const a = yaw + k * Math.PI * 0.5;
+      if (k >= arms) {
+        for (let i = 0; i < MAX_THORN_SEGS; i++) this.thornMesh.setMatrixAt(k * MAX_THORN_SEGS + i, _zero);
+        continue;
+      }
+      const a = yaw + (k * Math.PI * 2) / arms;
       const dx = Math.sin(a);
       const dz = Math.cos(a);
       const len = lens[k];
@@ -508,10 +676,10 @@ export class BossFX {
         // 節高度依索引交錯 (近大遠小) + 輕微搖擺
         const hash = Math.sin(idx * 12.9898) * 43758.5453;
         const jitter = hash - Math.floor(hash);
-        const hgt = (0.85 + 0.35 * jitter) * (1.15 - 0.35 * (i / segs)) * pop * (1 - sink);
+        const hgt = (0.85 + 0.35 * jitter) * (1.15 - 0.35 * (i / segs)) * pop * (1 - sink) * (0.8 + 0.2 * widthMul);
         _p.set(ax + dx * d, -0.05 - sink * 0.4, az + dz * d);
         _q.setFromAxisAngle(_yAxis, a + (jitter - 0.5) * 0.35 + Math.sin(this.time * 7 + idx) * 0.04);
-        _m.compose(_p, _q, _s.set(1.0 + 0.25 * jitter, Math.max(0.001, hgt), step * 1.08));
+        _m.compose(_p, _q, _s.set((1.0 + 0.25 * jitter) * widthMul, Math.max(0.001, hgt), step * 1.08));
         this.thornMesh.setMatrixAt(idx, _m);
       }
     }
@@ -538,6 +706,7 @@ export class BossFX {
     this.updateDecals(dt);
     this.updatePetals(dt);
     this.updatePillars(dt);
+    this.updateWave(dt);
     if (this.thornHot > 0) this.thornHot = Math.max(0, this.thornHot - dt * 5);
     this.thornMat.uniforms.uHot.value = this.thornHot * 0.85;
   }
@@ -578,7 +747,7 @@ export class BossFX {
       _q.multiply(_q2);
       _m.compose(_p, _q, _s.set(d.sx, d.sz, 1));
       this.decalMesh.setMatrixAt(i, _m);
-      fx[i * 4] = d.kind; fx[i * 4 + 1] = prog; fx[i * 4 + 2] = fade; fx[i * 4 + 3] = this.time;
+      fx[i * 4] = d.kind; fx[i * 4 + 1] = prog; fx[i * 4 + 2] = fade; fx[i * 4 + 3] = d.kind === DECAL_FAN ? d.extra : this.time;
       writeColor(col, i, d.color);
     }
     this.decalMesh.instanceMatrix.needsUpdate = true;
@@ -657,6 +826,9 @@ export class BossFX {
     for (const s of this.pillars) s.life = 0;
     this.regenOn = false;
     this.hideThorns();
+    this.waveLife = 0;
+    this.waveMesh.visible = false;
+    for (const h of this.holes) h.set(0, 0, 0);
     for (let i = 0; i < MAX_DECALS; i++) this.decalMesh.setMatrixAt(i, _zero);
     for (let i = 0; i < MAX_PETALS; i++) this.petalMesh.setMatrixAt(i, _zero);
     for (let i = 0; i < MAX_PILLARS; i++) this.pillarMesh.setMatrixAt(i, _zero);
@@ -670,11 +842,11 @@ export class BossFX {
     this.pillarMesh.visible = false;
   }
 
-  /** shader 預熱：四類 mesh 暫時顯示交給 compile 後還原 */
+  /** shader 預熱：五類 mesh 暫時顯示交給 compile 後還原 */
   public prewarm(compile: () => void) {
-    const v = [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible];
-    this.decalMesh.visible = this.petalMesh.visible = this.pillarMesh.visible = this.thornMesh.visible = true;
+    const v = [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible, this.waveMesh.visible];
+    this.decalMesh.visible = this.petalMesh.visible = this.pillarMesh.visible = this.thornMesh.visible = this.waveMesh.visible = true;
     compile();
-    [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible] = v;
+    [this.decalMesh.visible, this.petalMesh.visible, this.pillarMesh.visible, this.thornMesh.visible, this.waveMesh.visible] = v;
   }
 }

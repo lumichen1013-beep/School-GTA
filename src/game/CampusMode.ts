@@ -3,7 +3,6 @@ import { soundManager } from '../audio/SoundEffects';
 import { Bicycle } from '../vehicles/Bicycle';
 import { NPC } from '../entities/NPC';
 import { AnnouncementPlaylist } from '../data/announcements';
-import { BROADCAST } from './fencer/fencerStory';
 import type { MissionTrackerData } from '../ui/HUD';
 import type { GameContext } from './GameContext';
 import { BASKETBALL_UNLOCK_GOAL } from '../weapons/defs/basketball';
@@ -314,9 +313,9 @@ export class CampusMode {
     if (this.broadcastCooldown <= 0) {
       this.broadcastCooldown = 15.0;
       soundManager.playBroadcastChime(this.ctx.player.position);
-      // 首勝花劍客後偶爾插播太陽花鞠躬的後日談廣播
-      const afterWin = this.ctx.progression.fencerDefeated && Math.random() < BROADCAST.afterWinChance;
-      wantedSystem.showBanner(afterWin ? BROADCAST.afterWin : this.announcements.next(), 6000);
+      // 首勝花劍客後：第一次必播社旗收線，之後偶爾插播後日談 (鞠躬 / 割草機繞道)
+      const fencerNews = this.ctx.fencerBossFight?.nextBroadcast() ?? null;
+      wantedSystem.showBanner(fencerNews ?? this.announcements.next(), 6000);
       for (const npc of this.ctx.npcs) {
         npc.freeze(4.0);
       }

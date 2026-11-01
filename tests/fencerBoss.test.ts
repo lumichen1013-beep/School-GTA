@@ -10,7 +10,7 @@ vi.mock('../src/effects/ComboFinisherFX', () => ({ comboFinisherFX: { groundSlam
 import {
   FENCER, SUNFLOWER_LINES, SunflowerTaunt, BossHealthBars, CombatRegen, canSkipIntro, victoryReward,
   clampToCircle, segmentExitCircleT, segmentPointDistance, bossBarLabel, REMATCH_LINE_AFTER_WIN, REMATCH_LINE_AFTER_LOSS,
-  rayCircleDistance, thornCrossYaw, thornCrossHit, pinchClonePos, pinchHitMask
+  rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit, pinchClonePos, pinchHitMask, inFan
 } from '../src/game/fencer/fencerRules';
 import { AwakeningStats, PlayerAwakening, AWAKEN_INTRO_SEC } from '../src/game/fencer/PlayerAwakening';
 import { BattleModeSwitch } from '../src/game/fencer/BattleMode';
@@ -69,7 +69,7 @@ describe('太陽花 10 次計數與再戰規則', () => {
   });
 
   it('開場過場第二次起可跳過；首勝 1500、再戰勝利 200', () => {
-    expect(canSkipIntro(1)).toBe(false);
+    expect(canSkipIntro(1)).toBe(true);
     expect(canSkipIntro(2)).toBe(true);
     expect(victoryReward(false)).toBe(1500);
     expect(victoryReward(true)).toBe(200);
@@ -108,7 +108,7 @@ describe('三管血與換樂章', () => {
   });
 });
 
-describe('戰鬥回血：基礎 0.8/s + 脫戰 12/s', () => {
+describe('戰鬥回血：基礎 0.8/s + 脫戰 8/s', () => {
   const inp = (hp: number, dist: number, force = false) => ({ hp, maxHp: 200, distToBoss: dist, forceOutOfCombat: force });
 
   it('基礎回血任何狀態都在回 (受擊後也不暫停)', () => {
@@ -118,15 +118,17 @@ describe('戰鬥回血：基礎 0.8/s + 脫戰 12/s', () => {
     expect(r.outOfCombat).toBe(false);
   });
 
-  it('脫戰需同時滿足：2s 未被打、2s 未出手、距離 > 8m', () => {
+  it('脫戰需同時滿足：2s 未被打、2s 未出手、距離 > 10m', () => {
+    expect(FENCER.OOC_REGEN).toBe(8);
+    expect(FENCER.OOC_MIN_DIST).toBe(10);
     const r = new CombatRegen();
     r.onPlayerHit();
-    r.update(1.9, inp(60, 10));
+    r.update(1.9, inp(60, 12));
     expect(r.outOfCombat).toBe(false);
-    expect(r.update(0.2, inp(60, 10))).toBeCloseTo(12 * 0.2, 5);
+    expect(r.update(0.2, inp(60, 12))).toBeCloseTo(8 * 0.2, 5);
     expect(r.outOfCombat).toBe(true);
     // 距離不夠
-    expect(r.update(0.1, inp(60, 8))).toBeCloseTo(0.08, 5);
+    expect(r.update(0.1, inp(60, 10))).toBeCloseTo(0.08, 5);
     expect(r.outOfCombat).toBe(false);
     // 遠程出手也算攻擊
     r.update(0.1, inp(60, 12));
@@ -357,7 +359,7 @@ describe('花劍客本體', () => {
     const { boss, host } = makeBoss();
     for (let i = 0; i < 600; i++) {
       boss.update(1 / 30);
-      const d = Math.hypot(boss.position.x - FENCER.CENTER_X, boss.position.z - FENCER.CENTER_Z);
+      const d = Math.hypot(boss.position.x - FENCER.ARENA_X, boss.position.z - FENCER.ARENA_Z);
       expect(d).toBeLessThanOrEqual(FENCER.ARENA_R - FENCER.BOSS_CLAMP_PAD + 1e-6);
     }
     // 中立期結束後確實輪替出招 (不只開場第一招)
@@ -366,15 +368,57 @@ describe('花劍客本體', () => {
 });
 
 describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
-  const cx = FENCER.CENTER_X;
-  const cz = FENCER.CENTER_Z;
+  const cx = FENCER.ARENA_X;
+  const cz = FENCER.ARENA_Z;
   const R = FENCER.ARENA_R;
 
   it('荊棘臂長 = 插劍點到結界牆的距離', () => {
     expect(rayCircleDistance(cx, cz, 0, 1, cx, cz, R)).toBeCloseTo(R);
     expect(rayCircleDistance(cx, cz + 4, 0, 1, cx, cz, R)).toBeCloseTo(R - 4);
     expect(rayCircleDistance(cx, cz + 4, 0, -1, cx, cz, R)).toBeCloseTo(R + 4);
-    expect(rayCircleDistance(cx, cz + 20, 0, 1, cx, cz, R)).toBe(0);
+    expect(rayCircleDistance(cx, cz + R + 2, 0, 1, cx, cz, R)).toBe(0);
+  });
+
+  it('結界中心與太陽花拆開：R23 圓不含兩座足球門 (z 5.9 / 54.1、x ±2.6、深 ±0.4)', () => {
+    expect(FENCER.ARENA_R).toBe(23);
+    for (const gz of [5.9, 54.1]) {
+      for (const gx of [-2.6, 0, 2.6]) {
+        for (const dz of [-0.4, 0.4]) expect(Math.hypot(gx, gz + dz - cz)).toBeGreaterThan(R);
+      }
+    }
+    // 太陽花 (Boss 現身點) 在結界內
+    expect(Math.hypot(FENCER.CENTER_X - cx, FENCER.CENTER_Z - cz)).toBeLessThan(R - 5);
+  });
+
+  it('六臂荊棘 (終樂章)：臂距 60°、旋轉一個臂距；臂間安全點旋轉一半被掃到', () => {
+    expect(thornArmYaw(0, 1, 6)).toBeCloseTo(Math.PI / 3);
+    expect(thornCrossYaw(0, 1, 9, 2.2, 6)).toBeCloseTo(Math.PI / 3);
+    // 臂間 (30°) 半徑 8m：安全
+    const sx = cx + 8 * Math.sin(Math.PI / 6), sz = cz + 8 * Math.cos(Math.PI / 6);
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, sx, sz, 1.3, 6)).toBe(-1);
+    expect(thornCrossHit(cx, cz, thornCrossYaw(0, 1, 1.1, 2.2, 6), 1, cx, cz, R, sx, sz, 1.3, 6)).toBeGreaterThanOrEqual(0);
+    // 四臂預設不受影響
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, sx, sz, 1.3)).toBe(-1);
+  });
+
+  it('S4 可解性：任何距離都可跟轉 (切線 ≤ 9m/s) 或跳過 (臂寬掃過 ≤ 0.55s)', () => {
+    for (const arms of [4, 6]) {
+      const w = (Math.PI * 2 / arms) / 2.2;
+      for (let r = 0.5; r <= R + 6; r += 0.5) {
+        const follow = w * r <= 9;
+        const jump = (1.3 * 2) / (w * r) <= 0.55;
+        expect(follow || jump).toBe(true);
+      }
+    }
+  });
+
+  it('S1 衝擊波扇形：起點寬 1.2、半角 18°；外側與起點後方安全', () => {
+    const tan = Math.tan((18 * Math.PI) / 180);
+    expect(inFan(cx, cz, 0, 1, 1.2, tan, 20, cx, cz + 10)).toBe(true);
+    expect(inFan(cx, cz, 0, 1, 1.2, tan, 20, cx + 1.2 + 10 * tan - 0.05, cz + 10)).toBe(true);
+    expect(inFan(cx, cz, 0, 1, 1.2, tan, 20, cx + 1.2 + 10 * tan + 0.05, cz + 10)).toBe(false);
+    expect(inFan(cx, cz, 0, 1, 1.2, tan, 20, cx, cz - 2)).toBe(false);
+    expect(inFan(cx, cz, 0, 1, 1.2, tan, 20, cx, cz + 21)).toBe(false);
   });
 
   it('十字四臂命中、臂間安全，旋轉中途 45° 掃到原本的安全位置', () => {
@@ -396,8 +440,8 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     // 轉完 90° 十字與起始重合；超出時間夾住
     expect(thornCrossYaw(0, -1, 9, 2.5)).toBeCloseTo(-Math.PI / 2);
     // 生長中 (reach 0.5) 尚未長到 10m 外
-    expect(thornCrossHit(cx, cz, 0, 0.5, cx, cz, R, cx, cz + 10, 0.6)).toBe(-1);
-    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx, cz + 10, 0.6)).toBe(0);
+    expect(thornCrossHit(cx, cz, 0, 0.5, cx, cz, R, cx, cz + 14, 0.6)).toBe(-1);
+    expect(thornCrossHit(cx, cz, 0, 1, cx, cz, R, cx, cz + 14, 0.6)).toBe(0);
   });
 
   it('夾擊：分身站在玩家另一側 100°、兩線交叉於玩家；共用位元遮罩判定', () => {
@@ -447,7 +491,7 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
       if ((fx as unknown as { thornMesh: THREE.Mesh }).thornMesh.visible) sawThorns = true;
     }
     expect(sawThorns).toBe(true);
-    expect(host.damage).toEqual([[9, '玫瑰荊棘十字'], [9, '玫瑰荊棘十字']]);
+    expect(host.damage).toEqual([[16, '玫瑰荊棘十字'], [16, '玫瑰荊棘十字']]);
     expect(boss.act).toBe('RECOVER');
     expect((fx as unknown as { thornMesh: THREE.Mesh }).thornMesh.visible).toBe(false);
 
@@ -466,7 +510,7 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     for (let i = 0; i < 180 && f.boss.act === 'ATTACK'; i++) {
       // 插劍後站到兩臂中間 (半徑 5m)，旋轉中同步跟轉
       if (fb.atkStep >= 1) {
-        const yaw = fb.atkStep === 3 ? thornCrossYaw(fb.s4Yaw, fb.s4Dir, fb.atkTimer, 2.5) : fb.atkStep >= 4 ? fb.s4Yaw + fb.s4Dir * Math.PI / 2 : fb.s4Yaw;
+        const yaw = fb.atkStep === 3 ? thornCrossYaw(fb.s4Yaw, fb.s4Dir, fb.atkTimer, 2.2) : fb.atkStep >= 4 ? fb.s4Yaw + fb.s4Dir * Math.PI / 2 : fb.s4Yaw;
         follower.set(fb.s4Anchor.x + Math.sin(yaw + Math.PI / 4) * 5, 0, fb.s4Anchor.z + Math.cos(yaw + Math.PI / 4) * 5);
       }
       f.boss.update(1 / 30);
@@ -491,15 +535,17 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     expect(Math.hypot(cp.x - boss.position.x, cp.z - boss.position.z)).toBeGreaterThan(2);
     expect(boss.tryHitAtPoint(cp, 0.1, 50)).toBeNull();
     for (let i = 0; i < 120 && boss.act === 'ATTACK'; i++) boss.update(1 / 30);
-    // 終樂章：第 1 回合 8+1；第 1 回合刺中 → 第 2 回合追擊 12
-    expect(host.damage).toEqual([[9, '花影雙人舞'], [12, '花影雙人舞']]);
+    // 終樂章：第 1 回合 14+2；第 1 回合刺中 → 第 2 回合追擊 21
+    expect(host.damage).toEqual([[16, '花影雙人舞'], [21, '花影雙人舞']]);
     for (let i = 0; i < 30; i++) boss.update(1 / 30);
     expect(boss.clone.visible).toBe(false);
   });
 
-  it('難度：第 2 管起連刺追擊、終樂章 S1 / 綻放圈 / S5 傷害 +1', () => {
+  it('難度：第 2 管起連刺追擊、終樂章 S1 / 綻放圈 / S5 傷害 +2；終樂章六臂、第 2 管起全場終幕', () => {
     expect(PHASES.map((p) => p.followUp)).toEqual([false, true, true]);
-    expect(PHASES.map((p) => p.dmgBonus)).toEqual([0, 0, 1]);
+    expect(PHASES.map((p) => p.dmgBonus)).toEqual([0, 0, 2]);
+    expect(PHASES.map((p) => p.thornArms)).toEqual([4, 4, 6]);
+    expect(PHASES.map((p) => p.s3Field?.n ?? 0)).toEqual([0, 3, 2]);
   });
 
   type S1Internals = { beginAttack(id: string, c: boolean): void; s1Windup: number; s1Follow: boolean; s1Start: THREE.Vector3; s1End: THREE.Vector3; atkStep: number };
@@ -511,7 +557,7 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     const b = boss as unknown as S1Internals;
     b.beginAttack('S1', false);
     for (let i = 0; i < 60 && host.damage.length === 0; i++) boss.update(1 / 60);
-    expect(host.damage[0]).toEqual([8, '玫瑰三連刺']);
+    expect(host.damage[0]).toEqual([14, '玫瑰三連刺']);
     for (let i = 0; i < 60 && b.atkStep !== 0; i++) boss.update(1 / 60); // 突進完 → 第 2 刺瞄準
     const windup = b.s1Windup;
     // 第 2 刺：站在新突刺線中點
@@ -521,16 +567,53 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     return { windup, damage: host.damage.map(([d]) => d) };
   }
 
-  it('S1 連刺追擊：第 2 管起前一刺刺中 → 下一刺預警 0.2s、傷害 12；第 1 管不追擊', () => {
+  it('S1 連刺追擊：第 2 管起前一刺刺中 → 下一刺預警 0.2s、傷害 21；第 1 管不追擊', () => {
     const p2 = s1SecondThrust(1);
     expect(p2.windup).toBeCloseTo(0.2);
-    expect(p2.damage).toEqual([8, 12]);
+    expect(p2.damage).toEqual([14, 21]);
     const p1 = s1SecondThrust(0);
-    expect(p1.windup).toBeCloseTo(0.35);
-    expect(p1.damage).toEqual([8, 8]);
+    expect(p1.windup).toBeCloseTo(0.3);
+    expect(p1.damage).toEqual([14, 14]);
   });
 
-  it('S1 連刺追擊只懲罰被刺中：前一刺閃過則下一刺照常 0.35s / 8', () => {
+  it('S1 刺長 = 到玩家位置 +2.5m (夾 4~9m)：遠的玩家刺得到 (原固定 6m 刺不到 7m 外)', () => {
+    for (const [dist, len] of [[3, 5.5], [7, 9], [0.5, 4]] as const) {
+      const player = new THREE.Vector3(cx, 0, cz + dist);
+      const { boss, host } = makeBossAt(0, player);
+      boss.position.set(cx, 0, cz);
+      const b = boss as unknown as S1Internals;
+      b.beginAttack('S1', false);
+      expect(Math.hypot(b.s1End.x - b.s1Start.x, b.s1End.z - b.s1Start.z)).toBeCloseTo(len, 5);
+      for (let i = 0; i < 60 && host.damage.length === 0; i++) boss.update(1 / 60);
+      expect(host.damage[0]).toEqual([14, '玫瑰三連刺']);
+    }
+  });
+
+  it('S1 晚鎖定：預警期間追蹤移動的玩家，鎖定後 (打出前 0.3s) 才側移的玩家閃過', () => {
+    // 預警開始後立刻側移 3m：仍被追上 (鎖定前持續追蹤)
+    const p1 = new THREE.Vector3(cx, 0, cz + 5);
+    const a = makeBossAt(0, p1);
+    a.boss.position.set(cx, 0, cz);
+    const b1 = a.boss as unknown as S1Internals;
+    b1.beginAttack('S1', false);
+    p1.set(cx + 1.5, 0, cz + 5);
+    for (let i = 0; i < 60 && b1.atkStep === 0; i++) a.boss.update(1 / 60);
+    for (let i = 0; i < 10; i++) a.boss.update(1 / 60);
+    expect(a.host.damage.length).toBe(1);
+    // 鎖定之後才側移 2m：閃過
+    const p2 = new THREE.Vector3(cx, 0, cz + 5);
+    const b = makeBossAt(0, p2);
+    b.boss.position.set(cx, 0, cz);
+    const b2 = b.boss as unknown as S1Internals & { atkTimer: number };
+    b2.beginAttack('S1', false);
+    for (let i = 0; i < 60 && b2.atkTimer < 0.45 - 0.3 + 0.02; i++) b.boss.update(1 / 60);
+    p2.set(cx + 2, 0, cz + 5);
+    for (let i = 0; i < 60 && b2.atkStep === 0; i++) b.boss.update(1 / 60);
+    for (let i = 0; i < 10; i++) b.boss.update(1 / 60);
+    expect(b.host.damage.length).toBe(0);
+  });
+
+  it('S1 連刺追擊只懲罰被刺中：前一刺閃過則下一刺照常 0.3s / 14', () => {
     const player = new THREE.Vector3(cx, 0, cz + 3);
     const { boss, host } = makeBossAt(1, player);
     boss.position.set(cx, 0, cz);
@@ -541,18 +624,39 @@ describe('S4 玫瑰荊棘十字 / S5 花影雙人舞 判定', () => {
     for (let i = 0; i < 60 && b.atkStep !== 0; i++) boss.update(1 / 60); // 突進完 → 第 2 刺瞄準
     expect(host.damage.length).toBe(0);
     expect(b.s1Follow).toBe(false);
-    expect(b.s1Windup).toBeCloseTo(0.35);
+    expect(b.s1Windup).toBeCloseTo(0.3);
   });
 
-  it('終樂章 S3 綻放圈 7 (第 1、2 管 6)，終幕大圈仍 12', () => {
-    for (const [bar, ring] of [[0, 6], [2, 7]] as const) {
+  it('終樂章 S3 綻放圈 13 (第 1、2 管 11)，終幕 21 (第 1 管大圈、終樂章全場)', () => {
+    for (const [bar, ring] of [[0, 11], [2, 13]] as const) {
       const player = new THREE.Vector3(cx, 0, cz + 3);
       const { boss, host } = makeBossAt(bar, player);
       (boss as unknown as { beginAttack(id: string, c: boolean): void }).beginAttack('S3', false);
       for (let i = 0; i < 30 * 8 && host.damage.length === 0; i++) boss.update(1 / 30);
       expect(host.damage[0]).toEqual([ring, '萬花綻放']);
       for (let i = 0; i < 30 * 8; i++) boss.update(1 / 30);
-      expect(Math.max(...host.damage.map(([d]) => d))).toBe(12);
+      expect(Math.max(...host.damage.map(([d]) => d))).toBe(21);
+    }
+  });
+
+  it('全場終幕：站進金色安全圈的玩家不受終幕傷害；最近安全圈距玩家 4~7m 且全在結界內', () => {
+    for (let trial = 0; trial < 20; trial++) {
+      const player = new THREE.Vector3(cx + 3, 0, cz - 4);
+      const { boss, host } = makeBossAt(1, player);
+      const b = boss as unknown as { beginAttack(id: string, c: boolean): void; s3Safe: { x: number; z: number }[]; s3SafeCount: number; s3SafeR: number; atkStep: number };
+      b.beginAttack('S3', false);
+      for (let i = 0; i < 30 * 6 && b.atkStep < 2; i++) boss.update(1 / 30);
+      expect(b.s3SafeCount).toBe(3);
+      const ds = b.s3Safe.slice(0, b.s3SafeCount).map((c) => Math.hypot(c.x - player.x, c.z - player.z));
+      expect(Math.min(...ds)).toBeGreaterThanOrEqual(4 - 1e-6);
+      expect(Math.min(...ds)).toBeLessThanOrEqual(7 + 1e-6);
+      for (const c of b.s3Safe.slice(0, b.s3SafeCount)) expect(Math.hypot(c.x - cx, c.z - cz) + b.s3SafeR).toBeLessThanOrEqual(R - 0.5 + 1e-6);
+      // 走進最近安全圈
+      const near = b.s3Safe[ds.indexOf(Math.min(...ds))];
+      player.set(near.x, 0, near.z);
+      host.damage.length = 0;
+      for (let i = 0; i < 30 * 4; i++) boss.update(1 / 30);
+      expect(host.damage.some(([, r]) => r === '萬花華爾滋・終幕')).toBe(false);
     }
   });
 

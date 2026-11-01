@@ -3,8 +3,10 @@
 // Features seamless transition between "Campus Exploration Groove" and "High-Adrenaline Pursuit Chase".
 
 import { getAudioContext, resumeAudioContext } from './audioContext';
+import { duelStep, duelTempo, duelMidiToFreq, DUEL_LOOP_STEPS, type DuelNote, type DuelState } from './duelWaltz';
 
-export type BGMMode = 'EXPLORE' | 'PURSUIT';
+// DUEL：花劍客戰「向日圓舞曲」(3/4 拍，見 duelWaltz.ts)；由 setDuel() 進出，期間 setPursuitMode 不切模式
+export type BGMMode = 'EXPLORE' | 'PURSUIT' | 'DUEL';
 
 export class BGMManager {
   private ctx: AudioContext | null = null;
@@ -28,6 +30,10 @@ export class BGMManager {
   private currentStep: number = 0; // 0 to 63 (4 bars of 16 sixteenth-notes)
   private readonly lookaheadMs: number = 25; // How frequently to call scheduler (ms)
   private readonly scheduleAheadSec: number = 0.12; // How far ahead to schedule audio (sec)
+
+  // 花劍客戰狀態 (null = 不在決鬥)
+  private duel: DuelState | null = null;
+  private readonly duelNotes: DuelNote[] = [];
 
   // Status callback for UI updates
   public onModeChange?: (mode: BGMMode, isMuted: boolean) => void;
@@ -132,8 +138,42 @@ export class BGMManager {
     return this.currentMode;
   }
 
+  /** 花劍客戰音樂 (每幀可呼叫；只在狀態變動時切換)：null = 回到校園模式 (由 setPursuitMode 接手) */
+  public setDuel(state: DuelState | null) {
+    const d = this.duel;
+    if (!state) {
+      if (!d) return;
+      this.duel = null;
+      this.currentMode = 'EXPLORE';
+      this.tempo = 108;
+      this.currentStep = 0;
+      this.rampFilter(1600, 1.2, 0.6);
+      this.onModeChange?.(this.currentMode, this.isMuted);
+      return;
+    }
+    if (d && d.movement === state.movement && d.dawn === state.dawn && d.interlude === state.interlude) return;
+    const entering = !d;
+    const newMovement = !d || d.movement !== state.movement || d.interlude !== state.interlude;
+    this.duel = { movement: state.movement, dawn: state.dawn, interlude: state.interlude };
+    this.currentMode = 'DUEL';
+    this.tempo = duelTempo(state);
+    if (newMovement) this.currentStep = 0; // 換段從第一小節開始
+    // 黎明 / 終樂章：濾波打開更亮；過場 (音樂盒) 收窄
+    this.rampFilter(state.interlude ? 2600 : state.dawn ? 7000 : 4200, 1.0, 0.8);
+    if (entering) this.onModeChange?.(this.currentMode, this.isMuted);
+  }
+
+  private rampFilter(freq: number, q: number, sec: number) {
+    if (!this.ctx || !this.masterFilter) return;
+    const now = this.ctx.currentTime;
+    this.masterFilter.frequency.cancelScheduledValues(now);
+    this.masterFilter.frequency.linearRampToValueAtTime(freq, now + sec);
+    this.masterFilter.Q.linearRampToValueAtTime(q, now + sec);
+  }
+
   // Update dynamic mode based on player chase state
   public setPursuitMode(isPursuit: boolean, isHighDanger: boolean = false) {
+    if (this.duel) return; // 花劍客戰中由 setDuel 控制
     const newMode: BGMMode = isPursuit ? 'PURSUIT' : 'EXPLORE';
     this.isHighDanger = isHighDanger;
 
@@ -168,6 +208,16 @@ export class BGMManager {
     this.masterGain.gain.linearRampToValueAtTime(0.42, now + durationSec);
   }
 
+  /** 完全靜音 sec 秒後淡回 (花劍客第 10 戳：靜一拍再爆開) */
+  public silence(sec: number) {
+    if (!this.masterGain || !this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.linearRampToValueAtTime(0.0001, now + 0.08);
+    this.masterGain.gain.setValueAtTime(0.0001, now + Math.max(0.1, sec - 0.4));
+    this.masterGain.gain.linearRampToValueAtTime(0.42, now + sec);
+  }
+
   // Precise Web Audio lookahead scheduler
   private scheduler() {
     if (!this.ctx) return;
@@ -185,13 +235,14 @@ export class BGMManager {
         this.scheduleStep(this.currentStep, this.nextStepTime);
       }
       this.nextStepTime += secondsPer16th;
-      this.currentStep = (this.currentStep + 1) % 64; // 4-bar loop (16 * 4 = 64 steps)
+      this.currentStep = (this.currentStep + 1) % (this.duel ? DUEL_LOOP_STEPS : 64); // 4 小節循環 (4/4 = 64 步、華爾滋 3/4 = 48 步)
     }
   }
 
   // Schedule musical notes & percussion at a specific 16th-note step
   private scheduleStep(step: number, time: number) {
     if (!this.ctx || !this.masterFilter) return;
+    if (this.duel) { this.scheduleDuelStep(step, time, this.duel); return; }
 
     const barStep = step % 16;
     const isPursuit = this.currentMode === 'PURSUIT';
@@ -366,6 +417,41 @@ export class BGMManager {
         this.playTensionStab(time, stabFreq, 0.22);
       }
     }
+  }
+
+  // 向日圓舞曲：依 duelWaltz 的音符表發聲 (沿用既有合成器；音樂盒為新增的輕量音色)
+  private scheduleDuelStep(step: number, time: number, s: DuelState) {
+    for (const n of duelStep(step, s, this.duelNotes)) {
+      const f = duelMidiToFreq(n.midi);
+      if (n.voice === 'BASS') this.playExploreBass(time, f, n.dur);
+      else if (n.voice === 'CHORD') this.playRhodesChord(time, [f], n.dur * n.vel * 1.6);
+      else if (n.voice === 'LEAD') this.playMelodicLead(time, f, n.dur * 1.4);
+      else if (n.voice === 'BOX') this.playMusicBox(time, f, n.dur, n.vel);
+      else if (n.voice === 'TIMPANI') this.playKick(time, n.vel, false);
+      else this.playHiHat(time, false, n.vel);
+    }
+  }
+
+  // 音樂盒：三角波 + 高八度正弦泛音，短起音長衰減
+  private playMusicBox(time: number, freq: number, duration: number, vel: number) {
+    if (!this.ctx || !this.masterFilter) return;
+    const osc = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, time);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(freq * 3.01, time);
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.13 * vel, time + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    osc.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterFilter);
+    osc.start(time);
+    osc2.start(time);
+    osc.stop(time + duration + 0.02);
+    osc2.stop(time + duration + 0.02);
   }
 
   // ====================================================================
