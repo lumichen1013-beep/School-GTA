@@ -36,6 +36,7 @@ export const FENCER = {
   REPEAT_WIN_CASH: 200,
   /** 每管打空：無敵亮相 + 換樂章過場 (期間不出手、玩家算脫戰) */
   BAR_BREAK_POSE_SEC: 1.2,
+  /** 換樂章過場預設長度 (無宿主設定時；實際長度由 FencerBossFight 依台詞字數設定) */
   BAR_TRANSITION_SEC: 8.0
 } as const;
 
@@ -154,28 +155,27 @@ export function fencerQuestStage(fightsStarted: number, defeated: boolean): 0 | 
   return fightsStarted > 0 ? 1 : 0;
 }
 
-// ===== 開場過場時間軸 (秒)：首戰 8.2s (向陽之心多 1.4s 台詞)、再戰 6.8s =====
+// ===== 過場 (時長依台詞字數，見 storyPlayer；事件掛在 fencerStory 的句子上) =====
 
-export interface IntroTimeline {
-  awaken: number;
-  blend: number;
-  end: number;
-}
-export const INTRO_FIRST: IntroTimeline = { awaken: 5.3, blend: 7.4, end: 8.2 };
-export const INTRO_REMATCH: IntroTimeline = { awaken: 4.5, blend: 6.0, end: 6.8 };
-export function introTimeline(fightsStarted: number): IntroTimeline {
-  return fightsStarted <= 1 ? INTRO_FIRST : INTRO_REMATCH;
-}
-
-/** 首勝才播 7s 長過場 (鎖操作)；之後的勝利一律短收尾 */
+/** 首勝才播長過場 (鎖操作)；之後的勝利一律短收尾 */
 export function victoryIsLong(alreadyDefeated: boolean): boolean {
   return !alreadyDefeated;
 }
 
-/** 首勝過場 (鎖操作)：總長、恢復校園時間點、Boss 化花瓣時間點 */
-export const VICTORY_FIRST = { end: 7.0, restoreAt: 4.6, outroAt: 4.4, rapierAt: 5.8, faceAt: 2.8, dissolveAt: 3.4, freeze: 0.25 } as const;
-/** 再戰勝利 (短收尾，不鎖操作) */
+/** 首勝過場：開頭停格秒數 (之後的時間點全部跟著台詞事件) */
+export const VICTORY_FIRST = { freeze: 0.25 } as const;
+/** 再戰勝利 (短收尾，不鎖操作)：恢復校園 / 結束 / Boss 化花瓣 秒數 */
 export const VICTORY_REPEAT = { end: 3.6, restoreAt: 2.2, dissolveAt: 1.4 } as const;
+/** 戰敗：恢復校園時間點；結束 = max(DEFEAT_END_MIN, Boss 台詞秒數 + 0.6) */
+export const DEFEAT_RESTORE_AT = 1.2;
+export const DEFEAT_END_MIN = 2.6;
+/** 換樂章小過場：擊破亮相 (BAR_BREAK_POSE_SEC) 後花瓣傳送回中央，前導共 TRANSITION_LEAD_SEC 秒才開始台詞；最後一句後 TRANSITION_TAIL_SEC 秒混回戰鬥鏡頭 */
+export const TRANSITION_LEAD_SEC = 1.8;
+export const TRANSITION_TAIL_SEC = 0.6;
+/** 換樂章：Boss 回中央的時間點 (擊破後秒數) 與玩家推離 (距中心 < PUSH_IN 時推到 PUSH_TO) */
+export const TRANSITION_BLINK_AT = 1.5;
+export const TRANSITION_PUSH_IN = 4;
+export const TRANSITION_PUSH_TO = 5;
 
 // ===== Boss 台詞頻率 =====
 
@@ -235,9 +235,9 @@ export class HeartVoice {
   }
 }
 
-/** 開場過場是否可跳過：第二次起 (曾經開戰過) */
-export function canSkipIntro(fightsStarted: number): boolean {
-  return fightsStarted >= 2;
+/** 開場過場是否可跳過：首戰起都可長按跳過 (首戰也可，點擊可逐句前進) */
+export function canSkipIntro(_fightsStarted: number): boolean {
+  return true;
 }
 
 /** 勝利獎金：首勝 1500，再戰勝利 200 */

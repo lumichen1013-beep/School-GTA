@@ -3,14 +3,16 @@
 // 劇情稿：fencer-story.md (太陽花 10 句原句一字不改)。
 
 import type { SunflowerFace, SunflowerLine } from './fencerRules';
+import type { StoryLine } from './storyPlayer';
 
-/** 時間軸上的一拍：t 秒觸發；who 決定顯示方式 (字幕 / Boss框 / 玩家框)；dur 為頭頂框秒數 */
-export interface StoryBeat {
-  t: number;
-  text: string;
-  who?: 'SUB' | 'BOSS' | 'PLAYER';
-  dur?: number;
-}
+// 過場 = 台詞陣列 (資料驅動)：每句顯示秒數依字數自動計算 (storyPlayer.lineDuration：max(2, 字數 × 0.14 + 0.5))，
+// 改稿只動文字與順序，不必改計時；演出事件掛在句子上 (events: [{ id, at }]，at = 該句開始後秒數、負值 = 句尾前)。
+// 事件 id (FencerBossFight 依 id 執行)：
+//   開場：PETALS 花心爆花瓣、FLASH 白閃 + 清場 + 結界升起、WALL_UP 結界升滿卸載校園、BOSS 花劍客現身、AWAKEN 向陽覺醒、BLEND 鏡頭混回玩家身後
+//   首勝：FACE 玩家轉向回禮、DISSOLVE Boss 化花瓣、OUTRO 光飛回太陽花、RESTORE 恢復校園、RAPIER 細劍插地、BLEND 鏡頭混回
+//   換樂章：無 (Boss 回中央由固定前導 TRANSITION_LEAD_SEC 處理)
+/** 一句台詞 (who：SUB 字幕 (預設) / BOSS Boss框 + 字幕 / PLAYER 玩家頭頂框 + 字幕) */
+export type StoryBeat = StoryLine;
 
 export interface DailyLine {
   text: string;
@@ -113,25 +115,25 @@ export function fencerQuestText(stage: number, growth: number): QuestStageText {
 
 // ===== 戰中：開場過場 =====
 
-/** 首戰 8.2s (不可跳過)：時間點對應 FencerBossFight 的 INTRO_FIRST 時間軸 */
+/** 首戰開場 (約 15s，點擊前進 / 長按跳過) */
 export const INTRO_FIRST_BEATS: readonly StoryBeat[] = [
-  { t: 0.0, text: '🌻「看來不好好教訓你不行了……」' },
-  { t: 1.0, text: '（花心湧出暮色，把操場的光吞了——）' },
-  { t: 2.6, text: '🎩「午茶時間到了。」' },
-  { t: 4.0, text: '🎩「在下向日爵士，來教你什麼叫禮貌。」' },
-  { t: 5.3, text: '☀️「別怕！我是它最後的向陽之心！」' },
-  { t: 6.8, text: '☀️「你惹的禍——幫我打醒那個暴躁的我！」' }
+  { text: '🌻「看來不好好教訓你不行了……」', events: [{ id: 'PETALS', at: 0.6 }] },
+  { text: '（花心湧出暮色，把操場的光吞了——）', events: [{ id: 'FLASH' }, { id: 'WALL_UP', at: 1.5 }] },
+  { text: '🎩「午茶時間到了。」', events: [{ id: 'BOSS' }] },
+  { text: '🎩「在下向日爵士，來教你什麼叫禮貌。」' },
+  { text: '☀️「別怕！我是它最後的向陽之心！」', events: [{ id: 'AWAKEN' }] },
+  { text: '☀️「你惹的禍——幫我打醒那個暴躁的我！」', events: [{ id: 'BLEND', at: -0.8 }] }
 ];
 
-/** 再戰 6.8s (可跳過)；Boss 那句跳過時改由 Boss框 在開戰後補講 */
+/** 再戰開場 (約 7s)；Boss 那句跳過時改由 Boss框 在開戰後補講 */
 export const REMATCH_BOSS_LINE = {
   afterLoss: '歡迎回來。禮貌課，補考開始。',
   afterWin: '又見面了。這次換我討回禮數。'
 } as const;
 const rematchBeats = (flower: string, boss: string): readonly StoryBeat[] => [
-  { t: 0.0, text: `🌻「${flower}」` },
-  { t: 2.6, text: `🎩「${boss}」` },
-  { t: 4.5, text: '☀️「又要麻煩你了！」' }
+  { text: `🌻「${flower}」`, events: [{ id: 'PETALS', at: 0.2 }, { id: 'FLASH', at: 0.4 }, { id: 'WALL_UP', at: -0.05 }] },
+  { text: `🎩「${boss}」`, events: [{ id: 'BOSS' }] },
+  { text: '☀️「又要麻煩你了！」', events: [{ id: 'AWAKEN' }, { id: 'BLEND', at: -0.8 }] }
 ];
 export const INTRO_REMATCH_BEATS = {
   afterLoss: rematchBeats(REMATCH_LINE_AFTER_LOSS, REMATCH_BOSS_LINE.afterLoss),
@@ -161,23 +163,23 @@ export const BOSS_CUE_LINES = {
   BOW: { first: ['承讓。', '失禮了。', '請。'], later: ['承讓。', '失禮了。', '請。'], dur: 1.3 },
   S4: { first: ['荊棘十字——旋！', '跟上我的舞步。'], later: ['荊棘十字——旋！', '跟上我的舞步。'], dur: 1.4 },
   S5: { first: ['花影雙人舞，請入場。', '兩個我，你看哪個？'], later: ['花影雙人舞，請入場。', '兩個我，你看哪個？'], dur: 1.6 },
-  CHASE: { first: ['背對對手，可不是紳士所為。'], later: ['背對對手，可不是紳士所為。'], dur: 2.0 }
+  CHASE: { first: ['背對對手，可不是紳士所為。'], later: ['背對對手，可不是紳士所為。'], dur: 2.3 }
 } as const;
 
-/** 換樂章對白 (以 Boss 換樂章過場內時間為準)；[0] = 進入第二樂章、[1] = 進入終樂章 */
+/** 換樂章對白 (鎖操作小過場；Boss 回中央後開始)；[0] = 進入第二樂章、[1] = 進入終樂章 */
 export const TRANSITION_BEATS: readonly [readonly StoryBeat[], readonly StoryBeat[]] = [
   [
-    { t: 0.0, who: 'BOSS', text: '……好劍。有點意思。', dur: 2.2 },
-    { t: 2.4, who: 'BOSS', text: '三十年前，有位紳士在這裡教劍。', dur: 2.8 },
-    { t: 5.4, who: 'BOSS', text: '他說：劍，始於禮，終於禮。', dur: 2.6 },
-    { t: 8.2, who: 'BOSS', text: '第二樂章——請。', dur: 1.6 }
+    { who: 'BOSS', text: '……好劍。有點意思。' },
+    { who: 'BOSS', text: '三十年前，有位紳士在這裡教劍。' },
+    { who: 'BOSS', text: '他說：劍，始於禮，終於禮。' },
+    { who: 'BOSS', text: '第二樂章——請。' }
   ],
   [
-    { t: 0.0, who: 'BOSS', text: '……你一直看著我呢。', dur: 2.2 },
-    { t: 2.4, who: 'BOSS', text: '放學後，大家都背對我離開。', dur: 2.6 },
-    { t: 5.2, who: 'BOSS', text: '被踩、被踢，暮色越積越厚。', dur: 2.6 },
-    { t: 7.0, who: 'PLAYER', text: '我會看到最後' },
-    { t: 8.2, who: 'BOSS', text: '終樂章。請——看到最後。', dur: 1.6 }
+    { who: 'BOSS', text: '……你一直看著我呢。' },
+    { who: 'BOSS', text: '放學後，大家都背對我離開。' },
+    { who: 'BOSS', text: '被踩、被踢，暮色越積越厚。' },
+    { who: 'PLAYER', text: '我會看到最後' },
+    { who: 'BOSS', text: '終樂章。請——看到最後。' }
   ]
 ];
 
@@ -200,15 +202,15 @@ export const HEART_CRITICAL_HP = 0.2;
 /** 每場第二次起的快速回氣改顯示系統版 */
 export const REGEN_BANNER = '🍃 脫離戰鬥・快速回氣';
 
-// ===== 結局：首勝 7 秒過場 =====
+// ===== 結局：首勝過場 (約 13s，點擊前進 / 長按跳過) =====
 
 export const VICTORY_FIRST_BEATS: readonly StoryBeat[] = [
-  { t: 0.0, text: '🎩「……好劍。好一場決鬥。」' },
-  { t: 1.6, text: '🎩「最後——回個禮吧？」' },
-  { t: 2.8, who: 'PLAYER', text: '（抱拳回禮）' },
-  { t: 3.4, text: '（暮色化成花瓣，飄上天空——）' },
-  { t: 4.4, text: '☀️「謝謝你。光，我拿回去囉。」' },
-  { t: 5.8, text: '🎩「劍借你。下次來，記得先行禮。」' }
+  { text: '🎩「……好劍。好一場決鬥。」' },
+  { text: '🎩「最後——回個禮吧？」' },
+  { who: 'PLAYER', text: '（抱拳回禮）', events: [{ id: 'FACE' }] },
+  { text: '（暮色化成花瓣，飄上天空——）', events: [{ id: 'DISSOLVE' }] },
+  { text: '☀️「謝謝你。光，我拿回去囉。」', events: [{ id: 'OUTRO' }, { id: 'RESTORE', at: 0.2 }] },
+  { text: '🎩「劍借你。下次來，記得先行禮。」', events: [{ id: 'RAPIER' }, { id: 'BLEND', at: -0.8 }] }
 ];
 export const VICTORY_SLEEPY_LINE = '呼……呼……(太陽花打起了瞌睡)';
 export const VICTORY_BANNER = {

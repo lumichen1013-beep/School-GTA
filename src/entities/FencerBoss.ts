@@ -10,7 +10,7 @@ import type { PlantAoeShape } from '../world/EcologicalGarden';
 import { SkillBubble, TALK_BUBBLE_STYLE } from './shared/SkillBubble';
 import { ndcOvershoot, worldDropForNdc, ndcInsetX } from '../game/fencer/bubbleSafeArea';
 import {
-  BossHealthBars, FENCER, segmentPointDistance, rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit,
+  BossHealthBars, FENCER, TRANSITION_BLINK_AT, segmentPointDistance, rayCircleDistance, thornArmYaw, thornCrossYaw, thornCrossHit,
   pinchClonePos, pinchHitMask, inFan, type BossDamageResult, type BossCue
 } from '../game/fencer/fencerRules';
 
@@ -372,7 +372,9 @@ export class FencerBoss {
   private s5Lead = S5_LOCK_FIRST;
   // 開場 / 亮相 / 換樂章
   private introPose = 0;
-  /** 擊敗後化成花瓣的秒數 (首勝長過場 3.4s；再戰 1.4s) */
+  private transitionSec = FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
+  private _transitionCentered = false;
+  /** 擊敗後化成花瓣的秒數 (首勝長過場由台詞事件 DISSOLVE 觸發 = dissolveNow；再戰 1.4s) */
   public defeatDissolveAt = 1.4;
   // 頭頂對話框 (跟隨位置但不受縮放 / 化花瓣隱藏影響；1 sprite，預建畫布)
   private readonly bubbleAnchor = new THREE.Group();
@@ -543,6 +545,11 @@ export class FencerBoss {
     for (const r of this.rings) r.active = false;
   }
 
+  /** 擊敗後立即化成花瓣 (首勝過場台詞事件) */
+  public dissolveNow() {
+    if (this.act === 'DEFEATED') this.defeatDissolveAt = Math.min(this.defeatDissolveAt, this.actTimer);
+  }
+
   /** 開場亮相 (花瓣龍捲中現身、壓帽沿、劍禮)；由開戰過場驅動 */
   public beginIntro(faceYaw: number) {
     this.act = 'INTRO';
@@ -664,6 +671,8 @@ export class FencerBoss {
     this.bars.invulnerable = true;
     this.act = 'TRANSITION';
     this.actTimer = 0;
+    this.transitionSec = FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
+    this._transitionCentered = false;
     this.attack = null;
     this.move = 'NONE';
     this.resetHats();
@@ -672,6 +681,24 @@ export class FencerBoss {
     this.landNow();
     this.fx.petalBurst(this.position.x, 1.3, this.position.z, 60, 6, PETAL_PALETTE_ROSE, 3);
     this.host.shake(0.3);
+  }
+
+  private blinkToCenter() {
+    this._transitionCentered = true;
+    const pal = this.bars.bar === 0 ? PETAL_PALETTE_DUSK : PETAL_PALETTE_SUN;
+    this.fx.petalBurst(this.position.x, 1.1, this.position.z, 40, 5, pal, 3);
+    this.position.set(FENCER.ARENA_X, 0, FENCER.ARENA_Z);
+    this.airY = 0;
+    const p = this.host.playerPos;
+    this.rotY = Math.atan2(p.x - this.position.x, p.z - this.position.z);
+    this.fx.petalBurst(this.position.x, 0.6, this.position.z, 60, 6, pal, 3.5);
+    this.fx.petalTornado(this.position.x, this.position.z, 1.6, 50, pal, 1.2);
+    soundManager.playDodge(true, this.position);
+  }
+
+  /** 換樂章中且已回到中央 */
+  public get transitionCentered(): boolean {
+    return this._transitionCentered;
   }
 
   private endTransition() {
@@ -699,9 +726,19 @@ export class FencerBoss {
     this.landNow();
   }
 
-  /** 換樂章過場剩餘秒數 (HUD 提示用) */
+  /** 換樂章過場總長 (秒)；宿主依台詞字數以 setTransitionDuration 設定 */
   public get transitionTotal(): number {
-    return FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC;
+    return this.transitionSec;
+  }
+
+  /** 宿主設定本次換樂章過場總長 (擊破亮相 + 回中央 + 台詞) */
+  public setTransitionDuration(sec: number) {
+    this.transitionSec = Math.max(FENCER.BAR_BREAK_POSE_SEC + 0.5, sec);
+  }
+
+  /** 宿主結束換樂章過場 (跳過 / 台詞播完) */
+  public endTransitionNow() {
+    if (this.act === 'TRANSITION') this.endTransition();
   }
 
   // ===== 每幀 =====
@@ -734,6 +771,8 @@ export class FencerBoss {
           const pal = this.bars.bar === 0 ? PETAL_PALETTE_DUSK : PETAL_PALETTE_SUN;
           this.fx.petalTornado(this.position.x, this.position.z, 2.2, 90, pal, 3.0);
         }
+        // 花瓣龍捲收束後瞬移回結界中央 (頭頂框 / 台詞一定在牆內、鏡頭好取景)，面向玩家
+        if (!this.transitionCentered && this.actTimer >= TRANSITION_BLINK_AT) this.blinkToCenter();
         if (this.actTimer >= this.transitionTotal) this.endTransition();
         break;
       case 'DEFEATED':

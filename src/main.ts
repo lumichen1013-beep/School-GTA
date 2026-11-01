@@ -151,7 +151,7 @@ class SchoolGTASandbox implements GameContext {
       if (this.detentionCutscene.isActive) {
         this.detentionCutscene.skip();
       }
-      this.fencerBossFight.skipIntro();
+      this.fencerBossFight.skipCutscene();
     }
   });
 
@@ -761,16 +761,13 @@ class SchoolGTASandbox implements GameContext {
       }
     }
 
-    // -0.8 花劍客開戰過場 (清場 / 結界 / 亮相 / 向陽覺醒)：第二次起可按空白鍵跳過
+    // -0.8 花劍客過場 (開戰 / 換樂章 / 首勝)：點擊 / 空白鍵前進下一句、長按 1 秒跳過 (FencerBossFight 自行處理輸入)
     if (this.fencerBossFight.isCutscene) {
       this.input.consumeMouseDelta();
       this.bossCameraLink?.update(); // 過場中立即還原一般鏡頭 FOV (不干擾過場運鏡)
-      if (this.input.jump && this.fencerBossFight.canSkip) {
-        this.input.consumeJump();
-        this.fencerBossFight.skipIntro();
-      } else {
-        if (this.input.jump) this.input.consumeJump();
-        this.fencerBossFight.updateCutscene(rawDelta);
+      if (this.input.jump) this.input.consumeJump();
+      this.fencerBossFight.updateCutscene(rawDelta);
+      if (this.fencerBossFight.isCutscene) {
         this.engine.updateShadowFocus(this.player.position);
         this.renderFrame();
         return;

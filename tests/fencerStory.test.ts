@@ -9,12 +9,13 @@ vi.mock('../src/effects/ComboFinisherFX', () => ({ comboFinisherFX: { groundSlam
 
 import * as STORY from '../src/game/fencer/fencerStory';
 import {
-  FENCER, SunflowerTaunt, BossLineGate, HeartVoice, INTRO_FIRST, INTRO_REMATCH, introTimeline, VICTORY_FIRST, VICTORY_REPEAT,
+  FENCER, SunflowerTaunt, BossLineGate, HeartVoice, VICTORY_FIRST, VICTORY_REPEAT, TRANSITION_LEAD_SEC, TRANSITION_TAIL_SEC, TRANSITION_BLINK_AT,
   fencerQuestStage, victoryIsLong, REMATCH_ARM_SEC, type BossCue
 } from '../src/game/fencer/fencerRules';
 import { parseFencerSave, serializeFencerSave, defaultFencerSave, questStageOf } from '../src/game/fencer/fencerSave';
 import { FencerBoss, type FencerBossHost } from '../src/entities/FencerBoss';
 import { BossFX } from '../src/effects/BossFX';
+import { StoryPlayer, CutsceneInput, lineDuration, readingLength, storyTotal, ADVANCE_MIN_SEC, HOLD_SKIP_SEC, type StoryLine } from '../src/game/fencer/storyPlayer';
 
 const MAX = 22;
 const PLAYER_MAX = 8;
@@ -27,7 +28,7 @@ function collect(v: unknown, path: string, out: Array<{ path: string; text: stri
     return;
   }
   if (Array.isArray(v)) { v.forEach((x, i) => collect(x, `${path}[${i}]`, out)); return; }
-  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (k !== 'who' && k !== 'face' && k !== 'reaction') collect(x, `${path}.${k}`, out);
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (k !== 'who' && k !== 'face' && k !== 'reaction' && k !== 'events') collect(x, `${path}.${k}`, out);
 }
 
 describe('劇情文字長度 (手機直屏)', () => {
@@ -62,31 +63,111 @@ describe('劇情文字長度 (手機直屏)', () => {
   });
 });
 
-describe('劇情拍點時間軸', () => {
-  const increasing = (beats: readonly STORY.StoryBeat[], end: number) => {
-    for (let i = 0; i < beats.length; i++) {
-      expect(beats[i].t).toBeLessThan(end);
-      if (i > 0) expect(beats[i].t).toBeGreaterThan(beats[i - 1].t);
+describe('劇情過場：依字數計時、事件掛在句子上', () => {
+  const ids = (lines: readonly StoryLine[]) => lines.flatMap((l) => (l.events ?? []).map((e) => e.id));
+
+  it('每句時長 = max(2, 字數 × 0.14 + 0.5)；emoji / 引號括號不計字', () => {
+    expect(readingLength('🎩「午茶時間到了。」')).toBe(7);
+    expect(readingLength('☀️「別怕！」')).toBe(3);
+    expect(lineDuration({ text: '短' })).toBe(2);
+    expect(lineDuration({ text: '🎩「在下向日爵士，來教你什麼叫禮貌。」' })).toBeCloseTo(16 * 0.14 + 0.5, 5);
+    expect(lineDuration({ text: '短', hold: 0.5 })).toBe(2.5);
+    for (const lines of [STORY.INTRO_FIRST_BEATS, STORY.VICTORY_FIRST_BEATS, ...STORY.TRANSITION_BEATS]) {
+      for (const l of lines) expect(lineDuration(l)).toBeGreaterThanOrEqual(2);
     }
-  };
-  it('首戰 8.2s、再戰 6.8s；拍點遞增且在過場內', () => {
-    expect(INTRO_FIRST.end).toBe(8.2);
-    expect(INTRO_REMATCH.end).toBe(6.8);
-    expect(introTimeline(1)).toBe(INTRO_FIRST);
-    expect(introTimeline(2)).toBe(INTRO_REMATCH);
-    increasing(STORY.INTRO_FIRST_BEATS, INTRO_FIRST.end);
-    increasing(STORY.INTRO_REMATCH_BEATS.afterWin, INTRO_REMATCH.end);
-    increasing(STORY.INTRO_REMATCH_BEATS.afterLoss, INTRO_REMATCH.end);
-    // 向陽之心第一句在覺醒時
-    expect(STORY.INTRO_FIRST_BEATS.find((b) => b.t === INTRO_FIRST.awaken)?.text).toContain('向陽之心');
   });
-  it('換樂章對白在 9.2s 換樂章過場內；首勝過場 7s', () => {
-    for (const beats of STORY.TRANSITION_BEATS) increasing(beats, FENCER.BAR_BREAK_POSE_SEC + FENCER.BAR_TRANSITION_SEC);
-    increasing(STORY.VICTORY_FIRST_BEATS, VICTORY_FIRST.end);
-    expect(VICTORY_FIRST.end).toBe(7);
-    expect(VICTORY_FIRST.restoreAt).toBeGreaterThan(VICTORY_FIRST.outroAt);
-    expect(VICTORY_FIRST.rapierAt).toBeLessThan(VICTORY_FIRST.end);
+
+  it('首戰開場約 15s、首勝約 13s、換樂章約 11~13s (前導 1.8s + 台詞 + 收尾 0.6s)', () => {
+    expect(storyTotal(STORY.INTRO_FIRST_BEATS)).toBeGreaterThan(14);
+    expect(storyTotal(STORY.INTRO_FIRST_BEATS)).toBeLessThan(16.5);
+    expect(storyTotal(STORY.VICTORY_FIRST_BEATS)).toBeGreaterThan(12);
+    for (const lines of STORY.TRANSITION_BEATS) {
+      const t = storyTotal(lines, TRANSITION_LEAD_SEC, TRANSITION_TAIL_SEC);
+      expect(t).toBeGreaterThan(10.5);
+      expect(t).toBeLessThan(14.5);
+    }
+    // 台詞在 Boss 回到中央之後才開始
+    expect(TRANSITION_LEAD_SEC).toBeGreaterThan(TRANSITION_BLINK_AT);
+    expect(TRANSITION_BLINK_AT).toBeGreaterThanOrEqual(FENCER.BAR_BREAK_POSE_SEC);
+  });
+
+  it('開場 / 首勝事件齊全且順序正確 (白閃 → 結界升滿 → Boss → 覺醒 → 鏡頭混回)', () => {
+    expect(ids(STORY.INTRO_FIRST_BEATS)).toEqual(['PETALS', 'FLASH', 'WALL_UP', 'BOSS', 'AWAKEN', 'BLEND']);
+    for (const r of [STORY.INTRO_REMATCH_BEATS.afterWin, STORY.INTRO_REMATCH_BEATS.afterLoss]) {
+      expect(ids(r)).toEqual(['PETALS', 'FLASH', 'WALL_UP', 'BOSS', 'AWAKEN', 'BLEND']);
+    }
+    expect(ids(STORY.VICTORY_FIRST_BEATS)).toEqual(['FACE', 'DISSOLVE', 'OUTRO', 'RESTORE', 'RAPIER', 'BLEND']);
+    // 向陽之心第一句 = 覺醒
+    expect(STORY.INTRO_FIRST_BEATS.find((b) => b.events?.some((e) => e.id === 'AWAKEN'))?.text).toContain('向陽之心');
+    // 結界升起 1.5s 動畫：首戰 WALL_UP 在 FLASH 後 ≥ 1.5s
+    const l1 = STORY.INTRO_FIRST_BEATS[1].events!;
+    expect((l1.find((e) => e.id === 'WALL_UP')!.at ?? 0) - (l1.find((e) => e.id === 'FLASH')!.at ?? 0)).toBeGreaterThanOrEqual(1.5);
+    expect(VICTORY_FIRST.freeze).toBe(0.25);
     expect(VICTORY_REPEAT.end).toBe(3.6);
+  });
+});
+
+describe('StoryPlayer：自動前進 / 點擊前進 / 跳過補發事件', () => {
+  const lines: StoryLine[] = [
+    { text: '第一句', events: [{ id: 'A', at: 0.5 }, { id: 'B', at: -0.2 }] },
+    { text: '第二句', events: [{ id: 'C' }] },
+    { text: '第三句很長很長很長很長很長很長很長很長', events: [{ id: 'D', at: 99 }] }
+  ];
+  const make = (lead = 0, tail = 0) => {
+    const log: string[] = [];
+    const sp = new StoryPlayer(lines, { onLine: (i) => log.push(`L${i}`), onEvent: (id) => log.push(id) }, lead, tail);
+    return { sp, log };
+  };
+
+  it('依時長自動前進；事件在所屬句子時間內觸發 (負 at = 句尾前、超出 = 句尾)', () => {
+    const { sp, log } = make();
+    expect(log).toEqual(['L0']);
+    sp.update(0.6);
+    expect(log).toEqual(['L0', 'A']);
+    sp.update(1.25);
+    expect(log).toEqual(['L0', 'A', 'B']);
+    sp.update(0.2);
+    expect(log).toEqual(['L0', 'A', 'B', 'L1', 'C']);
+    for (let i = 0; i < 100 && !sp.done; i++) sp.update(0.1);
+    expect(log).toEqual(['L0', 'A', 'B', 'L1', 'C', 'L2', 'D']);
+    expect(sp.done).toBe(true);
+    expect(sp.elapsed).toBeGreaterThanOrEqual(sp.total - 1e-6);
+    expect(sp.elapsed).toBeLessThan(sp.total + 0.1);
+  });
+
+  it('點擊前進：本句顯示 < 0.6s 不接受；之後跳下一句並補發本句未觸發事件', () => {
+    const { sp, log } = make();
+    sp.update(ADVANCE_MIN_SEC - 0.1);
+    expect(sp.advance()).toBe(false);
+    sp.update(0.2);
+    expect(sp.advance()).toBe(true);
+    expect(log).toEqual(['L0', 'A', 'B', 'L1', 'C']);
+    expect(sp.index).toBe(1);
+  });
+
+  it('跳過：依序補發剩下事件後結束；lead / tail 計入總長', () => {
+    const { sp, log } = make(1.8, 0.6);
+    expect(log).toEqual([]);
+    sp.update(1.0);
+    sp.finish();
+    expect(log).toEqual(['A', 'B', 'C', 'D']);
+    expect(sp.done).toBe(true);
+    const { sp: sp2 } = make(1.8, 0.6);
+    expect(sp2.total).toBeCloseTo(1.8 + 0.6 + storyTotal(lines), 5);
+  });
+
+  it('CutsceneInput：短按 = 前進、按住 1s = 跳過 (一次)、放開後不再前進', () => {
+    const inp = new CutsceneInput();
+    inp.press(10);
+    expect(inp.update(10.5)).toBeNull();
+    expect(inp.release(10.5)).toBe('ADVANCE');
+    inp.press(20);
+    expect(inp.progress(20.5)).toBeCloseTo(0.5, 5);
+    expect(inp.update(20 + HOLD_SKIP_SEC)).toBe('SKIP');
+    expect(inp.update(21.5)).toBeNull();
+    expect(inp.release(21.6)).toBeNull();
+    // 沒按就放開 (過場開始前按下的鍵) 不算
+    expect(inp.release(30)).toBeNull();
   });
 });
 
@@ -212,11 +293,11 @@ describe('戰中台詞頻率', () => {
       boss.update(0.5);
       expect(boss.transitionTime).toBeCloseTo(0.5, 5);
     }
-    // 長過場：3.4s 才化花瓣
+    // 長過場：由台詞事件 DISSOLVE (dissolveNow) 才化花瓣
     const b2 = new FencerBoss({ ...host, onCue: undefined }, new BossFX());
     b2.resetForFight(FENCER.CENTER_X, FENCER.CENTER_Z);
     b2.startFight(0);
-    b2.defeatDissolveAt = VICTORY_FIRST.dissolveAt;
+    b2.defeatDissolveAt = 999;
     const p = new THREE.Vector3(FENCER.CENTER_X, 0, FENCER.CENTER_Z + 1);
     for (let bar = 0; bar < 3; bar++) {
       b2.tryHitMelee(p, 1.2, 99999);
@@ -224,10 +305,37 @@ describe('戰中台詞頻率', () => {
       b2.position.set(FENCER.CENTER_X, 0, FENCER.CENTER_Z);
     }
     expect(b2.isDefeated).toBe(true);
-    for (let i = 0; i < 20; i++) b2.update(0.1); // 2.0s
+    for (let i = 0; i < 50; i++) b2.update(0.1); // 5s：未觸發事件前不化
     expect(b2.root.visible).toBe(true);
-    for (let i = 0; i < 15; i++) b2.update(0.1); // 3.5s
+    b2.dissolveNow();
+    b2.update(0.05);
     expect(b2.root.visible).toBe(false);
+  });
+
+  it('換樂章：擊破後花瓣傳送回結界中央、面向玩家；過場長度由宿主設定，可提前結束', () => {
+    const host: FencerBossHost = {
+      playerPos: new THREE.Vector3(FENCER.ARENA_X + 12, 0, FENCER.ARENA_Z), playerVel: new THREE.Vector3(), playerDead: false, isTouch: false,
+      playerOutOfCombat: false, damagePlayer: () => undefined, onBossDamaged: () => undefined, shake: () => undefined, hitStop: () => undefined
+    };
+    const boss = new FencerBoss(host, new BossFX());
+    boss.resetForFight(FENCER.ARENA_X + 18, FENCER.ARENA_Z);
+    boss.startFight(0);
+    boss.tryHitMelee(new THREE.Vector3(FENCER.ARENA_X + 17, 0, FENCER.ARENA_Z), 1.2, 99999);
+    expect(boss.isInTransition).toBe(true);
+    boss.setTransitionDuration(12);
+    expect(boss.transitionTotal).toBe(12);
+    boss.update(TRANSITION_BLINK_AT - 0.1);
+    expect(boss.transitionCentered).toBe(false);
+    boss.update(0.2);
+    expect(boss.transitionCentered).toBe(true);
+    expect(boss.position.x).toBeCloseTo(FENCER.ARENA_X, 5);
+    expect(boss.position.z).toBeCloseTo(FENCER.ARENA_Z, 5);
+    expect(boss.rotY).toBeCloseTo(Math.PI / 2, 5); // 面向 +X 的玩家
+    for (let i = 0; i < 50; i++) boss.update(0.1); // 6.5s：仍在過場 (宿主設 12s)
+    expect(boss.isInTransition).toBe(true);
+    boss.endTransitionNow();
+    expect(boss.isInTransition).toBe(false);
+    expect(boss.currentBar).toBe(1);
   });
 });
 

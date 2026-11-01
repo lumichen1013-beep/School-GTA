@@ -69,7 +69,7 @@ describe('太陽花 10 次計數與再戰規則', () => {
   });
 
   it('開場過場第二次起可跳過；首勝 1500、再戰勝利 200', () => {
-    expect(canSkipIntro(1)).toBe(false);
+    expect(canSkipIntro(1)).toBe(true);
     expect(canSkipIntro(2)).toBe(true);
     expect(victoryReward(false)).toBe(1500);
     expect(victoryReward(true)).toBe(200);
