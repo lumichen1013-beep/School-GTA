@@ -50,7 +50,7 @@ describe('被動自動閃避', () => {
     expect(n.p.tryAutoDodge()).toBe(false); // 平時 0.25 不過
   });
 
-  it('第一世界學了哆嗦毛仍自動閃身步 (含花劍客戰)，機率與冷卻不變', () => {
+  it('學了哆嗦毛仍自動閃身步 (含花劍客戰)，機率與冷卻不變', () => {
     for (const boss of [false, true]) {
       const a = make(2, boss);
       vi.spyOn(Math, 'random').mockReturnValue(boss ? 0.3 : 0.2);
@@ -72,16 +72,21 @@ describe('被動自動閃避', () => {
     expect(m.player.performBearShake).toHaveBeenCalledTimes(1);
   });
 
-  it('第二世界等級 2 觸發狗熊哆嗦毛位移；突進斬中不位移但仍判定閃避', () => {
+  it('第二世界等級 2 也自動閃身步；主動鍵仍哆嗦毛；突進斬中不位移但仍判定閃避', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const a = make(2, false, 'DETENTION');
     expect(a.p.tryAutoDodge()).toBe(true);
-    expect(a.player.performBearShake).toHaveBeenCalledTimes(1);
-    expect(a.player.performFlashStep).not.toHaveBeenCalled();
+    expect(a.player.performFlashStep).toHaveBeenCalledTimes(1);
+    expect(a.player.performBearShake).not.toHaveBeenCalled();
+    expect(a.showBanner.mock.calls[0][0]).toContain('閃身步');
+    const k = make(2, false, 'DETENTION');
+    k.p.triggerDodgeSkill();
+    expect(k.player.performBearShake).toHaveBeenCalledTimes(1);
     const b = make(2, false, 'DETENTION');
     b.player.isLunging = true;
     expect(b.p.tryAutoDodge()).toBe(true);
     expect(b.player.performBearShake).not.toHaveBeenCalled();
+    expect(b.player.performFlashStep).not.toHaveBeenCalled();
   });
 
   it('被動冷卻與主動冷卻互不影響', () => {

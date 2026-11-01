@@ -453,17 +453,10 @@ export class Progression {
     const chance = this.ctx.fencerBossFight?.isActive ? AUTO_DODGE_CHANCE_BOSS : AUTO_DODGE_CHANCE;
     if (Math.random() >= chance) return false;
     this.autoDodgeCooldownTimer = AUTO_DODGE_COOLDOWN;
-    // 第一世界 (校園含花劍客戰) 一律自動閃身步，不受已學哆嗦毛影響；第二世界維持依等級
-    const isAdvanced = this.dodgeSkillLevel === 2 && this.ctx.currentWorldType !== 'CAMPUS';
+    // 自動閃避在所有世界一律為閃身步，不受已學哆嗦毛影響 (哆嗦毛只由主動技能鍵施放)
     // 突進斬衝刺中：判定閃避成功 (免傷、進入冷卻)，但不執行位移，避免中斷招式
-    if (!player.isLunging) {
-      if (isAdvanced) player.performBearShake(this.ctx.activeColliders);
-      else player.performFlashStep();
-    }
-    wantedSystem.showBanner(
-      isAdvanced ? '🐻 狗熊哆嗦毛自動發動！連續瞬移規避攻擊！' : '💨 閃身步自動發動！左右破空閃身規避！',
-      1600
-    );
+    if (!player.isLunging) player.performFlashStep();
+    wantedSystem.showBanner('💨 閃身步自動發動！左右破空閃身規避！', 1600);
     return true;
   };
 
