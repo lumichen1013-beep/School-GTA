@@ -4,6 +4,10 @@
 
 import { getAudioContext, resumeAudioContext } from './audioContext';
 import { duelStep, duelTempo, duelMidiToFreq, DUEL_LOOP_STEPS, type DuelNote, type DuelState } from './duelWaltz';
+import {
+  detentionStep, detentionMidiToFreq, detentionNeedsStinger, DET_LOOP_STEPS, DET_TEMPO, DET_FILTER, DET_LABEL,
+  type DetentionNote, type DetentionPhase
+} from './detentionTheme';
 
 // DUEL：花劍客戰「向日圓舞曲」(3/4 拍，見 duelWaltz.ts)；由 setDuel() 進出，期間 setPursuitMode 不切模式
 export type BGMMode = 'EXPLORE' | 'PURSUIT' | 'DUEL';
@@ -35,8 +39,13 @@ export class BGMManager {
   private duel: DuelState | null = null;
   private readonly duelNotes: DuelNote[] = [];
 
+  // 第二世界特訓院「鐵窗夜行」段落 (null = 不在特訓院)；由 setDetention() 進出，期間 setPursuitMode 不切模式
+  private detention: DetentionPhase | null = null;
+  private detentionStinger: boolean = false;
+  private readonly detentionNotes: DetentionNote[] = [];
+
   // Status callback for UI updates
-  public onModeChange?: (mode: BGMMode, isMuted: boolean) => void;
+  public onModeChange?: (mode: BGMMode, isMuted: boolean, label?: string) => void;
 
   public resume() {
     resumeAudioContext();
@@ -107,7 +116,7 @@ export class BGMManager {
     this.timerId = window.setInterval(() => this.scheduler(), this.lookaheadMs);
 
     if (this.onModeChange) {
-      this.onModeChange(this.currentMode, this.isMuted);
+      this.onModeChange(this.currentMode, this.isMuted, this.getModeLabel());
     }
   }
 
@@ -129,13 +138,51 @@ export class BGMManager {
       this.masterGain.gain.linearRampToValueAtTime(targetGain, this.ctx.currentTime + 0.15);
     }
     if (this.onModeChange) {
-      this.onModeChange(this.currentMode, this.isMuted);
+      this.onModeChange(this.currentMode, this.isMuted, this.getModeLabel());
     }
     return this.isMuted;
   }
 
   public getMode(): BGMMode {
     return this.currentMode;
+  }
+
+  /** 特訓院段落名稱 (HUD / 橫幅用)；不在特訓院回傳 undefined */
+  public getModeLabel(): string | undefined {
+    return this.detention && !this.duel ? DET_LABEL[this.detention] : undefined;
+  }
+
+  public getDetentionPhase(): DetentionPhase | null {
+    return this.detention;
+  }
+
+  /**
+   * 第二世界「鐵窗夜行」(每幀可呼叫；只在段落變動時切換)：null = 離開特訓院回到校園音樂。
+   * 突發段落 (警戒 / 總教官 / 通關) 從第一小節重來並打一記重音，其餘保留小節位置無縫接續 (各段共用和聲網格)
+   */
+  public setDetention(phase: DetentionPhase | null) {
+    const prev = this.detention;
+    if (prev === phase) return;
+    this.detention = phase;
+    if (this.duel) return; // 花劍客戰優先 (只在校園發生，保險)
+    if (!phase) {
+      this.currentMode = 'EXPLORE';
+      this.isHighDanger = false;
+      this.tempo = 108;
+      this.currentStep = 0;
+      this.detentionStinger = false;
+      this.rampFilter(1600, 1.2, 0.6);
+      this.onModeChange?.(this.currentMode, this.isMuted, this.getModeLabel());
+      return;
+    }
+    this.currentMode = phase === 'ALERT' || phase === 'BOSS' ? 'PURSUIT' : 'EXPLORE';
+    this.tempo = DET_TEMPO[phase];
+    this.detentionStinger = detentionNeedsStinger(prev, phase);
+    if (!prev || this.detentionStinger) this.currentStep = 0;
+    // 追捕段落快速打開濾波；回到潛入時緩慢收暗
+    const up = DET_FILTER[phase] > (prev ? DET_FILTER[prev] : 1600);
+    this.rampFilter(DET_FILTER[phase], phase === 'ALERT' ? 2.0 : 1.1, up ? 0.3 : 1.2);
+    this.onModeChange?.(this.currentMode, this.isMuted, this.getModeLabel());
   }
 
   /** 花劍客戰音樂 (每幀可呼叫；只在狀態變動時切換)：null = 回到校園模式 (由 setPursuitMode 接手) */
@@ -148,7 +195,7 @@ export class BGMManager {
       this.tempo = 108;
       this.currentStep = 0;
       this.rampFilter(1600, 1.2, 0.6);
-      this.onModeChange?.(this.currentMode, this.isMuted);
+      this.onModeChange?.(this.currentMode, this.isMuted, this.getModeLabel());
       return;
     }
     if (d && d.movement === state.movement && d.dawn === state.dawn && d.interlude === state.interlude) return;
@@ -160,7 +207,7 @@ export class BGMManager {
     if (newMovement) this.currentStep = 0; // 換段從第一小節開始
     // 黎明 / 終樂章：濾波打開更亮；過場 (音樂盒) 收窄
     this.rampFilter(state.interlude ? 2600 : state.dawn ? 7000 : 4200, 1.0, 0.8);
-    if (entering) this.onModeChange?.(this.currentMode, this.isMuted);
+    if (entering) this.onModeChange?.(this.currentMode, this.isMuted, this.getModeLabel());
   }
 
   private rampFilter(freq: number, q: number, sec: number) {
@@ -173,7 +220,7 @@ export class BGMManager {
 
   // Update dynamic mode based on player chase state
   public setPursuitMode(isPursuit: boolean, isHighDanger: boolean = false) {
-    if (this.duel) return; // 花劍客戰中由 setDuel 控制
+    if (this.duel || this.detention) return; // 花劍客戰中由 setDuel、特訓院由 setDetention 控制
     const newMode: BGMMode = isPursuit ? 'PURSUIT' : 'EXPLORE';
     this.isHighDanger = isHighDanger;
 
@@ -193,7 +240,7 @@ export class BGMManager {
         }
       }
       if (this.onModeChange) {
-        this.onModeChange(this.currentMode, this.isMuted);
+        this.onModeChange(this.currentMode, this.isMuted, this.getModeLabel());
       }
     }
   }
@@ -206,6 +253,16 @@ export class BGMManager {
     this.masterGain.gain.linearRampToValueAtTime(0.08, now + 0.2);
     this.masterGain.gain.setValueAtTime(0.08, now + durationSec - 0.5);
     this.masterGain.gain.linearRampToValueAtTime(0.42, now + durationSec);
+  }
+
+  /** 選單暫停：沿用 duckVolume 的壓低音量 (0.08) 持續到關閉選單才淡回；靜音中不動 */
+  public setMenuDuck(on: boolean) {
+    if (!this.masterGain || !this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const gain = this.masterGain.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(on ? 0.08 : 0.42, now + (on ? 0.2 : 0.35));
   }
 
   /** 完全靜音 sec 秒後淡回 (花劍客第 10 戳：靜一拍再爆開) */
@@ -235,7 +292,8 @@ export class BGMManager {
         this.scheduleStep(this.currentStep, this.nextStepTime);
       }
       this.nextStepTime += secondsPer16th;
-      this.currentStep = (this.currentStep + 1) % (this.duel ? DUEL_LOOP_STEPS : 64); // 4 小節循環 (4/4 = 64 步、華爾滋 3/4 = 48 步)
+      // 4 小節循環 (4/4 = 64 步、華爾滋 3/4 = 48 步、特訓院 8 小節 128 步)
+      this.currentStep = (this.currentStep + 1) % (this.duel ? DUEL_LOOP_STEPS : this.detention ? DET_LOOP_STEPS : 64);
     }
   }
 
@@ -243,6 +301,7 @@ export class BGMManager {
   private scheduleStep(step: number, time: number) {
     if (!this.ctx || !this.masterFilter) return;
     if (this.duel) { this.scheduleDuelStep(step, time, this.duel); return; }
+    if (this.detention) { this.scheduleDetentionStep(step, time, this.detention); return; }
 
     const barStep = step % 16;
     const isPursuit = this.currentMode === 'PURSUIT';
@@ -429,6 +488,29 @@ export class BGMManager {
       else if (n.voice === 'BOX') this.playMusicBox(time, f, n.dur, n.vel);
       else if (n.voice === 'TIMPANI') this.playKick(time, n.vel, false);
       else this.playHiHat(time, false, n.vel);
+    }
+  }
+
+  // 鐵窗夜行：依 detentionTheme 的音符表發聲 (全部沿用既有合成器，不新增常駐節點)
+  private scheduleDetentionStep(step: number, time: number, phase: DetentionPhase) {
+    const stinger = this.detentionStinger;
+    this.detentionStinger = false;
+    for (const n of detentionStep(step, phase, this.detentionNotes, stinger)) {
+      const f = detentionMidiToFreq(n.midi);
+      switch (n.voice) {
+        case 'BASS': this.playExploreBass(time, f, n.dur); break;
+        case 'PBASS': this.playPursuitBass(time, f, n.dur, n.vel < 1); break; // vel < 1 = 高八度彈跳音
+        case 'PAD': this.playRhodesChord(time, [f], n.dur * n.vel); break;
+        case 'CHORD': this.playRhodesChord(time, [f], n.dur * n.vel * 1.4); break;
+        case 'LEAD': this.playMelodicLead(time, f, n.dur * 1.4); break;
+        case 'BOX': this.playMusicBox(time, f, n.dur, n.vel); break;
+        case 'STAB': this.playTensionStab(time, f, n.dur); break;
+        case 'KICK': this.playKick(time, n.vel, false); break;
+        case 'HKICK': this.playKick(time, n.vel, true); break;
+        case 'SNARE': this.playSnare(time, n.vel); break;
+        case 'HAT': this.playHiHat(time, false, n.vel); break;
+        case 'OHAT': this.playHiHat(time, true, n.vel); break;
+      }
     }
   }
 

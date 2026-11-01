@@ -5,6 +5,7 @@ import { HUD } from '../ui/HUD';
 import { WantedSystem } from './WantedSystem';
 import { soundManager } from '../audio/SoundEffects';
 import { InputManager } from '../core/InputManager';
+import { worldTimeout } from '../core/worldClock';
 
 // 籃球第一次落地後，經過此秒數自動回到發球點
 const BALL_RESET_DELAY_SEC = 1.0;
@@ -289,7 +290,7 @@ export class BasketballGame {
               this.ballVelocity.set(this.ballVelocity.x * 0.1, -4.8, this.ballVelocity.z * 0.1);
             } else if (this.targetShotQuality === 'GOOD') {
               soundManager.playRimHit(this.basketballMesh.position);
-              setTimeout(() => soundManager.playSwish(this.basketballMesh.position), 180);
+              worldTimeout(() => soundManager.playSwish(this.basketballMesh.position), 180);
               this.scoreStreak++;
               this.totalMade++;
               if (this.scoreStreak > this.bestStreak) {

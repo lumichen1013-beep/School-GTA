@@ -532,7 +532,7 @@ export class CampusMode {
 
     const boss = ecologicalGarden.boss;
     if (targetPosition.distanceTo(boss.position) < 35.0 && !boss.isDead) {
-      hud.setBossHealth(boss.hp, boss.maxHp, true, '秘境霸主：變異食人花王', '🌸');
+      hud.setBossHealth(boss.hp, boss.maxHp, true);
     } else {
       hud.setBossHealth(0, 1000, false);
     }

@@ -39,6 +39,7 @@ import { safeTopNdc, shouldFitBubble } from './bubbleSafeArea';
 import { buildRapier } from '../../weapons/models/rapierModel';
 import { setConcealedById, showCutsceneOverlay } from '../../ui/uiConceal';
 import { FencerVoiceStrip, subtitleSpeaker } from '../../ui/fencerVoice';
+import { worldNow } from '../../core/worldClock';
 
 // 世界 Boss【花劍客】總控：太陽花戳戳 → 開戰過場 (清場 / 結界 / 暮紅異空間 / Boss 亮相 / 玩家向陽覺醒)
 // → 三樂章戰鬥 (回血 / 脫戰快速回氣 / HUD) → 勝利 (獎勵、恢復) / 戰敗 (死亡前還原上限、恢復) / 中止 (切換世界)。
@@ -371,7 +372,7 @@ export class FencerBossFight {
   public pokePromptText(): string {
     const t = this.taunt;
     if (t.lastResult === 'LOSS') return POKE_PROMPT.afterLoss;
-    if (t.lastResult === 'WIN') return t.isArmed(performance.now() / 1000) ? POKE_PROMPT.afterWinArmed : POKE_PROMPT.afterWinIdle;
+    if (t.lastResult === 'WIN') return t.isArmed(worldNow() / 1000) ? POKE_PROMPT.afterWinArmed : POKE_PROMPT.afterWinIdle;
     if (t.pokes === 0) return POKE_PROMPT.undiscovered;
     if (t.pokes !== this.promptN) {
       // 依進度烘托氣氛 (小苗 → 花苞 → 追問 → 警告)；只在計數變動時組字串
@@ -383,7 +384,7 @@ export class FencerBossFight {
   }
 
   public poke(): boolean {
-    const res = this.taunt.poke(performance.now() / 1000);
+    const res = this.taunt.poke(worldNow() / 1000);
     if (!res.accepted || !res.line) return true;
     this.sunflower.react(res.line.reaction, res.line.face, this.ctx.player.position);
     // 首次戳到 = 發現：短音效 + 橫幅；之後任務看板 / 大地圖才出現
@@ -848,6 +849,7 @@ export class FencerBossFight {
       this.bubbleSafeTimer = 0.5;
       let bottom = 0;
       document.querySelectorAll('.hud-info-group, #boss-hud').forEach((el) => {
+        if (el.id === 'boss-hud' && !el.classList.contains('boss-hud-on')) return; // 血條以 opacity 隱藏，仍佔版面
         const r = el.getBoundingClientRect();
         if (r.height > 0) bottom = Math.max(bottom, r.bottom); // display:none 的高度為 0
       });

@@ -51,12 +51,12 @@ describe('花劍客 Boss 戰精簡 HUD', () => {
     expect(bodyEl.classList.contains('boss-fight-hud')).toBe(false);
   });
 
-  it('花劍客血條：單條 fill = 整場剩餘，換管閃光一次，結束隱藏', async () => {
+  it('花劍客血條：單條 fill = 整場剩餘，三段分隔線，換管閃光一次，結束隱藏 (opacity class，不切 display)', async () => {
     const hud = await makeHud();
     const el = els['boss-hud'];
     hud.setFencerBossHealth(6300, 6300, 0, true);
-    expect(el.style.display).toBe('block');
-    expect(el.classList.contains('boss-hud-fencer')).toBe(true);
+    expect(el.classList.contains('boss-hud-on')).toBe(true);
+    expect(el.dataset.seg).toBe('3');
     expect(els['boss-bar-fill'].style.width).toBe('100%');
     expect(el.dataset.bar).toBe('0');
     hud.setFencerBossHealth(4200, 6300, 1, true);
@@ -64,17 +64,20 @@ describe('花劍客 Boss 戰精簡 HUD', () => {
     expect(el.dataset.bar).toBe('1');
     expect(el.classList.contains('bar-flash')).toBe(true);
     hud.setFencerBossHealth(0, 6300, 2, true);
-    expect(el.style.display).toBe('none');
+    expect(el.classList.contains('boss-hud-on')).toBe(false);
+    expect(el.style.display).toBeUndefined();
   });
 
-  it('其他 Boss 血條不變：沿用名稱與數字文字，並清除花劍客樣式', async () => {
+  it('其他 Boss 血條：同一元件、單管無分隔線、無名稱數字文字', async () => {
     const hud = await makeHud();
     const el = els['boss-hud'];
-    hud.setFencerBossHealth(6300, 6300, 0, true);
-    hud.setBossHealth(1000, 1200, true, '總教官 Boss：鐵面總長', '🎖️');
-    expect(el.classList.contains('boss-hud-fencer')).toBe(false);
-    expect(els['boss-name-text'].textContent).toBe('總教官 Boss：鐵面總長');
-    expect(els['boss-hp-text'].textContent).toBe('1000 / 1200');
-    expect(els['boss-bar-fill'].style.width).toBe(`${(1000 / 1200) * 100}%`);
+    hud.setBossHealth(1000, 1200, true);
+    expect(el.classList.contains('boss-hud-on')).toBe(true);
+    expect(el.dataset.seg).toBe('1');
+    expect(els['boss-bar-fill'].style.width).toBe('83.5%');
+    expect(els['boss-name-text']).toBeUndefined();
+    expect(els['boss-hp-text']).toBeUndefined();
+    hud.setBossHealth(0, 1200, false);
+    expect(el.classList.contains('boss-hud-on')).toBe(false);
   });
 });

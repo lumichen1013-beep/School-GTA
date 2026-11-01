@@ -1567,40 +1567,58 @@ html, body, #game-canvas, #hud-overlay, #touch-joystick-zone, .mobile-btn {
   font-family: monospace;
 }
 
-/* 變異食人花 Boss 血條 */
+/* 統一 Boss 血條：單條無文字無外框；顯示/隱藏只切 opacity + .boss-hud-on (不切 display) */
 #boss-hud {
   position: absolute;
   top: 80px;
   left: 50%;
   transform: translateX(-50%);
-  width: 440px;
-  background: rgba(13, 19, 33, 0.85);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 12px 18px;
-  border: 2px solid #8e44ad;
-  box-shadow: 0 0 25px rgba(142, 68, 173, 0.6), inset 0 0 15px rgba(231, 76, 60, 0.3);
-  display: none;
+  width: min(440px, calc(100vw - 24px));
+  padding: 6px 10px;
+  opacity: 0;
   z-index: var(--z-hud-base);
   pointer-events: none;
-  animation: bossHudGlow 2s infinite alternate;
 }
+#boss-hud.boss-hud-on { opacity: 1; }
 
 /* 花劍客 Boss 戰精簡 HUD：隱藏與戰鬥無關的面板 (校園歷練 / 地點資訊 / 零用錢 / 校規處分) */
 body.boss-fight-hud :is(.hud-info-group, .cash-badge, .demerit-container) { display: none !important; }
 
-/* 花劍客血條：單條無文字，兩條分隔線標示三管，顏色隨管數變化，換管閃光 */
-#boss-hud.boss-hud-fencer { width: min(440px, calc(100vw - 24px)); padding: 6px 10px; }
-#boss-hud.boss-hud-fencer .boss-title-row { display: none; }
-#boss-hud.boss-hud-fencer .boss-bar-track { position: relative; height: 12px; }
-#boss-hud:not(.boss-hud-fencer) .boss-bar-div { display: none; }
-.boss-bar-div { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(0, 0, 0, 0.85); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); z-index: 1; }
-#boss-hud.boss-hud-fencer[data-bar="0"] .boss-bar-fill { background: linear-gradient(90deg, #ff7aa8, #ff4d79); }
-#boss-hud.boss-hud-fencer[data-bar="1"] .boss-bar-fill { background: linear-gradient(90deg, #ffb347, #ff8a3d); }
-#boss-hud.boss-hud-fencer[data-bar="2"] .boss-bar-fill { background: linear-gradient(90deg, #ffe066, #f5c518); }
+/* 血條：兩條分隔線標示三管 (僅 data-seg="3")，顏色隨管數變化，換管閃光 */
+#boss-hud .boss-bar-track { position: relative; height: 12px; }
+.boss-bar-div { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(0, 0, 0, 0.85); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); z-index: 1; opacity: 0; }
+#boss-hud[data-seg="3"] .boss-bar-div { opacity: 1; }
+#boss-hud[data-bar="0"] .boss-bar-fill { background: linear-gradient(90deg, #ff7aa8, #ff4d79); }
+#boss-hud[data-bar="1"] .boss-bar-fill { background: linear-gradient(90deg, #ffb347, #ff8a3d); }
+#boss-hud[data-bar="2"] .boss-bar-fill { background: linear-gradient(90deg, #ffe066, #f5c518); }
 /* 直屏：血條置於頂部雷達 (左) 與設定鈕 (右) 之間的細長列，避開雷達 / 畫外箭頭 / 頭頂對話框 */
 @media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
-  #boss-hud.boss-hud-fencer {
+  #boss-hud {
+    top: calc(env(safe-area-inset-top, 0px) + 22px) !important;
+    left: 140px !important;
+    right: 62px !important;
+    width: auto !important;
+    transform: none !important;
+    padding: 4px 8px !important;
+  }
+  /* 血條占用零用錢徽章的位置時，戰鬥期間將徽章淡出 (不切 display) */
+  body:has(#boss-hud.boss-hud-on) .cash-badge { opacity: 0; }
+}
+#boss-hud.bar-flash { animation: bossBarFlash 0.6s ease-out 1; }
+@keyframes bossBarFlash {
+  0% { filter: brightness(2.2) drop-shadow(0 0 10px #fff); }
+  100% { filter: none; }
+}
+
+.boss-bar-track { position: relative; height: 12px; }
+.boss-bar-div { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(0, 0, 0, 0.85); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); z-index: 1; opacity: 0; }
+#boss-hud[data-seg="3"] .boss-bar-div { opacity: 1; }
+#boss-hud[data-bar="0"] .boss-bar-fill { background: linear-gradient(90deg, #ff7aa8, #ff4d79); }
+#boss-hud[data-bar="1"] .boss-bar-fill { background: linear-gradient(90deg, #ffb347, #ff8a3d); }
+#boss-hud[data-bar="2"] .boss-bar-fill { background: linear-gradient(90deg, #ffe066, #f5c518); }
+/* 直屏：血條置於頂部雷達 (左) 與設定鈕 (右) 之間的細長列，避開雷達 / 畫外箭頭 / 頭頂對話框 */
+@media (max-width: 900px) and (orientation: portrait), (max-width: 500px) {
+  #boss-hud {
     top: calc(env(safe-area-inset-top, 0px) + 22px) !important;
     left: 140px !important;
     right: 62px !important;
@@ -1609,7 +1627,7 @@ body.boss-fight-hud :is(.hud-info-group, .cash-badge, .demerit-container) { disp
     padding: 4px 8px !important;
   }
 }
-#boss-hud.boss-hud-fencer.bar-flash { animation: bossHudGlow 2s infinite alternate, bossBarFlash 0.6s ease-out 1; }
+#boss-hud.bar-flash { animation: bossBarFlash 0.6s ease-out 1; }
 @keyframes bossBarFlash {
   0% { filter: brightness(2.2) drop-shadow(0 0 10px #fff); }
   100% { filter: none; }
@@ -1643,7 +1661,7 @@ body.boss-fight-hud :is(.hud-info-group, .cash-badge, .demerit-container) { disp
 
 .boss-bar-track {
   width: 100%;
-  height: 14px;
+  height: 12px;
   background: rgba(0, 0, 0, 0.7);
   border-radius: 7px;
   overflow: hidden;
@@ -4531,7 +4549,7 @@ body.touch-mode-active .fullmap-keys { display: none !important; }
     font-size: 15px !important;
   }
   #boss-hud {
-    top: calc(36px + env(safe-area-inset-top, 0px)) !important;
+    top: calc(52px + env(safe-area-inset-top, 0px)) !important;
     width: 300px !important;
     padding: 5px 10px !important;
   }
@@ -4695,7 +4713,6 @@ body.touch-controls-hidden #mobile-controls-container {
 :is(.q-low, .no-blur) .hud-title-zone,
 :is(.q-low, .no-blur) .cash-badge,
 :is(.q-low, .no-blur) .skill-hud-card,
-:is(.q-low, .no-blur) #boss-hud,
 :is(.q-low, .no-blur) .fullmap-quest-panel,
 :is(.q-low, .no-blur) .fm-block,
 :is(.q-low, .no-blur) .demerit-container { background: rgba(13, 19, 33, 0.95); }

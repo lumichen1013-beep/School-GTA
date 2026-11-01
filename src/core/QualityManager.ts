@@ -103,6 +103,18 @@ class QualityManager {
     });
   }
 
+  /** 選單暫停開關 (同 visibilitychange)：暫停時世界不渲染，量測中則中止，恢復後重新開始 */
+  private worldPaused = false;
+  public setWorldPaused(paused: boolean) {
+    this.worldPaused = paused;
+    if (paused && this.isProbing) {
+      this.cancelProbe();
+      this.needProbe = true;
+    } else if (!paused && this.needProbe && this.probeArmed && this.phase === 'idle') {
+      this.scheduleProbe(PROBE.START_DELAY_MS);
+    }
+  }
+
   // 進入世界且 shader 預熱完成後呼叫：自動模式且尚無有效結果時，延遲後開始量測
   public startAutoProbeIfNeeded() {
     this.probeArmed = true;
@@ -237,7 +249,7 @@ class QualityManager {
     this.phase = 'waiting';
     this.probeTimer = window.setTimeout(() => {
       this.probeTimer = 0;
-      if (document.hidden) { this.phase = 'idle'; this.needProbe = true; return; }
+      if (document.hidden || this.worldPaused) { this.phase = 'idle'; this.needProbe = true; this.emit(); return; }
       this.beginPhase('settle-medium', PROBE.SETTLE_MS);
       if (this._tier !== 'medium') this.applyTier('medium');
       this.lastFrameAt = 0;

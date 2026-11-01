@@ -4,6 +4,7 @@ import {
   SOUND_COOLDOWN, SOUND_VOLUME, cooldownReady, distanceBetween, soundGain,
   type SpatialSoundId, type Vec3Like
 } from './spatialAudio';
+import { worldTimeout } from '../core/worldClock';
 
 // 參數包絡排程點：[排程方式, 目標值, 絕對時間]
 type EnvPoint = ['set' | 'lin' | 'exp', number, number];
@@ -607,7 +608,7 @@ export class SoundEffects {
     this.tone('sine', [['set', 1980, now], ['set', 2450, now + 0.06]],
       [['set', 0, now], ['lin', 0.3, now + 0.02], ['exp', 0.001, now + 0.28]], now, now + 0.3);
     // 2. 隨後的水花咚聲
-    setTimeout(() => {
+    worldTimeout(() => {
       this.playWaterSplash(pos);
     }, 120);
   }
@@ -626,7 +627,7 @@ export class SoundEffects {
   // 搶奪腳踏車踹人驚叫與倒地碰撞 (Bike Hijack Shove & Impact)
   public playBikeHijack(pos: Vec3Like) {
     this.playPunch(pos);
-    setTimeout(() => {
+    worldTimeout(() => {
       this.playBicycleBell(pos);
     }, 150);
   }

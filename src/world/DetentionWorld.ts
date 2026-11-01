@@ -10,6 +10,7 @@ import {
 import { ColliderRegistry, CollidableBox } from './ColliderRegistry';
 import { isBlockedXZ } from '../physics/aabb';
 import { sharedLambert, freezeStatic } from './sceneUtils';
+import { worldNow } from '../core/worldClock';
 
 // 管制閘門 1、2 門板共用材質 (外觀相同，閘門開啟只移動群組不改材質)
 const GATE_PANEL_MAT = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.8, roughness: 0.3 });
@@ -1552,7 +1553,7 @@ export class DetentionWorld {
 
   // 鑰匙卡自轉與上下懸浮動畫
   public updateKeycards(delta: number) {
-    const time = performance.now() * 0.003;
+    const time = worldNow() * 0.003;
     const hoverY = Math.sin(time) * 0.15;
 
     if (!this.hasPickedKeycardA && this.keycardAMeshGroup) {

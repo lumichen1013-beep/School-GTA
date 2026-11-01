@@ -5,6 +5,7 @@ import { soundManager } from '../audio/SoundEffects';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bakeStatic, freezeStatic } from './sceneUtils';
 import { FAN_ANGLE_MIN_DIST, probeLine } from '../entities/shared/kungfu';
+import { worldNow, worldTimeout } from '../core/worldClock';
 
 const _ecoScratchDir = new THREE.Vector3();
 const _ecoScratchWDir = new THREE.Vector3();
@@ -1076,7 +1077,7 @@ export class EcologicalGarden {
       if (this.isGoddessActive) {
         this.goddessTimer -= delta;
         // 女神緩緩自水面升起並神聖浮動
-        const targetY = 1.0 + Math.sin(Date.now() * 0.0035) * 0.18;
+        const targetY = 1.0 + Math.sin(worldNow() * 0.0035) * 0.18;
         this.lakeGoddessMesh.position.y = THREE.MathUtils.lerp(this.lakeGoddessMesh.position.y, targetY, delta * 2.5);
         this.lakeGoddessMesh.rotation.y += delta * 0.8;
         if (this.goddessTimer <= 0) {
@@ -1308,7 +1309,7 @@ export class EcologicalGarden {
   private hitVine(vine: HostileVine, damage: number): boolean {
     vine.hp -= damage;
     (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0xe74c3c);
-    setTimeout(() => {
+    worldTimeout(() => {
       if (!vine.isDead) {
         (vine.flowerHead.material as THREE.MeshLambertMaterial).color.setHex(0x8e44ad);
       }
@@ -1345,15 +1346,15 @@ export class EcologicalGarden {
 
   // Boss 死亡傾倒枯萎動畫
   private playBossDeathAnimation() {
+    // 每 50ms 一步 (世界時間：選單暫停期間停住)
     let timer = 0;
-    const interval = setInterval(() => {
+    const step = () => {
       timer += 0.05;
       this.boss.mesh.rotation.z += 0.08;
       this.boss.mesh.position.y -= 0.08;
-      if (timer > 1.2) {
-        clearInterval(interval);
-        this.dynamicGroup.remove(this.boss.mesh);
-      }
-    }, 50);
+      if (timer > 1.2) this.dynamicGroup.remove(this.boss.mesh);
+      else worldTimeout(step, 50);
+    };
+    worldTimeout(step, 50);
   }
 }

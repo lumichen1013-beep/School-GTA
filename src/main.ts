@@ -14,6 +14,7 @@ import { WantedSystem } from './systems/WantedSystem';
 import { HUD, DetentionRadarData } from './ui/HUD';
 import { soundManager } from './audio/SoundEffects';
 import { bgmManager } from './audio/BGMManager';
+import { detentionMusicPhase } from './audio/detentionTheme';
 import { EcologicalGarden } from './world/EcologicalGarden';
 import { WaterSplashVFX } from './effects/WaterSplashVFX';
 import { swingTrail } from './effects/SwingTrail';
@@ -33,6 +34,7 @@ import { setupDiagPanel } from './ui/DiagPanel';
 import { getDiagFlags } from './core/diagFlags';
 import { perfProbe } from './core/perfProbe';
 import { shouldSkipFrame } from './core/quality';
+import { WorldPause, type WorldPauseStep } from './core/worldPause';
 import { setupFullscreenButton } from './input/Fullscreen';
 import { setupMobileControls } from './input/MobileControls';
 import type { GameContext, WorldType } from './game/GameContext';
@@ -54,6 +56,7 @@ import { FencerBossFight } from './game/fencer/FencerBossFight';
 import { BossCameraLink } from './game/fencer/BossCameraLink';
 import { RESPAWN_HEART_DELAY_MS } from './game/fencer/fencerStory';
 import { showCutsceneOverlay } from './ui/uiConceal';
+import { worldTimeout, setWorldClockPaused } from './core/worldClock';
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -316,7 +319,7 @@ class SchoolGTASandbox implements GameContext {
     installProjectileDebug(this, () => this.isGameRunning);
     setupMobileControls(this.input, {
       onAttackRelease: this.releaseBasketballShot,
-      onDodge: this.progression.triggerDodgeSkill
+      onDodge: () => { if (!this.isMenuOpen) this.progression.triggerDodgeSkill(); }
     });
     // 滑鼠滾輪循環切換武器 (鏡頭無滾輪縮放，無衝突；僅畫布上觸發，大地圖開啟時略過)
     this.engine.canvas.addEventListener('wheel', (e) => {
@@ -334,8 +337,8 @@ class SchoolGTASandbox implements GameContext {
 
     // 綁定背景音樂 (BGM)
     this.hud.setupBGMClick(() => this.toggleBGM());
-    bgmManager.onModeChange = (mode, isMuted) => {
-      this.hud.updateBGMStatus(mode, isMuted);
+    bgmManager.onModeChange = (mode, isMuted, label) => {
+      this.hud.updateBGMStatus(mode, isMuted, label);
     };
     await nextFrame();
 
@@ -409,6 +412,8 @@ class SchoolGTASandbox implements GameContext {
     this.wantedSystem.currentWorld = targetWorld;
     this.weatherSystem.currentWorld = targetWorld;
     this.hud.setBGMWorld(targetWorld);
+    // 第二世界專屬「鐵窗夜行」：進特訓院依開場與否切序曲 / 潛入，回校園恢復校園音樂
+    bgmManager.setDetention(targetWorld === 'DETENTION' ? (skipCutscene ? 'SNEAK' : 'INTRO') : null);
     if (targetWorld === 'DETENTION' && previousWorld === 'CAMPUS') {
       this.campusHasNormalBat = this.player.hasNormalBat;
       this.campusWeaponId = this.player.currentWeapon;
@@ -506,6 +511,19 @@ class SchoolGTASandbox implements GameContext {
     }
   }
 
+  // 特訓院 BGM 段落：總教官追擊中且在 38m 內 (同 Boss 血條距離) 切鐵面進行曲
+  private detentionMusicPhase() {
+    const boss = this.wardenBossNpc;
+    const bossEngaged = !!boss && !this.detention.isBossDefeated && !boss.isKnockedDown && !boss.isPermanentlyKnockedOut &&
+      (boss.isChasing || boss.alertState === 'ALERT') && this.player.position.distanceToSquared(boss.position) < 38 * 38;
+    return detentionMusicPhase({
+      cutscene: this.detentionCutscene.isActive,
+      escaped: this.detention.isEscapeComplete,
+      bossEngaged,
+      alertPhase: this.detention.alertPhase
+    });
+  }
+
   // 下車並恢復步行鏡頭
   public forceDismount() {
     if (!this.currentRidingBike) return;
@@ -526,7 +544,7 @@ class SchoolGTASandbox implements GameContext {
 
   // 投籃出手 (滑鼠左鍵鬆開 / 手機攻擊鍵放開，僅天天國中)
   private readonly releaseBasketballShot = () => {
-    if (!this.isGameRunning) return;
+    if (!this.isGameRunning || this.isMenuOpen) return;
     if (this.currentWorldType === 'CAMPUS' && this.basketballGame.isHolding && this.basketballGame.isChargingShot) {
       this.basketballGame.releaseShot(this.player, this.cameraCtrl.camera, this.hud, this.world.hoopTargets);
     }
@@ -535,14 +553,14 @@ class SchoolGTASandbox implements GameContext {
   private setupInputBindings() {
     // E 鍵互動：依互動表優先順序執行 (與每幀互動提示共用同一張表)
     this.input.onInteract(() => {
-      if (!this.isGameRunning || this.combat.isExecutionActive) return;
+      if (!this.isGameRunning || this.isMenuOpen || this.combat.isExecutionActive) return;
       if (this.fencerBossFight.isActive) return; // 花劍客戰鬥中隱藏所有校園互動
       this.interaction.interact();
     });
 
     // 滑鼠左鍵：投籃蓄力 / 單車鳴鈴 / 背後暗殺 / 揮動武器攻擊
     this.input.onAttack(() => {
-      if (!this.isGameRunning) return;
+      if (!this.isGameRunning || this.isMenuOpen) return;
       this.combat.onAttack();
     });
     this.input.onAttackRelease(this.releaseBasketballShot);
@@ -567,7 +585,7 @@ class SchoolGTASandbox implements GameContext {
 
     // Q 鍵身法技能
     this.input.onSkill(() => {
-      if (!this.combat.isExecutionActive) this.progression.triggerDodgeSkill();
+      if (!this.isMenuOpen && !this.combat.isExecutionActive) this.progression.triggerDodgeSkill();
     });
   }
 
@@ -577,9 +595,9 @@ class SchoolGTASandbox implements GameContext {
       this.wantedSystem.showBanner('🔇 背景音樂 (BGM) 已靜音', 2000);
     } else {
       const isDetention = this.currentWorldType === 'DETENTION';
-      const modeText = bgmManager.getMode() === 'DUEL' ? '花劍客向日圓舞曲' : bgmManager.getMode() === 'PURSUIT'
+      const modeText = bgmManager.getModeLabel() ?? (bgmManager.getMode() === 'DUEL' ? '花劍客向日圓舞曲' : bgmManager.getMode() === 'PURSUIT'
         ? (isDetention ? '警戒追捕熱血節奏' : '通緝逃亡熱血節奏')
-        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律');
+        : (isDetention ? '暗夜潛入緊張旋律' : '校園漫步放鬆旋律'));
       this.wantedSystem.showBanner(`🎵 背景音樂 (BGM) 已開啟【${modeText}】`, 2500);
     }
   }
@@ -615,7 +633,7 @@ class SchoolGTASandbox implements GameContext {
       this.detention.resetGuards();
     }
 
-    setTimeout(() => {
+    worldTimeout(() => {
       // 復活點於復活當下依所在世界計算 (死亡 3 秒內切換世界時避免在另一世界的座標重生)
       const respawnPos = this.currentWorldType === 'CAMPUS' ? _campusRespawnPos : this.detentionWorld.spawnPos;
       this.fencerBossFight.beforeRespawn(); // 保險：上限與校園未還原時立即完成
@@ -638,7 +656,7 @@ class SchoolGTASandbox implements GameContext {
       this.wantedSystem.showBanner(recoverMsg, 4000);
       // 剛輸給花劍客：復活 1 秒後向陽之心打氣
       const fencerNote = this.fencerBossFight.consumeDefeatNotice();
-      if (fencerNote) setTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
+      if (fencerNote) worldTimeout(() => this.wantedSystem.showBanner(fencerNote, 3000), RESPAWN_HEART_DELAY_MS);
     }, 3000);
   }
 
@@ -724,6 +742,44 @@ class SchoolGTASandbox implements GameContext {
     perfProbe.render.push(t2, t2 - t1);
   }
 
+  private readonly worldPause = new WorldPause();
+
+  /** 大地圖選單 (雷達點擊 / J 鍵 / 任務小介面) 開啟中：遊戲世界暫停、操作輸入不觸發動作 */
+  private get isMenuOpen(): boolean {
+    return this.hud.isFullMapOpen;
+  }
+
+  // 選單暫停幀：世界邏輯全部不跑 (玩家 / NPC / Boss / 投射物 / 特效 / 計時 / 天氣 / 警戒)，只更新選單面板；
+  // 以實際時間計時者 (復活、增益、橫幅、越獄計時、處決計量表…) 改用 worldClock，於此停住
+  // 3D 畫面只在進入暫停與繪圖緩衝尺寸改變時重繪一次 (選單背景為靜止畫面，省電且不重配畫布)
+  private tickMenuPaused(step: WorldPauseStep) {
+    if (step === 'enter') {
+      this.input.releaseAll();
+      bgmManager.setMenuDuck(true);
+      qualityManager.setWorldPaused(true);
+      setWorldClockPaused(true);
+    }
+    this.input.consumeMouseDelta();
+    const bike = this.currentRidingBike;
+    const pos = bike ? bike.position : this.player.position;
+    const isCampus = this.currentWorldType === 'CAMPUS';
+    this.hud.updateFullMap(pos, bike ? bike.rotationY : this.player.rotationY, this.npcs, this.bicycles,
+      this.currentWorldType, isCampus ? undefined : this.detention.getRadarData());
+    const c = this.engine.canvas;
+    if (this.worldPause.needsRender(`${c.width}x${c.height}`)) {
+      this.engine.updateShadowFocus(pos);
+      this.renderFrame();
+    }
+  }
+
+  // 關閉選單恢復：放開暫停前後殘留的按鍵 / 搖桿、BGM 淡回、畫質量測可重新開始
+  private onMenuResume() {
+    setWorldClockPaused(false);
+    this.input.releaseAll();
+    bgmManager.setMenuDuck(false);
+    qualityManager.setWorldPaused(false);
+  }
+
   private readonly diag = getDiagFlags();
   private lastRunAt = 0;      // 上次實際執行邏輯 / 繪製的 rAF 時間戳
   private frameStartMs = 0;   // 診斷計時：本幀邏輯起點 (僅 ?diag= 時使用)
@@ -738,13 +794,24 @@ class SchoolGTASandbox implements GameContext {
     if (diagOn) perfProbe.onRaf(now);
     if (this.lastRunAt > 0 && shouldSkipFrame(now - this.lastRunAt, qualityManager.fpsCap)) return;
     this.lastRunAt = now;
-    qualityManager.onFrame(now, this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
+    // 選單暫停 (大地圖選單開啟中；過場劇情進行中依現況不暫停)
+    const pauseStep = this.worldPause.step(
+      this.isGameRunning && this.isMenuOpen && !this.detentionCutscene.isActive && !this.fencerBossFight.isCutscene);
+    qualityManager.onFrame(now, pauseStep !== 'run' || this.detentionCutscene.isActive || (this.fencerBossFight.isActive && this.fencerBossFight.phase !== 'FIGHT'));
     if (diagOn) {
       perfProbe.onFrameRun(now);
       this.frameStartMs = performance.now();
     }
 
-    const rawDelta = this.engine.getDelta();
+    let rawDelta = this.engine.getDelta(); // 暫停中照常取用並丟棄，恢復時不累積
+    if (pauseStep === 'enter' || pauseStep === 'hold') {
+      this.tickMenuPaused(pauseStep);
+      return;
+    }
+    if (pauseStep === 'resume') {
+      rawDelta = WorldPause.clampResumeDelta(rawDelta);
+      this.onMenuResume();
+    }
     const delta = this.combat.scaleDelta(rawDelta);
 
     // -1. 少年院開場電影級劇情動畫更新與 Space 跳過
@@ -753,6 +820,7 @@ class SchoolGTASandbox implements GameContext {
         this.detentionCutscene.skip();
         this.input.consumeJump();
       } else {
+        bgmManager.setDetention('INTRO');
         this.detentionCutscene.update(delta);
         this.weatherSystem.update(delta, this.cameraCtrl.camera.position);
         this.engine.updateShadowFocus(this.player.position);
@@ -954,7 +1022,7 @@ class SchoolGTASandbox implements GameContext {
     } else if (!isCampus) {
       const wardenBoss = this.wardenBossNpc;
       if (wardenBoss && targetPosition.distanceTo(wardenBoss.position) < 38.0 && !wardenBoss.isKnockedDown) {
-        this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true, '總教官 Boss：鐵面總長', '🎖️');
+        this.hud.setBossHealth(wardenBoss.hp, wardenBoss.maxHp, true);
       } else {
         this.hud.setBossHealth(0, 1000, false);
       }
@@ -965,6 +1033,7 @@ class SchoolGTASandbox implements GameContext {
     bgmManager.setDuel(this.fencerBossFight.musicState());
     const isBeingChased = !this.player.isDead && (this.isAnyChasing || this.wantedSystem.stars > 0);
     const dangerAlert = this.isHighDanger || this.wantedSystem.stars >= 4;
+    bgmManager.setDetention(isCampus ? null : this.detentionMusicPhase());
     bgmManager.setPursuitMode(isBeingChased, dangerAlert);
 
     this.hud.setCash(this.progression.cash);

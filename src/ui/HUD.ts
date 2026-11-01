@@ -29,6 +29,7 @@ import { fencerQuestText, REGEN_TAG } from '../game/fencer/fencerStory';
 import { FENCER } from '../game/fencer/fencerRules';
 import { pickCampusGoal, pickDetentionGoal, campusPoiDoneMask, isCampusPoiDone, isCampusPoiHidden, type FullMapGoal } from './fullMapGoals';
 import { setConcealedById } from './uiConceal';
+import { worldTimeout, clearWorldTimeout } from '../core/worldClock';
 
 // 小地圖與大地圖共用的 NPC 標記樣式 (顏色以大地圖為準；radius 為小地圖標記半徑)
 const NPC_ROLE_MAP_STYLE: Partial<Record<NPCRole, { color: string; radius: number }>> = {
@@ -174,10 +175,7 @@ export class HUD {
 
   // Boss HUD
   private bossHudEl: HTMLElement | null;
-  private bossHpTextEl: HTMLElement | null;
   private bossBarFillEl: HTMLElement | null;
-  private bossNameTextEl: HTMLElement | null;
-  private bossIconEl: HTMLElement | null;
 
   // Weapon HUD - 已整合至頂端任務看板與換武器功能
   // (保留介面屬性避免外部呼叫報錯)
@@ -234,9 +232,8 @@ export class HUD {
   private lastSkillKey: number = -1;
   private lastBossShown: boolean | null = null;
   private lastBossHp: number = -2;
-  private lastBossMaxHp: number = -1;
-  private lastBossName: string | undefined = undefined;
   private lastBossBar: number = -1;
+  private lastBossSeg: number = -1;
   // 關閉全螢幕地圖時請求重新鎖定滑鼠 (由 main 接到 InputManager.requestPointerLock)
   public onRequestPointerLock?: () => void;
   private worldModalEl: HTMLElement | null;
@@ -498,10 +495,7 @@ export class HUD {
     }
 
     this.bossHudEl = document.getElementById('boss-hud');
-    this.bossHpTextEl = document.getElementById('boss-hp-text');
     this.bossBarFillEl = document.getElementById('boss-bar-fill');
-    this.bossNameTextEl = document.getElementById('boss-name-text');
-    this.bossIconEl = document.getElementById('boss-icon-el');
 
     this.commissaryModalEl = document.getElementById('commissary-modal');
     this.commissaryCashValEl = document.getElementById('commissary-cash-val');
@@ -817,7 +811,7 @@ export class HUD {
         this.shotFeedbackEl.textContent = '❌ EARLY! 蓄力不足！';
         this.shotFeedbackEl.classList.add('bad');
       }
-      setTimeout(() => {
+      worldTimeout(() => {
         this.hideShotMeter();
       }, 1000);
     } else {
@@ -869,14 +863,17 @@ export class HUD {
   private bgmWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS';
   private lastBgmMode: 'EXPLORE' | 'PURSUIT' | 'DUEL' = 'EXPLORE';
   private lastBgmMuted = false;
+  private lastBgmLabel: string | undefined;
   public setBGMWorld(world: 'CAMPUS' | 'DETENTION') {
     this.bgmWorld = world;
-    this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted);
+    this.updateBGMStatus(this.lastBgmMode, this.lastBgmMuted, this.lastBgmLabel);
   }
 
-  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT' | 'DUEL', isMuted: boolean) {
+  /** label：特訓院「鐵窗夜行」段落名稱 (有值時取代預設文字) */
+  public updateBGMStatus(mode: 'EXPLORE' | 'PURSUIT' | 'DUEL', isMuted: boolean, label?: string) {
     this.lastBgmMode = mode;
     this.lastBgmMuted = isMuted;
+    this.lastBgmLabel = label;
     const isDetention = this.bgmWorld === 'DETENTION';
     if (!this.bgmBadgeEl || !this.bgmIconEl || !this.bgmTextEl || !this.bgmToggleBtnEl) return;
 
@@ -893,12 +890,12 @@ export class HUD {
     } else if (mode === 'PURSUIT') {
       this.bgmBadgeEl.className = 'bgm-badge pursuit';
       this.bgmIconEl.textContent = '🚨';
-      this.bgmTextEl.textContent = isDetention ? 'BGM: 警戒追捕!' : 'BGM: 通緝追逐!';
+      this.bgmTextEl.textContent = label ? `BGM: ${label}` : isDetention ? 'BGM: 警戒追捕!' : 'BGM: 通緝追逐!';
       this.bgmToggleBtnEl.textContent = '[開]';
     } else {
       this.bgmBadgeEl.className = 'bgm-badge';
       this.bgmIconEl.textContent = '🎵';
-      this.bgmTextEl.textContent = isDetention ? 'BGM: 暗夜潛入' : 'BGM: 校園漫步';
+      this.bgmTextEl.textContent = label ? `BGM: ${label}` : isDetention ? 'BGM: 暗夜潛入' : 'BGM: 校園漫步';
       this.bgmToggleBtnEl.textContent = '[開]';
     }
   }
@@ -957,18 +954,18 @@ export class HUD {
       this.missionCenterSubEl.textContent = subtitle;
     }
     if (this.missionCenterTimer) {
-      clearTimeout(this.missionCenterTimer);
+      clearWorldTimeout(this.missionCenterTimer);
       this.missionCenterTimer = null;
     }
 
     this.missionCenterPromptEl.classList.remove('fade-out');
     this.missionCenterPromptEl.classList.add('show');
 
-    this.missionCenterTimer = setTimeout(() => {
+    this.missionCenterTimer = worldTimeout(() => {
       if (this.missionCenterPromptEl) {
         this.missionCenterPromptEl.classList.remove('show');
         this.missionCenterPromptEl.classList.add('fade-out');
-        setTimeout(() => {
+        worldTimeout(() => {
           if (this.missionCenterPromptEl) {
             this.missionCenterPromptEl.classList.remove('fade-out');
           }
@@ -1035,69 +1032,48 @@ export class HUD {
     }
   }
 
-  // Boss 血條顯示與更新 (支援變異食人花王與體育老師林教頭)
-  public setBossHealth(currentHp: number, maxHp: number, visible: boolean, bossName?: string, bossIcon?: string) {
-    if (!this.bossHudEl || !this.bossHpTextEl || !this.bossBarFillEl) return;
-
-    // 髒檢查：每幀呼叫，僅在顯示狀態、血量 (取整) 或名稱變動時寫入 DOM
-    const shown = visible && currentHp > 0;
-    const hpKey = shown ? Math.ceil(currentHp) : -1;
-    if (shown === this.lastBossShown && hpKey === this.lastBossHp && maxHp === this.lastBossMaxHp && bossName === this.lastBossName) return;
-    this.lastBossShown = shown;
-    this.lastBossHp = hpKey;
-    this.lastBossMaxHp = maxHp;
-    this.lastBossName = bossName;
-    this.lastBossBar = -1;
-    this.bossHudEl.classList.remove('boss-hud-fencer', 'bar-flash');
-
-    if (!shown) {
-      this.bossHudEl.style.display = 'none';
-      return;
-    }
-
-    this.bossHudEl.style.display = 'block';
-    if (this.bossNameTextEl && bossName) {
-      this.bossNameTextEl.textContent = bossName;
-    }
-    if (this.bossIconEl && bossIcon) {
-      this.bossIconEl.textContent = bossIcon;
-    }
-    const pct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
-    this.bossBarFillEl.style.width = `${pct}%`;
-    this.bossHpTextEl.textContent = `${Math.ceil(currentHp)} / ${maxHp}`;
-  }
-
   /**
-   * 花劍客 Boss 血條：同一條血條呈現三管 (無文字)。fill = 整場剩餘 / 總量，兩條細分隔線標示三段，
-   * 顏色隨管數 (bar 0~2) 變化，換管時閃光一次。僅寫 class / width，並做髒檢查。
+   * 統一 Boss 血條 (單條、無文字、無外框)：每幀呼叫，只寫 class / dataset / width 並做髒檢查。
+   * pct = 0~100；bar = 顏色管數 0~2；segments = 3 時顯示兩條三管分隔線，其餘不顯示。
    */
-  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+  private applyBossBar(shown: boolean, pct: number, bar: number, segments: number) {
     if (!this.bossHudEl || !this.bossBarFillEl) return;
-    const shown = visible && totalHp > 0;
-    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : -1;
-    if (shown === this.lastBossShown && pct === this.lastBossHp && bar === this.lastBossBar && this.lastBossName === '__fencer') return;
-    const barChanged = bar !== this.lastBossBar;
+    const key = shown ? pct : -1;
+    if (shown === this.lastBossShown && key === this.lastBossHp && bar === this.lastBossBar && segments === this.lastBossSeg) return;
+    const barChanged = bar !== this.lastBossBar || segments !== this.lastBossSeg;
+    const wasShown = this.lastBossShown;
     this.lastBossShown = shown;
-    this.lastBossHp = pct;
+    this.lastBossHp = key;
     this.lastBossBar = bar;
-    this.lastBossMaxHp = totalMax;
-    this.lastBossName = '__fencer';
+    this.lastBossSeg = segments;
     const el = this.bossHudEl;
     if (!shown) {
-      el.style.display = 'none';
-      el.classList.remove('boss-hud-fencer');
-      this.lastBossBar = -1;
+      el.classList.remove('boss-hud-on', 'bar-flash');
       return;
     }
-    el.style.display = 'block';
-    el.classList.add('boss-hud-fencer');
+    el.classList.add('boss-hud-on');
     el.dataset.bar = String(bar);
+    el.dataset.seg = String(segments);
     this.bossBarFillEl.style.width = `${pct}%`;
-    if (barChanged) {
+    if (barChanged && wasShown && segments === 3) {
       el.classList.remove('bar-flash');
       void el.offsetWidth;
       el.classList.add('bar-flash');
     }
+  }
+
+  // 單管 Boss 血條 (變異食人花王 / 總教官鐵面總長)：無分隔線，固定第一管配色
+  public setBossHealth(currentHp: number, maxHp: number, visible: boolean) {
+    const shown = visible && currentHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((currentHp / maxHp) * 200) / 2)) : 0;
+    this.applyBossBar(shown, pct, 0, 1);
+  }
+
+  /** 花劍客三管 Boss 血條：fill = 整場剩餘 / 總量，兩條分隔線標示三段，顏色隨管數變化，換管閃光一次。 */
+  public setFencerBossHealth(totalHp: number, totalMax: number, bar: number, visible: boolean) {
+    const shown = visible && totalHp > 0;
+    const pct = shown ? Math.max(0, Math.min(100, Math.round((totalHp / totalMax) * 200) / 2)) : 0;
+    this.applyBossBar(shown, pct, bar, 3);
   }
 
   /** 花劍客戰鬥中精簡 HUD：只切 body class (CSS 隱藏校園歷練 / 地點資訊 / 零用錢 / 校規處分) */
@@ -1620,15 +1596,7 @@ export class HUD {
 
     // 3.1 全螢幕大地圖 (若開啟中，同步繪製全景大地圖)
     // 節流至約 20fps：大地圖為導覽用途，無需逐幀重繪；畫布僅在【地圖】分頁繪製，學生證 / 戰績同節流且值變才寫 DOM
-    if (this.isFullMapOpen) {
-      const nowMs = performance.now();
-      // 頻率依畫質檔位 (中高 20Hz / 低 10Hz)，容差 4ms 避免 30fps 鎖幀時因差一點點而多等一幀
-      if (nowMs - this.lastFullmapRenderAt >= 1000 / QUALITY_PRESETS[qualityManager.tier].fullmapHz - 4) {
-        this.lastFullmapRenderAt = nowMs;
-        this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
-        if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
-      }
-    }
+    this.updateFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
 
     // 4. 被追捕外框紅色閃爍特效 (Pursuit Alert Vignette，狀態變化時更新)
     if (this.pursuitVignetteEl) {
@@ -1646,6 +1614,25 @@ export class HUD {
           this.pursuitVignetteEl.classList.remove('active', 'danger');
         }
       }
+    }
+  }
+
+  /** 全螢幕大地圖選單 (開啟中才繪製，節流)；選單暫停期間 main 只呼叫這裡，世界與雷達不更新 */
+  public updateFullMap(
+    playerPos: THREE.Vector3,
+    playerRotY: number,
+    npcs: NPC[],
+    bicycles: Bicycle[],
+    currentWorld: 'CAMPUS' | 'DETENTION' = 'CAMPUS',
+    detentionData?: DetentionRadarData
+  ) {
+    if (!this.isFullMapOpen) return;
+    const nowMs = performance.now();
+    // 頻率依畫質檔位 (中高 20Hz / 低 10Hz)，容差 4ms 避免 30fps 鎖幀時因差一點點而多等一幀
+    if (nowMs - this.lastFullmapRenderAt >= 1000 / QUALITY_PRESETS[qualityManager.tier].fullmapHz - 4) {
+      this.lastFullmapRenderAt = nowMs;
+      this.refreshFullMapPanels(playerPos, npcs, currentWorld, detentionData);
+      if (this.fullmapTab === 'map') this.renderFullMap(playerPos, playerRotY, npcs, bicycles, currentWorld, detentionData);
     }
   }
 
@@ -2161,14 +2148,14 @@ export class HUD {
     if (!this.cinematicBarsEl) return;
     if (this.cinemaQteBadgeEl) this.cinemaQteBadgeEl.textContent = title;
     if (this.cinemaQteSubEl) this.cinemaQteSubEl.textContent = subtitle;
-    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    clearWorldTimeout(this.cinemaDismissTimer);
     this.cinemaDismissTimer = null;
 
     this.cinematicBarsEl.classList.remove('qte-show');
     this.cinematicBarsEl.classList.add('active');
     if (this.cinemaFlashEl) {
       this.cinemaFlashEl.classList.add('flash');
-      setTimeout(() => {
+      worldTimeout(() => {
         if (this.cinemaFlashEl) this.cinemaFlashEl.classList.remove('flash');
       }, 140);
     }
@@ -2176,7 +2163,7 @@ export class HUD {
 
   // 處決特寫結束：收起黑邊，恢復操控後短暫顯示 QTE 打擊橫幅 (resultMs 為 0 則不顯示)，結束後呼叫 onDone
   public endCinematicExecution(resultMs: number, onDone?: () => void) {
-    if (this.cinemaDismissTimer) clearTimeout(this.cinemaDismissTimer);
+    clearWorldTimeout(this.cinemaDismissTimer);
     this.cinemaDismissTimer = null;
     const bars = this.cinematicBarsEl;
     if (!bars) {
@@ -2190,7 +2177,7 @@ export class HUD {
       return;
     }
     bars.classList.add('qte-show');
-    this.cinemaDismissTimer = setTimeout(() => {
+    this.cinemaDismissTimer = worldTimeout(() => {
       this.cinemaDismissTimer = null;
       bars.classList.remove('qte-show');
       onDone?.();
