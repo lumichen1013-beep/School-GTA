@@ -5,8 +5,7 @@ import { GRAVITY, SPEED, PLAYER_HW } from './constants';
 import { clamp, playerBox, sweepAxis } from './geometry';
 import { MODES } from './modes';
 import { solidsFor } from './presence';
-import { pushCrate } from './push';
-import { resetCrates, updatePlates } from './mechanisms';
+import { pushCrate, resetCrates } from './push';
 import { trySwitchMode } from './switchMode';
 import { interact } from './interact';
 import { respawn, updateCheckpoint } from './world';
@@ -77,7 +76,6 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
   p.x = clamp(p.x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW);
   if (spec.boundsZ) p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
 
-  updatePlates(w);
   for (const m of w.rt.mechanics.afterPhysics) m.afterPhysics!(w, dt);
   updateCheckpoint(w);
   if (p.y < w.level.voidY) respawn(w, MSG_FELL);

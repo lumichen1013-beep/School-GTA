@@ -141,7 +141,7 @@ export function doorModel(p: Painter, d: ObjDef): PropModel {
   seal.position.set(0, 0, d.d / 2 + 0.06);
   g.add(seal);
   const update = (c: ModelCtx) => {
-    const k = approach(seal.scale.x, c.world.sealed ? 1 : 0.001, c.dt * 3);
+    const k = approach(seal.scale.x, c.obj.used ? 0.001 : 1, c.dt * 3);
     seal.scale.setScalar(k);
     seal.visible = k > 0.01;
     hinge.rotation.y = approach(hinge.rotation.y, c.world.cleared ? -1.4 : 0, c.dt * 3);

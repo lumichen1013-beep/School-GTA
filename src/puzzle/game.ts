@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './ui/puzzle.css';
 import { foyer } from './content/levels/ch1/1-2-foyer';
-import { createWorld } from './core/world';
+import { createWorld, hasItem } from './core/world';
 import { step } from './core/step';
 import { findTarget } from './core/interact';
 import type { WorldAction } from './core/actions';
@@ -117,7 +117,7 @@ export class PuzzleGame {
     if (w.msgSeq !== this.lastMsgSeq) { this.lastMsgSeq = w.msgSeq; this.hud.toast(w.msg, now); }
     this.hud.tick(now);
     this.hud.setMode(this.renderMode);
-    this.hud.setInventory(w.hasKey);
+    this.hud.setInventory(hasItem(w, 'nib'));
     const t = this.lock > 0 || w.cleared ? null : findTarget(w);
     this.hud.setPrompt(t ? `[E] ${VERBS[t.def.type] ?? '互動'}${t.def.label ? '　' + t.def.label : ''}` : null);
     this.cams.follow(0.12, this.renderMode);

@@ -4,7 +4,7 @@ import { ACTION_ORDER } from '../../../src/puzzle/core/actions';
 import { step, stepWorld } from '../../../src/puzzle/core/step';
 import { trySwitchMode } from '../../../src/puzzle/core/switchMode';
 import { interact } from '../../../src/puzzle/core/interact';
-import { resetCrates } from '../../../src/puzzle/core/mechanisms';
+import { resetCrates } from '../../../src/puzzle/core/push';
 import { createWorld } from '../../../src/puzzle/core/world';
 import { compileMechanics } from '../../../src/puzzle/core/registry';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';

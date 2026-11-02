@@ -1,16 +1,20 @@
-import type { Mode, ObjState, World } from './types';
+import type { ItemReq, Mode, ObjState, World } from './types';
 import { INTERACT_RANGE } from './constants';
 import { objBox } from './geometry';
 import { MODES } from './modes';
 import { activeIn, effectiveVisibility, isActiveIn } from './presence';
-import { say } from './world';
+import { addItem, hasItem, openLinks, say } from './world';
 
-export const MSG_KEY = '拿到了「筆尖」。它還帶著一點未乾的墨。';
-export const MSG_GATE = '閘門紋絲不動。門軸上沾著墨，像在等紙上的什麼。';
+const MSG_UNREACHABLE = '看得見，卻碰不到。換個角度試試。';
+
+/** 未觸發，或類型允許觸發後仍可互動 (出口門) */
+function usable(w: World, o: ObjState): boolean {
+  return !o.used || !!w.rt.mechanics.types.get(o.def.type)?.spec.usableWhenUsed;
+}
 
 function canUse(w: World, o: ObjState, mode: Mode): boolean {
   const d = o.def;
-  return isActiveIn(w, o, mode) && !o.used && !!d.interactable && activeIn(d.interactIn ?? effectiveVisibility(w, o), mode);
+  return isActiveIn(w, o, mode) && usable(w, o) && !!d.interactable && activeIn(d.interactIn ?? effectiveVisibility(w, o), mode);
 }
 
 /** 玩家身體中心到物件盒的最近距離；2D 忽略 z */
@@ -40,32 +44,31 @@ export function findTarget(w: World): ObjState | null {
   return best;
 }
 
-/** E：對最近目標互動，驅動關卡狀態 (筆尖 → 墨水閥 → 出口門) */
+const reqOf = (r: ItemReq): { item: string; consume: boolean } =>
+  typeof r === 'string' ? { item: r, consume: false } : { item: r.item, consume: !!r.consume };
+
+/**
+ * E：對最近目標互動。通用前置 (資料驅動，N9)：requires 不滿足 → lockedText 並中止；
+ * 滿足 → 消耗 / grants (取得並消失) / opens (自身與目標 used) → useText；之後交給類型 handler。
+ */
 export function interact(w: World): void {
   const t = findTarget(w);
   if (!t) {
-    const unreachable = w.player.onGround && w.objs.some(o => isActiveIn(w, o, w.player.mode) && !o.used && o.def.interactable
+    const unreachable = w.player.onGround && w.objs.some(o => isActiveIn(w, o, w.player.mode) && usable(w, o) && o.def.interactable
       && !canUse(w, o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
-    if (unreachable) say(w, '看得見，卻碰不到。換個角度試試。');
+    if (unreachable) say(w, MSG_UNREACHABLE);
     return;
   }
-  switch (t.def.type) {
-    case 'note': say(w, t.def.text ?? ''); break;
-    case 'key':
-      t.gone = true; w.hasKey = true;
-      say(w, MSG_KEY);
-      break;
-    case 'gate': say(w, MSG_GATE); break;
-    case 'valve':
-      if (!w.hasKey) { say(w, '墨水閥乾涸了。需要一支能引墨的東西。'); break; }
-      t.used = true; w.sealed = false;
-      say(w, '筆尖點下，墨線像退潮一樣散開了。');
-      break;
-    case 'door':
-      if (w.sealed) { say(w, '門被墨線封印著。圖紙裡似乎有它的機關。'); break; }
-      w.cleared = true;
-      say(w, '門開了。');
-      break;
-    default: break;
+  const d = t.def;
+  let acted = false;
+  if (d.requires !== undefined) {
+    const req = reqOf(d.requires);
+    if (!hasItem(w, req.item)) { if (d.lockedText !== undefined) say(w, d.lockedText); return; }
+    if (req.consume) addItem(w, req.item, -1);
+    acted = true;
   }
+  if (d.grants !== undefined) { t.gone = true; addItem(w, d.grants, 1); acted = true; }
+  if (d.opens !== undefined) { t.used = true; openLinks(w, t); acted = true; }
+  if (acted && d.useText !== undefined) say(w, d.useText);
+  w.rt.mechanics.types.get(d.type)?.spec.interact?.(w, t);
 }

@@ -4,6 +4,8 @@ export type MechanicId = string;
 
 /** 物件類型規格 (S4 起由機制註冊；類型只能有一個擁有者) */
 export interface ObjTypeSpec {
+  /** used 之後仍可互動 (出口門：解封 = used，解封後才開得了) */
+  usableWhenUsed?: boolean;
   /** 通用前置 (requires / grants / opens) 處理完之後呼叫 */
   interact?(w: World, o: ObjState): void;
 }

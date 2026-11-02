@@ -2,15 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { newWorld, run, walkTo, place, DT } from './helpers';
 import { stepWorld, MSG_FELL } from '../../src/puzzle/core/step';
 import { trySwitchMode } from '../../src/puzzle/core/switchMode';
-import { findTarget, interact, MSG_GATE } from '../../src/puzzle/core/interact';
+import { findTarget, interact } from '../../src/puzzle/core/interact';
+import { MSG_GATE } from '../../src/puzzle/mechanics/links';
 import { pushCrate } from '../../src/puzzle/core/push';
-import { resetCrates, MSG_CRATE_RESET } from '../../src/puzzle/core/mechanisms';
+import { resetCrates, MSG_CRATE_RESET } from '../../src/puzzle/core/push';
 import { objBox, overlapsXZ, playerBox, supportsOf } from '../../src/puzzle/core/geometry';
 import { solidsFor } from '../../src/puzzle/core/presence';
 import { foyer } from '../../src/puzzle/content/levels/ch1/1-2-foyer';
 import type { LevelDef, ObjDef, World } from '../../src/puzzle/core/types';
 
 const crateOf = (w: World) => w.byId.get('crate')!;
+const get = (w: World, id: string) => w.byId.get(id)!;
 
 describe('關卡資料', () => {
   it('房間尺寸與物件 id 唯一', () => {
@@ -213,7 +215,7 @@ describe('狀態機、檢查點與掉落', () => {
     place(w, 15, 0, -5.2, '2d');
     expect(findTarget(w)?.def.id).toBe('valve');
     interact(w);
-    expect(w.sealed).toBe(true);
+    expect(get(w, 'door').used).toBe(false);
   });
 
   it('空中不能互動', () => {

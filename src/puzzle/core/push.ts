@@ -1,6 +1,10 @@
 import type { ObjState, World } from './types';
 import { objBox, sweepAxis } from './geometry';
 import { solidsFor } from './presence';
+import { resolvePlayerOverlap } from './place';
+import { say } from './world';
+
+export const MSG_CRATE_RESET = '木箱回到了原來的地方。';
 
 /** 木箱底下是否仍有支撐 (中心點落在某個頂面等高的實體上) */
 function supported(w: World, crate: ObjState, x: number, z: number): boolean {
@@ -33,4 +37,15 @@ export function pushCrate(w: World, crate: ObjState, axis: 0 | 2, delta: number)
   }
   if (axis === 0) crate.x += moved; else crate.z += moved;
   return moved;
+}
+
+/** T：所有木箱回到初始位置 (避免推進死角卡關)；若木箱回到玩家身上則把玩家挪到最近空位 (C12) */
+export function resetCrates(w: World): void {
+  if (w.cleared) return;
+  for (const o of w.objs) {
+    if (!o.def.pushable) continue;
+    o.x = o.def.x; o.y = o.def.y; o.z = o.def.z;
+  }
+  resolvePlayerOverlap(w);
+  say(w, MSG_CRATE_RESET);
 }

@@ -30,7 +30,8 @@ const objects: ObjDef[] = [
   { id: 'crate', type: 'crate', x: 4.5, y: 0, z: 2, w: 1.2, h: 1.1, d: 1.2, visible: 'both', solid: true, pushable: true, label: '木箱' },
   { ...noteBase, id: 'note2', x: 6, text: '站得夠高之前，先找一個肯讓你踩的。' },
   { id: 'plinth', type: 'plinth', x: 8.5, y: 0, z: -4.5, w: 1, h: 2.5, d: 3, visible: 'both', solid: true, label: '高台' },
-  { id: 'key', type: 'key', x: 8.5, y: 2.5, z: -4.5, w: 0.3, h: 0.5, d: 0.3, visible: 'both', solid: false, interactable: true, interactIn: '2d', label: '筆尖' },
+  { id: 'key', type: 'key', x: 8.5, y: 2.5, z: -4.5, w: 0.3, h: 0.5, d: 0.3, visible: 'both', solid: false, interactable: true, interactIn: '2d', label: '筆尖',
+    grants: 'nib', useText: '拿到了「筆尖」。它還帶著一點未乾的墨。' },
 
   // 隔牆：門洞 z∈[-1,1] 只在現實能穿過 (圖紙裡整面牆壓成一道)，門洞由 3D 閘門擋住，壓板壓下才升起
   { ...partBase, id: 'partBack', z: -3.5, d: 5 },
@@ -38,9 +39,11 @@ const objects: ObjDef[] = [
   { ...partBase, id: 'lintel', y: 3, h: 3, z: 0, d: 2 },
   { id: 'gate', type: 'gate', x: 10.2, y: 0, z: 0, w: 0.3, h: 3, d: 2, visible: '3d', solid: true, interactable: true, label: '閘門' },
 
-  // 出口區：墨水閥只畫在圖紙上；出口門在後牆
-  { id: 'valve', type: 'valve', x: 15, y: 0.55, z: -5.7, w: 0.5, h: 0.5, d: 0.5, visible: '2d', solid: false, interactable: true, label: '墨水閥' },
-  { id: 'door', type: 'door', x: 18, y: 0, z: -5.85, w: 1.6, h: 2.4, d: 0.3, visible: 'both', solid: false, interactable: true, label: '出口門' }
+  // 出口區：墨水閥只畫在圖紙上 (需筆尖，解封出口門)；出口門在後牆 (被墨水閥 opens 解封 = used)
+  { id: 'valve', type: 'valve', x: 15, y: 0.55, z: -5.7, w: 0.5, h: 0.5, d: 0.5, visible: '2d', solid: false, interactable: true, label: '墨水閥',
+    requires: 'nib', opens: 'door', lockedText: '墨水閥乾涸了。需要一支能引墨的東西。', useText: '筆尖點下，墨線像退潮一樣散開了。' },
+  { id: 'door', type: 'door', x: 18, y: 0, z: -5.85, w: 1.6, h: 2.4, d: 0.3, visible: 'both', solid: false, interactable: true, label: '出口門',
+    lockedText: '門被墨線封印著。圖紙裡似乎有它的機關。', useText: '門開了。' }
 ];
 
 export const foyer: LevelDef = {

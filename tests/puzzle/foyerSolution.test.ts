@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { newWorld, run, walkTo, hopUntil, place } from './helpers';
 import { trySwitchMode } from '../../src/puzzle/core/switchMode';
 import { findTarget, interact } from '../../src/puzzle/core/interact';
-import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from '../../src/puzzle/core/mechanisms';
+import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from '../../src/puzzle/mechanics/plates';
+import { hasItem } from '../../src/puzzle/mechanics/items';
 import type { World } from '../../src/puzzle/core/types';
 
 const get = (w: World, id: string) => w.byId.get(id)!;
@@ -32,7 +33,7 @@ function solveKey(w: World): void {
   walkTo(w, 8.5, null);
   expect(findTarget(w)?.def.id).toBe('key');
   interact(w);
-  expect(w.hasKey).toBe(true);
+  expect(hasItem(w, 'nib')).toBe(true);
 }
 
 /** ③ 木箱推回、沿 -z 推進後方窄道、從右側沿窄道推到長桌後方的壓板 x；切 2D 壓下 → 閘門升起 → 3D 穿門洞 */
@@ -70,7 +71,7 @@ function solveExit(w: World): void {
   walkTo(w, 15, null);
   expect(findTarget(w)?.def.id).toBe('valve');
   interact(w);
-  expect(w.sealed).toBe(false);
+  expect(get(w, 'door').used).toBe(true);
   expect(trySwitchMode(w).ok).toBe(true);
   walkTo(w, 18, -4.6);
   expect(findTarget(w)?.def.id).toBe('door');
@@ -121,7 +122,7 @@ describe('謎題 ② 反例：高台與筆尖', () => {
     expect(onPlinth).toBe(false);
     place(w, 5.4, 1.1, 2, '2d');
     interact(w);
-    expect(w.hasKey).toBe(false);
+    expect(hasItem(w, 'nib')).toBe(false);
   });
 
   it('3D 站上緊貼高台的木箱也跳不上去、拿不到筆尖', () => {
@@ -134,7 +135,7 @@ describe('謎題 ② 反例：高台與筆尖', () => {
     expect(maxY).toBeLessThan(2.4);
     place(w, 7.7, 1.1, -4.5);
     interact(w);
-    expect(w.hasKey).toBe(false);
+    expect(hasItem(w, 'nib')).toBe(false);
   });
 
   it('2D 地面貼著高台跳起，空中按 E 也拿不到 (需站穩)', () => {
@@ -142,7 +143,7 @@ describe('謎題 ② 反例：高台與筆尖', () => {
     place(w, 7.7, 0, 0, '2d');
     run(w, { jump: true }, 0.2, () => interact(w));
     run(w, {}, 1, () => interact(w));
-    expect(w.hasKey).toBe(false);
+    expect(hasItem(w, 'nib')).toBe(false);
   });
 });
 
@@ -224,7 +225,7 @@ describe('終章反例', () => {
     const w = newWorld();
     place(w, 15, 0, 0, '2d');
     interact(w);
-    expect(w.sealed).toBe(true);
+    expect(get(w, 'door').used).toBe(false);
     place(w, 18, 0, -4.6);
     expect(findTarget(w)?.def.id).toBe('door');
     interact(w);
