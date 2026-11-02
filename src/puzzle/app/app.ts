@@ -13,6 +13,7 @@ import { cleanName, loadSave, NAME_MAX, writeSave, type SaveV2 } from '../meta/s
 import { loadSettings } from '../meta/settings';
 import { isUnlocked, levelState, recordClear, startAbilities } from '../meta/progress';
 import { cssFade, TRANSITIONS } from '../render/transitions';
+import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom } from '../ui/dom';
 import { PuzzleHud } from '../ui/hud';
 import { showMenu } from '../ui/screens/menu';
@@ -140,9 +141,11 @@ export class PuzzleApp {
   private startSession(e: LevelEntry): void {
     this.endSession();
     const levelId = e.id;
+    const level = e.load();
+    const theme = resolveTheme(level.theme ?? CHAPTERS.find(ch => ch.id === e.chapter)?.theme);
     this.session = new LevelSession(
-      { renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS.ink) },
-      e.load(),
+      { renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme },
+      level,
       { abilities: startAbilities(e, this.save), onCleared: () => this.go({ id: 'clear', levelId }) }
     );
     this.resize();

@@ -1,5 +1,7 @@
-// 《圖紙之間》共用配色：3D (有光影) 與 2D (扁平描邊色塊) 用同一套顏色，同一物件兩邊對應
-export const PAL = {
+import type { Palette, Theme } from './types';
+
+/** 玄關 (第 1 章) 配色：沿用 S7 前的 render/palette.ts PAL */
+export const FOYER_PAL: Palette = {
   outline: 0x3a2618,
   // 房間
   wallpaper: 0xf0dcb8, wallStripe: 0xe4c795, wallMotif: 0xd99a6c,
@@ -29,6 +31,16 @@ export const PAL = {
   lampShade: 0xf2b84b, lampBulb: 0xfff2c0, lampLight: 0xffc27a, cord: 0x3a2a1e,
   // 2D 背景 (奶油色紙張漸層)
   bgTop: '#fcf3df', bgBottom: '#f4d9b6', bg3d: 0x3b2a1d
-} as const;
+};
 
-export const toCss = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
+export const FOYER_THEME: Theme = {
+  id: 'foyer',
+  pal: FOYER_PAL,
+  room2d: { paper: 0xfff9ef, wainscot: 0xead0ae, trim: 0xd9b48c, frameGold: 0xf3d58a, canvas: 0xfff6ea, shade: 0xf7d79a, bulb: 0xfff7dc },
+  lights: {
+    hemiSky: 0xfff1dc, hemiGround: 0x6b4a32, hemiIntensity: 0.85,
+    ambient: 0xffe2c0, ambientIntensity: 0.25,
+    sun: 0xfff0d8, sunIntensity: 1.25
+  },
+  transition: 'ink'
+};

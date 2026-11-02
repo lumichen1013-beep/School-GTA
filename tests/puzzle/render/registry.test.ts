@@ -5,6 +5,7 @@ import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
 import { MODELS, boxModel, modelFor } from '../../../src/puzzle/render/models';
 import { Painter } from '../../../src/puzzle/render/materials';
 import type { ObjDef } from '../../../src/puzzle/core/types';
+import { DEFAULT_THEME } from '../../../src/puzzle/render/themes';
 import { stubCanvas } from './stubCanvas';
 
 describe('渲染：模型登錄表', () => {
@@ -19,7 +20,7 @@ describe('渲染：模型登錄表', () => {
   it('未登錄類型改用後備盒模型 (不隱形)，尺寸同邏輯盒、原點在底面中心', () => {
     expect(modelFor('noSuchType')).toBe(boxModel);
     const def = { id: 'x', type: 'noSuchType', x: 0, y: 0, z: 0, w: 1, h: 2, d: 3, visible: 'both', solid: true } as unknown as ObjDef;
-    const m = modelFor(def.type)(new Painter(), def);
+    const m = modelFor(def.type)(new Painter(DEFAULT_THEME.pal.outline), def, DEFAULT_THEME);
     const bb = new THREE.Box3();
     m.root.updateMatrixWorld(true);
     m.root.traverse(o => {
@@ -35,11 +36,11 @@ describe('渲染：模型登錄表', () => {
   });
 
   it('每個工廠都產生 root；有動畫的模型以 update(ctx) 更新 (鑰匙不再是 scene 特例)', () => {
-    const p = new Painter();
+    const p = new Painter(DEFAULT_THEME.pal.outline);
     for (const o of foyer.objects) {
-      const m = modelFor(o.type)(p, o);
+      const m = modelFor(o.type)(p, o, DEFAULT_THEME);
       expect(m.root).toBeInstanceOf(THREE.Object3D);
     }
-    expect(MODELS.key!(p, foyer.objects.find(o => o.type === 'key')!).update).toBeTypeOf('function');
+    expect(MODELS.key!(p, foyer.objects.find(o => o.type === 'key')!, DEFAULT_THEME).update).toBeTypeOf('function');
   });
 });

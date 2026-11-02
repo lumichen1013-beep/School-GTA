@@ -6,13 +6,14 @@ import { crateModel, noteModel, plinthModel, railModel, shelfModel, tableModel }
 import { doorModel, gateModel, plateModel, valveModel, wallModel } from './devices';
 import { floorModel } from './room';
 import type { PropModel } from './types';
+import type { Theme } from '../themes';
 
 /** 物件類型 → 模型工廠：同一份物件資料產生 3D / 2D 兩種外觀 (Painter 每個網格兩套材質) */
-export type ModelFactory = (paint: Painter, def: ObjDef) => PropModel;
+export type ModelFactory = (paint: Painter, def: ObjDef, theme: Theme) => PropModel;
 
 /** 筆尖鑰匙：旋轉漂浮 + 微光 (類別模型包成工廠) */
-export const keyModel: ModelFactory = p => {
-  const key = new NibKeyModel(p);
+export const keyModel: ModelFactory = (p, _d, theme) => {
+  const key = new NibKeyModel(p, theme.pal);
   return { root: key.root, update: c => key.update(c.t, c.mode === '2d') };
 };
 

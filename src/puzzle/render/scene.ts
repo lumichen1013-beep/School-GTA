@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import type { Mode, ObjDef, World } from '../core/types';
 import { isActiveIn } from '../core/presence';
 import { Painter } from './materials';
-import { PAL } from './palette';
 import { paperBackground } from './textures';
 import { DraftsmanModel } from './models/player';
 import { buildDecor, type Decor } from './models/room';
 import { modelFor } from './models';
 import type { PropModel } from './models/types';
+import { DEFAULT_THEME, type Theme } from './themes';
 
 /** 圖紙專屬物件在 2D 畫在最前面 (不被牆 / 地板擋住)，玩家再前面一層 */
 const FRONT_2D = 6.3;
@@ -18,12 +18,12 @@ interface Entry { id: string; model: PropModel }
 /** 場景：依世界狀態建立 / 更新模型，並依模式切換「現實」(光影材質) 或「圖紙」(扁平描邊色塊) 外觀 */
 export class PuzzleScene {
   readonly scene = new THREE.Scene();
-  private paint = new Painter();
+  private paint: Painter;
   private entries: Entry[] = [];
   private decor: Decor;
   private player: DraftsmanModel;
-  private sun = new THREE.DirectionalLight(0xfff0d8, 1.25);
-  private bg3d = new THREE.Color(PAL.bg3d);
+  private sun: THREE.DirectionalLight;
+  private bg3d: THREE.Color;
   private occluders: THREE.Mesh[] = [];
   /** 離鏡頭太近也要淡出的網格 (吊燈) */
   private nearFaders = new Set<THREE.Mesh>();
@@ -33,9 +33,14 @@ export class PuzzleScene {
   private lastY = 0;
   private lastZ = 0;
 
-  constructor(private world: World) {
-    this.scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b4a32, 0.85));
-    this.scene.add(new THREE.AmbientLight(0xffe2c0, 0.25));
+  /** theme：配色 / 燈光 / 過場 (主題切換 = 重建場景)；未給 = 預設主題 */
+  constructor(private world: World, private theme: Theme = DEFAULT_THEME) {
+    const L = theme.lights;
+    this.paint = new Painter(theme.pal.outline);
+    this.sun = new THREE.DirectionalLight(L.sun, L.sunIntensity);
+    this.bg3d = new THREE.Color(theme.pal.bg3d);
+    this.scene.add(new THREE.HemisphereLight(L.hemiSky, L.hemiGround, L.hemiIntensity));
+    this.scene.add(new THREE.AmbientLight(L.ambient, L.ambientIntensity));
     const b = world.level.bounds;
     this.sun.position.set(-8, 16, 12);
     this.sun.target.position.set(0, 0, 0);
@@ -48,12 +53,12 @@ export class PuzzleScene {
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target);
 
-    this.decor = buildDecor(this.paint, world.level);
+    this.decor = buildDecor(this.paint, world.level, theme);
     this.scene.add(this.decor.root);
     this.occluders.push(...this.decor.occluders);
     this.nearFaders = new Set(this.decor.occluders);
     for (const o of world.objs) this.entries.push(this.build(o.def));
-    this.player = new DraftsmanModel(this.paint);
+    this.player = new DraftsmanModel(this.paint, theme.pal);
     this.scene.add(this.player.root);
     const p = world.player;
     this.lastX = p.x; this.lastY = p.y; this.lastZ = p.z;
@@ -61,7 +66,7 @@ export class PuzzleScene {
 
   /** 依登錄表 (models/index.ts) 建模型；未登錄類型用後備盒模型 */
   private build(def: ObjDef): Entry {
-    const model = modelFor(def.type)(this.paint, def);
+    const model = modelFor(def.type)(this.paint, def, this.theme);
     this.scene.add(model.root);
     if (model.occluders) this.occluders.push(...model.occluders);
     return { id: def.id, model };
@@ -71,7 +76,7 @@ export class PuzzleScene {
     this.mode = mode;
     const is2d = mode === '2d';
     this.paint.setMode(mode);
-    this.scene.background = is2d ? paperBackground() : this.bg3d;
+    this.scene.background = is2d ? paperBackground(this.theme.pal) : this.bg3d;
     this.sun.castShadow = !is2d;
     for (const m of this.occluders) this.setOpacity(m, 1);
   }

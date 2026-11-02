@@ -64,6 +64,8 @@ export interface LevelDef {
   narrationKey: TextKey;
   /** 通關畫面的「下一間房」文字 */
   nextKey: TextKey;
+  /** 呈現主題 id (render/themes)；未給 = 章節主題 */
+  theme?: string;
   objects: ObjDef[];
 }
 

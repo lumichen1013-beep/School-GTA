@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Mode } from '../core/types';
-import { PAL } from './palette';
 
 /** 2D 描邊粗細 (世界單位) */
 const OUTLINE = 0.04;
@@ -36,8 +35,13 @@ export class Painter {
   private items: Item[] = [];
   private cache3 = new Map<string, THREE.Material>();
   private cache2 = new Map<string, THREE.Material>();
-  private outlineMat = new THREE.MeshBasicMaterial({ color: PAL.outline, side: THREE.BackSide });
+  private outlineMat: THREE.MeshBasicMaterial;
   private mode: Mode = '3d';
+
+  /** outline：2D 描邊色 (主題 pal.outline) */
+  constructor(outline: number) {
+    this.outlineMat = new THREE.MeshBasicMaterial({ color: outline, side: THREE.BackSide });
+  }
 
   mesh(geo: THREE.BufferGeometry, color: number, opts: PaintOpts = {}): THREE.Mesh {
     const m3 = this.mat3(color, opts);

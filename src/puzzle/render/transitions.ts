@@ -30,8 +30,11 @@ export const INK_FADE: FadeSpec = {
   swapAt: 0.5
 };
 
-/** 過場登錄表 (日後「減少動態」加 plain) */
-export const TRANSITIONS: Readonly<Record<'ink', FadeSpec>> = { ink: INK_FADE };
+/** 過場 id (主題的 transition 欄位；日後「減少動態」加 plain) */
+export type TransitionId = 'ink';
+
+/** 過場登錄表：主題選用哪一種 (外殼依 theme.transition 取) */
+export const TRANSITIONS: Readonly<Record<TransitionId, FadeSpec>> = { ink: INK_FADE };
 
 /** 以 DOM 元素 (#pz-fade) 播放 FadeSpec */
 export function cssFade(el: HTMLElement, spec: FadeSpec): Transition {

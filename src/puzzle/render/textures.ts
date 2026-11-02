@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { PAL, toCss } from './palette';
+import type { Palette } from './themes';
+
+const toCss = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 
 // 程序化 CanvasTexture (不使用圖檔)：木紋、地板、壁紙、地毯、掛畫、紙張、光暈、2D 背景
 
@@ -51,23 +53,33 @@ function cached(key: string, make: () => THREE.Texture): THREE.Texture {
   return t;
 }
 
+/** 依配色快取 (主題不同 → 紋理不同；同一主題全域共用) */
+const palCaches = new WeakMap<Palette, Map<string, THREE.Texture>>();
+function cachedFor(pal: Palette, key: string, make: () => THREE.Texture): THREE.Texture {
+  let m = palCaches.get(pal);
+  if (!m) { m = new Map(); palCaches.set(pal, m); }
+  let t = m.get(key);
+  if (!t) { t = make(); m.set(key, t); }
+  return t;
+}
+
 /** 木箱：橫向木板，板縫深色 */
-export const crateWood = (): THREE.Texture => cached('crate', () => canvas(256, 256, g => {
+export const crateWood = (pal: Palette): THREE.Texture => cachedFor(pal, 'crate', () => canvas(256, 256, g => {
   const r = rng(7);
   const rows = 4;
   for (let i = 0; i < rows; i++) {
     const y = (i * 256) / rows;
-    g.fillStyle = shade(PAL.crate, 0.92 + r() * 0.14);
+    g.fillStyle = shade(pal.crate, 0.92 + r() * 0.14);
     g.fillRect(0, y, 256, 256 / rows);
-    grain(g, 0, y, 256, 256 / rows, PAL.crate, r);
-    g.fillStyle = toCss(PAL.crateDark);
+    grain(g, 0, y, 256, 256 / rows, pal.crate, r);
+    g.fillStyle = toCss(pal.crateDark);
     g.fillRect(0, y, 256, 3);
   }
 }));
 
 /** 地板：兩色木地板交錯 */
-export function floorPlanks(repeatX: number, repeatY: number): THREE.Texture {
-  const base = cached('floor', () => canvas(256, 256, g => {
+export function floorPlanks(pal: Palette, repeatX: number, repeatY: number): THREE.Texture {
+  const base = cachedFor(pal, 'floor', () => canvas(256, 256, g => {
     const r = rng(11);
     const rows = 4;
     for (let i = 0; i < rows; i++) {
@@ -75,13 +87,13 @@ export function floorPlanks(repeatX: number, repeatY: number): THREE.Texture {
       const off = (i % 2) * 96;
       for (let k = -1; k < 3; k++) {
         const x = off + k * 128;
-        g.fillStyle = toCss((i + k) % 2 === 0 ? PAL.floorA : PAL.floorB);
+        g.fillStyle = toCss((i + k) % 2 === 0 ? pal.floorA : pal.floorB);
         g.fillRect(x, y, 128, 64);
-        grain(g, x, y, 128, 64, (i + k) % 2 === 0 ? PAL.floorA : PAL.floorB, r);
-        g.fillStyle = toCss(PAL.floorLine);
+        grain(g, x, y, 128, 64, (i + k) % 2 === 0 ? pal.floorA : pal.floorB, r);
+        g.fillStyle = toCss(pal.floorLine);
         g.fillRect(x, y, 2, 64);
       }
-      g.fillStyle = toCss(PAL.floorLine);
+      g.fillStyle = toCss(pal.floorLine);
       g.fillRect(0, y, 256, 2);
     }
   }));
@@ -93,14 +105,14 @@ export function floorPlanks(repeatX: number, repeatY: number): THREE.Texture {
 }
 
 /** 壁紙：直條紋 + 小花 */
-export function wallpaper(repeatX: number, repeatY: number): THREE.Texture {
-  const base = cached('wall', () => canvas(128, 128, g => {
-    g.fillStyle = toCss(PAL.wallpaper);
+export function wallpaper(pal: Palette, repeatX: number, repeatY: number): THREE.Texture {
+  const base = cachedFor(pal, 'wall', () => canvas(128, 128, g => {
+    g.fillStyle = toCss(pal.wallpaper);
     g.fillRect(0, 0, 128, 128);
-    g.fillStyle = toCss(PAL.wallStripe);
+    g.fillStyle = toCss(pal.wallStripe);
     g.fillRect(0, 0, 22, 128);
     g.fillRect(64, 0, 22, 128);
-    g.fillStyle = toCss(PAL.wallMotif);
+    g.fillStyle = toCss(pal.wallMotif);
     for (const [x, y] of [[43, 30], [107, 94]]) {
       for (let a = 0; a < 5; a++) {
         g.beginPath();
@@ -117,13 +129,13 @@ export function wallpaper(repeatX: number, repeatY: number): THREE.Texture {
 }
 
 /** 地毯：外框 + 菱形 */
-export const rug = (): THREE.Texture => cached('rug', () => canvas(256, 160, g => {
-  g.fillStyle = toCss(PAL.rugBorder); g.fillRect(0, 0, 256, 160);
-  g.fillStyle = toCss(PAL.rug); g.fillRect(10, 10, 236, 140);
-  g.strokeStyle = toCss(PAL.rugBorder); g.lineWidth = 4; g.strokeRect(22, 22, 212, 116);
-  g.fillStyle = toCss(PAL.rugInner);
+export const rug = (pal: Palette): THREE.Texture => cachedFor(pal, 'rug', () => canvas(256, 160, g => {
+  g.fillStyle = toCss(pal.rugBorder); g.fillRect(0, 0, 256, 160);
+  g.fillStyle = toCss(pal.rug); g.fillRect(10, 10, 236, 140);
+  g.strokeStyle = toCss(pal.rugBorder); g.lineWidth = 4; g.strokeRect(22, 22, 212, 116);
+  g.fillStyle = toCss(pal.rugInner);
   g.beginPath(); g.moveTo(128, 34); g.lineTo(200, 80); g.lineTo(128, 126); g.lineTo(56, 80); g.closePath(); g.fill();
-  g.fillStyle = toCss(PAL.rugBorder);
+  g.fillStyle = toCss(pal.rugBorder);
   g.beginPath(); g.moveTo(128, 58); g.lineTo(164, 80); g.lineTo(128, 102); g.lineTo(92, 80); g.closePath(); g.fill();
 }));
 
@@ -146,8 +158,8 @@ export const painting = (variant: number): THREE.Texture => cached(`paint${varia
 }));
 
 /** 紙條：手寫橫線 */
-export const notePaper = (): THREE.Texture => cached('note', () => canvas(64, 80, g => {
-  g.fillStyle = toCss(PAL.paperNote); g.fillRect(0, 0, 64, 80);
+export const notePaper = (pal: Palette): THREE.Texture => cachedFor(pal, 'note', () => canvas(64, 80, g => {
+  g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 64, 80);
   g.strokeStyle = '#8a6a4a'; g.lineWidth = 2;
   for (let y = 22; y < 74; y += 11) {
     g.beginPath(); g.moveTo(8, y); g.quadraticCurveTo(32, y + 2, 56 - (y % 3) * 6, y - 1); g.stroke();
@@ -164,9 +176,9 @@ export const glow = (): THREE.Texture => cached('glow', () => canvas(64, 64, g =
 }));
 
 /** 2D 背景：奶油色紙張漸層 + 細顆粒 + 淡淡的水彩暈染 */
-export const paperBackground = (): THREE.Texture => cached('bg2d', () => canvas(512, 512, g => {
+export const paperBackground = (pal: Palette): THREE.Texture => cachedFor(pal, 'bg2d', () => canvas(512, 512, g => {
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, PAL.bgTop); grad.addColorStop(1, PAL.bgBottom);
+  grad.addColorStop(0, pal.bgTop); grad.addColorStop(1, pal.bgBottom);
   g.fillStyle = grad; g.fillRect(0, 0, 512, 512);
   const r = rng(3);
   for (const [x, y, rad, col] of [[90, 120, 140, 'rgba(255,214,150,0.25)'], [420, 90, 120, 'rgba(176,214,220,0.22)'], [300, 380, 180, 'rgba(250,190,170,0.18)']] as const) {

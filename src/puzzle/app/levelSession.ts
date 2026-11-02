@@ -8,6 +8,7 @@ import type { WorldAction } from '../core/actions';
 import { PuzzleScene } from '../render/scene';
 import { PuzzleCameras } from '../render/cameras';
 import type { Transition } from '../render/transitions';
+import type { Theme } from '../render/themes';
 import type { PuzzleHud } from '../ui/hud';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
@@ -18,6 +19,8 @@ export interface SessionContext {
   hud: PuzzleHud;
   bindings: Bindings;
   transition: Transition;
+  /** 本關呈現主題 (關卡 theme ?? 章節 theme) */
+  theme: Theme;
 }
 
 const isWorldAction = (a: string): a is WorldAction => a === 'flip' || a === 'reset' || a === 'interact';
@@ -39,7 +42,7 @@ export class LevelSession {
       },
       onCleared: hooks.onCleared
     });
-    this.view = new PuzzleScene(this.world);
+    this.view = new PuzzleScene(this.world, ctx.theme);
     this.cams = new PuzzleCameras(this.world);
     ctx.transition.cancel();
     ctx.hud.reset(this.world.msgSeq);
