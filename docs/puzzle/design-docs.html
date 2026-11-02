@@ -130,9 +130,10 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
  <nav id="toc" aria-label="目錄"></nav>
  <main><article class="doc" data-doc="spec" data-title="遊戲規格"><h1 id="spec--圖紙之間整體遊戲規格-v02">《圖紙之間》整體遊戲規格 v0.2</h1>
 <div class="meta"><b>最後修訂紀錄</b>：v0.2（劇情修訂）（2026-11-02）— <strong>劇情改為「社團的遊戲世界」</strong>（目標玩家改為青少年），取代沈歸 / 宅邸 / 製圖員設定；題數、關卡 ID、N 編號、解法大綱不變。完整劇情見 <code>story-bible-v0.1.md</code></div>
+
 <blockquote>
 <p>狀態：v0.2 草案（2026-11-02）。v0.1 → v0.2：主線 37 → <strong>50 題</strong>、13 → 22 關；新增核心 / 擴充標記；筆桿改為新物理機制 N16 墨記（已確認）；里程碑改為先做垂直切片。v0.1 見 git 歷史。
-決策見第 11 節；待確認：Q-D 提示安全閥、Q-E 提示輔助描邊（已先套用暫定值）。</p>
+決策見第 11 節；待確認：Q-D 解答手稿安全閥、Q-E 字條預算與顯字時間、Q-F 氛圍強度曲線與事件預算、Q-G 聲音與視覺參數、Q-H N19 追逐參數（皆已先套用暫定值）。</p>
 <p><strong>修訂紀錄</strong></p>
 <div class="tw"><table>
 <thead>
@@ -158,12 +159,27 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>三級提示改為全抽象（意象 / 觀察角度 / 缺的性質）、新增提示撰寫量表與 L4 安全閥（暫定）；玄關謎題 id 改 <code>1-2a</code>～<code>1-2d</code>、Boss 改 <code>5-5a</code>～<code>5-5c</code>；剖面 × 影子規則統一為 4-2b；剖面開關限完成版；主迴圈固定步長 1/60</td>
 </tr>
 <tr>
+<td>v0.2（老宅尋寶・單人詭異版）</td>
+<td>2026-11-02</td>
+<td><strong>劇情改為「老宅尋寶・單人詭異版」</strong>（取代社團版；目標高中 16～18 歲；完整劇情見 <code>story-bible-v0.2.md</code>）；P3 改寫（允許少數驚嚇與追逐，不構成失敗）；新增 <strong>N19 追逐</strong>（嵌入既有關卡，不增題）；9.1 改為全遊戲氛圍與緊張曲線；提示字條改為叔公口吻；音訊模組提前到 M1</td>
+</tr>
+<tr>
+<td>v0.2（緊張感）</td>
+<td>2026-11-02</td>
+<td>新增 9.1 緊張感設計（環境壓力 / 聲音 / 視覺鏡頭，限章末考、Boss、終章；純呈現層、可關閉）；P3 補充；設定新增「減弱緊張效果」；原「局部詭異」取消</td>
+</tr>
+<tr>
+<td>v0.2（提示改便利貼）</td>
+<td>2026-11-02</td>
+<td>移除提示角色「小格」；提示改為場景內便利貼（適量、抽象、不破題），新增 H10 不破題規則、便利貼預算表；L4 改為暫停選單「社長的攻略筆記」頁</td>
+</tr>
+<tr>
 <td>v0.2（劇情修訂）</td>
 <td>2026-11-02</td>
 <td><strong>劇情改為「社團的遊戲世界」</strong>（目標玩家改為青少年），取代沈歸 / 宅邸 / 製圖員設定；題數、關卡 ID、N 編號、解法大綱不變。完整劇情見 <code>story-bible-v0.1.md</code></td>
 </tr>
 </tbody></table></div>
-<p><strong>命名約定</strong>：本規格內「現實 / 圖紙、筆尖、定稿印、剖面尺、墨記、墨滴、章印、墨水閥、墨牆、墨橋、紙條」等為<strong>內部代號</strong>（對應 N 編號與程式識別）；玩家看到的顯示名（完成版 / 設計稿、畫筆工具、提交、剖面檢視、標記點、修補包、驗收章……）一律以 <code>story-bible-v0.1.md</code> 第 4 節對照表為準。
+<p><strong>命名約定</strong>：本規格內「現實 / 圖紙、筆尖、定稿印、剖面尺、墨記、墨滴、章印、墨水閥、墨牆、墨橋、紙條」等為<strong>內部代號</strong>（對應 N 編號與程式識別）；玩家看到的顯示名（實景 / 藏寶圖、鋼筆筆尖、火漆印章、建築剖面尺、圖釘、墨水瓶、房間的銅鑰匙、叔公的字條……）一律以 <code>story-bible-v0.2.md</code> 第 4 節對照表為準。
 範圍：整款遊戲的章節、關卡、謎題、機制擴充、提示、存檔、文案骨架、製作順序。本文件不改任何程式碼。
 標記：<strong><span class="tg t-cur">〔現有〕</span></strong> = 只用現有機制即可實作；<strong><span class="tg t-new">〔新增：X〕</span></strong> = 需新增邏輯 X。<strong><span class="tg t-src">〔來源〕</span></strong> = 參考資料有說；<strong><span class="tg t-inf">〔推論〕</span></strong> = 我的推論、未經來源證實。</p>
 </blockquote>
@@ -190,7 +206,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>P3</td>
-<td><strong>輕鬆的推理而非手速</strong>：無計時、無敵人、無精準跳躍要求；失敗成本只有走回去</td>
+<td><strong>以安靜推理為主</strong>：無真實計時、無精準跳躍要求；少數段落允許驚嚇（每章 ≤ 1 次）與追逐（全遊戲 3 次，N19），<strong>不構成失敗、不懲罰進度</strong>：被追上只回檢查點、進度與物件位置不丟；設定「減弱緊張效果」可讓追逐自動通過、驚嚇改平靜版（9.1）</td>
 <td>不出現計時器；跳躍高度餘裕 ≥ 0.15（D10）</td>
 </tr>
 <tr>
@@ -200,14 +216,14 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>P5</td>
-<td><strong>在遊戲裡修遊戲</strong>：機制都以遊戲開發語彙命名（畫筆工具、提交、剖面檢視、標記點；顯示名見 story-bible 對照表），劇情與機制同源</td>
+<td><strong>叔公的疊圖術</strong>：機制都以老宅與製圖語彙命名（鋼筆、火漆印章、建築剖面尺、圖釘；顯示名見 story-bible 對照表），劇情與機制同源；主題「換個角度看，就會懂」</td>
 <td>新機制命名須通過此檢查</td>
 </tr>
 </tbody></table></div>
 <h3 id="spec--12-目標玩家">1.2 目標玩家</h3>
 <ul>
-<li><strong>國中到高中的青少年</strong>；喜歡 Monument Valley、Portal 一類「短而有頓悟」作品，不要求平台跳躍技術。</li>
-<li>文案短、直白、有一點幽默（劇情：遊戲社的你被吸進社團做到一半的遊戲，見 <code>story-bible-v0.1.md</code>）；鍵盤操作（WASD / Space / F·Q / E / T / R，見 <code>puzzle.html</code>）。</li>
+<li><strong>高中（約 16～18 歲）</strong>；喜歡解謎與輕度懸疑（Portal、Monument Valley、Inside 一類氣氛），不要求平台跳躍技術。</li>
+<li>劇情：暑假最後的週末，你獨自進入怪叔公的山上老宅，用他的鋼筆把宅邸疊成藏寶圖尋寶（見 <code>story-bible-v0.2.md</code>）；鍵盤操作（WASD / Space / F·Q / E / T / R，見 <code>puzzle.html</code>）。</li>
 </ul>
 <h3 id="spec--13-時長估計推論">1.3 時長估計<span class="tg t-inf">〔推論〕</span></h3>
 <div class="tw"><table>
@@ -395,7 +411,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <td>D5</td>
 <td><strong>不放純粹的紅鯡魚</strong>；允許「誘導性錯誤」——看起來可行、試了會學到東西（如玩家站壓板「太輕」）</td>
-<td>〔查不到〕密室社群對紅鯡魚的系統性論述未找到可信來源；<span class="tg t-inf">〔推論〕</span>浪費時間的假線索會破壞玩家對謎題的信任，對青少年玩家尤其容易直接放棄</td>
+<td>〔查不到〕密室社群對紅鯡魚的系統性論述未找到可信來源；<span class="tg t-inf">〔推論〕</span>浪費時間的假線索會破壞玩家對謎題的信任，容易直接放棄</td>
 <td>每個非必要物件需寫出它教了什麼或屬於哪個隱藏要素</td>
 </tr>
 <tr>
@@ -406,7 +422,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>D7</td>
-<td><strong>提示分三級且三級都抽象</strong>（意象 → 觀察角度 → 缺的性質），不給動作、不點名物件、不給數字（量表見 7.1.1）；把玩家推回邏輯路徑、不給答案；同一級提示被超過 50% 玩家使用 → 謎題要重做；L4 解法筆記被 ≥ 20% 打開 → 重做</td>
+<td><strong>提示只用場景字條，適量、抽象、不破題</strong>（意象 → 觀察問題 → 缺口的形狀；每題 0～3 張依預算，7.1.3），不給動作、不點名物件、不給數字、不點出 aha 依賴的性質（量表 7.1.1，H10）；同一級字條被超過 50% 玩家需要 → 謎題要重做；解答手稿被 ≥ 20% 打開 → 重做</td>
 <td><span class="tg t-src">〔來源〕</span>Room Escape Artist 的提示文章</td>
 <td>本機統計（第 8 節 <code>puzzle:stats</code>）＋ 驗證器（7.1.1）</td>
 </tr>
@@ -518,7 +534,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <td>N8</td>
 <td>剖面尺（筆升級 3）</td>
-<td>C：切換剖面開關（<strong>只能在完成版 / 3D 切換</strong>，已確認；在 2D 按下提示「回到完成版再切換剖面」）；開啟時進 2D 只保留 <strong>z 範圍包含 <code>z3d</code></strong> 的物件（剖到的才存在），壓板也只算剖面內的木箱</td>
+<td>C：切換剖面開關（<strong>只能在實景 / 3D 切換</strong>，已確認；在 2D 按下提示「回到實景再調剖面尺」）；開啟時進 2D 只保留 <strong>z 範圍包含 <code>z3d</code></strong> 的物件（剖到的才存在），壓板也只算剖面內的木箱</td>
 <td>進紙的「位置」決定紙上的世界；R2 再次被推翻</td>
 <td><strong><span class="tg t-new">〔新增〕</span></strong> M：<code>solidsFor(&#39;2d&#39;)</code> 依 cut 過濾；HUD 顯示剖切線</td>
 <td>站在牆的門洞深度剖切 → 紙上牆只剩楣；同一房間兩個剖面兩種地形</td>
@@ -594,6 +610,16 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>4-3、4-4b、5-1、5-5c、6-1</td>
 <td>瞬移類，捷徑風險最高 → 區域限制 + 取樣反例</td>
 <td>地下室起</td>
+</tr>
+<tr>
+<td>N19</td>
+<td><strong>追逐（輪廓）</strong></td>
+<td>藏寶圖裡的輪廓沿確定路徑追你，<strong>只在 2D 碰得到</strong>；靠切換到實景躲避；被追上回檢查點、進度不丟</td>
+<td>2D 危險、3D 安全，但通道需要兩邊交替才走得過</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> M</td>
+<td>3-4、4-4、5-5 的過場走道（詳見 4.2）</td>
+<td>挫折感 → 減弱模式自動通過、被追上 3 次後減速</td>
+<td>溫室起</td>
 </tr>
 <tr>
 <td>N12</td>
@@ -693,8 +719,90 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>與剖面尺重疊太多，不建議</td>
 </tr>
 </tbody></table></div>
+<h3 id="spec--42-n19-追逐輪廓使用者已確認形式參數暫定待確認-q-h">4.2 N19 追逐（輪廓）——使用者已確認形式；參數暫定，待確認 Q-H</h3>
+<p><strong>定義</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>規則</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>追逐者</td>
+<td><code>chaser</code> 物件，<code>visible:&#39;2d&#39;</code>（輪廓只在藏寶圖存在）；非實體：不擋玩家、不擋木箱、不算重量、不可蓋印、不投影、不受剖面過濾（開剖面時仍在）</td>
+</tr>
+<tr>
+<td>碰撞</td>
+<td>只在 2D 判定：玩家在 2D 且與輪廓的 x-y 盒重疊 → 「被追上」；玩家在 3D 時輪廓照常移動但碰不到</td>
+</tr>
+<tr>
+<td>路徑與速度</td>
+<td>確定性：沿關卡資料的路徑點（只沿 x 前進、貼地、不跳），速度固定 2.6（玩家 3.2）；由觸發後經過的模擬時間決定位置（固定步長 1/60），不讀亂數與實際時鐘</td>
+</tr>
+<tr>
+<td>觸發與結束</td>
+<td>進入追逐走道（旗標）觸發；抵達走道終點區域即結束（旗標），持續 15～40 秒</td>
+</tr>
+<tr>
+<td>走道設計</td>
+<td>嵌在既有關卡<strong>謎題完成之後</strong>的過場走道（謎題 <code>area</code> 之外、自成一個圖釘區域）；交替擺放只在 3D 的鐵柵（要在 2D 通過）與只在 2D 的墨牆（要在 3D 通過），所以不能一直躲在實景；每段 2D 通行窗 ≥ 1.5 秒、起跑時輪廓落後 ≥ 6 單位（D10 精神：不要求精準）</td>
+</tr>
+<tr>
+<td>被追上</td>
+<td>圖面一皺，回到走道起點檢查點（C13 respawn），輪廓重置；所有旗標、物件位置不變；<strong>不計失敗、不扣任何東西</strong></td>
+</tr>
+<tr>
+<td>輔助</td>
+<td>同一段被追上 3 次後輪廓速度 ×0.8（確定性計數）</td>
+</tr>
+<tr>
+<td>減弱模式</td>
+<td><code>calmTension</code> 開啟：輪廓不生成，走道終點旗標在進入時直接成立（門打開），等同自動通過</td>
+</tr>
+<tr>
+<td>不計題</td>
+<td>追逐是過場段落，<strong>不計入 50 題</strong>，不屬任何謎題的 <code>doneFlag</code>；只用已教機制（C1～C3 切換、單邊存在）</td>
+</tr>
+</tbody></table></div>
+<p><strong>安排</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>次</th>
+<th>關</th>
+<th>位置</th>
+<th>時長</th>
+<th>前置已教機制</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>3-4 溫室深處</td>
+<td>3-4a 完成後通往 3-4b / 出口的長廊</td>
+<td>15～20 秒</td>
+<td>C1～C3（1-1）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>4-4 最後的抽屜</td>
+<td>4-4a 完成後的儲藏走道</td>
+<td>25～35 秒</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>3</td>
+<td>5-5 最後的機關</td>
+<td>5-5b 與 5-5c 之間的樓梯（沿用階段檢查點）</td>
+<td>30～40 秒</td>
+<td>同上</td>
+</tr>
+</tbody></table></div>
+<p><strong>與既有機制的互動檢查</strong>：R1 / N2 / N4 壓板——輪廓不是可推物，不算重量；N5 火漆印章——不可蓋印；N6 實影——不是 caster；N8 剖面——不受過濾；N16 圖釘——走道是獨立區域（Q-C），不能用圖釘跨出或跳過；C5 推箱 / C12 物歸原處——走道內無木箱；C10 / C11 切換落點——走道內留足空間，不會出現「塞不下」。走道位於謎題 <code>area</code> 之外，<strong>不影響任何既有解法與捷徑掃描</strong>。</p>
+<p><strong>成本與風險</strong>：M（機制約 S～M：路徑、判定、重置、減弱模式；輪廓渲染與音效 S～M；測試 S）。風險：挫折感、破壞安靜節奏 → 全遊戲只 3 次、輔助減速、減弱模式自動通過。</p>
+<p><strong>測試策略</strong>：腳本回放（固定 1/60）驗證——① 一條「交替切換」的成功路徑腳本必定通過；② 一直待在 2D 必定被追上並回到起點、旗標不變；③ 同輸入兩次執行輪廓位置逐幀相同（確定性）；④ <code>calmTension</code> 下進入即通過；⑤ 被追上 3 次後速度降為 0.8 倍；⑥ 既有關卡通關腳本在加入走道後仍通過。</p>
 <hr>
-<h2 id="spec--5-整體關卡結構">5. 整體關卡結構</h2>
+<h2 id="spec--5-整體關卡結構-5-整體關卡結構">5. 整體關卡結構## 5. 整體關卡結構</h2>
 <h3 id="spec--51-總數v02主線剛好-50-題">5.1 總數（v0.2：主線剛好 50 題）</h3>
 <div class="tw"><table>
 <thead>
@@ -725,7 +833,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>收集要素</td>
-<td>日記碎片 ×5（顯示名「開發筆記」，主線、元謎題用）；圖紙碎片 ×6（顯示名「被刪掉的草稿」，3 隱藏房 + 3 隱藏點，結局 B 用）</td>
+<td>日記碎片 ×5（顯示名「叔公的日記」，主線、元謎題用）；圖紙碎片 ×6（顯示名「藏寶圖殘片」，3 隱藏房 + 3 隱藏點，結局 B 用）</td>
 </tr>
 </tbody></table></div>
 <p><strong>v0.1 → v0.2 的擴充做法與取捨</strong></p>
@@ -747,7 +855,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <th>前置能力</th>
 <th>時長(分)</th>
 <th>難度</th>
-<th>一句話劇情（社團版，見 story-bible 第 5 節）</th>
+<th>一句話劇情（老宅尋寶版，見 story-bible-v0.2 第 5 節）</th>
 </tr>
 </thead>
 <tbody><tr>
@@ -768,7 +876,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>無</td>
 <td>8～10</td>
 <td>1.5</td>
-<td>門把畫在牆上？社長說那是「示意圖」。</td>
+<td>門把畫在牆上。真的門把，在圖裡。</td>
 </tr>
 <tr>
 <td>1-2</td>
@@ -778,7 +886,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>無</td>
 <td>12～16</td>
 <td>3</td>
-<td>門不見了，牆上寫著：TODO 記得放門。</td>
+<td>鋼筆少了筆尖，墨線封住了門。</td>
 </tr>
 <tr>
 <td>1-3</td>
@@ -788,7 +896,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>筆尖</td>
 <td>8～12</td>
 <td>3.5</td>
-<td>衣架上貼滿「之後再改」的便利貼。</td>
+<td>掛著三件大衣，只有一件是叔公的。</td>
 </tr>
 <tr>
 <td><strong>第二章 書房（變奏 I：投影疊合）</strong></td>
@@ -808,7 +916,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>筆尖</td>
 <td>12～16</td>
 <td>4</td>
-<td>書都長一樣，因為只做了一個書的模型。</td>
+<td>書都背對著你，像在躲什麼。</td>
 </tr>
 <tr>
 <td>2-2</td>
@@ -818,7 +926,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>筆尖</td>
 <td>14～18</td>
 <td>5</td>
-<td>這張桌子的重量，是社長隨手填的。</td>
+<td>桌上攤著一本只寫了開頭的書。</td>
 </tr>
 <tr>
 <td>2-3</td>
@@ -828,7 +936,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>10～14</td>
 <td>4.5</td>
-<td>找到「提交」按鈕。一次只能提交一個喔。</td>
+<td>一枚火漆印章，壓在一張空白的紙上。</td>
 </tr>
 <tr>
 <td>2-4</td>
@@ -838,7 +946,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>14～18</td>
 <td>5.5</td>
-<td>每份手稿都寫著：第 12 版，最終版（這次真的）。</td>
+<td>每份手稿都畫著這棟房子，角落都被撕過。</td>
 </tr>
 <tr>
 <td>2-5</td>
@@ -848,7 +956,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>8～10</td>
 <td>6</td>
-<td>最後一扇門要蓋驗收章，小格說它很嚴格。</td>
+<td>最後一扇門上，有三個人的指印。</td>
 </tr>
 <tr>
 <td><strong>第三章 溫室（變奏 II：光影）</strong></td>
@@ -868,7 +976,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>8～12</td>
 <td>4</td>
-<td>光影 bug：影子居然可以踩。</td>
+<td>影子踩得住。叔公說這不是魔術。</td>
 </tr>
 <tr>
 <td>3-2</td>
@@ -878,7 +986,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>10～14</td>
 <td>5.5</td>
-<td>靠近燈，影子變大。這不是 bug，是物理。</td>
+<td>靠近燈，影子就變大。玻璃上不只你一個影子。</td>
 </tr>
 <tr>
 <td>3-3</td>
@@ -888,7 +996,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>15～19</td>
 <td>6.5</td>
-<td>燈關了，有一個影子忘了消失。</td>
+<td>燈熄了，有一個影子沒跟著走。</td>
 </tr>
 <tr>
 <td>3-4</td>
@@ -898,7 +1006,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>定稿印</td>
 <td>12～16</td>
 <td>7</td>
-<td>燈有輪子，因為社長懶得做固定座。</td>
+<td>燈架有輪子。有人推過它，很多次。</td>
 </tr>
 <tr>
 <td><strong>第四章 地下室（變奏 III：剖面）</strong></td>
@@ -918,7 +1026,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>剖面尺</td>
 <td>12～16</td>
 <td>5</td>
-<td>牆只做一半，另一半寫著「預算不足」。</td>
+<td>一模一樣的酒架，排得太整齊了。</td>
 </tr>
 <tr>
 <td>4-2</td>
@@ -928,7 +1036,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>剖面尺</td>
 <td>15～19</td>
 <td>6.5</td>
-<td>這裡的壓力板，真人站上去也算數。</td>
+<td>牆上的影子，慢了半拍。</td>
 </tr>
 <tr>
 <td>4-3</td>
@@ -938,7 +1046,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>剖面尺</td>
 <td>12～16</td>
 <td>6</td>
-<td>封存資料夾裡，有一支會做記號的筆。</td>
+<td>抽屜裡是一盒圖釘，和撕成六塊的地圖。</td>
 </tr>
 <tr>
 <td>4-4</td>
@@ -948,7 +1056,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>筆桿</td>
 <td>15～19</td>
 <td>8</td>
-<td>抽屜是空的，只有一張「先這樣吧」。</td>
+<td>日記寫到撕圖那晚，就停了。</td>
 </tr>
 <tr>
 <td><strong>第五章 閣樓（整合章 + 期末考）</strong></td>
@@ -968,47 +1076,47 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>全部</td>
 <td>12～16</td>
 <td>7.5</td>
-<td>地上有一個標記點，不是你放的。</td>
+<td>地上有一枚圖釘，不是你釘的。</td>
 </tr>
 <tr>
 <td>5-2</td>
-<td>東翼「春」</td>
+<td>東窗（阿河）</td>
 <td>—（組合）</td>
 <td>1（1/0）</td>
 <td>全部</td>
 <td>8～12</td>
 <td>8</td>
-<td>春天的貼圖還沒上色，只有線稿。</td>
+<td>從這扇窗看，什麼都很近。</td>
 </tr>
 <tr>
 <td>5-3</td>
-<td>西翼「秋」</td>
+<td>西窗（小桐）</td>
 <td>—（組合）</td>
 <td>1（1/0）</td>
 <td>全部</td>
 <td>8～12</td>
 <td>8</td>
-<td>落葉一直掉，因為忘了寫「停」。</td>
+<td>從這扇窗看，路都是側面的。</td>
 </tr>
 <tr>
 <td>5-4</td>
-<td>北翼「冬」</td>
+<td>北窗（叔公）</td>
 <td>—（組合）</td>
 <td>1（1/0）</td>
 <td>全部</td>
 <td>8～12</td>
 <td>8</td>
-<td>每片雪花都一樣，複製貼上的。</td>
+<td>從這扇窗看，只看得見自己那一面。</td>
 </tr>
 <tr>
 <td>5-5</td>
-<td>未竟之圖（Boss；顯示名「沒做完的最終關」）</td>
+<td>最後的機關（Boss，原「未竟之圖」）</td>
 <td>—（三階段考）</td>
 <td>3（3/0）</td>
 <td>全部</td>
 <td>18～22</td>
 <td>9</td>
-<td>最終關一直重生，像在說「再等我一下」。</td>
+<td>三道光要落在同一點。</td>
 </tr>
 <tr>
 <td><strong>終章 草地</strong></td>
@@ -1022,13 +1130,13 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>6-1</td>
-<td>草地（標題畫面）</td>
-<td>元謎題（日記碎片 = 開發筆記）</td>
+<td>草地（庭院）</td>
+<td>元謎題（叔公的日記）</td>
 <td>1（1/0）</td>
 <td>日記 ×5</td>
 <td>10</td>
 <td>6</td>
-<td>這裡是標題畫面，開始鍵還沒放上去。</td>
+<td>天亮了。日記五頁，指著同一個地方。</td>
 </tr>
 <tr>
 <td><strong>主線合計</strong></td>
@@ -1048,7 +1156,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>剖面尺</td>
 <td>10</td>
 <td>7</td>
-<td>書櫃後面，是社長說「太難了」刪掉的關。</td>
+<td>書櫃後面，還有一面書櫃。</td>
 </tr>
 <tr>
 <td>H2</td>
@@ -1058,7 +1166,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>剖面尺</td>
 <td>10</td>
 <td>8</td>
-<td>一棵被刪掉的樹，還留在設計稿裡。</td>
+<td>一棵沒種下的樹，只在圖上長。</td>
 </tr>
 <tr>
 <td>H3</td>
@@ -1068,7 +1176,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>筆桿</td>
 <td>15</td>
 <td>9</td>
-<td>最大的資料夾，名字叫「也許有一天」。</td>
+<td>撕圖那晚的房間，一直沒人收拾。</td>
 </tr>
 </tbody></table></div>
 <p><strong>時長計算<span class="tg t-inf">〔推論〕</span></strong>：各章題均 3.5 / 5 / 6 / 6.5 / 8 分 → 約 32 + 65 + 54 + 65 + 64 + 10 ≈ 290 分（約 4.8 小時），取 4～5.5 小時；隱藏房再加 30～40 分。單關上限約 20 分（Boss 18～22 分為唯一例外，三階段之間有自動檢查點）。</p>
@@ -1480,21 +1588,21 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>7.5</td>
 </tr>
 <tr>
-<td>5-2 東翼「春」</td>
+<td>5-2 東窗（阿河）</td>
 <td>核心</td>
 <td>N1 + N6 + N7</td>
 <td>用影子與箱子在紙上拼出同一道階梯，再把影子那一階定稿給箱子走</td>
 <td>8</td>
 </tr>
 <tr>
-<td>5-3 西翼「秋」</td>
+<td>5-3 西窗（小桐）</td>
 <td>核心</td>
 <td>N8 + R1 + N3</td>
 <td>人在現實站著壓板、紙上用剖面通過，兩邊各凍住一個機關</td>
 <td>8</td>
 </tr>
 <tr>
-<td>5-4 北翼「冬」</td>
+<td>5-4 北窗（叔公）</td>
 <td>核心</td>
 <td>N5 + N2 + N14</td>
 <td>一個印、三次改蓋的正確順序</td>
@@ -1525,11 +1633,11 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>6-1 草地（元謎題）</td>
 <td>核心</td>
 <td>N8 + N1 + N5 + N16 + 日記</td>
-<td>五片日記插畫疊起來，是草地從某一深度剖切的天際線；找到那一刀、把兩箱推到缺的兩筆位置 → 紙上畫出門 → 用定稿印讓紙上的門在現實成真（結局 B 改為在畫桌留下最後一個墨記、不再兌現）</td>
+<td>五片日記插畫疊起來，是草地從某一深度剖切的天際線；找到那一刀、把兩箱推到缺的兩筆位置 → 紙上畫出門 → 用火漆印章讓圖上的石門在實景成真（結局 B：在只畫在圖上的工作桌前釘下圖釘、不回去兌現）</td>
 <td>6</td>
 </tr>
 </tbody></table></div>
-<p><strong>元謎題設計</strong>（社團版敘事見 story-bible 6.1：開發筆記每頁畫著標題畫面草圖的一筆）：日記碎片各含一幅輪廓插畫，在日誌（筆記）介面依取得順序疊合 = 草地某深度的剖面輪廓（樹、石、兩個空缺）。防暴力：只沿 z 掃描剖面找不到門，必須同時把兩箱推到空缺的 x<span class="tg t-inf">〔推論：連續空間的兩箱位置組合無法窮舉〕</span>。</p>
+<p><strong>元謎題設計</strong>（老宅版敘事見 story-bible-v0.2 6.1：叔公日記每頁角落一筆庭院速寫）：日記碎片各含一幅輪廓插畫，在日誌（筆記）介面依取得順序疊合 = 草地某深度的剖面輪廓（樹、石、兩個空缺）。防暴力：只沿 z 掃描剖面找不到門，必須同時把兩箱推到空缺的 x<span class="tg t-inf">〔推論：連續空間的兩箱位置組合無法窮舉〕</span>。</p>
 <h3 id="spec--隱藏房另計不含在主線-50-題">隱藏房（另計，不含在主線 50 題）</h3>
 <div class="tw"><table>
 <thead>
@@ -1645,60 +1753,57 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <p><strong>機制教學順序自檢</strong>：C1～C3、C4、C11（1-1）→ C5、C6、C8（1-2）→ N9 墨滴（1-3a）→ N1、N2（2-1）→ N4、R1（2-2a/b）→ N13（2-2c）→ N5（2-3a）→ <code>heavy</code>（2-4b）→ N14（2-4c）→ N6（3-1）→ N7（3-3a）→ N15（3-4b）→ N8（4-1a）→ N3（4-2a）→ N16 墨記（4-3a 教、4-3b 測、5-1 變奏）。所有題目使用的機制都不早於其首次出現；第五章、終章只用已教機制。</p>
 <hr>
 <h2 id="spec--7-提示系統與無障礙">7. 提示系統與無障礙</h2>
-<h3 id="spec--71-三級提示全抽象來源room-escape-artist提示是把玩家推回邏輯路徑不是給答案同一提示被-50-隊伍需要即該修謎題">7.1 三級提示（全抽象）<span class="tg t-src">〔來源：Room Escape Artist——提示是把玩家推回邏輯路徑，不是給答案；同一提示被 ≥50% 隊伍需要即該修謎題〕</span></h3>
-<p>使用者要求：小格的提示要盡量抽象，不要太直接，否則不好玩。三級都只給「想的方向」，動作永遠由玩家自己組出來。</p>
+<h3 id="spec--71-提示場景裡的字條適量抽象不破題來源room-escape-artist提示是把玩家推回邏輯路徑不是給答案同一提示被-50-隊伍需要即該修謎題">7.1 提示：場景裡的字條（適量、抽象、不破題）<span class="tg t-src">〔來源：Room Escape Artist——提示是把玩家推回邏輯路徑，不是給答案；同一提示被 ≥50% 隊伍需要即該修謎題〕</span></h3>
+<p>使用者決定：<strong>不設會跟玩家說話的提示角色</strong>（原 AI 小助手「小格」整個移除），提示只用場景裡的字條——延續現有 <code>note</code> 物件（靠近、站穩、按 E 閱讀，C9、C14）。劇情上是<strong>叔公留在宅邸各處的字條</strong>（只有你一人，沒有同行角色）。提示要<strong>適量、抽象、不破題</strong>，動作永遠由玩家自己組出來。</p>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>級</th>
-<th>小格外殼台詞</th>
+<th>形式</th>
 <th>給什麼</th>
-<th>不給什麼</th>
-<th>字數上限（不含外殼）</th>
-<th>解鎖（計時已確認）</th>
+<th>字數上限（署名不計）</th>
+<th>出現方式</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>L1 意象</td>
-<td>「運算中……」</td>
-<td>一句比喻或意象，指向本題的核心現象；青少年讀得懂但要動腦</td>
-<td>物件名、視角名、動作</td>
+<td>一開始就貼在謎題附近的字條</td>
+<td>方向感、情緒或意象；不碰機制</td>
 <td>24 字</td>
-<td>進入謎題 3 分鐘</td>
+<td>進入關卡即可讀</td>
 </tr>
 <tr>
-<td>L2 觀察角度</td>
-<td>「找到線索了！……大概。」</td>
-<td>一個<strong>提問</strong>，只指出該注意哪一類現象或哪個檢視（完成版 / 設計稿）</td>
-<td>物件名、動作、答案</td>
+<td>L2 觀察問題</td>
+<td>原本<strong>空白</strong>的字條，時間到才浮現字跡</td>
+<td>一個觀察問題</td>
 <td>30 字</td>
-<td>再 3 分鐘，或主動按 H</td>
+<td>進入謎題 4 分鐘，或卡關偵測提前；浮現時字條<strong>邊角微微發亮</strong>，不彈窗、不對話、不打斷</td>
 </tr>
 <tr>
-<td>L3 缺的性質</td>
-<td>「好吧，直接說——啊不行，只能說這些。」</td>
-<td>縮小範圍：用類比、反例，或說出「現在缺的是什麼性質」；玩家仍須自己組出動作</td>
-<td>動作、順序、位置、數字</td>
+<td>L3 缺口的形狀</td>
+<td>同上</td>
+<td>只指出「還缺什麼樣的東西」，不指出怎麼補</td>
 <td>36 字</td>
-<td>再 4 分鐘，且需按 H 兩次確認</td>
+<td>進入謎題 8 分鐘，或卡關偵測提前</td>
 </tr>
 <tr>
-<td>L4 解法筆記（安全閥，暫定，待確認 Q-D）</td>
-<td>小格：「這題我算不動了，借你社長的攻略筆記。」</td>
-<td>逐步解法（原 v0.2 的「步驟級」內容）</td>
-<td>—</td>
-<td>不限（每步一行）</td>
-<td><strong>預設鎖定</strong>：L3 顯示後再 5 分鐘才出現「再給我一點」按鈕，需按住 H 2 秒確認；或在設定開啟「輔助模式」</td>
+<td>L4 解答手稿（安全閥，暫定，待確認 Q-D）</td>
+<td><strong>不在場景裡</strong>：暫停選單「叔公的解答手稿」頁</td>
+<td>逐步解法</td>
+<td>不限</td>
+<td>見 7.1.2；預設關閉，需主動開啟並確認警語</td>
 </tr>
 </tbody></table></div>
 <ul>
-<li><strong>計時解鎖的敘事</strong>：提示由小格在遊戲剩下的記憶體裡「運算」，所以要等；「隨時可用」= 社長開了開發者模式（story-bible 1.2）。L4 是「社長的攻略筆記」，不是小格算的。</li>
-<li><strong>卡關偵測</strong><span class="tg t-inf">〔推論〕</span>（敘事：小格發現你很努力，把你的提示排到前面）：以謎題進度旗標為單位；同一謎題內 T 歸位 ≥ 3 次、或切換 ≥ 12 次無新旗標、或掉落 ≥ 3 次 → 提前解鎖下一級（只亮提示圖示，不自動顯示）。<strong>只作用於 L1～L3</strong>；最多把 L4 的等待縮短到 3 分鐘，不會直接解鎖 L4。</li>
-<li><strong>資料格式</strong>：每題在關卡資料定義 <code>hints: [HintDef, HintDef, HintDef]</code>（<code>HintDef = { textKey, truthRef }</code>）、<code>solutionKey</code>（L4 解法筆記）、<code>keyObjects: ObjId[]</code>（供 H4 檢查）、<code>assistFocus?: ObjId[]</code>（只在「提示輔助」開啟時用於描邊）與進度旗標；詳見 <code>architecture-v0.2.md</code> 4.10。</li>
-<li>現有「看得見，卻碰不到。換個角度試試。」（C9）保留為 0 級即時回饋，文案改由小格說（story-bible 2.3）。它是即時規則回饋，不算提示、不受量表限制。</li>
-<li>提示範例（1-1～1-3、2-1 全部謎題三級）見 story-bible 7.3。</li>
+<li><strong>節奏</strong>（沿用 Q3「計時解鎖」，改在場景內呈現）：L1 不計時；L2、L3 的空白字條一開始就貼好，時間到才浮現字跡。設定「提示：計時 / 隨時 / 關閉」照舊——「隨時」= 空白字條一開始就有字；「關閉」= L2、L3 字條不放（L1 仍在，因為它是場景的一部分）。</li>
+<li><strong>敘事</strong>：叔公有些字條用慢慢顯色的墨水寫，「給卡住的人一點時間」；你在同一處反覆嘗試時，墨水顯得比較快（卡關偵測）。</li>
+<li><strong>卡關偵測</strong><span class="tg t-inf">〔推論〕</span>：以謎題進度旗標為單位；同一謎題內 T 歸位 ≥ 3 次、或切換 ≥ 12 次無新旗標、或掉落 ≥ 3 次 → 下一張空白字條提前顯字。只作用於 L2、L3，不會打開 L4。</li>
+<li><strong>H 鍵</strong>：只用來<strong>重看本關已出現過的字條</strong>（唯讀清單，不會叫出新提示）。</li>
+<li><strong>資料格式</strong>：每題 0～3 張提示字條，依 7.1.3 預算；每張是關卡裡的 <code>note</code> 物件，帶 <code>hint: { puzzle, level, truthRef }</code>；每題另有 <code>keyObjects</code>（H4 檢查用）、<code>solutionKey</code>（L4）。詳見 <code>architecture-v0.2.md</code> 4.10。</li>
+<li>C9「看得見，卻碰不到。換個角度試試。」保留為即時規則回饋（系統訊息，無說話者），不算提示、不受量表限制。</li>
+<li>範例（1-1～1-3、2-1 全部謎題）與破題檢查見 story-bible 7.3。</li>
 </ul>
-<h4 id="spec--711-提示撰寫量表可檢查規則">7.1.1 提示撰寫量表（可檢查規則）</h4>
+<h4 id="spec--711-字條撰寫量表可檢查規則">7.1.1 字條撰寫量表（可檢查規則）</h4>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -1709,7 +1814,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </thead>
 <tbody><tr>
 <td>H1</td>
-<td>字數：L1 ≤ 24、L2 ≤ 30、L3 ≤ 36 字（不含小格外殼台詞）</td>
+<td>字數：L1 ≤ 24、L2 ≤ 30、L3 ≤ 36 字（「——問津」等署名不計）</td>
 <td>關卡驗證器（自動）</td>
 </tr>
 <tr>
@@ -1724,36 +1829,40 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>H4</td>
-<td>不得點名本題關鍵物件：提示文字不得包含該題 <code>keyObjects</code> 的 label 或顯示名（可以描述性質：「重的」「只在一邊的」「會動的」）</td>
-<td>驗證器：比對關卡資料 label 與 story-bible 顯示名</td>
+<td>不得點名本題關鍵物件：不得包含該題 <code>keyObjects</code> 的 label 或顯示名</td>
+<td>驗證器：比對關卡資料與 story-bible 顯示名</td>
 </tr>
 <tr>
 <td>H5</td>
-<td>必須為真、不誤導：每條提示標 <code>truthRef</code>（對應解法大綱的哪一步或哪條規則）</td>
+<td>必須為真、不誤導：每張標 <code>truthRef</code>（對應解法大綱的哪一步或哪條規則）</td>
 <td>人工審稿</td>
 </tr>
 <tr>
 <td>H6</td>
-<td>一條提示只對應解法的一步或一個性質，不得一次洩漏兩步</td>
+<td>一張只對應一步或一個性質，不得一次洩漏兩步</td>
 <td>人工審稿</td>
 </tr>
 <tr>
 <td>H7</td>
-<td>遞增：L2 比 L1 窄（指出現象 / 檢視），L3 比 L2 窄（指出缺的性質），但三級都不是答案</td>
+<td>遞增：L2 比 L1 窄、L3 比 L2 窄，但都不是答案</td>
 <td>人工審稿</td>
 </tr>
 <tr>
 <td>H8</td>
-<td><strong>抽象度測試</strong>：給沒玩過該題的人只看三級提示與房間截圖，不應能照做完成；看完解法後應覺得「原來如此，提示沒騙我」</td>
-<td>人工，併入 G1 試玩（每題記錄「照做就過？」「覺得被騙？」）</td>
+<td><strong>抽象度測試</strong>：沒玩過的人只看字條與房間截圖，不應能照做完成；看完解法後應覺得「原來如此，字條沒騙我」</td>
+<td>人工，併入 G1 試玩</td>
 </tr>
 <tr>
 <td>H9</td>
-<td>小格口吻：可愛、有點笨拙、愛用資料庫 / 運算比喻；外殼台詞另計，提示本體不放梗</td>
+<td>口吻：叔公的字條——表面友善、愛開玩笑，後面章節偶爾一句冷掉的話；<strong>字形一律正常好讀</strong>（不劃掉、不扭曲、不殘缺），詭異只在用詞；不放對話、不叫玩家做事</td>
 <td>人工審稿</td>
 </tr>
+<tr>
+<td><strong>H10</strong></td>
+<td><strong>不破題</strong>：任何一級都不得點出本題 aha 依賴的性質或機制名（例：不得寫出「深度」「疊在一起」「左右才算」「重量相加」「回來時落在…」這類規則本身），讀完不能就知道「關鍵是 X」。L1 只給方向感 / 情緒 / 意象；L2 只問一個觀察問題；L3 只指出缺口的形狀、不指出填補方式</td>
+<td>人工審稿（每題在關卡資料寫 <code>aha</code> 一句，審稿時逐張比對）；驗證器另對每題 <code>ahaTerms</code> 詞表做字串比對</td>
+</tr>
 </tbody></table></div>
-<p><strong>輔助設定（預設關閉，暫定，待確認 Q-E）</strong>：v0.2 原本 L2「標出相關物件（描邊 + 符號）」與 L3「下一步具體動作」太直接，改為：描邊降級為設定裡的「提示輔助：顯示相關物件」（開啟時 L2 會同時描邊 <code>assistFocus</code> 物件）；具體步驟移到 L4 解法筆記。取捨：預設全抽象保住「想通」的樂趣；需要的人（含無障礙需求）仍可自己打開。</p>
 <h4 id="spec--712-安全閥評估暫定待確認-q-d">7.1.2 安全閥評估（暫定，待確認 Q-D）</h4>
 <div class="tw"><table>
 <thead>
@@ -1765,27 +1874,77 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 </thead>
 <tbody><tr>
-<td>(a) 只有三級全抽象</td>
-<td>最好玩、最一致</td>
-<td>青少年卡太久會直接放棄；一題卡死 = 整章卡死（線性）</td>
+<td>(a) 只有字條（適量、抽象）</td>
+<td>最好玩、最安靜、最一致</td>
+<td>字條變少又更抽象，青少年卡太久容易直接放棄；一題卡死 = 整章卡死（線性）</td>
 <td>單獨不夠</td>
 </tr>
 <tr>
-<td>(b) 加 L4 解法筆記 / 跳過此題，預設鎖定</td>
-<td>保證不會永久卡關</td>
-<td>太早出現會被濫用、破壞頓悟</td>
-<td><strong>採用</strong>，但要延後、要主動確認</td>
+<td>(b) 暫停選單「叔公的解答手稿」頁 + 擴充題可「跳過此題」</td>
+<td>保證不會永久卡關；不在場景裡、沒有角色口吻，不破壞氣氛</td>
+<td>太容易打開就會被濫用</td>
+<td><strong>採用</strong>，預設關、要主動開、要等、要確認</td>
 </tr>
 <tr>
-<td>(c) 卡關偵測提前解鎖（沿用）</td>
-<td>卡住的人更快拿到抽象提示</td>
-<td>只加速 L1～L3，抽象提示仍可能不夠</td>
-<td><strong>採用</strong>，但<strong>不得</strong>提前解鎖 L4</td>
+<td>(c) 卡關偵測讓空白字條提前顯字（沿用）</td>
+<td>卡住的人更快拿到抽象字條</td>
+<td>只加速 L2、L3</td>
+<td><strong>採用</strong>，不得打開 L4</td>
 </tr>
 </tbody></table></div>
-<p><strong>建議（暫定值）</strong>：(a)+(b)+(c)。L4 在 L3 顯示後再 5 分鐘、按住 H 確認才出現；「跳過此題」只開放給<strong>擴充題</strong>（核心題會斷教學鏈，不提供跳過）。理由：目標是青少年，永久卡關的流失成本高於偶爾看解法；用延後與主動確認保住預設體驗。統計 L4 使用率：某題 ≥ 20% 試玩者打開 L4 → 該題或其提示要重做（比 D7 的 50% 更嚴，因為 L4 等同看答案）。</p>
+<p><strong>建議（暫定值）</strong>：(a)+(b)+(c)。因為字條變少、更抽象，<strong>L4 的重要性上升</strong>，但仍維持預設關閉、需主動開啟：</p>
 <ul>
-<li><strong>測試策略</strong>：關卡驗證器自動檢查 H1～H4（字數、禁用句型 / 詞、數字、關鍵物件名）與每題 L1～L3 + L4 齊全；H5～H9 人工審稿；H8 抽象度併入 G1 試玩決策點。</li>
+<li>解答手稿頁在暫停選單，按謎題列出；某題要在<strong>進入謎題 10 分鐘後</strong>才可打開（卡關偵測可縮到 6 分鐘，因為很多題沒有 L2 / L3，不能用「L3 出現後」當條件）；打開前顯示警語（信封上叔公的字：「拆開就不好玩了。」）並需再按一次確認。</li>
+<li>設定「解答模式」（預設關，開啟時同樣顯示警語）：開啟後解答手稿頁不必等待。</li>
+<li>「跳過此題」只在解答手稿頁裡、只限擴充題（核心題會斷教學鏈）。</li>
+<li>統計：某題 ≥ 20% 試玩者打開解答手稿 → 該題或其字條要重做（比 D7 的 50% 更嚴，因為等同看答案）。</li>
+</ul>
+<h4 id="spec--713-字條預算適量">7.1.3 字條預算（適量）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>謎題難度</th>
+<th>L1</th>
+<th>L2</th>
+<th>L3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&lt; 3</td>
+<td>0～1（可不放）</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>3～4.5</td>
+<td>1</td>
+<td>0（標「易卡關」才放）</td>
+<td>0</td>
+</tr>
+<tr>
+<td>5～6.5</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>≥ 7</td>
+<td>1</td>
+<td>1</td>
+<td>1（或 G1 資料顯示需要時才放，見下）</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><p><strong>每關提示字條總數 ≤ 該關謎題數 + 1</strong>；超出時從難度最低的謎題刪起。</p>
+</li>
+<li><p>難度 &lt; 7 的謎題要加 L3，必須有 G1 試玩數據（該題 L2 出現後仍有 ≥ 50% 試玩者卡超過 4 分鐘）。</p>
+</li>
+<li><p><strong>不擠在一起</strong>：同一個 2D 畫面寬度內（約 16 單位）可見的字條（提示 + 劇情）≤ 3 張，兩張間距 ≥ 3 單位；每關字條總數（提示 + 劇情）≤ 謎題數 + 3。</p>
+</li>
+<li><p>隱藏房（難度 7～9）同樣適用此表。</p>
+</li>
+<li><p><strong>測試策略</strong>：關卡驗證器自動檢查 H1～H4、H10 的 <code>ahaTerms</code> 字串比對、預算表（每題張數符合難度、每關總數上限）、字條位置（每張提示字條位於所屬謎題的 <code>area</code> 內、兩模式都站得到、間距與每畫面數量上限）；H5～H10 的語意部分人工審稿；H8 抽象度併入 G1 試玩決策點。</p>
+</li>
 </ul>
 <h3 id="spec--72-無障礙">7.2 無障礙</h3>
 <div class="tw"><table>
@@ -1808,7 +1967,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td>視角提示</td>
-<td>HUD 現有模式文字（<code>hud.ts</code> <code>setMode</code>）保留，顯示名改為「完成版 / 設計稿」（日後改程式）；剖面開啟時加「剖面檢視」字樣</td>
+<td>HUD 現有模式文字（<code>hud.ts</code> <code>setMode</code>）保留，顯示名改為「實景 / 藏寶圖」（日後改程式）；剖面開啟時加「剖面」字樣</td>
 <td>現況</td>
 </tr>
 <tr>
@@ -1822,9 +1981,24 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>D8</td>
 </tr>
 <tr>
-<td>提示輔助（可選，預設關）</td>
-<td>開啟後 L2 同時描邊相關物件；「輔助模式」可讓 L4 解法筆記不必等待</td>
-<td>7.1.1、Q-E</td>
+<td>字條可讀性</td>
+<td>字條字級可調；浮現字跡時邊角發光並有輕微音效（不只靠視覺）；H 鍵可重看本關已出現的字條</td>
+<td>7.1、P4</td>
+</tr>
+<tr>
+<td>減弱緊張效果 / 關閉驚嚇與追逐（可選，預設關）</td>
+<td>關閉暈影、色溫、鏡頭推近、脈動低音、環境漸變與詭異裝飾事件；<strong>驚嚇改平靜版</strong>（無突然大聲、物件緩慢變化）；<strong>追逐自動通過</strong>（N19）；不影響通關與題數</td>
+<td>9.1、N19</td>
+</tr>
+<tr>
+<td>光敏安全</td>
+<td>全遊戲不做強光閃爍：任何 1 秒內亮度大幅變化 ≤ 1 次，遠低於 WCAG 2.3.1「三次閃光」門檻<span class="tg t-src">〔來源：W3C WCAG 2.1 SC 2.3.1〕</span></td>
+<td>9.1</td>
+</tr>
+<tr>
+<td>解答模式（可選，預設關）</td>
+<td>開啟後暫停選單的解答手稿不必等待（開啟時顯示警語）</td>
+<td>7.1.2、Q-D</td>
 </tr>
 <tr>
 <td>操作</td>
@@ -1849,32 +2023,358 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><code>puzzle:settings</code></td>
-<td><code>{ hints:&#39;timed&#39;｜&#39;always&#39;｜&#39;off&#39;, hintAssist:boolean /* 描邊輔助，預設 false */, assistMode:boolean /* L4 免等待，預設 false */, inkPalette:&#39;default&#39;｜&#39;blueOrange&#39;｜&#39;mono&#39;, reduceMotion:boolean, keys:{...} }</code></td>
+<td><code>{ hints:&#39;timed&#39;｜&#39;always&#39;｜&#39;off&#39;, guideMode:boolean /* 解答模式：解答手稿免等待，預設 false */, calmTension:boolean /* 減弱緊張效果：關閉氛圍演出、驚嚇改平靜版、追逐自動通過；預設 false */, noteScale:number /* 字條字級 */, inkPalette:&#39;default&#39;｜&#39;blueOrange&#39;｜&#39;mono&#39;, reduceMotion:boolean, keys:{...} }</code></td>
 <td>設定變更</td>
 </tr>
 <tr>
 <td><code>puzzle:stats</code></td>
-<td><code>{ [puzzleId]: { time:number, hints:[n1,n2,n3,n4], skipped:boolean, resets:number } }</code>（只存本機，供試玩調整 D7）</td>
+<td><code>{ [puzzleId]: { time:number, notesRevealed:[l2:boolean,l3:boolean], notesRead:number, guideOpened:boolean, skipped:boolean, resets:number } }</code>（只存本機，供試玩調整 D7）</td>
 <td>謎題完成</td>
 </tr>
 </tbody></table></div>
 <ul>
 <li><strong>遷移</strong>：讀到舊 <code>puzzle:foyer:cleared=&#39;1&#39;</code> → 寫入 <code>cleared:[&#39;1-1&#39;,&#39;1-2&#39;]</code>、<code>abilities:[&#39;nib&#39;]</code>（舊玄關即新 1-2；1-1 門廊視為已通過以免老玩家重教），刪除舊 key。</li>
-<li><strong>關內不存檔</strong>（已確認；敘事：遊戲的存檔系統只做了「過關時存檔」，見 story-bible 1.2）；Boss 5-5 三階段之間有關內檢查點（不寫入存檔）。墨記不跨關保留。</li>
+<li><strong>關內不存檔</strong>（已確認；敘事：叔公的機關以房間為單位，離開房間時宅邸才「記住」，見 story-bible-v0.2 1.2）；Boss 5-5 三階段之間與 N19 追逐走道起點有關內檢查點（不寫入存檔）。墨記不跨關保留。</li>
 <li><strong>章節解鎖</strong>：線性解鎖；5-2、5-3、5-4 在 5-1 通關後同時開放；5-5 需三翼皆完成；6-1 需 5-5；隱藏房在取得所需能力後於章節選單顯示入口。</li>
 <li><strong>重玩規則</strong>：<code>LevelDef.abilities</code> 決定該關可用能力（防新能力破解舊關）；隱藏房入口例外。</li>
 <li><strong>結局旗標</strong>：<code>endings.A</code> 於結局 A 寫入；<code>endings.B</code> 於結局 B 寫入（需 <code>scraps</code> 1～6 齊全）。</li>
 </ul>
 <hr>
-<h2 id="spec--9-劇情與文案骨架摘要完整內容見-story-bible-v01md">9. 劇情與文案骨架（摘要；完整內容見 <code>story-bible-v0.1.md</code>）</h2>
+<h2 id="spec--9-劇情與文案骨架摘要完整內容見-story-bible-v02md">9. 劇情與文案骨架（摘要；完整內容見 <code>story-bible-v0.2.md</code>）</h2>
 <ul>
-<li><strong>世界觀</strong>：遊戲社的你和社長被吸進社團做到一半的密室逃脫遊戲《圖紙之間》，要把每個房間修到能通關，遊戲能從頭玩到尾才能回到社辦。2D = 設計稿、3D = 完成版；切換檢視是社長做的除錯功能。</li>
-<li><strong>角色</strong>：你（玩家，新社員、關卡設計，不指定性別）、社長江若晴（開朗、點子多、常說「明天就做完」）、AI 小助手小格（社長以前做的教學 NPC，也是三級提示系統的化身）。</li>
-<li><strong>章 = 沒做完的模組</strong>：玄關 = 教學模組、書房 = 物理（重量）、溫室 = 光影（影子有碰撞箱的 bug）、地下室 = 社長的封存資料夾、閣樓 = 最終關（自動生成器）、草地 = 標題畫面。</li>
-<li><strong>收集物</strong>（數量與位置同第 6 節）：日記碎片 → 開發筆記 ×5（1-3a、2-5、3-4a、4-4b、5-5c）；圖紙碎片 → 被刪掉的草稿 ×6（2-1a、3-2b、4-2a 隱藏點與 H1、H2、H3）。</li>
-<li><strong>結局</strong>（條件不變）：A 一起回去——完成 6-1、提交「開始遊戲」的門並走出，大家回到社辦、趕上發表會。B 製作人員名單——收齊 6 張草稿，在 6-1 只在設計稿裡的編輯桌留下一個標記點、不去用它，它變成下一位玩家的「新遊戲」起點；接著跑製作人員名單與彩蛋。</li>
-<li><strong>文案規則</strong>：國中～高中可讀、每句 ≤ 40 字、無恐怖 / 死亡 / 霸凌、不依賴流行語、不影射現有 IP；對照例句與範例見 story-bible 第 7 節。</li>
+<li><strong>世界觀</strong>：暑假最後的週末，你獨自進入怪叔公許問津的山上老宅（遺囑只寫了你的名字；沒有訊號，門在身後鎖上），用他的鋼筆把宅邸「疊」成藏寶圖，在週日老宅被賣掉前找到寶藏。期限只是敘事：律師來信只在章節之間，不顯示倒數，不構成失敗。</li>
+<li><strong>角色</strong>：你（不指定性別）；叔公（不出場，字條 / 日記 / 遺囑）；阿河、小桐（叔公的老朋友，撕圖那晚影子被留在圖裡，只在藏寶圖看得到模糊輪廓，沒有惡意）；林律師（來信）。<strong>沒有同行 NPC</strong>。</li>
+<li><strong>章節與道具</strong>：玄關（鋼筆、筆尖）→ 書房（火漆印章）→ 溫室（建築剖面尺）→ 地下室（圖釘）→ 閣樓（三扇天窗 = 三人的三種視角，最後的機關）→ 草地（日記五頁指向寶箱）。</li>
+<li><strong>收集物</strong>（數量與位置同第 6 節）：叔公的日記 ×5（1-3a、2-5、3-4a、4-4b、5-5c）；藏寶圖殘片 ×6（2-1a、3-2b、4-2a 隱藏點與 H1、H2、H3）。</li>
+<li><strong>結局</strong>（條件不變）：A——讓石門成真、打開寶箱：三人合照與從沒寄出的道歉信；離開時回頭在藏寶圖裡看見兩道輪廓揮手淡去。B——收齊 6 張殘片，地圖拼回完整，輪廓走出圖外道謝消失；露出第七個房間（叔公工作室），你在只畫在圖上的工作桌前釘下一枚圖釘，作為下一個故事的起點。</li>
+<li><strong>文案規則</strong>：高中可讀、旁白 / 字條 ≤ 40 字；無血腥、無死亡或傷害畫面、無霸凌；不依賴流行語、不影射現有 IP 或套用知名恐怖橋段；對照例句與範例見 story-bible-v0.2 第 7 節。</li>
 </ul>
+<h3 id="spec--91-氛圍與緊張感全遊戲">9.1 氛圍與緊張感（全遊戲）</h3>
+<p><strong>已確認</strong>：詭異調性隨新劇情恢復並<strong>擴大為全遊戲</strong>，強度逐章上升；手法為環境壓力、聲音、視覺與鏡頭，外加少數驚嚇（每章 ≤ 1 次）與 N19 追逐（全遊戲 3 次）。<strong>暫定，待確認</strong>：強度曲線、預算與參數（Q-F、Q-G、Q-H）。程式落點見 architecture 4.13、4.14。</p>
+<p><strong>護欄（全部必須遵守）</strong></p>
+<ul>
+<li>P3：無真實計時；慢或錯都不會失敗；被追上只回檢查點，進度不丟。</li>
+<li>氛圍與驚嚇<strong>只屬呈現層</strong>：不改 <code>bounds</code>、碰撞、謎題邏輯，不新增通關必需資訊，不新增窄平台或精準操作；四種詭異手法全是<strong>純裝飾</strong>（非實體、不可互動），與 N 機制明顯區分（例：裝飾影子沒有 N6 的網點紋）。</li>
+<li>無血腥、無死亡或傷害畫面；結局釋懷、不留創傷。</li>
+<li>光敏：無強光閃爍；任何 1 秒內亮度大幅變化 ≤ 1 次（WCAG 2.3.1 上限為 3 次）<span class="tg t-src">〔來源：W3C WCAG 2.1 SC 2.3.1〕</span>；亮度呼吸 ≤ 10%、週期 ≥ 3 秒。</li>
+<li>響亮音效允許，但有上限與限幅器（見聲音）。</li>
+<li>可讀性底線：謎題物件、P4 符號、字條、互動提示在暈影 / 色溫 / 霧下仍清楚。</li>
+<li>「減弱緊張效果」可全部關閉：氛圍演出停用、驚嚇改平靜版、追逐自動通過。</li>
+</ul>
+<p><strong>強度曲線（0～3，暫定）與每關手法</strong></p>
+<p>四種詭異手法：<strong>A</strong> 只在藏寶圖看得到的人影輪廓；<strong>B</strong> 影子與本體不一致（裝飾影子）；<strong>C</strong> 回到圖釘後環境小變化（4-3 起）；<strong>D</strong> 切換視角瞬間才換位置的裝飾物。所有手法對解謎的影響皆為「無」，皆可被「減弱緊張效果」關閉。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>關</th>
+<th>強度</th>
+<th>手法（觸發 → 持續）</th>
+<th>驚嚇 / 追逐</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-1 門廊</td>
+<td>1</td>
+<td>D 衣帽架在第 3 次切換後轉了方向 → 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>1-2 玄關</td>
+<td>1</td>
+<td>A 取得筆尖後，圖上走廊盡頭一道模糊輪廓 → 靠近淡出（≤ 8 秒）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>1-3 衣帽間</td>
+<td>1</td>
+<td>B 一件大衣的影子比大衣長一截 → 持續</td>
+<td>驚嚇：1-3a 完成後三件大衣同時滑落</td>
+</tr>
+<tr>
+<td>2-1 書架迴廊</td>
+<td>1</td>
+<td>D 書背的書名在每次切換後換一本 → 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2-2 閱覽室</td>
+<td>1</td>
+<td>A 閱覽桌對面坐著的輪廓（只在圖上）→ 靠近淡出</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2-3 印房（喘息）</td>
+<td>1</td>
+<td>B 印章的影子慢半拍 → 6 秒</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2-4 手稿庫</td>
+<td>2</td>
+<td>D 手稿角落的撕痕位置在切換後改變 → 持續</td>
+<td>驚嚇：2-4b 完成後一整排書同時倒下</td>
+</tr>
+<tr>
+<td>2-5 書房深處</td>
+<td>2</td>
+<td>A 兩道輪廓在書架盡頭重複爭執的姿勢 → 持續（不靠近你）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3-1 苗圃（喘息）</td>
+<td>2</td>
+<td>B 一盆裝飾植物的影子朝向與燈相反 → 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3-2 玻璃長廊</td>
+<td>2</td>
+<td>A 玻璃倒影裡多一道輪廓（只在圖上）→ 8 秒</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3-3 夜溫室</td>
+<td>2</td>
+<td>D 花盆裝飾在切換後轉向你 → 持續</td>
+<td>驚嚇：3-3b 完成後玻璃上突然出現手印輪廓</td>
+</tr>
+<tr>
+<td>3-4 溫室深處</td>
+<td>2</td>
+<td>A 輪廓推燈架的重複動作 → 持續</td>
+<td><strong>追逐 1</strong>（15～20 秒）</td>
+</tr>
+<tr>
+<td>4-1 酒窖走廊（喘息）</td>
+<td>2</td>
+<td>D 酒架每次回實景多一層重複貼圖 → 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>4-2 鍋爐間</td>
+<td>3</td>
+<td>B 牆上裝飾影子慢 0.5 秒跟著你 → 6 秒</td>
+<td>—</td>
+</tr>
+<tr>
+<td>4-3 封存書庫</td>
+<td>3</td>
+<td>C 回到圖釘後，一格裝飾書架的書換了順序 → 持續</td>
+<td>驚嚇：4-3b 完成後燈全暗 0.8 秒、亮起時輪廓就在眼前（藏寶圖視角時才出現；實景時改為一聲遠處腳步）</td>
+</tr>
+<tr>
+<td>4-4 最後的抽屜</td>
+<td>3</td>
+<td>C 回到圖釘後，抽屜自己拉開一格 → 持續</td>
+<td><strong>追逐 2</strong>（25～35 秒）</td>
+</tr>
+<tr>
+<td>5-1 天窗間（喘息）</td>
+<td>2</td>
+<td>C 地上那枚不是你釘的圖釘，每次回到你的圖釘後移近一點（上限 3 次）→ 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5-2 東窗（阿河）</td>
+<td>3</td>
+<td>A 窗前站著阿河的輪廓 → 靠近淡出</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5-3 西窗（小桐）</td>
+<td>3</td>
+<td>A 窗前站著小桐的輪廓 → 靠近淡出</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5-4 北窗（叔公）</td>
+<td>3</td>
+<td>B 窗前只有影子、沒有人 → 持續</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5-5 最後的機關</td>
+<td>3</td>
+<td>見下方三階段表</td>
+<td>驚嚇：5-5c 開始時三道輪廓同時出現；<strong>追逐 3</strong>（30～40 秒，5-5b 與 5-5c 之間）</td>
+</tr>
+<tr>
+<td>6-1 草地</td>
+<td>3 → 0</td>
+<td>黎明漸亮；石門成真時所有效果回復</td>
+<td>—</td>
+</tr>
+<tr>
+<td>H1 夾層</td>
+<td>2</td>
+<td>D 書櫃後的書櫃在切換後多一層</td>
+<td>—</td>
+</tr>
+<tr>
+<td>H2 溫床</td>
+<td>2</td>
+<td>B 沒種下的樹只有影子，每次切換多一片葉</td>
+<td>—</td>
+</tr>
+<tr>
+<td>H3 封存室</td>
+<td>3 → 0</td>
+<td>A 輪廓重複撕紙的動作；取得殘片後停止</td>
+<td>—</td>
+</tr>
+</tbody></table></div>
+<p><strong>事件預算（暫定）</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>強度</th>
+<th>同時啟用類別上限（環境 / 聲音 / 視覺）</th>
+<th>每關裝飾事件上限</th>
+<th>事件最小間隔</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>1</td>
+<td>3</td>
+<td>60 秒</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2</td>
+<td>4</td>
+<td>45 秒</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2（任何時候不得同時疊加超過兩類）</td>
+<td>6</td>
+<td>30 秒</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>驚嚇</strong>：每章 ≤ 1 次，只在謎題 <code>doneFlag</code> 成立之後觸發；觸發前 ≥ 2 秒相對安靜，觸發後 ≥ 15 秒不再有任何事件；同一關不同時有驚嚇與追逐的 60 秒內重疊。</li>
+<li><strong>追逐</strong>：全遊戲 3 次（3-4、4-4、5-5），每次 15～40 秒；開始前 ≥ 3 秒的預兆（聲音漸強、輪廓出現），結束後 ≥ 20 秒安靜。</li>
+<li>謎題開始 60 秒內、掉落重生後 10 秒內、字條浮現的 5 秒內，不觸發裝飾事件或驚嚇。</li>
+</ul>
+<p><strong>聲音</strong>（暫定；現況：解謎遊戲沒有任何音訊，依架構隔離規則不得 import 專案的 <code>src/audio/</code>，需新增最小 Web Audio 合成模組，不引入音檔；見 architecture 4.13）</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>規格</th>
+<th>上限</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>章節底音</td>
+<td>玄關、書房：安靜的長音墊；溫室：加輕微脈動；<strong>地下室：不放 BGM</strong>，只有 40～80 Hz 低頻持續音與局部環境音（翻紙、門軸、遠處腳步）；閣樓：分層音軌；草地：黎明時收成和弦</td>
+<td>低頻持續音增益 ≤ 0.03；環境音峰值 ≤ -24 dBFS、起音 ≥ 150 ms、同類 ≥ 20 秒一次</td>
+</tr>
+<tr>
+<td>脈動低音</td>
+<td>正弦 50～70 Hz，節拍隨進度由 60 漸升</td>
+<td>≤ 96 BPM；變速漸變 ≥ 2 秒</td>
+</tr>
+<tr>
+<td>驚嚇音</td>
+<td>短促重音（≤ 1.2 秒），只在驚嚇事件</td>
+<td>峰值 ≤ -6 dBFS（經限幅器）；<strong>減弱模式改為 ≤ -24 dBFS 的柔和聲</strong></td>
+</tr>
+<tr>
+<td>限幅器</td>
+<td>總輸出端</td>
+<td>門檻 -6 dBFS、比例 ≥ 20:1、攻擊 ≤ 3 ms、釋放約 250 ms；一般時段總輸出 ≤ -14 dBFS<span class="tg t-inf">〔推論，需試玩調整〕</span></td>
+</tr>
+<tr>
+<td>關鍵動作回饋音</td>
+<td>蓋印、回到圖釘、踏板壓下的低沉「咚」（80～120 Hz）</td>
+<td>≤ -18 dBFS；間隔 ≥ 0.5 秒</td>
+</tr>
+<tr>
+<td>切換音色</td>
+<td>藏寶圖低通 1.2 kHz、實景 4 kHz，0.3 秒漸變</td>
+<td>—</td>
+</tr>
+</tbody></table></div>
+<p><strong>視覺與鏡頭</strong>（以一般照明為 100%）</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>範圍</th>
+<th>可讀性底線</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>點光強度</td>
+<td>55%～100%（地下室、閣樓偏低）</td>
+<td>謎題 <code>area</code> 內照度 ≥ 55%</td>
+</tr>
+<tr>
+<td>霧（3D）</td>
+<td>near ≥ 12、far ≥ 28 單位（鏡頭距玩家約 10）</td>
+<td>謎題物件永遠在 near 以內；P4 符號、字條、互動提示不吃霧</td>
+</tr>
+<tr>
+<td>暈影</td>
+<td>邊緣最多暗 30%</td>
+<td>中央 75% 畫面不變暗</td>
+</tr>
+<tr>
+<td>色溫</td>
+<td>偏冷：地下室、5-5b；偏紅：只在 5-5c 後半</td>
+<td>色偏 ≤ 12%；P4 符號以形狀區分</td>
+</tr>
+<tr>
+<td>飽和度</td>
+<td>下限 60%（地下室）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>鏡頭緩推</td>
+<td>追逐預兆與 5-5c</td>
+<td>3D 距離縮短 ≤ 10%、2D 縮放 ≤ 8%；推進 ≥ 8 秒、回復 ≥ 2 秒</td>
+</tr>
+<tr>
+<td>危險區域警示</td>
+<td>坑洞邊緣、追逐走道</td>
+<td>用虛線邊框（避開剖面的斜線填紋），不只靠顏色</td>
+</tr>
+</tbody></table></div>
+<p><strong>閣樓 Boss 三階段編排</strong>（沿用 5-5a～5-5c 與階段間檢查點，不增加謎題內容）</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>階段</th>
+<th>強度</th>
+<th>聲音</th>
+<th>視覺 / 環境</th>
+<th>結束時</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>5-5a 地板被重畫</td>
+<td>3</td>
+<td>長音墊 + 慢脈動</td>
+<td>輕暈影；第一道天窗的光落下</td>
+<td>靜默 2 秒 → 鐘音</td>
+</tr>
+<tr>
+<td>5-5b 搖晃的吊燈</td>
+<td>3</td>
+<td>+ 脈動加快</td>
+<td>色溫偏冷；第二道光</td>
+<td>同上 → 接追逐 3</td>
+</tr>
+<tr>
+<td>5-5c 收束</td>
+<td>3</td>
+<td>+ 琶音</td>
+<td>驚嚇（三道輪廓同時出現）後鏡頭緩推；後半偏紅</td>
+<td>三道光落在同一點；效果 3 秒內回復，音樂收成一個和弦</td>
+</tr>
+</tbody></table></div>
 <hr>
 <h2 id="spec--10-技術可行性與製作順序v02-重排先垂直切片">10. 技術可行性與製作順序（v0.2 重排：先垂直切片）</h2>
 <div class="tw"><table>
@@ -1898,7 +2398,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><strong>M1 垂直切片：玄關章 + 書房章</strong></td>
-<td>8 關 22 題（核心 17 / 擴充 5）：1-1～1-3、2-1～2-5；N1、N2、N4、N5、N13、N14、<code>heavy</code>、N10；三級抽象提示 + L4 解法筆記 + 卡關偵測 + 提示驗證器（7.1.1 H1～H4）+ <code>puzzle:stats</code></td>
+<td>8 關 22 題（核心 17 / 擴充 5）：1-1～1-3、2-1～2-5；<strong>氛圍 / 驚嚇呈現框架 + 最小音訊模組（9.1，M；1-3、2-4 的驚嚇與全遊戲底音從這裡開始，用來驗證詭異調性與手感）</strong>；N1、N2、N4、N5、N13、N14、<code>heavy</code>、N10；提示字條（預算、延遲顯字、卡關偵測）+ 解答手稿頁 + 字條驗證器（7.1.1 H1～H4、H10 詞表、7.1.3 預算與位置）+ <code>puzzle:stats</code></td>
 <td><code>updatePlates</code> 計數 / 非鎖定 / 反向 / 只算當前視角存在的箱；<code>ObjState.pinned</code> 與有效可見性；移印承載檢查</td>
 <td><strong>L</strong></td>
 <td>每關一條完整通關路徑 + 每題反例（只用 3D、只用 2D、關鍵物件在別處）；<strong>捷徑掃描</strong>：每個可推物網格取樣 × 兩模式，斷言關鍵旗標不成立（比照玄關 <code>for z of [...]</code>）</td>
@@ -1906,7 +2406,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><strong>G1 試玩關卡（決策點）</strong></td>
-<td>3～5 人外部試玩切片；看每題時間、提示使用率（D7：L1～L3 ≥50%、L4 ≥20% 需重做）、<strong>提示抽象度（H8：照做就過？覺得被騙？）</strong>、操作手感</td>
+<td>3～5 人外部試玩切片；看每題時間、字條需要率（D7：≥50% 需重做）、解答手稿開啟率（≥20% 需重做）、<strong>字條抽象度與破題（H8、H10：照做就過？一讀就知道關鍵？覺得被騙？）</strong>、哪些難度 &lt; 7 的題需要補 L3（7.1.3）、操作手感</td>
 <td>—</td>
 <td>S</td>
 <td><code>puzzle:stats</code> 匯出</td>
@@ -1914,7 +2414,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><strong>M2 溫室</strong></td>
-<td>4 關 9 題；N6、N7、N15</td>
+<td>4 關 9 題；N6、N7、N15；<strong>N19 追逐（M）與追逐 1（3-4）</strong></td>
 <td>由燈與 caster 推導影子盒；2D 剪影渲染</td>
 <td>L</td>
 <td>影子尺寸公式單元測試；軌道花盆位置取樣反例</td>
@@ -1922,7 +2422,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><strong>M3 地下室</strong></td>
-<td>4 關 10 題；N8、N3、N16 墨記；H1、H2</td>
+<td>4 關 10 題；N8、N3、N16 墨記；H1、H2；追逐 2（4-4）；地下室聲音設計（無 BGM、低頻音）</td>
 <td><code>solidsFor(&#39;2d&#39;)</code> 依 cut 過濾；壓板依 cut 計數；定稿 &gt; 剖面；剖面 × 影子；墨記的放置 / 兌現（區域限制、落點驗證）</td>
 <td>L</td>
 <td>所有既有 2D 測試加跑「剖面關閉」確認不變</td>
@@ -1930,7 +2430,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 <tr>
 <td><strong>M4 閣樓 + 終章</strong></td>
-<td>6 關 9 題、Boss 三階段、元謎題、日誌介面、兩結局</td>
+<td>Boss 分層音軌與追逐 3（5-5）；6 關 9 題、Boss 三階段、元謎題、日誌介面、兩結局</td>
 <td>關內階段切換（重載物件子集）</td>
 <td>L</td>
 <td>各階段通關測試 + 整場測試；結局旗標測試</td>
@@ -1985,7 +2485,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <td>Q5</td>
 <td>結局 B 條件</td>
-<td>收齊 6 片圖紙碎片（顯示名「被刪掉的草稿」）才出現</td>
+<td>收齊 6 片圖紙碎片（顯示名「藏寶圖殘片」）才出現</td>
 <td>已確認</td>
 </tr>
 <tr>
@@ -1997,7 +2497,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <td>Q-A</td>
 <td>筆桿機制</td>
-<td>N16 墨記（顯示名「標記點」）</td>
+<td>N16 墨記（顯示名「圖釘」）</td>
 <td>已確認</td>
 </tr>
 <tr>
@@ -2039,23 +2539,77 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <td>A5</td>
 <td>剖面開關在哪個檢視切換</td>
-<td>只能在完成版（3D）；已檢查 4-1～4-4、5-3、5-5c、6-1、H1、H2 的解法都在 3D 開關剖面後才進紙</td>
+<td>只能在實景（3D）；已檢查 4-1～4-4、5-3、5-5c、6-1、H1、H2 的解法都在 3D 開關剖面後才進紙</td>
 <td>已確認</td>
 </tr>
 <tr>
 <td><strong>Q-D</strong></td>
-<td>提示安全閥</td>
-<td>(a)+(b)+(c)：三級全抽象 + L4 解法筆記（L3 後再 5 分鐘、按住 H 確認）+ 卡關偵測（不提前解鎖 L4）；「跳過此題」只限擴充題</td>
+<td>卡關安全閥</td>
+<td>(a)+(b)+(c)：字條（適量、抽象）+ 暫停選單「叔公的解答手稿」（進入謎題 10 分鐘後可開、卡關偵測縮到 6 分、需確認警語；設定「解答模式」預設關）+ 卡關偵測；「跳過此題」只限擴充題</td>
 <td><strong>暫定，待確認</strong></td>
 </tr>
 <tr>
 <td><strong>Q-E</strong></td>
-<td>原 L2 描邊、L3 具體步驟</td>
-<td>描邊降級為「提示輔助」設定（預設關閉）；具體步驟移到 L4</td>
+<td>字條預算與顯字時間</td>
+<td>7.1.3 表：難度 &lt;3 可不放（簡單題可完全沒有字條）、3～4.5 只放 L1、5～6.5 加 L2、≥7 加 L3；每關 ≤ 謎題數 + 1；L2 4 分鐘、L3 8 分鐘顯字；原 L2 描邊與具體步驟全部移除（步驟只在解答手稿）</td>
+<td><strong>暫定，待確認</strong></td>
+</tr>
+<tr>
+<td>—</td>
+<td>提示角色</td>
+<td>移除「小格」，提示改為場景字條（使用者決定）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>—</td>
+<td>詭異調性</td>
+<td>曾以「局部詭異」提出、因與社團輕鬆調性不協調而取消；<strong>已隨新劇情恢復並擴大為全遊戲</strong>（9.1）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>—</td>
+<td>緊張感方向</td>
+<td>採環境壓力、聲音、視覺鏡頭三類；原「只限章末考、Boss、終章」已作廢，改為全遊戲強度曲線（9.1）；結構節奏不變</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>—</td>
+<td>劇情主題</td>
+<td>社團的遊戲世界 → <strong>老宅尋寶・單人詭異版</strong>（story-bible-v0.2）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>—</td>
+<td>目標年齡</td>
+<td>高中（約 16～18 歲）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>—</td>
+<td>驚嚇與追逐</td>
+<td>允許；追逐 = 以切換視角為核心的短段落（N19），只在一個視角碰得到、被抓只回檢查點；追逐全遊戲 2～3 次、每次 15～40 秒，驚嚇每章 ≤ 1 次；「減弱緊張效果」讓追逐自動通過、驚嚇改平靜版</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td><strong>Q-F</strong></td>
+<td>氛圍強度曲線與事件預算</td>
+<td>9.1：玄關 1、書房 1～2、溫室 2、地下室 2～3、閣樓 2～3、草地 3→0；驚嚇位置 1-3 / 2-4 / 3-3 / 4-3 / 5-5；預算依強度 3 / 4 / 6 個裝飾事件</td>
+<td><strong>暫定，待確認</strong></td>
+</tr>
+<tr>
+<td><strong>Q-G</strong></td>
+<td>聲音與視覺參數</td>
+<td>9.1 上限；驚嚇音峰值 ≤ -6 dBFS、限幅器門檻 -6 dBFS；新增解謎遊戲專用最小音訊模組（M1）</td>
+<td><strong>暫定，待確認</strong></td>
+</tr>
+<tr>
+<td><strong>Q-H</strong></td>
+<td>N19 追逐參數</td>
+<td>4.2：輪廓速度 2.6、起跑落後 ≥ 6、2D 通行窗 ≥ 1.5 秒、被追上 3 次後 ×0.8；位置 3-4、4-4、5-5（全遊戲 3 次）</td>
 <td><strong>暫定，待確認</strong></td>
 </tr>
 </tbody></table></div>
-<p>A1～A5 原為 <code>architecture-v0.2.md</code> 第 9 節的 Q1～Q5。劇情相關的後續選項（角色名、結局 B 呈現等）列在 <code>story-bible-v0.1.md</code>，不影響本規格的題數與機制。</p>
+<p>A1～A5 原為 <code>architecture-v0.2.md</code> 第 9 節的 Q1～Q5。劇情相關內容見 <code>story-bible-v0.2.md</code>，不影響本規格的題數與機制。</p>
 <hr>
 <h2 id="spec--12-參考資料">12. 參考資料</h2>
 <p>標示：✅ 本文直接引用其主張（多數經由搜尋摘要取得，未逐字核對原文）；⚠️ 查到來源但內容未取得 / 查不到具體主張。</p>
@@ -2165,6 +2719,12 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>✅</td>
 </tr>
 <tr>
+<td>光敏：一秒內不超過三次閃光</td>
+<td><a href="https://www.w3.org/WAI/WCAG21/Understanding/three-flashes-or-below-threshold.html">https://www.w3.org/WAI/WCAG21/Understanding/three-flashes-or-below-threshold.html</a></td>
+<td>7.2、9.1</td>
+<td>✅（W3C 官方說明；本作採更保守的 ≤ 1 次）</td>
+</tr>
+<tr>
 <td>Monument Valley GDC、Baba Is You 設計訪談、Echochrome、Perspective、Neko Ghost Jump</td>
 <td>—</td>
 <td>—</td>
@@ -2226,22 +2786,23 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>2-2b、4-2a 鏡像設計</td>
 </tr>
 <tr>
-<td>劇情與機制同語彙（遊戲開發：提交、剖面檢視、標記點）</td>
+<td>劇情與機制同語彙（疊圖術：火漆印章、剖面尺、圖釘）</td>
 <td>支柱 P5、結局 B</td>
 </tr>
 </tbody></table></div>
 </article>
-<article class="doc" data-doc="story" data-title="劇情設定"><h1 id="story--圖紙之間劇情設定-story-bible-v01">《圖紙之間》劇情設定 Story Bible v0.1</h1>
-<div class="meta"><b>《圖紙之間》劇情設定 Story Bible v0.1</b>　（此文件內無修訂紀錄）</div>
+<article class="doc" data-doc="story" data-title="劇情設定"><h1 id="story--圖紙之間劇情設定-story-bible-v02-老宅尋寶單人詭異版">《圖紙之間》劇情設定 Story Bible v0.2 ——老宅尋寶・單人詭異版</h1>
+<div class="meta"><b>最後修訂紀錄</b>：v0.1 = 「社團的遊戲世界」（已被取代，見 git 歷史）；<strong>v0.2 = 老宅尋寶・單人詭異版</strong>（使用者定案，2026-11-02）。</div>
+
 <blockquote>
-<p>用途：取代 <code>game-spec-v0.2.md</code> 原本的「建築師沈歸 / 宅邸 / 製圖員」劇情。
-不變的部分：50 題 / 22 關 / 隱藏房 3、關卡 ID、N 機制編號、解法大綱，一律以規格為準。本文件只管<strong>敘事、命名、文案</strong>。
-目標讀者：國中到高中的玩家。原則：<strong>一句話就懂</strong>，不寫隱喻與哲思。</p>
+<p>修訂紀錄：v0.1 = 「社團的遊戲世界」（已被取代，見 git 歷史）；<strong>v0.2 = 老宅尋寶・單人詭異版</strong>（使用者定案，2026-11-02）。
+不變的部分：50 題 / 22 關 / 隱藏房 3、關卡 ID、N 編號、解法、提示機制（場景字條、適量 / 抽象 / 不破題、H1～H10、預算表）、固定步長 1/60、剖面只能在 3D 切換——一律以 <code>game-spec-v0.2.md</code> 為準。本文件只管<strong>敘事、命名、文案</strong>。
+目標讀者：高中（約 16～18 歲）。調性：安靜、孤立、有點詭異，最後釋懷。</p>
 </blockquote>
 <hr>
 <h2 id="story--1-世界觀">1. 世界觀</h2>
 <h3 id="story--11-一句話">1.1 一句話</h3>
-<p>遊戲社的你和社長，被吸進社團做到一半的密室逃脫遊戲《圖紙之間》，得把每個房間修好、讓遊戲能從頭玩到尾，才能回到社辦。</p>
+<p>暑假最後的週末，你獨自走進怪叔公許問津的山上老宅，用他的鋼筆把宅邸「疊」成藏寶圖，在週日前找到寶藏——也找到三個老朋友當年沒說完的話。</p>
 <h3 id="story--12-設定細節">1.2 設定細節</h3>
 <div class="tw"><table>
 <thead>
@@ -2251,162 +2812,140 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tr>
 </thead>
 <tbody><tr>
-<td>《圖紙之間》是什麼？</td>
-<td>遊戲社準備在校慶發表會展出的作品：在一棟老房子裡逃脫的解謎遊戲。目前只做到一半。</td>
+<td>為什麼是你？</td>
+<td>叔公的遺囑只寫了你的名字。律師說，叔公指名「那個會把地圖倒過來看的孩子」。</td>
 </tr>
 <tr>
-<td>怎麼進去的？</td>
-<td>發表會前一週，社長在社辦按下「測試執行」，螢幕一白，兩個人就站在遊戲的門廊裡了。不解釋原理，一句帶過。</td>
+<td>為什麼只有你一個人？</td>
+<td>遺囑只交代給你。老宅在山上，沒有手機訊號；你一進門，門就悄悄鎖上了。</td>
 </tr>
 <tr>
-<td>怎麼出去？</td>
-<td>遊戲必須能「從開頭玩到結尾」，最後一個畫面的「回到桌面」才會出現。所以每個房間都要修到能通關。</td>
+<td>期限是什麼？</td>
+<td>週日老宅就要被賣掉。<strong>只是敘事期限</strong>：律師的來信只出現在章節之間，畫面上沒有倒數，也不會因為慢而失敗（規格 P3）。</td>
 </tr>
 <tr>
 <td>為什麼能切換 2D / 3D？</td>
-<td>社長做了一個除錯用的「切換檢視」鍵，用來對照「設計稿」（2D 平面圖）和「完成版」（3D 實際做出來的樣子）。被吸進來時，這個鍵跟著你，變成手上的畫筆。</td>
+<td>叔公的「疊圖術」：用他的鋼筆點一下，宅邸就被壓平成一張<strong>藏寶圖</strong>；再點一下回到<strong>實景</strong>。圖上看得見機關，但只有在實景裡才能動手推、拿、走。</td>
 </tr>
 <tr>
 <td>為什麼兩邊不一樣？</td>
-<td>因為遊戲沒做完：有些東西<strong>畫進了設計稿但還沒做出來</strong>（只在 2D），有些東西<strong>做出來了卻忘了補進設計稿</strong>（只在 3D）。設計稿是一張平面的圖，所以沒有前後深度。</td>
+<td>有些機關叔公只畫在圖上（只在 2D）；有些東西是後來搬進宅子、沒畫進圖裡（只在 3D）。圖是平的，所以沒有前後。</td>
 </tr>
 <tr>
-<td>為什麼設計稿裡跳得比較高？</td>
-<td>設計稿的重力參數還是預設值，比較輕。（社長：「我之後會調……」）</td>
+<td>為什麼圖裡跳得比較高？</td>
+<td>「紙上的人比較輕。」——叔公的日記</td>
 </tr>
 <tr>
-<td>為什麼是密室逃脫？</td>
-<td>遊戲本來就是密室逃脫。每個房間的門，就是那一關的「通關判定」。</td>
-</tr>
-<tr>
-<td>為什麼要一關一關修？</td>
-<td>每一章是遊戲裡一個沒做完的模組（見 1.3）。前一個模組沒修好，下一個不會載入。</td>
+<td>詭異的來源？</td>
+<td>叔公和兩位老朋友<strong>阿河、小桐</strong>當年一起畫這張地圖，後來為了地圖吵翻。撕圖那晚，三人的影子有兩道被「留在了圖裡」。實景看不見他們，只有藏寶圖裡看得到模糊的輪廓。他們<strong>沒有惡意</strong>，只是被困住，一直重複當年的動作。</td>
 </tr>
 <tr>
 <td>掉進坑會怎樣？</td>
-<td>掉出地圖，被傳回最近的檢查點。不會死，也不會受傷。</td>
+<td>「圖面一皺」，你回到最近的檢查點。沒有受傷、沒有死亡畫面。</td>
 </tr>
 <tr>
-<td>為什麼中途不能存檔？（規格 Q4 關內不存檔）</td>
-<td>存檔系統只做了「過關時存檔」。社長：「中途存檔……下一版一定做！」所以每個房間要一口氣修完，按 R 是「重新載入這個房間」。</td>
+<td>為什麼中途不能存檔？（規格 Q4）</td>
+<td>叔公的機關每個房間自成一套：離開房間（通關）時宅邸才「記住」你做過的事。重新進房（R）= 這個房間的機關回到原樣。</td>
 </tr>
 <tr>
-<td>為什麼提示要等？（規格 7.1 計時解鎖）</td>
-<td>提示是 AI 小助手「小格」在算，而且社長給它定了規矩：只能給方向、不能直接說答案。小格跑在遊戲剩下的一點記憶體上，所以每一級提示都要「運算」一段時間。小格發現你很努力（一直重置物件、一直切換），會把你的提示排到前面先算（卡關偵測）。設定裡的「提示隨時可用」= 社長幫你開了「開發者模式」。</td>
+<td>提示從哪來？（規格 7.1）</td>
+<td>叔公到處留了字條。有些字條一開始是空白的——他用了慢慢顯色的墨水，「給卡住的人一點時間」。你在同一處反覆嘗試時，墨水會早一點顯出來（卡關偵測）。設定「提示隨時可用」= 字一開始就顯好。</td>
 </tr>
 </tbody></table></div>
-<h3 id="story--13-章節-沒做完的模組">1.3 章節 = 沒做完的模組</h3>
+<h3 id="story--13-時間線與章節僅敘事">1.3 時間線與章節（僅敘事）</h3>
 <div class="tw"><table>
 <thead>
 <tr>
+<th>時間</th>
 <th>章</th>
 <th>房間</th>
-<th>遊戲裡的模組</th>
-<th>這章要修的東西</th>
+<th>這章拿到的東西</th>
 </tr>
 </thead>
 <tbody><tr>
+<td>週五傍晚</td>
 <td>第一章</td>
-<td>門廊 / 玄關 / 衣帽間</td>
-<td>教學模組</td>
-<td>門、開關、最基本的切換</td>
+<td>玄關（門廊、玄關、衣帽間）</td>
+<td>叔公的鋼筆（門廊桌上，切換用）；鋼筆筆尖（1-2b，能轉圖上的墨水閥）</td>
 </tr>
 <tr>
+<td>週五夜</td>
 <td>第二章</td>
 <td>書房</td>
-<td>物理模組（重量）</td>
-<td>壓力板的重量、物件「提交」</td>
+<td>火漆印章（N5）</td>
 </tr>
 <tr>
+<td>週六白天</td>
 <td>第三章</td>
 <td>溫室</td>
-<td>光影模組</td>
-<td>影子意外有了碰撞箱（bug 變成路）</td>
+<td>建築剖面尺（N8）</td>
 </tr>
 <tr>
+<td>週六傍晚</td>
 <td>第四章</td>
-<td>地下室</td>
-<td>社長的「封存」資料夾</td>
-<td>被刪掉一半的功能：剖面檢視、標記點</td>
+<td>地下室（酒窖、封存的儲藏區）</td>
+<td>圖釘（N16）</td>
 </tr>
 <tr>
+<td>週六深夜</td>
 <td>第五章</td>
-<td>閣樓</td>
-<td>最終關（自動生成器）</td>
-<td>一直重生、還沒定案的最終關</td>
+<td>閣樓（三扇天窗）</td>
+<td>—（整合考驗）</td>
 </tr>
 <tr>
+<td>週日黎明</td>
 <td>終章</td>
-<td>草地</td>
-<td>標題畫面</td>
-<td>「開始遊戲」的門還沒放上去</td>
+<td>草地（庭院）</td>
+<td>—（日記五頁指向寶箱）</td>
 </tr>
 </tbody></table></div>
 <hr>
 <h2 id="story--2-角色">2. 角色</h2>
 <blockquote>
-<p>玩家稱呼一律用「你」；系統文字用玩家暱稱（開始時輸入，預設「新社員」）。不使用「他 / 她」指稱玩家。</p>
+<p>玩家稱「你」，不指定性別；暱稱於開始時輸入（存檔 <code>name</code>，結局使用）。<strong>沒有同行 NPC</strong>，解謎途中沒有對白。</p>
 </blockquote>
-<h3 id="story--21-你玩家">2.1 你（玩家）</h3>
-<ul>
-<li>身分：遊戲社今年的新社員，負責關卡設計。</li>
-<li>性格：由玩家決定；文案裡的「你」話不多、動手比較快。</li>
-<li>在故事裡的功能：拿著畫筆修 bug 的人。社長出點子，小格給提示，你把它做完。</li>
-</ul>
-<h3 id="story--22-社長江若晴大家叫社長或若晴">2.2 社長：江若晴（大家叫「社長」或「若晴」）</h3>
-<ul>
-<li>高二，遊戲社社長兼企劃兼美術兼「什麼都說好」。</li>
-<li>性格：開朗、點子很多、很會鼓勵人；缺點是常常開了頭就跑去做下一個點子，留下一堆「之後再改」。真心希望大家的作品被看見。</li>
-<li>口頭禪：「沒問題，明天就做完！」</li>
-<li>代表台詞：「我做的都只有一半……可是有你在，另一半好像就做得完了。」</li>
-<li>在故事裡的功能：每章開場與機制取得時說話；不負責給提示（避免和小格重疊）。</li>
-</ul>
-<h3 id="story--23-ai-小助手小格">2.3 AI 小助手：小格</h3>
-<ul>
-<li>社長很久以前做的教學 NPC，外型是一個方塊頭、會飄的小格子。做到一半被擱著，所以說話偶爾卡頓。</li>
-<li>性格：認真、講話像說明書、會吐槽社長；對你很有耐心。</li>
-<li>口頭禪：「運算中……」</li>
-<li>代表台詞：「提示運算完成。你其實已經想到一半了，我只是幫你按下確認。」</li>
-<li><strong>提示系統的化身</strong>（對應規格 7.1 三級提示，<strong>三級全抽象</strong>）：小格只給「想的方向」，從不說要按什麼、推什麼、站哪裡。</li>
-</ul>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>級</th>
-<th>小格的外殼台詞</th>
-<th>顯示</th>
-<th>內容</th>
+<th>角色</th>
+<th>出現方式</th>
+<th>性格 / 功能</th>
+<th>代表句</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>1</td>
-<td>「運算中……」</td>
-<td>小格頭上轉圈圈</td>
-<td>一句比喻（≤ 24 字）</td>
+<td>你</td>
+<td>玩家</td>
+<td>被指名繼承的人，會把地圖倒過來看</td>
+<td>（不說話）</td>
 </tr>
 <tr>
-<td>2</td>
-<td>「找到線索了！……大概。」</td>
-<td>小格歪頭</td>
-<td>一個提問：該注意哪一類現象、哪個檢視（≤ 30 字）</td>
+<td>叔公 許問津</td>
+<td>不出場；字條、日記、遺囑</td>
+<td>愛惡作劇的建築師。字條表面友善，越往後字裡行間越不對勁；日記慢慢說出撕圖那晚</td>
+<td>「換個角度看，就會懂。」</td>
 </tr>
 <tr>
-<td>3</td>
-<td>「好吧，直接說——啊不行，只能說這些。」</td>
-<td>小格捂嘴</td>
-<td>現在缺的是什麼性質（≤ 36 字），仍不給做法</td>
+<td>阿河</td>
+<td>日記與藏寶圖裡的輪廓</td>
+<td>叔公的老朋友，急性子，當年想把寶藏挖出來分掉</td>
+<td>（輪廓不說話；日記裡：「你總是只看你那一面。」）</td>
 </tr>
 <tr>
-<td>4（安全閥，暫定）</td>
-<td>「這題我算不動了，借你社長的攻略筆記。」</td>
-<td>社長的筆記頁</td>
-<td>逐步解法；預設鎖定，要等、要主動確認（規格 7.1.2）</td>
+<td>小桐</td>
+<td>日記與藏寶圖裡的輪廓</td>
+<td>叔公的老朋友，安靜，負責畫地圖的細節</td>
+<td>（日記裡：「從側面看，路就連起來了。」）</td>
+</tr>
+<tr>
+<td>林律師</td>
+<td>章節之間的來信</td>
+<td>公事公辦、偶爾冷幽默；提醒週日期限</td>
+<td>「本週日上午十點，買方看屋。請勿在牆上畫畫。」</td>
 </tr>
 </tbody></table></div>
-<ul>
-<li>小格的笨拙是性格的一部分：它「想直接說」但被自己的規則擋住（L3 外殼），讓抽象提示有劇情理由。</li>
-<li>0 級即時回饋（規格 C9「看得見，卻碰不到」）也由小格說：「看得到，但搆不到喔。換個檢視試試？」</li>
-</ul>
+<p><strong>輪廓與追逐的詮釋</strong>：輪廓把拿著鋼筆的你當成「當年撕圖的人」。他們想搶回鋼筆、把地圖拼回去，所以慌亂地追過來；在實景裡碰不到你。被碰到時，圖面一皺，你回到檢查點，什麼都沒丟（規格 N19）。結局揭曉：他們想要的只是地圖完整、和一句道歉。</p>
+<p><strong>主題</strong>：換個角度看，就會懂——同時是玩法（切換視角）、遺囑（叔公的話）與答案（三人吵架是因為各看一面）。</p>
 <hr>
 <h2 id="story--3-主線弧線起承轉合">3. 主線弧線（起承轉合）</h2>
 <div class="tw"><table>
@@ -2414,38 +2953,33 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tr>
 <th>段</th>
 <th>章</th>
-<th>發生什麼（一句話）</th>
-<th>主題</th>
+<th>發生什麼</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>起</td>
 <td>玄關</td>
-<td>社長按下測試，兩人被吸進遊戲；小格說：讓遊戲能玩到結尾就能回去。</td>
-<td>合作的開始</td>
+<td>你拿到鑰匙和鋼筆，門在身後鎖上。點一下鋼筆，宅邸變成一張圖，圖上角落有兩道模糊的人影。</td>
 </tr>
 <tr>
 <td>承</td>
 <td>書房、溫室</td>
-<td>邊修邊發現社長留了好多「之後再改」，但每個點子都很好玩；你們越修越有默契。</td>
-<td>友情、互補</td>
+<td>字條一張張引你往裡走；日記提到阿河、小桐。人影越來越常出現在你剛離開的地方。溫室末尾，人影第一次追過來。</td>
 </tr>
 <tr>
 <td>轉</td>
 <td>地下室</td>
-<td>找到社長的「封存」資料夾：她怕做不好而刪掉的功能。社長說：「我怕大家覺得很爛。」你回：「先做完，再一起改。」</td>
-<td>不完美也沒關係</td>
+<td>封存的儲藏區裡找到撕成六塊的舊地圖殘片與撕圖那晚的日記。你明白人影不是要害你，是被困住了。</td>
 </tr>
 <tr>
 <td>合</td>
 <td>閣樓、草地</td>
-<td>最終關一直重生，三個人用所有工具一起把它定下來；放上開始鍵，回到社辦，趕上發表會。</td>
-<td>把作品做完的成就感</td>
+<td>三扇天窗是三個人當年的三種視角；讓三道光落在同一點，叔公最後的機關打開。黎明時，日記五頁疊起來指向庭院的寶箱。</td>
 </tr>
 </tbody></table></div>
 <hr>
-<h2 id="story--4-機制命名對照表">4. 機制命名對照表</h2>
-<p>「需改程式碼」= 現在程式裡已有文字，日後要換（<strong>本次不改</strong>）；「未實作」= 規格 N 機制尚未寫程式，直接用新名。N 編號不變。</p>
+<h2 id="story--4-命名對照表">4. 命名對照表</h2>
+<p>N 編號、物件 id、程式識別不變，只換顯示名。「需改程式碼」= 現在程式裡已有文字，日後要換（<strong>本次不改</strong>）；「未實作」= 規格機制尚未寫程式，直接用新名。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -2458,185 +2992,191 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tbody><tr>
 <td>3D「現實」</td>
 <td><code>mode:&#39;3d&#39;</code></td>
-<td><strong>完成版</strong></td>
+<td><strong>實景</strong></td>
 <td>是：<code>hud.ts</code> <code>setMode</code>、<code>puzzle.html</code> <code>#pz-mode</code></td>
 </tr>
 <tr>
 <td>2D「圖紙」</td>
 <td><code>mode:&#39;2d&#39;</code></td>
-<td><strong>設計稿</strong></td>
+<td><strong>藏寶圖</strong></td>
 <td>同上</td>
 </tr>
 <tr>
 <td>切換（F / Q）</td>
 <td><code>trySwitchMode</code></td>
-<td>切換檢視</td>
+<td>點鋼筆（切換）</td>
 <td>是：<code>puzzle.html</code> 操作說明</td>
 </tr>
 <tr>
-<td>筆尖（玄關取得，點墨）</td>
+<td>筆尖（1-2b，點墨）</td>
 <td><code>type:&#39;key&#39;</code>、<code>hasKey</code></td>
-<td><strong>畫筆工具</strong></td>
-<td>是：<code>foyer.ts</code> label、<code>interact.ts</code> <code>MSG_KEY</code>、<code>hud.ts</code> 持有物文字與圖示</td>
+<td><strong>鋼筆筆尖</strong></td>
+<td>是：<code>foyer.ts</code> label、<code>interact.ts</code> <code>MSG_KEY</code>、<code>hud.ts</code> 持有物文字</td>
 </tr>
 <tr>
 <td>墨水閥</td>
 <td><code>type:&#39;valve&#39;</code></td>
-<td>設計稿開關</td>
-<td>是：<code>foyer.ts</code> label、<code>interact.ts</code> 閥的訊息</td>
+<td>墨水閥（沿用）</td>
+<td>只改訊息文字</td>
 </tr>
 <tr>
 <td>出口門封印</td>
 <td><code>sealed</code></td>
-<td>「門還沒接上判定」</td>
-<td>是：<code>interact.ts</code> 門的訊息</td>
+<td>門上的墨線封印（沿用）</td>
+<td>只改訊息文字</td>
 </tr>
 <tr>
-<td>紙條</td>
+<td>紙條 / 便利貼</td>
 <td><code>type:&#39;note&#39;</code></td>
-<td>便利貼（社員留的開發便條）</td>
+<td><strong>叔公的字條</strong></td>
 <td>是：<code>foyer.ts</code> label / text、<code>game.ts</code> <code>VERBS</code></td>
 </tr>
 <tr>
 <td>壓板 / 計重壓板 N2</td>
 <td><code>type:&#39;plate&#39;</code>、<code>weight</code></td>
-<td>壓力板（顯示需要幾個重量）</td>
+<td>機關踏板（顯示需要的重量）</td>
 <td>是：<code>mechanisms.ts</code> <code>MSG_PLATE_ON / LIGHT</code></td>
 </tr>
 <tr>
 <td>閘門</td>
 <td><code>type:&#39;gate&#39;</code></td>
-<td>柵門</td>
+<td>鐵柵門</td>
 <td>是：<code>interact.ts</code> <code>MSG_GATE</code></td>
 </tr>
 <tr>
 <td>T 木箱歸位</td>
 <td><code>resetCrates</code></td>
-<td>重置物件</td>
+<td>物歸原處</td>
 <td>是：<code>puzzle.html</code>、<code>MSG_CRATE_RESET</code></td>
 </tr>
 <tr>
 <td>R 重來</td>
 <td><code>restart</code></td>
-<td>重新載入房間</td>
+<td>重新進房</td>
 <td>是：<code>puzzle.html</code></td>
 </tr>
 <tr>
 <td>掉落</td>
 <td><code>MSG_FELL</code></td>
-<td>「掉出地圖了，回到檢查點。」</td>
+<td>「圖面一皺，你回到了熟悉的地方。」</td>
 <td>是：<code>step.ts</code></td>
 </tr>
 <tr>
-<td>塞不下</td>
-<td><code>MSG_SQUEEZE</code></td>
-<td>「這裡塞不下」（沿用）</td>
-<td>否</td>
-</tr>
-<tr>
 <td>墨滴（小鑰匙）</td>
-<td><code>inkdrop</code>（未實作）</td>
-<td><strong>修補包</strong></td>
+<td><code>inkdrop</code></td>
+<td><strong>墨水瓶</strong></td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>墨鎖</td>
 <td><code>inklock</code></td>
-<td>待修補（需要修補包）</td>
+<td>墨線鎖</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>章印（Boss 鑰匙）</td>
 <td><code>seal</code></td>
-<td><strong>驗收章</strong></td>
+<td><strong>房間的銅鑰匙</strong></td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>墨牆 / 墨橋 / 墨台</td>
 <td><code>inkwall</code> 等</td>
-<td>線稿牆 / 線稿橋 / 線稿平台</td>
+<td>圖上的墨牆 / 墨橋 / 墨台</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>N5 定稿印</td>
 <td><code>pinned</code> / <code>pinnable</code></td>
-<td><strong>提交</strong>（可提交物件有「提交框」）；一次只能提交一個</td>
+<td><strong>火漆印章</strong>（蓋印；可蓋的物件有「封蠟框」）</td>
 <td>未實作</td>
 </tr>
 <tr>
-<td><code>heavy</code> 鉛字盤</td>
 <td><code>heavy</code></td>
-<td>超重物件（例：一整箱課本）</td>
+<td><code>heavy</code></td>
+<td>鉛字盤（沿用）</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>N6 燈影</td>
 <td><code>shadow</code></td>
-<td>影子碰撞（光影模組的 bug）</td>
+<td>實影（藏寶圖裡的影子是實的）</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>N7 定稿影子</td>
 <td>—</td>
-<td>提交影子</td>
+<td>封蠟的影子</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>N8 剖面尺</td>
 <td><code>section</code></td>
-<td><strong>剖面檢視</strong>（除錯模式；只能在完成版開關）</td>
+<td><strong>建築剖面尺</strong>（只能在實景開關）</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>N15 燈車</td>
 <td><code>lampcart</code></td>
-<td>燈光推車</td>
+<td>燈架推車</td>
 <td>未實作</td>
 </tr>
 <tr>
-<td>N16 墨記（筆桿，已確認採用，只能在同一區域內兌現）</td>
+<td>N16 墨記</td>
 <td><code>mark</code></td>
-<td><strong>標記點</strong></td>
+<td><strong>圖釘</strong>（釘下 / 回到圖釘；只能在同一區域）</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N19 追逐</td>
+<td><code>chase</code></td>
+<td>輪廓（追逐段落）</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>日記碎片 ×5</td>
 <td><code>diary</code></td>
-<td><strong>開發筆記</strong> ×5</td>
+<td><strong>叔公的日記</strong> ×5 頁</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>圖紙碎片 ×6</td>
 <td><code>scraps</code></td>
-<td><strong>被刪掉的草稿</strong> ×6</td>
+<td><strong>藏寶圖殘片</strong> ×6 張</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>L4 攻略筆記</td>
+<td><code>solutionKey</code> / <code>guide</code></td>
+<td><strong>叔公的解答手稿</strong>（暫停選單，預設關閉）</td>
 <td>未實作</td>
 </tr>
 <tr>
 <td>通關畫面</td>
 <td><code>#pz-clear h1</code></td>
-<td>「玄關 · 修好了！」</td>
+<td>「玄關 · 機關解開了」</td>
 <td>是：<code>puzzle.html</code></td>
 </tr>
 <tr>
-<td>玄關旁白</td>
-<td><code>foyer.narration</code></td>
-<td>見 7.2</td>
+<td>玄關旁白 / 下一關</td>
+<td><code>foyer.narration</code>、<code>nextRoom</code></td>
+<td>見 5、7.3</td>
 <td>是：<code>foyer.ts</code></td>
 </tr>
 <tr>
+<td>頁面標題</td>
+<td><code>puzzle.html &lt;title&gt;</code></td>
+<td>《圖紙之間》</td>
+<td>是</td>
+</tr>
+<tr>
 <td>玩家暱稱</td>
-<td><code>puzzle:save.name</code>（新欄位）</td>
-<td>結局與製作人員名單使用</td>
+<td><code>puzzle:save.name</code></td>
+<td>遺囑、結局使用</td>
 <td>新增</td>
 </tr>
 </tbody></table></div>
-<p><strong>命名說明</strong></p>
-<ul>
-<li>墨記（N16，已確認）改叫「<strong>標記點</strong>」，不用任務建議的「書籤」：書籤容易讓人以為是存檔。標記點只記一個位置，用掉就消失，也不會帶到下一關。規格 Q4「關內不存檔」不受影響。</li>
-<li>定稿印叫「提交」：遊戲開發裡「提交」就是把改動確定下來，兩個檢視都會看到。</li>
-<li>測試字串：<code>tests/puzzle/puzzleLogic.test.ts</code> 有直接比對紙條文字（「看不見的地方，不代表不存在……」），改文案時要一起改測試；<code>foyerSolution.test.ts</code> 引用的是常數，改常數即可。</li>
-<li>任務提到的 <code>isTeacher</code> 只出現在 <code>src/game/CampusLife.ts</code>（校園主遊戲），與 <code>src/puzzle/</code> 無關，不需更動。</li>
-</ul>
+<p><strong>日後要改程式碼的地方（本次不改）</strong>：<code>hud.ts</code>（模式文字、持有物文字）、<code>puzzle.html</code>（標題、模式預設、操作說明、通關標題）、<code>foyer.ts</code>（物件 label、三張字條、旁白、下一關文字）、<code>interact.ts</code>（筆尖 / 閥 / 門 / 鐵柵門訊息、「看得見，卻碰不到」）、<code>mechanisms.ts</code>（踏板、物歸原處訊息）、<code>step.ts</code>（掉落訊息）、<code>game.ts</code>（<code>VERBS</code> 動詞）；<code>tests/puzzle/puzzleLogic.test.ts</code> 直接比對字條原文，改字條時要一起改；存檔新增 <code>name</code>；新增追逐（N19）與音訊模組。</p>
 <hr>
 <h2 id="story--5-關卡一句話劇情22-關-3-隱藏房每句-30-字">5. 關卡一句話劇情（22 關 + 3 隱藏房，每句 ≤ 30 字）</h2>
 <h3 id="story--章節旁白">章節旁白</h3>
@@ -2649,29 +3189,30 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </thead>
 <tbody><tr>
 <td>第一章 玄關</td>
-<td>歡迎來到《圖紙之間》！……目前只有教學關能玩。</td>
+<td>門在身後鎖上了。桌上的鋼筆，像在等你。</td>
 </tr>
 <tr>
 <td>第二章 書房</td>
-<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
+<td>書都朝著牆。叔公說，背面才是正面。</td>
 </tr>
 <tr>
 <td>第三章 溫室</td>
-<td>光影模組上線！副作用：影子有碰撞箱。</td>
+<td>植物朝著一盞燈長。有些影子，比植物先到。</td>
 </tr>
 <tr>
 <td>第四章 地下室</td>
-<td>這裡是社長放「先不要」的資料夾。請不要亂翻……來不及了。</td>
+<td>這裡的東西被封起來了。封住的，不只是東西。</td>
 </tr>
 <tr>
 <td>第五章 閣樓</td>
-<td>最終關生成中，請稍候……大概。</td>
+<td>三扇天窗，三個人。當年他們各看一面。</td>
 </tr>
 <tr>
 <td>終章 草地</td>
-<td>你們走到遊戲的第一個畫面，也是最後一個。</td>
+<td>天快亮了。換個角度看，就會懂。</td>
 </tr>
 </tbody></table></div>
+<p><strong>章節之間的律師來信</strong>（各 1 句）：玄關後「鑰匙收到了嗎？週日上午十點看屋。」／書房後「買方問：牆上的墨線可以擦掉嗎？」／溫室後「天氣預報：週六晚上山區起霧。」／地下室後「若您找到任何舊文件，請勿撕毀。」／閣樓後「週日見。或者，不見也行。」</p>
 <h3 id="story--各關">各關</h3>
 <div class="tw"><table>
 <thead>
@@ -2684,201 +3225,217 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <tbody><tr>
 <td>1-1</td>
 <td>門廊</td>
-<td>門把畫在牆上？社長說那是「示意圖」。</td>
+<td>門把畫在牆上。真的門把，在圖裡。</td>
 </tr>
 <tr>
 <td>1-2</td>
 <td>玄關</td>
-<td>門不見了，牆上寫著：TODO 記得放門。</td>
+<td>鋼筆少了筆尖，墨線封住了門。</td>
 </tr>
 <tr>
 <td>1-3</td>
 <td>衣帽間</td>
-<td>衣架上貼滿「之後再改」的便利貼。</td>
+<td>掛著三件大衣，只有一件是叔公的。</td>
 </tr>
 <tr>
 <td>2-1</td>
 <td>書架迴廊</td>
-<td>書都長一樣，因為只做了一個書的模型。</td>
+<td>書都背對著你，像在躲什麼。</td>
 </tr>
 <tr>
 <td>2-2</td>
 <td>閱覽室</td>
-<td>這張桌子的重量，是社長隨手填的。</td>
+<td>桌上攤著一本只寫了開頭的書。</td>
 </tr>
 <tr>
 <td>2-3</td>
 <td>印房</td>
-<td>找到「提交」按鈕。一次只能提交一個喔。</td>
+<td>一枚火漆印章，壓在一張空白的紙上。</td>
 </tr>
 <tr>
 <td>2-4</td>
 <td>手稿庫</td>
-<td>每份手稿都寫著：第 12 版，最終版（這次真的）。</td>
+<td>每份手稿都畫著這棟房子，角落都被撕過。</td>
 </tr>
 <tr>
 <td>2-5</td>
 <td>書房深處</td>
-<td>最後一扇門要蓋驗收章，小格說它很嚴格。</td>
+<td>最後一扇門上，有三個人的指印。</td>
 </tr>
 <tr>
 <td>3-1</td>
 <td>苗圃</td>
-<td>光影 bug：影子居然可以踩。</td>
+<td>影子踩得住。叔公說這不是魔術。</td>
 </tr>
 <tr>
 <td>3-2</td>
 <td>玻璃長廊</td>
-<td>靠近燈，影子變大。這不是 bug，是物理。</td>
+<td>靠近燈，影子就變大。玻璃上不只你一個影子。</td>
 </tr>
 <tr>
 <td>3-3</td>
 <td>夜溫室</td>
-<td>燈關了，有一個影子忘了消失。</td>
+<td>燈熄了，有一個影子沒跟著走。</td>
 </tr>
 <tr>
 <td>3-4</td>
 <td>溫室深處</td>
-<td>燈有輪子，因為社長懶得做固定座。</td>
+<td>燈架有輪子。有人推過它，很多次。</td>
 </tr>
 <tr>
 <td>4-1</td>
 <td>酒窖走廊</td>
-<td>牆只做一半，另一半寫著「預算不足」。</td>
+<td>一模一樣的酒架，排得太整齊了。</td>
 </tr>
 <tr>
 <td>4-2</td>
 <td>鍋爐間</td>
-<td>這裡的壓力板，真人站上去也算數。</td>
+<td>牆上的影子，慢了半拍。</td>
 </tr>
 <tr>
 <td>4-3</td>
 <td>封存書庫</td>
-<td>封存資料夾裡，有一支會做記號的筆。</td>
+<td>抽屜裡是一盒圖釘，和撕成六塊的地圖。</td>
 </tr>
 <tr>
 <td>4-4</td>
 <td>最後的抽屜</td>
-<td>抽屜是空的，只有一張「先這樣吧」。</td>
+<td>日記寫到撕圖那晚，就停了。</td>
 </tr>
 <tr>
 <td>5-1</td>
 <td>天窗間</td>
-<td>地上有一個標記點，不是你放的。</td>
+<td>地上有一枚圖釘，不是你釘的。</td>
 </tr>
 <tr>
 <td>5-2</td>
-<td>東翼「春」</td>
-<td>春天的貼圖還沒上色，只有線稿。</td>
+<td>東窗（阿河）</td>
+<td>從這扇窗看，什麼都很近。</td>
 </tr>
 <tr>
 <td>5-3</td>
-<td>西翼「秋」</td>
-<td>落葉一直掉，因為忘了寫「停」。</td>
+<td>西窗（小桐）</td>
+<td>從這扇窗看，路都是側面的。</td>
 </tr>
 <tr>
 <td>5-4</td>
-<td>北翼「冬」</td>
-<td>每片雪花都一樣，複製貼上的。</td>
+<td>北窗（叔公）</td>
+<td>從這扇窗看，只看得見自己那一面。</td>
 </tr>
 <tr>
 <td>5-5</td>
-<td>沒做完的最終關（Boss，原「未竟之圖」）</td>
-<td>最終關一直重生，像在說「再等我一下」。</td>
+<td>最後的機關（Boss）</td>
+<td>三道光要落在同一點。</td>
 </tr>
 <tr>
 <td>6-1</td>
-<td>草地（標題畫面）</td>
-<td>這裡是標題畫面，開始鍵還沒放上去。</td>
+<td>草地</td>
+<td>天亮了。日記五頁，指著同一個地方。</td>
 </tr>
 <tr>
 <td>H1</td>
 <td>夾層</td>
-<td>書櫃後面，是社長說「太難了」刪掉的關。</td>
+<td>書櫃後面，還有一面書櫃。</td>
 </tr>
 <tr>
 <td>H2</td>
 <td>溫床</td>
-<td>一棵被刪掉的樹，還留在設計稿裡。</td>
+<td>一棵沒種下的樹，只在圖上長。</td>
 </tr>
 <tr>
 <td>H3</td>
 <td>封存室</td>
-<td>最大的資料夾，名字叫「也許有一天」。</td>
+<td>撕圖那晚的房間，一直沒人收拾。</td>
 </tr>
 </tbody></table></div>
-<blockquote>
-<p>5-1 的伏筆：那個不是你放的標記點，是社長以前測試標記點功能時留下的，結局 B 揭曉（見 6.2）。</p>
-</blockquote>
 <hr>
-<h2 id="story--6-收集物與結局">6. 收集物與結局</h2>
-<h3 id="story--61-收集物數量位置與規格相同">6.1 收集物（數量、位置與規格相同）</h3>
+<h2 id="story--6-收集物追逐驚嚇與結局">6. 收集物、追逐、驚嚇與結局</h2>
+<h3 id="story--61-收集物數量與位置同規格">6.1 收集物（數量與位置同規格）</h3>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>原名</th>
-<th>新名</th>
+<th>名稱</th>
 <th>數量</th>
-<th>位置（同規格）</th>
+<th>位置</th>
 <th>內容</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>日記碎片</td>
-<td><strong>開發筆記</strong></td>
-<td>5</td>
+<td>叔公的日記</td>
+<td>5 頁</td>
 <td>1-3a、2-5、3-4a、4-4b、5-5c</td>
-<td>社長的筆記本頁，每頁 1～2 句碎碎念，加一張標題畫面的草圖</td>
+<td>每頁 2～3 句，寫三人畫地圖的日子到撕圖那晚；每頁角落有一筆庭院輪廓的速寫</td>
 </tr>
 <tr>
-<td>圖紙碎片</td>
-<td><strong>被刪掉的草稿</strong></td>
-<td>6</td>
+<td>藏寶圖殘片</td>
+<td>6 張</td>
 <td>2-1a 隱藏點、3-2b 隱藏點、4-2a 隱藏點、H1、H2、H3</td>
-<td>社長覺得「太難」「太怪」而刪掉的點子，每張一句話</td>
+<td>當年被撕碎的六塊地圖；每塊背面有一句阿河或小桐的字</td>
 </tr>
 </tbody></table></div>
-<p><strong>元謎題 6-1 在新設定下怎麼成立</strong>（結構與規格相同）：</p>
-<ol>
-<li>每頁開發筆記都畫著標題畫面草圖的「其中一筆」（社長每改一版就畫一筆）。</li>
-<li>在筆記介面把 5 頁疊起來，會拼成標題畫面背景的輪廓（樹、石頭、兩個空缺），而且是<strong>從某一個深度剖切看到的樣子</strong>。</li>
-<li>在 6-1 開剖面檢視、找到那個深度，再把兩個木箱推到缺的兩筆位置 → 設計稿裡畫出「開始遊戲」的門 → 對門按提交，完成版裡就有這扇門 → 走出去。</li>
-<li>解謎所需的資訊全部在筆記介面裡，不用查外部資料。</li>
-</ol>
-<h3 id="story--62-結局">6.2 結局</h3>
+<p><strong>元謎題 6-1 如何成立</strong>（結構與規格相同）：五頁日記角落的速寫，在日記介面疊起來，拼成庭院從某一個深度剖切看到的輪廓（樹、石頭、兩個空缺）。在 6-1 用剖面尺找到那一刀，把兩個木箱推到缺的兩筆位置 → 藏寶圖上畫出通往寶箱的石門 → 用火漆印章讓石門在實景成真。所需資訊全在日記介面裡。</p>
+<h3 id="story--62-追逐與驚嚇的劇情位置次數與參數見規格-91n19">6.2 追逐與驚嚇的劇情位置（次數與參數見規格 9.1、N19）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>類型</th>
+<th>關</th>
+<th>劇情</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>追逐 1（約 15～20 秒）</td>
+<td>3-4 溫室深處（3-4a 之後的長廊）</td>
+<td>輪廓第一次看見你手上的鋼筆，衝過來想搶</td>
+</tr>
+<tr>
+<td>追逐 2（約 25～35 秒）</td>
+<td>4-4 最後的抽屜（4-4a 之後的儲藏走道）</td>
+<td>你拿著殘片，他們以為你又要撕</td>
+</tr>
+<tr>
+<td>追逐 3（約 30～40 秒）</td>
+<td>5-5 最後的機關（第二、第三階段之間的樓梯）</td>
+<td>三道光快對齊時，他們慌了</td>
+</tr>
+<tr>
+<td>驚嚇（每章最多 1 次）</td>
+<td>1-3（大衣同時從衣架滑落）、2-4（一整排書同時倒下）、3-3（玻璃上突然出現手印輪廓）、4-3（燈全暗一瞬，輪廓就在眼前）、5-5（三道輪廓同時出現）</td>
+<td>都發生在謎題完成之後的空檔，不在思考途中</td>
+</tr>
+</tbody></table></div>
+<p>「減弱緊張效果」開啟時：追逐段落自動通過（輪廓不出現，門直接打開），驚嚇改為平靜版（物件安靜地落下、輪廓緩慢淡入）。</p>
+<h3 id="story--63-結局觸發條件與規格相同">6.3 結局（觸發條件與規格相同）</h3>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>結局</th>
-<th>條件（同規格）</th>
-<th>一句話</th>
+<th>條件</th>
 <th>場景</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>A 一起回去（一般結局）</td>
-<td>完成 6-1，提交「開始遊戲」的門並走出去</td>
-<td>遊戲終於能從頭玩到尾，大家一起回到社辦。</td>
-<td>你們回到社辦，窗外是放學的天色。螢幕上的遊戲顯示「建置成功」。社長大叫：「發表會趕上了！」小格在螢幕裡揮手：「下次見。」</td>
+<td>A 寶箱</td>
+<td>完成 6-1，讓石門成真並打開寶箱</td>
+<td>寶箱裡是三人的合照，和一封叔公寫給阿河、小桐、從沒寄出的道歉信。你在黎明離開；回頭點一下鋼筆，藏寶圖上兩道輪廓向你揮手，慢慢淡去。律師來信：「看屋改期。」</td>
 </tr>
 <tr>
-<td>B 製作人員名單（真結局）</td>
-<td>收齊 6 張被刪掉的草稿；6-1 的門出現後，切到設計稿，站上只在設計稿裡的編輯桌按 V</td>
-<td>你留下一個標記點，它變成下一位玩家的起點。</td>
-<td>你在標題畫面的設計稿上放一個標記點，但<strong>不去用它</strong>。它在標題畫面亮起，變成「新遊戲」按鈕：以後每個玩家都會從你放的地方開始。接著跑製作人員名單：關卡設計是你的暱稱、企劃是社長（加註「與拖稿」）、提示系統是小格。名單後彩蛋：5-1 那個標記點，是社長第一次做這個功能時留下的；回到社辦，電腦桌面右下角跳出小格：「我也出來了！」</td>
+<td>B 第七個房間</td>
+<td>收齊 6 張殘片；6-1 石門出現後切到藏寶圖，在只畫在圖上的工作桌前用圖釘釘下一點</td>
+<td>六塊殘片拼回完整的地圖。兩道輪廓從圖裡走出來，漸漸清楚，向你道謝後消失。宅邸露出第七個房間：叔公的工作室。桌上一張沒畫完的圖，你用圖釘釘下一點——下一個故事從這裡開始。律師來信：「遺囑附件寫著：找到第七個房間的人，老宅不賣。」</td>
 </tr>
 </tbody></table></div>
-<p><strong>與規格的差異說明</strong>：原結局 B 是「留下」（主角留在圖裡）。新設定下沒有人被留下（避免讓人不安），改成「留下一個標記點給後來的人」。機制呼應不變：同樣是放一個標記點、不回完成版用它。</p>
+<p>與規格一致：結局 B 仍是「在只存在於圖上的桌前留下一枚圖釘、不回去兌現它」。</p>
 <hr>
-<h2 id="story--7-文案風格指南與範例">7. 文案風格指南與範例</h2>
+<h2 id="story--7-文案風格指南與範例高中版">7. 文案風格指南與範例（高中版）</h2>
 <h3 id="story--71-規則">7.1 規則</h3>
 <ul>
-<li>讀者：國中到高中。句子短，一句只講一件事。</li>
-<li>每段旁白 / 便利貼 / 提示 ≤ 40 字；一句話劇情 ≤ 30 字。</li>
-<li>幽默來源：遊戲開發的日常（TODO、最終版、參數亂填、複製貼上）、社長的不靠譜、小格的吐槽。</li>
-<li>不寫：恐怖、死亡、霸凌、身材外貌梗、會過時的網路流行語、影射現有作品或真人。</li>
-<li>不擋解謎：對白一次最多 2 句，可按任意鍵跳過（沿用 <code>game.ts</code> 跳過旁白）。</li>
-<li>提示三級都抽象，不搶走「想通」的那一刻（規格 D7、7.1.1 量表）：不寫「把 X 推到 Y」、不寫按鍵、不給數字、不叫出關鍵物件的名字。</li>
+<li>讀者：高中。句子短，但可以更成熟：留白、暗示、不把話說滿。</li>
+<li>旁白 / 字條 ≤ 40 字；一句話劇情 ≤ 30 字；提示字條另遵守規格 7.1.1（H1～H10）與 7.1.3 預算。</li>
+<li>詭異來自「不對勁」：重複、慢半拍、少了一個人、字跡的變化；<strong>不靠血腥、傷害、死亡</strong>。</li>
+<li>不依賴會過時的流行語；不影射現有 IP，不套用知名恐怖作品的經典橋段（例如鏡中人、電話來電、娃娃轉頭）。</li>
+<li>輪廓沒有惡意。任何文案都不得把阿河、小桐寫成怪物或復仇者。</li>
+<li>叔公字條的語氣：表面友善、愛開玩笑；往後的章節偶爾一句冷掉的話。但<strong>提示字條必須好讀、不誤導</strong>：氛圍只能在用詞，不能用劃掉、扭曲、殘缺的字形。</li>
 </ul>
 <h3 id="story--72-可以這樣寫-不要這樣寫">7.2 可以這樣寫 / 不要這樣寫</h3>
 <div class="tw"><table>
@@ -2892,263 +3449,326 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </thead>
 <tbody><tr>
 <td>1</td>
-<td>門不見了，牆上寫著：TODO 記得放門。</td>
-<td>門消失了，彷彿從未存在於這個世界。</td>
-<td>太文藝、太深</td>
+<td>門在身後鎖上了。</td>
+<td>門在身後鎖上了，你再也出不去了！</td>
+<td>不製造真正的絕望</td>
 </tr>
 <tr>
 <td>2</td>
-<td>社長：「沒問題，明天就做完！」</td>
-<td>社長：「我是不是永遠都做不完任何事……」</td>
-<td>太沉重</td>
+<td>玻璃上不只你一個影子。</td>
+<td>玻璃上濺滿了血。</td>
+<td>無血腥</td>
 </tr>
 <tr>
 <td>3</td>
-<td>小格：「運算中……想站得高，需要一位願意被踩的朋友。」</td>
-<td>小格：「運算中……你先看看那個木箱？」</td>
-<td>提示不點名物件、不給動作</td>
-</tr>
-<tr>
-<td>4</td>
-<td>掉出地圖了，回到檢查點。</td>
-<td>你摔死了。</td>
+<td>圖面一皺，你回到了熟悉的地方。</td>
+<td>你被抓住了，死了。</td>
 <td>無死亡</td>
 </tr>
 <tr>
+<td>4</td>
+<td>它不是故意擋你的。它也在找出口。</td>
+<td>它想殺了你。</td>
+<td>輪廓沒有惡意</td>
+</tr>
+<tr>
 <td>5</td>
-<td>這張桌子的重量，是社長隨手填的。</td>
-<td>這張桌子跟社長一樣重。</td>
-<td>不開身材玩笑</td>
+<td>桌子底下，我從來不讓人看。</td>
+<td>把木箱推到長桌底下。</td>
+<td>提示不給動作</td>
 </tr>
 <tr>
 <td>6</td>
-<td>影子有碰撞箱，這是 bug，但很好用。</td>
-<td>影子裡藏著某種東西在看你。</td>
-<td>無恐怖</td>
+<td>這面書牆，當年我們一起爬過。</td>
+<td>這題的關鍵是：圖上只看左右。</td>
+<td>不破題（H10）</td>
 </tr>
 <tr>
 <td>7</td>
-<td>每份手稿都寫著：第 12 版，最終版。</td>
-<td>（任何當下流行的網路梗或縮寫）</td>
-<td>會過時</td>
+<td>週日上午十點看屋。請勿在牆上畫畫。</td>
+<td>剩下 23 小時 59 分！</td>
+<td>不顯示倒數</td>
 </tr>
 <tr>
 <td>8</td>
-<td>社長：「謝啦，你超可靠。」</td>
-<td>社長：「你這麼笨也修得好？」</td>
-<td>幽默不傷人</td>
+<td>掛著三件大衣，只有一件是叔公的。</td>
+<td>衣櫃裡傳出女人的哭聲。</td>
+<td>不套用經典恐怖橋段</td>
 </tr>
 <tr>
 <td>9</td>
-<td>按下提交，設計稿和完成版都會有它。</td>
-<td>定稿之後，它就不再只是你心裡的草稿。</td>
+<td>換個角度看，就會懂。</td>
+<td>真相只有在黑暗中才能被看見……</td>
 <td>直白優先</td>
 </tr>
 <tr>
 <td>10</td>
-<td>小格：「看得到，但搆不到喔。換個檢視？」</td>
-<td>小格：「錯誤代碼 0x00F3：互動失敗。」</td>
-<td>玩家看不懂技術訊息</td>
+<td>「你總是只看你那一面。」——阿河</td>
+<td>（任何當下流行的網路梗）</td>
+<td>會過時</td>
 </tr>
 </tbody></table></div>
 <h3 id="story--73-範例玄關章1-11-3與書房第一關2-1">7.3 範例：玄關章（1-1～1-3）與書房第一關（2-1）</h3>
-<h4 id="story--旁白與通關台詞">旁白與通關台詞</h4>
+<h4 id="story--旁白與通關文字無同行角色以旁白-字條呈現">旁白與通關文字（無同行角色，以旁白 / 字條呈現）</h4>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>關</th>
-<th>開場旁白</th>
-<th>通關台詞</th>
+<th>開場</th>
+<th>通關</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>1-1 門廊</td>
-<td>社長：「這裡是門廊，教學關！……教學是什麼來著？」</td>
-<td>小格：「切換檢視，學會了。社長，這本來是妳要教的。」</td>
+<td>門把畫在牆上。桌上有一支鋼筆。</td>
+<td>你點了第二下鋼筆。宅邸回來了，人影沒有。</td>
 </tr>
 <tr>
 <td>1-2 玄關</td>
-<td>門不見了，牆上寫著：TODO 記得放門。</td>
-<td>社長：「門回來了！我就說明天就做完……好啦是你做完的。」</td>
+<td>鋼筆少了筆尖。墨線封住了門。</td>
+<td>墨線像退潮一樣散開。門後的走廊很長。</td>
 </tr>
 <tr>
 <td>1-3 衣帽間</td>
-<td>衣架上貼滿「之後再改」的便利貼。</td>
-<td>小格：「教學模組修復完成。下一個：物理模組。」</td>
+<td>掛著三件大衣，只有一件是叔公的。</td>
+<td>第一頁日記：「我們三個，第一次畫這張圖。」</td>
 </tr>
 <tr>
 <td>2-1 書架迴廊</td>
-<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
-<td>社長：「兩個在設計稿裡疊在一起，這樣也算？好聰明！」</td>
+<td>書都背對著你，像在躲什麼。</td>
+<td>書背上的書名，換了一本。</td>
 </tr>
 </tbody></table></div>
-<h4 id="story--三級提示全抽象外殼台詞見-23此處只列提示本體">三級提示（全抽象；外殼台詞見 2.3，此處只列提示本體）</h4>
+<h4 id="story--提示字條叔公的口吻適量抽象不破題-依預算不放署名問津不計字數">提示字條（叔公的口吻；適量、抽象、不破題；「—」= 依預算不放；署名「——問津」不計字數）</h4>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>題</th>
-<th>L1 意象（運算中……）</th>
-<th>L2 觀察角度（找到線索了！）</th>
-<th>L3 缺的性質（只能說這些）</th>
+<th>難度</th>
+<th>這題的 aha（審稿用，不給玩家看）</th>
+<th>L1（一開始就貼著）</th>
+<th>L2（空白，時間到浮現）</th>
+<th>L3</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>1-1a 兩種牆</td>
-<td>這條走廊，好像照著不同的施工圖蓋的。</td>
-<td>擋住你的東西，換了檢視也還在嗎？</td>
-<td>每道牆，都只缺席在其中一邊。</td>
+<td>1</td>
+<td>兩個視角各缺一樣東西</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-1b 紙上跳得高</td>
-<td>在設計稿裡，大家的身體都輕一點。</td>
-<td>上得去的地方和過得去的地方，在同樣的檢視裡嗎？</td>
-<td>上去靠的是輕；過去靠的是深度。</td>
+<td>1.5</td>
+<td>圖上上得去、實景過得去</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-1c 回來的深度</td>
-<td>平面圖上，沒有前面和後面。</td>
-<td>每次回到完成版，你是怎麼決定站在哪裡的？</td>
-<td>回來時的深度，是向腳下借來的。</td>
+<td>2</td>
+<td>回到實景時，落在腳下那個東西的深度</td>
+<td>玻璃這一邊太擠了。另一邊，我替你留了位子。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-2a 書架過缺口</td>
-<td>有些路，只有在沒有深度的地方才連得起來。</td>
-<td>那道缺口，在設計稿裡還是缺口嗎？</td>
-<td>圍住它的東西只蓋在完成版；被圍住的那一層，紙上沒人擋。</td>
+<td>2</td>
+<td>被圍住的書架在圖上就是路</td>
+<td>缺口不寬。當年他們也是這樣走過去的。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-2b 推箱取筆尖</td>
-<td>想站得高，需要一位願意被踩的朋友。</td>
-<td>在設計稿裡，東西要多近才算挨在一起？</td>
-<td>它不必在完成版裡靠過去，紙上排在旁邊就夠。</td>
+<td>3</td>
+<td>箱子只需在圖上挨著高台</td>
+<td>想要高一點？我小時候都踩著朋友的肩膀。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-2c 長桌下的壓板</td>
-<td>有些重量，只在紙上才算數。</td>
-<td>哪些東西，設計稿根本沒畫？</td>
-<td>重的東西要抵達那裡，得走一條平常不會注意的窄路。</td>
+<td>3</td>
+<td>長桌在圖上不存在，踏板在桌子底下</td>
+<td>桌子底下，我從來不讓人看。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-2d 高處的墨水閥</td>
-<td>用過的東西，不一定用完了。</td>
-<td>鎖住之後，還需要一直壓著嗎？</td>
-<td>高處要的不是新東西，是之前幫過你的那位。</td>
+<td>3</td>
+<td>鎖住的踏板放走了箱子，箱子還能再用</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-3a 踩前面，站後面</td>
-<td>一樣的高度，可以有好幾種深度。</td>
-<td>在設計稿裡踩著的，回到完成版還是它嗎？</td>
-<td>回來時，腳下得是靠後面的那一層。</td>
+<td>3.5（易卡關）</td>
+<td>圖上踩前面的箱，回來站在後面的高台</td>
+<td>後面那一排大衣，掛的不是我的。</td>
+<td>你每次從圖裡回來，都站在哪裡？</td>
+<td>—</td>
 </tr>
 <tr>
 <td>1-3b 紙上伸手</td>
-<td>玻璃在平面圖上，只是沒畫出來的框。</td>
-<td>設計稿裡量距離時，前後還算數嗎？</td>
-<td>搆不到的是高度，不是深度。</td>
+<td>3</td>
+<td>圖上沒有深度，也就沒有玻璃與距離</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>2-1a 書梯</td>
-<td>樓梯，不一定要排在同一排。</td>
-<td>在設計稿裡，什麼樣的排列看起來像樓梯？</td>
-<td>階梯只要左右挨著、越往上越高；前後隨意。</td>
+<td>4</td>
+<td>階梯只需在圖上連續</td>
+<td>這面書牆，當年我們一起爬過。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>2-1b 同一格</td>
-<td>排隊的人，從正面只看得到最前面那位。</td>
-<td>這裡要的重量，一定得並排放嗎？</td>
-<td>重量看的是左右位置；深度是另一回事。</td>
+<td>4</td>
+<td>實景擠不下的兩箱，圖上疊在同一處</td>
+<td>這塊板很貪心，一份重量餵不飽它。</td>
+<td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td>2-1c 推到後面也沒用</td>
-<td>躲到後面，不等於躲開了。</td>
-<td>在設計稿裡，前後移動會改變什麼嗎？</td>
-<td>擋路的東西，只有往旁邊挪才算真的挪開。</td>
+<td>5</td>
+<td>往後推沒用，要往旁邊挪，挪對就成階梯</td>
+<td>它不是故意擋你的。它也在找出口。</td>
+<td>它挪過位置之後，圖上有什麼不一樣？</td>
+<td>—</td>
 </tr>
 </tbody></table></div>
-<p>（1-2 原有 3 張紙條改為便利貼，兼作 L1：「看不到的東西，換個檢視可能就在。——社長」「有些重量，只在設計稿裡才算。」「想站高一點，先找個可以踩的。」）</p>
-<h4 id="story--改寫前-改寫後感受差異">改寫前 → 改寫後（感受差異）</h4>
+<p>預算核對（規格 7.1.3）：1-1 共 1 張（上限 4）；1-2 共 3 張（上限 5，即現有三張紙條改寫）；1-3 共 2 張（上限 3）；2-1 共 4 張（上限 4）。</p>
+<p><strong>破題檢查（逐條）</strong>：沿用上一版的字條位置與張數（11 張），口吻全部改為叔公；每張重新比對 aha。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>字條為什麼不洩漏 aha</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-1c</td>
+<td>只說「另一邊有位子」：指出目標方向與一點詭異感，不提腳下、深度、回來的規則</td>
+</tr>
+<tr>
+<td>1-2a</td>
+<td>「當年他們走過去」只說缺口可以過，不提書架、欄杆、藏寶圖</td>
+</tr>
+<tr>
+<td>1-2b</td>
+<td>「踩著朋友的肩膀」只暗示需要墊腳，不說疊高、不說圖上挨著就好</td>
+</tr>
+<tr>
+<td>1-2c</td>
+<td>只把目光引到桌下，不說桌子在圖上不存在、不說踏板只在圖上</td>
+</tr>
+<tr>
+<td>1-3a</td>
+<td>L1 只指出後排；L2 只請玩家回想「回來時站在哪」，答案要自己看出</td>
+</tr>
+<tr>
+<td>2-1a</td>
+<td>只有回憶與情緒，不提階梯排法</td>
+</tr>
+<tr>
+<td>2-1b</td>
+<td>「一份重量不夠」：踏板本身就顯示需要的重量，字條不提並排、深度、疊在一起</td>
+</tr>
+<tr>
+<td>2-1c</td>
+<td>L1 只說它擋路；L2 引導觀察「挪了之後圖上沒變」，不說要往旁邊</td>
+</tr>
+</tbody></table></div>
+<p>現有 <code>foyer.ts</code> 三張紙條（「看不見的地方，不代表不存在……」「站得夠高之前，先找一個肯讓你踩的。」「有些重量，只在紙上才算數。」）依 H10 偏破題，日後改為上表 1-2a～1-2c 的 L1。</p>
+<h4 id="story--改寫對照最初-社團版便利貼-叔公字條">改寫對照（最初 → 社團版便利貼 → 叔公字條）</h4>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>#</th>
-<th>改寫前（太直接）</th>
-<th>改寫後（抽象）</th>
-<th>差在哪</th>
+<th>最初（太直接）</th>
+<th>社團版（已廢止）</th>
+<th>叔公字條（現行）</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>1</td>
-<td>1-1a：運算中……鐵柵只做在完成版，設計稿裡沒有它。</td>
-<td>運算中……這條走廊，好像照著不同的施工圖蓋的。</td>
-<td>不點名鐵柵、不說哪邊沒有</td>
+<td>1-2a：被圍起來的書架，在設計稿裡好像沒有欄杆？</td>
+<td>缺口不大，只是少了一點想像力。</td>
+<td>缺口不寬。當年他們也是這樣走過去的。</td>
 </tr>
 <tr>
 <td>2</td>
-<td>1-2a：運算中……被圍起來的書架，在設計稿裡好像沒有欄杆？</td>
-<td>找到線索了！……那道缺口，在設計稿裡還是缺口嗎？</td>
-<td>不點名書架，只問現象</td>
+<td>1-2c：有些重量，只在紙上才算數。</td>
+<td>桌子底下，我從來不打掃。</td>
+<td>桌子底下，我從來不讓人看。</td>
 </tr>
 <tr>
 <td>3</td>
-<td>1-3a：運算中……從設計稿回來時，你會站在腳下那個東西的位置。</td>
-<td>運算中……一樣的高度，可以有好幾種深度。</td>
-<td>原句直接說出規則</td>
+<td>1-3a：從設計稿回來時，你會站在腳下那個東西的位置。</td>
+<td>後面那一排，我一直想上去看看。</td>
+<td>後面那一排大衣，掛的不是我的。</td>
 </tr>
 <tr>
 <td>4</td>
 <td>2-1b：設計稿裡只看左右。箱子前後差多遠，沒關係。</td>
-<td>運算中……排隊的人，從正面只看得到最前面那位。</td>
-<td>用比喻代替規則與物件名</td>
+<td>它說它很重要，所以要很重。</td>
+<td>這塊板很貪心，一份重量餵不飽它。</td>
 </tr>
 <tr>
 <td>5</td>
-<td>規格 v0.2 L3：「把書車推到迴廊左緣旁」</td>
-<td>只能說這些……階梯只要左右挨著、越往上越高；前後隨意。</td>
-<td>不給動作與位置，玩家仍要自己排</td>
+<td>規格初版 L3：「把書車推到迴廊左緣旁」</td>
+<td>（取消）</td>
+<td>（取消；2-1a 只留 L1「這面書牆，當年我們一起爬過。」）</td>
 </tr>
 </tbody></table></div>
-<h3 id="story--74-其餘章節旁白-機制取得台詞">7.4 其餘章節：旁白 + 機制取得台詞</h3>
+<h3 id="story--74-其餘章節旁白-道具取得文字">7.4 其餘章節：旁白 + 道具取得文字</h3>
 <div class="tw"><table>
 <thead>
 <tr>
 <th>章</th>
 <th>開場旁白</th>
-<th>機制取得台詞</th>
+<th>道具取得</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>玄關（1-2 取得畫筆工具）</td>
-<td>歡迎來到《圖紙之間》！……目前只有教學關能玩。</td>
-<td>小格：「取得：畫筆工具。可以操作設計稿上的開關。」</td>
+<td>玄關</td>
+<td>門在身後鎖上了。桌上的鋼筆，像在等你。</td>
+<td>鋼筆筆尖：「筆尖還是濕的。像有人剛用過。」</td>
 </tr>
 <tr>
-<td>書房（2-2b 取得提交）</td>
-<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
-<td>社長：「按提交，它就同時在兩個檢視裡！一次只能一個喔。」</td>
+<td>書房</td>
+<td>書都朝著牆。叔公說，背面才是正面。</td>
+<td>火漆印章：「蓋上去，圖上和實景就都算數。一次只能封一樣。」</td>
 </tr>
 <tr>
-<td>溫室（3-4a 取得剖面檢視）</td>
-<td>光影模組上線！副作用：影子有碰撞箱。</td>
-<td>小格：「解鎖除錯功能：剖面檢視。只顯示你站的那一層。」</td>
+<td>溫室</td>
+<td>植物朝著一盞燈長。有些影子，比植物先到。</td>
+<td>建築剖面尺：「只看你站的那一層。在實景裡才能調。」</td>
 </tr>
 <tr>
-<td>地下室（4-3a 取得標記點）</td>
-<td>這裡是社長放「先不要」的資料夾。請不要亂翻……來不及了。</td>
-<td>社長：「這是我刪掉的功能！在設計稿點一下，回到完成版還能回到那個高度。」</td>
-</tr>
-<tr>
-<td>地下室（轉折，4-4b 後）</td>
-<td>—</td>
-<td>社長：「我怕大家覺得很爛，所以刪了。」／你：「先做完，再一起改。」</td>
+<td>地下室</td>
+<td>這裡的東西被封起來了。封住的，不只是東西。</td>
+<td>圖釘：「在圖上釘下一點，回到實景，就能回到那個高度。」</td>
 </tr>
 <tr>
 <td>閣樓</td>
-<td>最終關生成中，請稍候……大概。</td>
+<td>三扇天窗，三個人。當年他們各看一面。</td>
 <td>—</td>
 </tr>
 <tr>
 <td>草地</td>
-<td>你們走到遊戲的第一個畫面，也是最後一個。</td>
+<td>天快亮了。換個角度看，就會懂。</td>
 <td>—</td>
 </tr>
 </tbody></table></div>
@@ -3164,33 +3784,34 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </thead>
 <tbody><tr>
 <td>1</td>
-<td>meta 梗（bug、TODO、最終版）太多會變成一直在講同一個笑話</td>
-<td>每關最多 1 個開發梗；謎題本身的提示不用梗</td>
+<td>單人加詭異，前段可能太悶</td>
+<td>前兩章強度只有 1～2，驚嚇每章最多 1 次；律師來信提供一點冷幽默</td>
 </tr>
 <tr>
 <td>2</td>
-<td>角色說話擋住解謎節奏</td>
-<td>對白一次 ≤ 2 句、可跳過；提示只在玩家需要時出現；社長只在章開場與取得機制時說話</td>
+<td>驚嚇與追逐打斷「想」的節奏</td>
+<td>驚嚇只在謎題完成後的空檔；追逐嵌在過場走道，不計入謎題（規格 N19）</td>
 </tr>
 <tr>
 <td>3</td>
-<td>小格同時是角色和提示系統，玩家可能覺得被催；提示全抽象又可能讓人卡太久</td>
-<td>小格只在計時解鎖後才「舉手」，不主動說話；設定可關閉；卡太久時才出現 L4「社長的攻略筆記」（預設鎖定，規格 7.1.2）</td>
+<td>輪廓被誤解成惡靈</td>
+<td>日記從第二章起逐步說明他們是誰；追逐被抓只回檢查點；結局讓他們道謝</td>
 </tr>
 <tr>
 <td>4</td>
-<td>「被吸進遊戲」太常見</td>
-<td>不花篇幅解釋原理，重點放在「把作品做完」與兩人一 AI 的互動</td>
+<td>叔公字條為了詭異而變得難讀或誤導</td>
+<td>提示字條字形一律正常；詭異只在用詞；照 H1～H10 審稿</td>
 </tr>
 <tr>
 <td>5</td>
-<td>結局 B 的「標記點變成新遊戲按鈕」對沒玩過 4-3 以後的人不好懂</td>
-<td>5-1 先埋「不是你放的標記點」伏筆，結局 B 用一句話揭曉，不做長篇說明</td>
+<td>對光敏或怕驚嚇的玩家不友善</td>
+<td>無強光閃爍（規格 9.1 依 WCAG 2.3.1）；「減弱緊張效果」讓追逐自動通過、驚嚇改平靜版</td>
 </tr>
 </tbody></table></div>
 </article>
 <article class="doc" data-doc="arch" data-title="架構設計"><h1 id="arch--圖紙之間程式架構設計-v02">《圖紙之間》程式架構設計 v0.2</h1>
-<div class="meta"><b>最後修訂紀錄</b>：v0.2（2026-11-02）— 第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；<code>HintDef</code> / <code>PuzzleDef</code> / <code>Settings</code> 格式更新；謎題 id <code>1-2a</code>～<code>1-2d</code>、<code>5-5a</code>～<code>5-5c</code></div>
+<div class="meta"><b>最後修訂紀錄</b>：v0.2（老宅尋寶・單人詭異版）（2026-11-02）— 劇情改為老宅尋寶（顯示名見 <code>story-bible-v0.2.md</code>）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 <code>mechanics/chase</code>（N19 追逐，確定性）與 <code>chase</code> 事件；<code>calmTension</code> 語意擴大（驚嚇平靜版、追逐自動通過）</div>
+
 <blockquote>
 <p><strong>修訂紀錄</strong></p>
 <div class="tw"><table>
@@ -3207,6 +3828,21 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 <td>初版架構（commit <code>97bc79c</code>）</td>
 </tr>
 <tr>
+<td>v0.2（老宅尋寶・單人詭異版）</td>
+<td>2026-11-02</td>
+<td>劇情改為老宅尋寶（顯示名見 <code>story-bible-v0.2.md</code>）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 <code>mechanics/chase</code>（N19 追逐，確定性）與 <code>chase</code> 事件；<code>calmTension</code> 語意擴大（驚嚇平靜版、追逐自動通過）</td>
+</tr>
+<tr>
+<td>v0.2（緊張感）</td>
+<td>2026-11-02</td>
+<td>新增 4.13 緊張感呈現（<code>render/tension/</code>、<code>audio/</code>、<code>LevelEntry.mood</code>），依賴規則與 <code>validateMood</code>；<code>Settings.calmTension</code></td>
+</tr>
+<tr>
+<td>v0.2（提示改便利貼）</td>
+<td>2026-11-02</td>
+<td>移除提示角色與提示面板；提示改為場景 <code>note</code> 物件（<code>hint</code> 屬性、延遲顯字、預算檢查）；L4 改為暫停選單解答手稿頁（規格 7.1、7.1.2、7.1.3、H10）</td>
+</tr>
+<tr>
 <td>v0.2</td>
 <td>2026-11-02</td>
 <td>第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；<code>HintDef</code> / <code>PuzzleDef</code> / <code>Settings</code> 格式更新；謎題 id <code>1-2a</code>～<code>1-2d</code>、<code>5-5a</code>～<code>5-5c</code></td>
@@ -3214,7 +3850,7 @@ mark.cur{outline:2px solid var(--accent);background:#ffb347}
 </tbody></table></div>
 </blockquote>
 <blockquote>
-<p>狀態：草案（2026-11-02），對應 <code>game-spec-v0.2.md</code>（下稱「規格」）與 <code>story-bible-v0.1.md</code>（下稱「劇情」）。基準程式為 commit <code>52635aa</code> 的 <code>src/puzzle/</code>（20 檔、約 2.3k 行）與 <code>tests/puzzle/</code>（36 個測試；全專案 <code>vitest run</code> 共 584 個測試）。
+<p>狀態：草案（2026-11-02），對應 <code>game-spec-v0.2.md</code>（下稱「規格」）與 <code>story-bible-v0.2.md</code>（下稱「劇情」）。基準程式為 commit <code>52635aa</code> 的 <code>src/puzzle/</code>（20 檔、約 2.3k 行）與 <code>tests/puzzle/</code>（36 個測試；全專案 <code>vitest run</code> 共 584 個測試）。
 範圍：只寫架構，不改任何程式碼。標記：<strong>〔規格 X〕</strong> = 依據規格章節或 N 編號；<strong>〔碼 file:line〕</strong> = 依據現有程式；<strong><span class="tg t-inf">〔推論〕</span></strong> = 我的判斷，未經實作驗證。
 總原則：<strong>每個抽象都對應一個已知需求</strong>；對應不到的一律不做（見第 8 節）。</p>
 </blockquote>
@@ -3337,7 +3973,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 <td>H16</td>
 <td><code>hud.ts:33,44</code>、<code>hud.ts:6-14</code></td>
 <td>「現實 / 圖紙」「筆尖」、單一 <code>KEY_ICON</code>、<code>setInventory(boolean)</code></td>
-<td>劇情 4 節改名（完成版 / 設計稿 / 畫筆工具）；多物品無法顯示</td>
+<td>劇情 4 節改名（實景 / 藏寶圖 / 鋼筆筆尖）；多物品無法顯示</td>
 </tr>
 <tr>
 <td>H17</td>
@@ -3511,7 +4147,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 </tr>
 <tr>
 <td>L4 呈現</td>
-<td><code>render/</code>、<code>ui/</code>、<code>input/</code></td>
+<td><code>render/</code>、<code>ui/</code>、<code>input/</code>、<code>audio/</code></td>
 <td>three 場景、DOM HUD / 選單、輸入來源</td>
 <td><code>render</code>→<code>core</code>；<code>ui</code>→<code>text</code>；<code>input</code>→<code>core</code>（型別）</td>
 </tr>
@@ -3698,7 +4334,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 <td>✓</td>
 </tr>
 </tbody></table></div>
-<p>另：<code>src/puzzle/**</code> 不得 import <code>src/puzzle</code> 以外的專案檔（GTA 隔離）；<code>src/**</code> 其餘檔案不得 import <code>src/puzzle/**</code>。<code>render</code> 讀 <code>core</code> 只用查詢函式（<code>isActiveIn</code>、<code>allObjs</code>），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。</p>
+<p>另：<code>audio/</code> 的權限同 <code>render</code>（DOM / Web Audio 可用，不得 import three 以外的裸模組）；<code>render/tension/</code> 與 <code>audio/</code> 對 <code>content</code> 只能 <code>import type</code> <code>content/moodTypes.ts</code>（4.13）；<code>core / mechanics / meta / text / devtools</code> 不得 import <code>render/</code>、<code>audio/</code>。<code>src/puzzle/**</code> 不得 import <code>src/puzzle</code> 以外的專案檔（GTA 隔離，含 <code>src/audio/</code>）；<code>src/**</code> 其餘檔案不得 import <code>src/puzzle/**</code>。<code>render</code> 讀 <code>core</code> 只用查詢函式（<code>isActiveIn</code>、<code>allObjs</code>），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。</p>
 <h3 id="arch--23-可自動檢查的依賴規則測試設計不實作">2.3 可自動檢查的依賴規則（測試設計，不實作）</h3>
 <p><code>tests/puzzle/architecture.test.ts</code>：</p>
 <ol>
@@ -3735,19 +4371,21 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
     items.ts                 C8/N9：物品、requires/grants、key/pickup/inklock 類型
     links.ts                 C7/N10/N13：opens 連結、gate/inkwall/inkbridge、延後關閉
     plates.ts                C6/N2/N3/N4/N14：壓板計重
-    notes.ts                 C14：便利貼
+    notes.ts                 C14：字條
     exit.ts                  出口門 → cleared
     pin.ts                   N5（N7 的定稿入口）
     light.ts                 N6/N7/N15：燈、caster、影子推導與定稿
     section.ts               N8：剖面
     mark.ts                  N16：墨記、區域限制
+    chase.ts                 N19：追逐（輪廓路徑、2D 限定判定、檢查點、減弱模式自動通過；4.14）
   content/                   L2 純資料
     items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
     chapters.ts              CHAPTERS（章、主題 id、旁白 key）
+    moodTypes.ts             MoodDef 純型別（零依賴，4.13）
     levels/index.ts          LEVELS 登錄表（id、章、解鎖、def）
     levels/ch1/1-2-foyer.ts  現有玄關（export 名仍為 foyer）
     levels/ch1/…、ch2/…      各關一檔（22 + 3）
-    text/zh-Hant/index.ts    zh-Hant 文字表（ui / msg / obj / lvl / hint / story / term 分檔）
+    text/zh-Hant/index.ts    zh-Hant 文字表（ui / msg / obj / lvl / note / guide / story / term 分檔）
   text/                      L2&#39; 文字系統
     text.ts                  createText(bundle, fallback)、插值、[[term.*]] 解析
   meta/                      L3 外圍規則
@@ -3756,7 +4394,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
     settings.ts              Settings、預設值、校正
     stats.ts                 puzzle:stats
     progress.ts              解鎖規則、能力計算
-    hints.ts                 HintStrategy（timed/always/off）、卡關偵測
+    hints.ts                 NoteRevealStrategy（timed/always/off）、卡關偵測、解答手稿解鎖
   input/                     L4 輸入
     types.ts                 InputSource、Bindings、ShellAction
     bindings.ts              DEFAULT_BINDINGS、重綁合併
@@ -3767,17 +4405,20 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
     materials.ts             Painter 沿用（2D/3D 雙材質）
     textures.ts              沿用
     transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
-    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線）
+    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線、字條浮現字跡與邊角發光）
     themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組
     models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
     decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯…由關卡資料擺放）
     debug.ts                 DEV：碰撞盒線框（可選）
+    tension/director.ts      TensionDirector：氛圍、詭異裝飾事件、驚嚇、暈影、色溫、鏡頭緩推（4.13）
+    models/chaser.ts         N19 輪廓外觀（只在藏寶圖）
+  audio/                     L4 最小 Web Audio 合成（4.13）
+    synth.ts                 PuzzleAudio：章節底音、分層音軌、脈動低音、鐘音、驚嚇音、限幅器、回饋音
   ui/                        L4 DOM
-    hud.ts                   依 HudModel 繪製（模式、物品列、提示、吐司）
+    hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
     icons.ts                 物品 id → SVG
-    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）
-    hintPanel.ts             小格提示面板
+    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的字條，唯讀）、guide（叔公的解答手稿頁，解答模式）
     puzzle.css               沿用
   app/                       L5 外殼
     app.ts                   畫面狀態機
@@ -3918,7 +4559,8 @@ export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, p?
 
 export type GameEvent =
   | { t: &#39;switch&#39;; to: Mode } | { t: &#39;switchDenied&#39; } | { t: &#39;reset&#39; } | { t: &#39;fall&#39; }
-  | { t: &#39;flag&#39;; flag: string } | { t: &#39;item&#39;; id: ItemId; n: number } | { t: &#39;cleared&#39; };
+  | { t: &#39;flag&#39;; flag: string } | { t: &#39;item&#39;; id: ItemId; n: number } | { t: &#39;cleared&#39; }
+  | { t: &#39;chase&#39;; id: string; s: &#39;start&#39; | &#39;caught&#39; | &#39;end&#39; | &#39;autoPass&#39; };   // N19（4.14）
 
 export interface ActionFrame { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[] }
 export type WorldAction = &#39;flip&#39; | &#39;reset&#39; | &#39;interact&#39; | &#39;pin&#39; | &#39;section&#39; | &#39;mark&#39;;
@@ -4161,11 +4803,11 @@ export class PuzzleScene {
 <li>效能：切換視角只換材質與相機（現況做法）；derived 物件 id 穩定（<code>light:shadow:&lt;casterId&gt;</code>），對帳只在增減時建 / 拆模型，縮放走 <code>update</code>。數百物件不需 instancing<span class="tg t-inf">〔推論〕</span>。</li>
 </ul>
 <h3 id="arch--46-輸入層input">4.6 輸入層（<code>input/</code>）</h3>
-<pre><code class="language-ts">export type ShellAction = &#39;restart&#39; | &#39;hint&#39; | &#39;skip&#39; | &#39;menu&#39;;
+<pre><code class="language-ts">export type ShellAction = &#39;restart&#39; | &#39;notes&#39; | &#39;menu&#39;;   // &#39;skip&#39; 移到解答手稿頁內（只限擴充題）
 export type InputAction = WorldAction | ShellAction;
 export type Axis = &#39;left&#39; | &#39;right&#39; | &#39;up&#39; | &#39;down&#39; | &#39;jump&#39;;
 export type Bindings = Record&lt;InputAction | Axis, string[]&gt;;   // KeyboardEvent.code
-export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H hint（規格 N5/N8/4.1/7.1）
+export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H notes（重看已出現的字條；規格 N5/N8/4.1/7.1）
 
 export interface InputSource {
   /** 每幀取樣：持續軸 + 本幀新按下的動作（取走即清空） */
@@ -4187,16 +4829,16 @@ export function mergeSources(sources: InputSource[]): InputSource;   // 觸控 /
 // boot →(無暱稱) nickname → menu → level → clear → (下一關 | menu)；6-1 → ending → menu
 </code></pre>
 <p>資料流（單向）：</p>
-<pre><code>InputSource.poll ─► ShellAction ─► App（restart/hint/menu/skip）
-                └─► ActionFrame ─► step(world) ─► world.events ─► meta（hints 計數、stats、save）
+<pre><code>InputSource.poll ─► ShellAction ─► App（restart/notes/menu）
+                └─► ActionFrame ─► step(world) ─► world.events ─► meta（字條顯字計時與卡關計數、stats、save）
                                          │
-                                         ├─► deriveHud(world, text, hintState, bindings) ─► ui.render(HudModel)
+                                         ├─► deriveHud(world, text, noteState, bindings) ─► ui.render(HudModel)
                                          └─► PuzzleScene.update(world)
 UI 按鈕 ─► App 指令（不直接改 world）
 </code></pre>
 <ul>
 <li><code>app/loop.ts</code>：固定步長 1/60 累加器（測試 <code>DT=1/60</code> 相同；決策 Q4 已確認）、過場鎖 0.3 秒期間不呼叫 <code>step</code>（沿用 <code>game.ts:90-101</code> 語意）。</li>
-<li><code>deriveHud</code> 是純函式（可在 Node 測）：<code>{ modeText, items: {id, n}[], prompt, toast, narration, hint }</code>；<code>ui/hud.ts</code> 只做 diff 後寫 DOM。</li>
+<li><code>deriveHud</code> 是純函式（可在 Node 測）：<code>{ modeText, items: {id, n}[], prompt, toast, narration, newNoteGlow }</code>（<code>newNoteGlow</code> 只是「有新字條浮現」的小圖示狀態，不顯示內容）；<code>ui/hud.ts</code> 只做 diff 後寫 DOM。</li>
 <li>畫面狀態機用一個 <code>switch</code> + <code>enter/exit</code>，不引入狀態機函式庫（只有 7 個狀態）。</li>
 </ul>
 <h3 id="arch--48-內容載入contentlevelsindextsmetaprogressts">4.8 內容載入（<code>content/levels/index.ts</code>、<code>meta/progress.ts</code>）</h3>
@@ -4204,6 +4846,8 @@ UI 按鈕 ─► App 指令（不直接改 world）
   id: string; chapter: 1 | 2 | 3 | 4 | 5 | 6 | &#39;H&#39;;
   def: LevelDef;
   unlock: Unlock; core: boolean;   // core：只做核心題時的範圍篩選（規格 6.9）
+  mood?: MoodDef;                  // 氛圍 / 緊張 / 驚嚇呈現資料（4.13；全遊戲，強度依規格 9.1）
+  chases?: ChaseDef[];             // N19 追逐走道（4.14；只在 3-4、4-4、5-5）
 }
 export type Unlock =
   | { after: string[] }                               // 線性；5-5 = after [&#39;5-2&#39;,&#39;5-3&#39;,&#39;5-4&#39;]
@@ -4236,39 +4880,46 @@ export const MIGRATIONS: Record&lt;number, Migration&gt; = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, hintAssist, assistMode, inkPalette, reduceMotion, keys }（hintAssist / assistMode 預設 false，規格 8）
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, inkPalette, reduceMotion, keys }（guideMode / calmTension 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial&lt;PuzzleStat&gt;): void;
 </code></pre>
 <ul>
 <li><strong>壞資料回退</strong>：JSON 解析失敗或校正後不合法 → 原字串備份到 <code>puzzle:save:corrupt</code>、回傳預設存檔，不丟例外（遊戲照樣能開）。校正是手寫 type guard（不引入 zod 等相依）。</li>
 <li>關內不存檔（規格 Q4）：<code>snapshot</code> 只供記憶體內使用（回到謎題開始、Boss 階段），不寫 storage。</li>
 </ul>
-<h3 id="arch--410-提示系統content-資料-metahintsts-uihintpanelts">4.10 提示系統（<code>content</code> 資料 + <code>meta/hints.ts</code> + <code>ui/hintPanel.ts</code>）</h3>
+<h3 id="arch--410-提示系統場景字條content-資料-metahintsts-rendermarkersts無提示面板無對話框">4.10 提示系統（場景字條：<code>content</code> 資料 + <code>meta/hints.ts</code> + <code>render/markers.ts</code>；無提示面板、無對話框）</h3>
+<p>規格 7.1：提示只用場景裡的字條（<code>type:&#39;note&#39;</code>），沒有提示角色。L1 一開始可讀；L2、L3 是空白字條，時間到或卡關偵測才「浮現字跡」。</p>
 <pre><code class="language-ts">export interface PuzzleDef {
   id: string;                       // &#39;1-2a&#39;～&#39;1-2d&#39;、&#39;5-5a&#39;～&#39;5-5c&#39;（決策 Q3，已確認）
   core: boolean;
+  difficulty: number;               // 規格 6 的難度；驗證器據此檢查字條預算（規格 7.1.3）
+  stuckProne?: boolean;             // 「易卡關」：難度 3～4.5 也可放 L2
   doneFlag: string;                 // 完成判定，例 &#39;item:nib&#39;、&#39;on:plate&#39;、&#39;zone:exit&#39;
-  hints: [HintDef, HintDef, HintDef];   // L1 意象 / L2 觀察角度 / L3 缺的性質，三級全抽象（規格 7.1、D7）
-  solutionKey: TextKey;                 // L4 解法筆記（安全閥，預設鎖定；規格 7.1.2）
-  keyObjects: ObjId[];                  // 本題關鍵物件：驗證器據此檢查提示不得點名（規格 7.1.1 H4）
-  assistFocus?: ObjId[];                // 只在 Settings.hintAssist 開啟時用於 L2 描邊（規格 Q-E，預設關）
+  area: Box2;                       // 謎題範圍（x、y），提示字條必須在內（驗證器）
+  aha: TextKey;                     // 本題 aha 一句（審稿用，不顯示），H10 人工比對
+  ahaTerms: string[];               // H10 自動比對詞表（例 2-1b：[&#39;深度&#39;,&#39;疊&#39;,&#39;並排&#39;,&#39;左右&#39;]）
+  keyObjects: ObjId[];              // H4：字條不得點名
+  solutionKey: TextKey;             // 解答手稿頁內容（規格 7.1.2）
 }
-export interface HintDef { textKey: TextKey; truthRef: string }   // truthRef：對應解法大綱的步驟或規則（H5 人工審稿用）
 
-export interface HintState { puzzleId: string | null; unlocked: 0 | 1 | 2 | 3 | 4; ready: 0 | 1 | 2 | 3 | 4; shown: 0 | 1 | 2 | 3 | 4 }   // 4 = L4 解法筆記
-export interface HintStrategy {
+/** 提示字條 = 一般 note 物件多一個 hint 屬性；位置、可見模式（預設 both）都在關卡資料裡 */
+export interface NoteHint { puzzle: string; level: 1 | 2 | 3; truthRef: string }
+// ObjDef（4.3）新增選填欄位：hint?: NoteHint；文字 key = `note.&lt;puzzleId&gt;.&lt;1|2|3&gt;`
+
+export interface NoteState { puzzleId: string | null; revealed: Record&lt;ObjId, true&gt;; sinceSec: number; guideReady: boolean }
+export interface NoteRevealStrategy {
   /** realSec 為真實經過秒數（暫停不計）；events 為本幀 world.events */
-  update(s: HintState, realSec: number, events: readonly GameEvent[]): HintState;
-  request(s: HintState, hold?: boolean): HintState;   // 按 H；L4 需 hold（按住 2 秒）
+  update(s: NoteState, realSec: number, events: readonly GameEvent[]): NoteState;
 }
-export const HINT_STRATEGIES: Record&lt;&#39;timed&#39; | &#39;always&#39; | &#39;off&#39;, () =&gt; HintStrategy&gt;;
+export const NOTE_STRATEGIES: Record&lt;&#39;timed&#39; | &#39;always&#39; | &#39;off&#39;, () =&gt; NoteRevealStrategy&gt;;
 </code></pre>
 <ul>
 <li><strong>目前謎題</strong> = <code>level.puzzles</code> 中第一個 <code>doneFlag</code> 未成立者（關內謎題線性，規格 6；<span class="tg t-inf">〔推論〕</span>5-x 若需並行再加欄位）。新旗標事件 → 計時與計數歸零。</li>
-<li><strong>計時</strong>（規格 7.1）：L1 3 分、L2 +3 分、L3 +4 分；L4 在 L3 <strong>顯示後</strong>再 5 分鐘（<code>Settings.assistMode</code> 開啟則免等待）。</li>
-<li><strong>卡關偵測</strong>（規格 7.1）只吃 <code>world.events</code>：<code>reset ≥3</code>、<code>switch ≥12 且無 flag</code>、<code>fall ≥3</code> → <code>ready+1</code>（只亮圖示），<strong>上限 L3</strong>；對 L4 只把等待縮短到 3 分鐘。</li>
-<li><strong>跳過此題</strong>：只在 <code>core === false</code>（擴充題）時提供，與 L4 同條件出現；寫入 <code>stats.skipped</code>。</li>
-<li><strong>與「小格」的關係</strong>：策略只產生「第幾級可用」；小格的台詞外殼（「運算中……」「找到線索了！……大概。」「好吧，直接說——啊不行，只能說這些。」；L4「借你社長的攻略筆記」）是 <code>ui/hintPanel.ts</code> + 文字表 <code>story.xiaoge.*</code>，換角色或關閉小格只動 UI 與文字。0 級回饋（C9「看得見，卻碰不到」）仍由核心 <code>say(&#39;msg.unreachable&#39;)</code>，劇情改由小格說只需改文字。</li>
+<li><strong>顯字計時</strong>：L1 不計時（場景物件，<code>always</code> 可讀）；L2 進入謎題 4 分鐘、L3 8 分鐘。<code>always</code> = 一開始就顯字；<code>off</code> = L2、L3 字條不生成（L1 照常）。</li>
+<li><strong>卡關偵測</strong>只吃 <code>world.events</code>：<code>reset ≥3</code>、<code>switch ≥12 且無 flag</code>、<code>fall ≥3</code> → 下一張空白字條提前顯字；不影響解答手稿以外的任何東西。</li>
+<li><strong>「字條浮現」事件</strong>：<code>meta/hints.ts</code> 產生 <code>{ type:&#39;noteRevealed&#39;, id }</code> 給 app；app 把 <code>revealed</code> 寫進 <code>world.ext.notes</code>（供 <code>interact</code> 讀到文字：未顯字時互動只顯示「這張還是空白的。」），<code>render/markers.ts</code> 依 <code>revealed</code> 畫字跡淡入與邊角發光，HUD 只亮 <code>newNoteGlow</code> 小圖示。不彈窗、不暫停遊戲。</li>
+<li><strong>解答手稿</strong>（規格 7.1.2，暫定）：<code>guideReady</code> 在進入謎題 10 分鐘後成立（卡關偵測可縮至 6 分）或 <code>Settings.guideMode</code> 開啟；<code>ui/screens/guide.ts</code> 在暫停選單顯示，打開前需確認警語；擴充題（<code>core === false</code>）另有「跳過此題」，寫入 <code>stats.skipped</code>。</li>
+<li>C9「看得見，卻碰不到」仍由核心 <code>say(&#39;msg.unreachable&#39;)</code>，是系統訊息，無說話者。</li>
 </ul>
 <h3 id="arch--411-文字-文案系統textcontenttext">4.11 文字 / 文案系統（<code>text/</code>、<code>content/text/</code>）</h3>
 <pre><code class="language-ts">export type TextBundle = Readonly&lt;Record&lt;TextKey, string&gt;&gt;;
@@ -4280,7 +4931,7 @@ export interface Text {
 export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   // 缺 key → fallback → 回傳 key 本身（DEV 警告）
 </code></pre>
 <ul>
-<li>key 命名：<code>ui.*</code>（HUD / 選單）、<code>msg.*</code>（系統訊息）、<code>obj.&lt;type&gt;.*</code>（類型預設 label / verb）、<code>lvl.&lt;levelId&gt;.*</code>（標題、旁白、便利貼、物件 label）、<code>hint.&lt;puzzleId&gt;.&lt;1|2|3|sol&gt;</code>、<code>story.*</code>（角色台詞、結局）、<code>term.*</code>（詞彙表）。</li>
+<li>key 命名：<code>ui.*</code>（HUD / 選單）、<code>msg.*</code>（系統訊息）、<code>obj.&lt;type&gt;.*</code>（類型預設 label / verb）、<code>lvl.&lt;levelId&gt;.*</code>（標題、旁白、字條、物件 label）、<code>note.&lt;puzzleId&gt;.&lt;1|2|3&gt;</code>（提示字條；劇情字條仍在 <code>lvl.&lt;levelId&gt;.note.*</code>）、<code>guide.&lt;puzzleId&gt;</code>（解答手稿）、<code>story.*</code>（旁白、叔公日記 <code>story.diary.&lt;1..5&gt;</code>、殘片背面 <code>story.scrap.&lt;1..6&gt;</code>、律師來信 <code>story.letter.&lt;章&gt;</code>、結局 <code>story.ending.&lt;A|B&gt;</code>）、<code>term.*</code>（詞彙表）。</li>
 <li><strong>劇情詞彙與內部 id 分離</strong>：內部一律用規格代號（<code>key</code>、<code>valve</code>、<code>pin</code>、<code>mark</code>、模式 <code>&#39;2d&#39;</code>）；玩家看到的名稱集中在 <code>term.*</code>：<code>term.mode3d=&#39;現實&#39;</code>、<code>term.nib=&#39;筆尖&#39;</code>。劇情 4 節的改名 = 改 <code>term.*</code> 幾行，其他字串透過 <code>[[term.nib]]</code> 自動跟著變。</li>
 <li>暱稱：<code>{name}</code> 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。</li>
 <li>多語系：新增 <code>content/text/en/</code> 同 key 表，<code>createText(en, zhHant)</code> 以中文回退；驗證器檢查各語系 key 集合。</li>
@@ -4307,10 +4958,87 @@ export interface ScanSpec {
 }
 export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): Array&lt;{ sample: string; flag: string }&gt;;
 </code></pre>
-<p><strong>驗證器規則</strong>（每條附規格依據）：id 唯一；類型已註冊；<code>opens/requires/grants</code> 參照存在；<code>requires</code> 的能力在 <code>abilities</code> 或關內可得（規格 8）；每個 puzzle 三級提示 + <code>solutionKey</code> 齊全、<code>hint.*</code> key 存在（規格 7.1）；<strong>提示 lint</strong>（規格 7.1.1 H1～H4）：L1 ≤24、L2 ≤30、L3 ≤36 字，禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，且不得含 <code>keyObjects</code> 的 label / 顯示名（H5～H9 為人工審稿與 G1 試玩項，不自動化）；每關 <code>pinnable</code> 1～3 個（規格 N5）；切換式閥 ≤2（規格 N10）；燈車 ≤1（規格 N15）；墨記關卡必有 <code>regions</code> 且不重疊（Q-C）；起點與檢查點在兩模式站得住（現有測試 <code>puzzleLogic.test.ts:24</code>）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 <code>*Key</code> 在 zh-Hant 存在；各機制 <code>validate</code>。
+<p><strong>驗證器規則</strong>（每條附規格依據）：id 唯一；類型已註冊；<code>opens/requires/grants</code> 參照存在；<code>requires</code> 的能力在 <code>abilities</code> 或關內可得（規格 8）；<strong>字條預算</strong>（規格 7.1.3）：每題提示字條張數符合難度表（<code>stuckProne</code> 例外）、每關提示字條 ≤ 謎題數 + 1、每關字條總數（提示 + 劇情）≤ 謎題數 + 3、同一 2D 畫面寬（約 16）內 ≤ 3 張且間距 ≥ 3；每張提示字條位於所屬謎題 <code>area</code> 內、兩模式都站得到（重用 <code>place</code> 檢查）、<code>note.*</code> 與 <code>guide.&lt;id&gt;</code> key 存在；<strong>字條 lint</strong>（規格 7.1.1 H1～H4、H10）：L1 ≤24、L2 ≤30、L3 ≤36 字（署名不計），禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，不得含 <code>keyObjects</code> 的 label / 顯示名，不得含該題 <code>ahaTerms</code>（H5～H10 語意部分為人工審稿與 G1 試玩項）；起點與檢查點在兩模式站得住（現有測試 <code>puzzleLogic.test.ts:24</code>）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 <code>*Key</code> 在 zh-Hant 存在；各機制 <code>validate</code>。
 <strong>捷徑掃描</strong>是取樣器而非求解器：誠實地說，它只能證明「取樣到的配置 × 探針」沒有捷徑；探針與取樣格由寫關卡的人負責。成本估計：3 箱 × 10×6 格 × 數個玩家點 × 6 探針，每探針 ≤3 秒模擬，單關約數秒<span class="tg t-inf">〔推論〕</span>。
 <strong>通關回放</strong>：每關一個 <code>tests/puzzle/levels/&lt;id&gt;.test.ts</code>，以 <code>runScript</code> 從 <code>createWorld</code> 走到 <code>cleared</code>。
 <strong>Debug 疊層</strong>（可選，DEV only）：<code>render/debug.ts</code> 畫 <code>solidsFor(renderMode)</code> 線框與 flags 清單；<code>main.ts</code> 已有 <code>window.__puzzle</code>（<code>main.ts:5</code>）沿用。</p>
+<h3 id="arch--413-氛圍緊張與驚嚇呈現rendertensionaudio規格-91">4.13 氛圍、緊張與驚嚇呈現（<code>render/tension/</code>、<code>audio/</code>；規格 9.1）</h3>
+<p>全遊戲使用，強度逐章上升（規格 9.1 曲線）；<strong>純呈現層</strong>，核心與機制不知道它存在。四種詭異手法（只在藏寶圖出現的輪廓、不一致的影子、回到圖釘後的小變化、切換瞬間換位的裝飾）全部是 decor，不是 <code>ObjDef</code>。</p>
+<ul>
+<li><strong>資料位置</strong>：放在 content 層 <code>LevelEntry</code>（4.8）的 <code>mood?: MoodDef</code> 欄位，<strong>不放進 core 的 <code>LevelDef</code></strong>（否則核心型別得認識呈現資料）。型別在 <code>content/moodTypes.ts</code>（純型別、零依賴）。</li>
+</ul>
+<pre><code class="language-ts">// content/moodTypes.ts
+export interface MoodDef {
+  intensity: 0 | 1 | 2 | 3;                         // 關卡基準；Boss 由 stages 覆寫
+  light?: { intensity: number /* 0.55～1 */; breathe?: { amp: number /* ≤ 0.1 */; periodSec: number /* ≥ 3 */ } };
+  fog?: { near: number /* ≥ 12 */; far: number /* ≥ 28 */ };
+  saturation?: number;                              // 0.6～1
+  vignette?: { edgeDark: number /* ≤ 0.30 */; clearCenter: number /* ≥ 0.75 */ };
+  tint?: { hue: &#39;cool&#39; | &#39;warm&#39;; amount: number /* ≤ 0.12 */; fromFlag?: string };
+  cameraDrift?: { dolly3d: number /* ≤ 0.10 */; zoom2d: number /* ≤ 0.08 */; inSec: number /* ≥ 8 */; outSec: number /* ≥ 2 */ };
+  ambience: { bed: &#39;pad&#39; | &#39;drone&#39; | &#39;layers&#39; | &#39;dawn&#39;; layers?: Array&lt;&#39;pad&#39; | &#39;pulse&#39; | &#39;arp&#39;&gt;; pulseBpm?: [number, number] /* 60～96 */; droneHz?: number /* 40～80 */ };
+  events: MoodEventDef[];
+  stages?: Array&lt;{ untilFlag: string; patch: Partial&lt;MoodDef&gt; }&gt;;   // Boss 三階段，以階段旗標切換
+}
+export interface MoodEventDef {
+  id: string;
+  kind: &#39;sketchFigure&#39; | &#39;mismatchShadow&#39; | &#39;pinEcho&#39; | &#39;swapOnSwitch&#39; | &#39;envStep&#39; | &#39;silenceThenChime&#39; | &#39;tintShift&#39; | &#39;cameraDrift&#39; | &#39;scare&#39;;
+  on: { flag?: string; switchNth?: number[]; pinRecall?: true; chase?: &#39;start&#39; | &#39;end&#39;; cleared?: true };
+  category: &#39;env&#39; | &#39;sound&#39; | &#39;visual&#39;;
+  strong?: boolean;                                 // 同時最多兩類（規格 9.1）
+  decorIds?: string[];                              // 只能指向 decor，保證無碰撞、不可互動
+  calmVariant?: &#39;skip&#39; | &#39;gentle&#39;;                  // 減弱模式下：不播 / 改平靜版（驚嚇必須是 &#39;gentle&#39;）
+}
+
+// render/tension/director.ts
+export interface TensionDirector {
+  load(def: MoodDef | undefined, calm: boolean): void;   // calm = Settings.calmTension
+  update(dt: number, events: readonly GameEvent[], view: { mode: Mode; puzzleArea: Box2 | null }): void;
+  dispose(): void;
+}
+// audio/synth.ts（新增；最小 Web Audio 合成，不得 import src/audio/）
+export interface PuzzleAudio {
+  setBed(bed: MoodDef[&#39;ambience&#39;][&#39;bed&#39;], fadeSec: number): void;
+  setLayers(layers: readonly (&#39;pad&#39; | &#39;pulse&#39; | &#39;arp&#39;)[], fadeSec: number): void;
+  setPulseBpm(bpm: number, rampSec: number): void;
+  chime(afterSilenceSec: number): void;
+  sting(calm: boolean): void;                             // 驚嚇音；經限幅器（門檻 -6 dBFS）；calm 時改柔和聲
+  thump(): void;                                          // 關鍵動作回饋音
+  setViewFilter(mode: Mode): void;                        // 藏寶圖低通 1.2 kHz / 實景 4 kHz
+  stopAll(): void;
+}
+</code></pre>
+<ul>
+<li><strong>單向事件匯流</strong>：core → <code>world.events</code>（<code>switch</code>、<code>flag</code>、<code>fall</code>、<code>cleared</code>、<code>chase</code>）→ <code>app/loop.ts</code> → <code>TensionDirector.update</code> / <code>PuzzleAudio</code>。director 只讀、不回寫 world；Boss 階段以旗標表示（<code>stages[].untilFlag</code>），與 4.3 的 <code>phases</code> 同一組旗標。「回到圖釘」由 <code>flag</code>（<code>mark:recalled</code>）事件表示。</li>
+<li><strong>預算執行</strong>（規格 9.1）：director 內部檢查同時類別 ≤ 2、事件最小間隔、驚嚇前後留白（前 ≥ 2 秒、後 ≥ 15 秒）、謎題開始 60 秒 / 重生 10 秒 / 字條浮現 5 秒靜默窗、事件不落在目前謎題 <code>area</code> 內。</li>
+<li><strong>減弱緊張效果</strong>（<code>Settings.calmTension</code>，預設 false）：<code>load(def, true)</code> 時暈影、色溫、鏡頭推近、脈動低音、環境漸變與詭異裝飾事件停用，驚嚇改 <code>gentle</code>；<strong>追逐自動通過屬邏輯效果，由 4.14 的 <code>chase</code> 機制處理</strong>（<code>createWorld</code> 的 <code>options.calmTension</code>），不靠呈現層。</li>
+<li><strong>依賴規則</strong>：<code>render/tension/</code>、<code>audio/</code> 可 <code>import type</code> <code>content/moodTypes.ts</code> 與 <code>core</code> 的 <code>GameEvent</code>；<code>core/</code>、<code>mechanics/</code>、<code>meta/</code>、<code>text/</code>、<code>devtools/</code> 不得 import <code>render/</code> 或 <code>audio/</code>；<code>content/moodTypes.ts</code> 不得 import 任何檔（2.3 測試加一條）。</li>
+<li><strong>測試策略</strong>：邏輯測試不載入 tension / audio，因此不受影響；<code>devtools/validate.ts</code> 加 <code>validateMood(LEVELS)</code>：參數上下限（上方註解）、強度曲線與規格 9.1 一致、事件數 ≤ 強度上限、驚嚇每章 ≤ 1 且 <code>calmVariant === &#39;gentle&#39;</code>、<code>decorIds</code> 只指向 decor；<code>TensionDirector</code> 的預算邏輯以假事件序列在 Node 單元測試（不碰 three）；限幅器與音量以 <code>OfflineAudioContext</code> 在瀏覽器測試量峰值<span class="tg t-inf">〔推論〕</span>；視覺與聽覺以 G1 / 各里程碑人工試玩檢查。</li>
+</ul>
+<h3 id="arch--414-n19-追逐mechanicschasets規格-42">4.14 N19 追逐（<code>mechanics/chase.ts</code>；規格 4.2）</h3>
+<p><strong>確定性邏輯，放機制層</strong>；輪廓的外觀放 <code>render/models/chaser.ts</code>（依 <code>allObjs</code> 對帳，與其他物件相同）。</p>
+<pre><code class="language-ts">export interface ChaseDef {
+  id: string;                        // 例 &#39;chase:3-4&#39;
+  startFlag: string;                 // 進入走道（zone 旗標）
+  endZone: Box2;                     // 抵達即結束 → flag `${id}:done`
+  checkpoint: { x: number; y: number; z: number };
+  path: Array&lt;{ x: number; y: number }&gt;;   // 只沿 x 前進、貼地；位置 = f(觸發後模擬時間)
+  speed: number;                     // 2.6（規格 Q-H 暫定）
+  lead: number;                      // 起跑落後 ≥ 6
+  assistAfterCaught: number;         // 3 → 速度 ×0.8
+  region: string;                    // 圖釘區域（Q-C）：走道自成一區，不能用圖釘跨出
+}
+// 機制掛點（4.2）：
+//   init   ：每個 ChaseDef 生成一個 ObjState{ def:{ type:&#39;chaser&#39;, visible:&#39;2d&#39;, solid:false } }（不擋路、不算重量、不可蓋印、不投影）
+//   presence(2d)：恆 true（不受剖面過濾）
+//   afterStep：若已觸發 → 依 t 推進位置；玩家在 2D 且 x-y 盒重疊 → respawn 到 checkpoint、重置 t、caught+1、emit { t:&#39;chase&#39;, s:&#39;caught&#39; }
+//              抵達 endZone → setFlag(`${id}:done`)、emit { t:&#39;chase&#39;, s:&#39;end&#39; }
+//   options.calmTension：startFlag 成立時直接 setFlag(`${id}:done`)、emit { t:&#39;chase&#39;, s:&#39;autoPass&#39; }，不生成輪廓
+</code></pre>
+<ul>
+<li>走道位於謎題 <code>area</code> 之外；<code>validate</code> 檢查：走道與任何謎題 <code>area</code> 不相交、走道沒有可推物、<code>region</code> 與相鄰區域不重疊、<code>startFlag</code> 只在某題 <code>doneFlag</code> 之後可達（規格：追逐不屬於任何謎題）。</li>
+<li><strong>測試策略</strong>（規格 4.2）：<code>runScript</code> 腳本回放——成功路徑必過；一直待在 2D 必被追上且旗標不變；同輸入兩次逐幀位置相同；<code>calmTension</code> 下進入即通過；被追上 3 次後速度 ×0.8；加入走道後該關既有通關腳本與捷徑掃描結果不變。</li>
+</ul>
 <hr>
 <h2 id="arch--5-擴充劇本">5. 擴充劇本</h2>
 <div class="tw"><table>
@@ -4336,7 +5064,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 </tr>
 <tr>
 <td>新增一關（例：2-1）</td>
-<td><code>content/levels/ch2/2-1-shelves.ts</code>；<code>content/text/zh-Hant/lvl-2-1.ts</code>、<code>hint-2-1.ts</code>；<code>tests/puzzle/levels/2-1.test.ts</code>（通關＋反例＋掃描）</td>
+<td><code>content/levels/ch2/2-1-shelves.ts</code>；<code>content/text/zh-Hant/lvl-2-1.ts</code>、<code>note-2-1.ts</code>（字條與解答手稿）；<code>tests/puzzle/levels/2-1.test.ts</code>（通關＋反例＋掃描）</td>
 <td><code>content/levels/index.ts</code> 一行；<code>chapters.ts</code> 的 levels 陣列</td>
 <td>無</td>
 </tr>
@@ -4365,7 +5093,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 <td>無</td>
 </tr>
 <tr>
-<td>新提示策略</td>
+<td>新的字條顯字策略</td>
 <td>在 <code>meta/hints.ts</code> 加一個 factory</td>
 <td><code>Settings.hints</code> 聯集加值</td>
 <td>無</td>
@@ -4409,11 +5137,11 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 <li>兌現（3D、站穩）：玩家目前 x 所在 region ≠ 墨記 region → <code>say(&#39;msg.mark.region&#39;)</code>；否則目標盒 <code>boxAt(mx, my, p.z)</code> 須 <code>inBounds</code>、<code>!hits(solidsFor(&#39;3d&#39;))</code>、<code>supportsAt(…,&#39;3d&#39;)</code> 非空、通過 <code>canLand</code>；為吸收浮點誤差以 <code>nearestFree</code> 在半徑 0.1 內找點<span class="tg t-inf">〔推論〕</span>；失敗 → <code>say(&#39;msg.mark.noSupport&#39;)</code>（「這裡接不住你」）；成功 → 移動玩家、清除墨記、<code>emit flag &#39;mark:redeemed&#39;</code>。</li>
 <li>「記在影子上要先定稿」（5-1a）：影子只在 2D 存在，3D <code>supportsAt</code> 找不到 → 自然失敗；定稿後是實體 slab → 成功。無需特例。</li>
 <li>「先記後拆」（4-4b、5-1b）：墨記只存座標，不參照物件，自然成立。</li>
-<li>5-1「不是你放的標記點」：物件資料無法表達「世界狀態初值」→ 走查時發現缺口，<strong>已回頭在 4.3 補 <code>LevelDef.initial?: Json</code></strong>，由 <code>mark.init</code> 讀取 <code>initial.mark</code>。</li>
+<li>5-1「不是你釘的圖釘」：物件資料無法表達「世界狀態初值」→ 走查時發現缺口，<strong>已回頭在 4.3 補 <code>LevelDef.initial?: Json</code></strong>，由 <code>mark.init</code> 讀取 <code>initial.mark</code>。</li>
 <li>結局 B（劇情 6.2：在編輯桌放墨記不兌現）：<code>mark</code> 放置時若腳下支撐物有 <code>markFlag</code> 欄位 → <code>flags[markFlag]</code>；外殼依 <code>ending.B</code> 旗標 + <code>save.scraps</code> 齊全判定。</li>
 <li>渲染：<code>derive</code> 產生 <code>mark:marker</code>（visible both、solid false）；<code>MODELS[&#39;mark&#39;]</code> 3D 畫橫跨深度墨線、2D 畫墨點（規格 7.2）。<strong>放得下（補一欄位）。</strong></li>
 </ul>
-<h3 id="arch--64-n5-提交-定稿規格-42-32-5">6.4 N5 提交 / 定稿（規格 4、2-3～2-5）</h3>
+<h3 id="arch--64-n5-火漆印章-定稿規格-42-32-5">6.4 N5 火漆印章 / 定稿（規格 4、2-3～2-5）</h3>
 <ul>
 <li>狀態：<code>WorldExt.pin = { target: ObjId | null }</code>；<code>actions.pin</code>（G，<code>ability:&#39;pin&#39;</code>）。</li>
 <li>有效可見性：<code>visibility(w, o)</code> → <code>o.def.id === pin.target ? &#39;both&#39; : undefined</code>。所有讀可見性的地方都經 <code>isActiveIn</code>，一次生效。</li>
@@ -4583,7 +5311,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 <tr>
 <td>T2</td>
 <td><strong>不做事件匯流排（訂閱式）</strong></td>
-<td>只用 <code>world.events</code> 外送匣（單向、每幀清空），服務提示卡關偵測與統計（規格 7.1、8）。機制之間用查詢函式；訂閱式匯流排會讓執行順序隱形，不利確定性</td>
+<td>只用 <code>world.events</code> 外送匣（單向、每幀清空），服務字條卡關偵測與統計（規格 7.1、8）。機制之間用查詢函式；訂閱式匯流排會讓執行順序隱形，不利確定性</td>
 </tr>
 <tr>
 <td>T3</td>
@@ -4674,7 +5402,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 <tr>
 <td>Q5</td>
 <td>剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變</td>
-<td><strong>只能在 3D</strong>；2D 按下提示「回到完成版再切換剖面」（<strong>已確認</strong>）</td>
+<td><strong>只能在 3D</strong>；2D 按下提示「回到實景再調剖面尺」（<strong>已確認</strong>）</td>
 </tr>
 </tbody></table></div>
 </article>
