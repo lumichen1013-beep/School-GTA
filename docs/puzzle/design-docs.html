@@ -1,0 +1,4784 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>《圖紙之間》設計文件</title>
+<style>
+:root{--bg:#f7f1e3;--panel:#fffaf0;--ink:#3b2a1e;--muted:#7a6753;--line:#e2d6bd;--accent:#c4501f;--accent-soft:#f6e1d3;--th:#4a3626;--thfg:#fff6e6;--zebra:#f9f2e2;--code:#efe5cf;--quote:#f1e8d0;--mark:#ffe27a;--shadow:0 2px 10px rgba(60,40,20,.12)}
+html.dark{--bg:#1f1a16;--panel:#28221c;--ink:#eadfcc;--muted:#a99a85;--line:#41372c;--accent:#f08a55;--accent-soft:#4a2f22;--th:#5a4531;--thfg:#fbeed8;--zebra:#2d261f;--code:#362d24;--quote:#2e271f;--mark:#8a6a00;--shadow:0 2px 10px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:120px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei","Heiti TC",sans-serif;font-size:16px;line-height:1.8}
+header{position:sticky;top:0;z-index:30;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:var(--shadow)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 16px}
+.brand{font-weight:700;font-size:17px;white-space:nowrap}
+.tabs{display:flex;gap:4px}
+.tab,button.btn{font:inherit;font-size:14px;line-height:1.4;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:5px 12px;cursor:pointer}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+button.btn:hover,.tab:hover{border-color:var(--accent)}
+.search{display:flex;align-items:center;gap:4px;margin-left:auto}
+.search input{font:inherit;font-size:14px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:200px}
+#cnt{font-size:12px;color:var(--muted);min-width:46px}
+.tools{display:flex;gap:6px}
+#menu{display:none}
+.layout{display:flex;max-width:1240px;margin:0 auto}
+nav#toc{position:sticky;top:var(--hh,60px);align-self:flex-start;width:290px;flex:none;height:calc(100vh - var(--hh,60px));overflow-y:auto;padding:16px 8px 40px 16px;font-size:14px;line-height:1.5}
+nav#toc .grp{font-weight:700;margin:14px 0 4px;color:var(--accent);font-size:13px;letter-spacing:.05em}
+nav#toc a{display:block;color:var(--ink);text-decoration:none;padding:3px 8px;border-left:3px solid transparent;border-radius:0 6px 6px 0}
+nav#toc a.l3{padding-left:20px;color:var(--muted);font-size:13px}
+nav#toc a:hover{background:var(--accent-soft)}
+nav#toc a.on{border-left-color:var(--accent);background:var(--accent-soft);font-weight:600;color:var(--ink)}
+main{flex:1;min-width:0;padding:20px 24px 80px}
+.doc{display:none;max-width:880px;margin:0 auto}
+.doc.show{display:block}
+.meta{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin:0 0 18px;font-size:13px;color:var(--muted);line-height:1.6}
+.meta b{color:var(--ink)}
+h1,h2,h3,h4{line-height:1.4;scroll-margin-top:110px}
+h1{font-size:28px;margin:.4em 0 .6em}
+h2{font-size:23px;margin:2em 0 .6em;padding-bottom:.25em;border-bottom:2px solid var(--line)}
+h3{font-size:19px;margin:1.6em 0 .5em;color:var(--accent)}
+h4{font-size:16.5px;margin:1.4em 0 .4em}
+h2,h3,h4{cursor:pointer;position:relative;padding-left:1.2em}
+h2::before,h3::before,h4::before{content:"▾";position:absolute;left:0;top:0;font-size:.8em;color:var(--muted);transition:transform .15s}
+h2.collapsed::before,h3.collapsed::before,h4.collapsed::before{transform:rotate(-90deg)}
+h1{padding-left:0}
+.hid{display:none!important}
+p{margin:.8em 0}
+ul,ol{padding-left:1.5em;margin:.6em 0}
+li{margin:.25em 0}
+hr{border:0;border-top:1px dashed var(--line);margin:2em 0}
+a{color:var(--accent)}
+blockquote{margin:1em 0;padding:.4em 1em;background:var(--quote);border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:var(--ink)}
+blockquote p{margin:.4em 0}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.88em;background:var(--code);padding:.1em .4em;border-radius:4px;word-break:break-word}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto;line-height:1.55}
+pre code{background:none;padding:0;word-break:normal}
+.tw{overflow-x:auto;margin:1em 0;border:1px solid var(--line);border-radius:8px;background:var(--panel);-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere;min-width:72px}
+th{background:var(--th);color:var(--thfg);font-weight:600;white-space:nowrap}
+tbody tr:nth-child(even){background:var(--zebra)}
+tbody tr:hover{background:var(--accent-soft)}
+td:first-child{font-weight:700}
+tr:last-child td{border-bottom:0}
+.tg{display:inline-block;font-size:.8em;line-height:1.5;padding:0 .5em;border-radius:999px;border:1px solid;font-weight:600;vertical-align:baseline;white-space:normal}
+.t-src{color:#1f6b3a;background:#dff2e3;border-color:#a8d5b3}
+.t-inf{color:#8a5a00;background:#fdecc4;border-color:#ecc97a}
+.t-new{color:#1c5a96;background:#dcebfa;border-color:#a3c6ea}
+.t-cur{color:#56606a;background:#e6e9ec;border-color:#c3c9cf}
+.t-core{color:#a63a10;background:#fbe0d3;border-color:#eeb59c}
+.t-ext{color:#6a3d96;background:#eadcf8;border-color:#cdb0ea}
+.t-weak{color:#9b1c1c;background:#fbdcdc;border-color:#eaa5a5}
+html.dark .t-src{color:#9fdcaf;background:#1f3a2a;border-color:#2f5a40}
+html.dark .t-inf{color:#f2cf86;background:#443513;border-color:#6d561e}
+html.dark .t-new{color:#9cc8f2;background:#1a3250;border-color:#2b4f7a}
+html.dark .t-cur{color:#c4cbd2;background:#363b40;border-color:#50575e}
+html.dark .t-core{color:#f6a98a;background:#4d2616;border-color:#7a3d24}
+html.dark .t-ext{color:#d1b4f2;background:#3a2650;border-color:#5b3d80}
+html.dark .t-weak{color:#f4a5a5;background:#4a2020;border-color:#7a3535}
+.t-tmp{color:#8a5a00;background:#fdecc4;border-color:#ecc97a}
+.t-ok{color:#1f6b3a;background:#dff2e3;border-color:#a8d5b3}
+html.dark .t-tmp{color:#f2cf86;background:#443513;border-color:#6d561e}
+html.dark .t-ok{color:#9fdcaf;background:#1f3a2a;border-color:#2f5a40}
+mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+mark.cur{outline:2px solid var(--accent);background:#ffb347}
+#top{position:fixed;right:18px;bottom:18px;z-index:20;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--accent);color:#fff;font-size:20px;cursor:pointer;box-shadow:var(--shadow);display:none}
+#top.show{display:block}
+#scrim{display:none}
+@media(max-width:900px){
+ #menu{display:inline-block}
+ .search{margin-left:0;width:100%}
+ .search input{flex:1;width:auto;min-width:0}
+ nav#toc{position:fixed;left:0;top:0;bottom:0;height:auto;z-index:50;width:min(86vw,320px);background:var(--panel);box-shadow:var(--shadow);transform:translateX(-105%);transition:transform .2s;padding-top:16px}
+ body.drawer nav#toc{transform:none}
+ body.drawer #scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40}
+ main{padding:14px 14px 80px}
+ h1{font-size:23px}h2{font-size:20px}h3{font-size:17.5px}
+ .brand{display:none}
+ header{position:static}
+ #menu{position:fixed;left:12px;bottom:18px;z-index:35;background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:var(--shadow);padding:10px 14px}
+ html{scroll-padding-top:16px!important}
+ h1,h2,h3,h4{scroll-margin-top:16px}
+ nav#toc{top:0}
+}
+@media print{
+ header,nav#toc,#top,#scrim{display:none!important}
+ body{background:#fff;color:#000;font-size:11pt}
+ .layout{display:block}main{padding:0}
+ .doc{display:none!important;max-width:none}.doc.show{display:block!important}
+ .hid{display:block!important}
+ h2::before,h3::before,h4::before{display:none}
+ .tw{overflow:visible;border:1px solid #999}
+ tr,h2,h3{break-inside:avoid}
+ th{background:#ddd!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ mark{background:none}
+}
+</style>
+</head>
+<body>
+<header id="hd">
+ <div class="bar">
+  <button class="btn" id="menu" aria-label="目錄">☰ 目錄</button>
+  <span class="brand">《圖紙之間》設計文件</span>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" data-doc="spec">遊戲規格</button><button class="tab" role="tab" data-doc="story">劇情設定</button><button class="tab" role="tab" data-doc="arch">架構設計</button></div>
+  <div class="search"><input id="q" type="search" placeholder="搜尋目前文件…" aria-label="搜尋"><span id="cnt"></span><button class="btn" id="prev" title="上一個">↑</button><button class="btn" id="next" title="下一個 (Enter)">↓</button></div>
+  <div class="tools"><button class="btn" id="ex">全部展開</button><button class="btn" id="co">全部摺疊</button><button class="btn" id="dm" aria-label="深色模式">🌙</button></div>
+ </div>
+</header>
+<div class="layout">
+ <nav id="toc" aria-label="目錄"></nav>
+ <main><article class="doc" data-doc="spec" data-title="遊戲規格"><h1 id="spec--圖紙之間整體遊戲規格-v02">《圖紙之間》整體遊戲規格 v0.2</h1>
+<div class="meta"><b>最後修訂紀錄</b>：v0.2（劇情修訂）（2026-11-02）— <strong>劇情改為「社團的遊戲世界」</strong>（目標玩家改為青少年），取代沈歸 / 宅邸 / 製圖員設定；題數、關卡 ID、N 編號、解法大綱不變。完整劇情見 <code>story-bible-v0.1.md</code></div>
+<blockquote>
+<p>狀態：v0.2 草案（2026-11-02）。v0.1 → v0.2：主線 37 → <strong>50 題</strong>、13 → 22 關；新增核心 / 擴充標記；筆桿改為新物理機制 N16 墨記（已確認）；里程碑改為先做垂直切片。v0.1 見 git 歷史。
+決策見第 11 節；待確認：Q-D 提示安全閥、Q-E 提示輔助描邊（已先套用暫定值）。</p>
+<p><strong>修訂紀錄</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>版本</th>
+<th>日期</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>v0.1</td>
+<td>2026-11-02</td>
+<td>初版：37 題、13 關（沈歸 / 宅邸劇情）</td>
+</tr>
+<tr>
+<td>v0.2</td>
+<td>2026-11-02</td>
+<td>主線 50 題、22 關、核心 / 擴充標記、筆桿新物理（N16）、垂直切片里程碑</td>
+</tr>
+<tr>
+<td>v0.2（提示與架構決策修訂）</td>
+<td>2026-11-02</td>
+<td>三級提示改為全抽象（意象 / 觀察角度 / 缺的性質）、新增提示撰寫量表與 L4 安全閥（暫定）；玄關謎題 id 改 <code>1-2a</code>～<code>1-2d</code>、Boss 改 <code>5-5a</code>～<code>5-5c</code>；剖面 × 影子規則統一為 4-2b；剖面開關限完成版；主迴圈固定步長 1/60</td>
+</tr>
+<tr>
+<td>v0.2（劇情修訂）</td>
+<td>2026-11-02</td>
+<td><strong>劇情改為「社團的遊戲世界」</strong>（目標玩家改為青少年），取代沈歸 / 宅邸 / 製圖員設定；題數、關卡 ID、N 編號、解法大綱不變。完整劇情見 <code>story-bible-v0.1.md</code></td>
+</tr>
+</tbody></table></div>
+<p><strong>命名約定</strong>：本規格內「現實 / 圖紙、筆尖、定稿印、剖面尺、墨記、墨滴、章印、墨水閥、墨牆、墨橋、紙條」等為<strong>內部代號</strong>（對應 N 編號與程式識別）；玩家看到的顯示名（完成版 / 設計稿、畫筆工具、提交、剖面檢視、標記點、修補包、驗收章……）一律以 <code>story-bible-v0.1.md</code> 第 4 節對照表為準。
+範圍：整款遊戲的章節、關卡、謎題、機制擴充、提示、存檔、文案骨架、製作順序。本文件不改任何程式碼。
+標記：<strong><span class="tg t-cur">〔現有〕</span></strong> = 只用現有機制即可實作；<strong><span class="tg t-new">〔新增：X〕</span></strong> = 需新增邏輯 X。<strong><span class="tg t-src">〔來源〕</span></strong> = 參考資料有說；<strong><span class="tg t-inf">〔推論〕</span></strong> = 我的推論、未經來源證實。</p>
+</blockquote>
+<hr>
+<h2 id="spec--1-設計支柱目標玩家時長">1. 設計支柱、目標玩家、時長</h2>
+<h3 id="spec--11-設計支柱可用來否決提案">1.1 設計支柱（可用來否決提案）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>支柱</th>
+<th>檢查方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P1</td>
+<td><strong>兩種視角缺一不可</strong>：每個謎題都必須同時用到 3D 與 2D 能力，只用一種視角必定解不開</td>
+<td>每個謎題至少一條「只用單一模式」的反例測試</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><strong>一章一個頓悟</strong>：每章的核心 aha 推翻或延伸前一章建立的直覺（不是換座標）</td>
+<td>第 5 節表格「本章 aha」欄不得重複</td>
+</tr>
+<tr>
+<td>P3</td>
+<td><strong>輕鬆的推理而非手速</strong>：無計時、無敵人、無精準跳躍要求；失敗成本只有走回去</td>
+<td>不出現計時器；跳躍高度餘裕 ≥ 0.15（D10）</td>
+</tr>
+<tr>
+<td>P4</td>
+<td><strong>物件會說話</strong>：可互動 / 只在某視角存在 / 可蓋印 等狀態一律有形狀符號，不只靠顏色</td>
+<td>第 7 節無障礙檢查表</td>
+</tr>
+<tr>
+<td>P5</td>
+<td><strong>在遊戲裡修遊戲</strong>：機制都以遊戲開發語彙命名（畫筆工具、提交、剖面檢視、標記點；顯示名見 story-bible 對照表），劇情與機制同源</td>
+<td>新機制命名須通過此檢查</td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--12-目標玩家">1.2 目標玩家</h3>
+<ul>
+<li><strong>國中到高中的青少年</strong>；喜歡 Monument Valley、Portal 一類「短而有頓悟」作品，不要求平台跳躍技術。</li>
+<li>文案短、直白、有一點幽默（劇情：遊戲社的你被吸進社團做到一半的遊戲，見 <code>story-bible-v0.1.md</code>）；鍵盤操作（WASD / Space / F·Q / E / T / R，見 <code>puzzle.html</code>）。</li>
+</ul>
+<h3 id="spec--13-時長估計推論">1.3 時長估計<span class="tg t-inf">〔推論〕</span></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>估計</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>主線總時長</td>
+<td>約 4～5.5 小時（50 個主線謎題，各章題均 3.5～8 分；計算見 5.2）</td>
+</tr>
+<tr>
+<td>每關</td>
+<td>8～20 分鐘（Boss 18～22 分為唯一例外）</td>
+</tr>
+<tr>
+<td>每章</td>
+<td>30～65 分鐘，約等於一場實體密室逃脫的長度（實體密室常見 60 分鐘，但本文未找到可信來源佐證「每題幾分鐘」的業界數據 → 推論）</td>
+</tr>
+<tr>
+<td>隱藏房</td>
+<td>3 間各 1 題，每間 10～15 分鐘（另計）</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="spec--2-現況機制清單依程式碼2026-11-02commit-1e26b34">2. 現況機制清單（依程式碼，2026-11-02，commit <code>1e26b34</code>）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>機制</th>
+<th>規則（現況）</th>
+<th>出處</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>C1</td>
+<td>兩種視角</td>
+<td>3D：透視鏡頭斜後上方跟隨；2D：正交鏡頭從 +z 側視，z 被壓平</td>
+<td><code>render/cameras.ts</code></td>
+</tr>
+<tr>
+<td>C2</td>
+<td>壓平碰撞</td>
+<td>2D 碰撞只看 x、y，忽略 z（任何深度的物體都在同一平面）；2D 只能左右移動（<code>mz=0</code>）</td>
+<td><code>logic/geometry.ts</code> <code>overlaps</code> / <code>sweepAxis</code>；<code>logic/step.ts</code></td>
+</tr>
+<tr>
+<td>C3</td>
+<td>可見模式</td>
+<td>物件 <code>visible: both｜2d｜3d</code> 同時決定可見、碰撞、互動；<code>interactIn</code> 可另限互動模式（如筆尖只能在 2D 拾取）</td>
+<td><code>logic/types.ts</code>；<code>geometry.ts</code> <code>solidsFor</code>；<code>interact.ts</code> <code>canUse</code></td>
+</tr>
+<tr>
+<td>C4</td>
+<td>跳躍高度差</td>
+<td>3D 跳高約 1.25（<code>JUMP_V_3D=8.66</code>）；2D 約 1.6（<code>JUMP_V_2D=9.8</code>）；重力 30、速度 3.2</td>
+<td><code>logic/constants.ts</code></td>
+</tr>
+<tr>
+<td>C5</td>
+<td>推木箱</td>
+<td>只在 3D、走進去即推、沿單軸；被擋 / 出界 / 中心點失去支撐就停（不能推下地板或推入缺口）；不能連推另一個箱子；木箱沒有重力、不能疊箱</td>
+<td><code>logic/push.ts</code>；<code>step.ts</code> <code>moveAxis</code></td>
+</tr>
+<tr>
+<td>C6</td>
+<td>圖紙壓板</td>
+<td><code>visible:&#39;2d&#39;</code>；僅在圖紙模式更新；木箱中心 x 落在板的 x 範圍且同高（<strong>任何 z 都算</strong>）即壓下並<strong>永久鎖定</strong>、開啟 <code>opens</code> 指定的閘門；玩家太輕壓不動（提示一次）</td>
+<td><code>logic/mechanisms.ts</code> <code>updatePlates</code></td>
+</tr>
+<tr>
+<td>C7</td>
+<td>閘門</td>
+<td><code>type:&#39;gate&#39;</code>；<code>used=true</code> 後不再是實體、不可互動；關閉時互動顯示提示</td>
+<td><code>geometry.ts</code> <code>isOpenGate</code>；<code>interact.ts</code></td>
+</tr>
+<tr>
+<td>C8</td>
+<td>鑰匙鏈</td>
+<td>筆尖（<code>interactIn:&#39;2d&#39;</code>）→ <code>hasKey</code>；墨水閥（2D）需 hasKey → <code>sealed=false</code>；出口門需未封印 → <code>cleared</code>。<strong>全域單一旗標，寫死在 <code>interact()</code> 的 switch</strong></td>
+<td><code>interact.ts</code>；<code>world.ts</code></td>
+</tr>
+<tr>
+<td>C9</td>
+<td>互動條件</td>
+<td>範圍 1.5（2D 忽略 z）；<strong>雙腳站穩才能互動</strong>；看得見卻搆不到時提示「換個角度試試」</td>
+<td><code>interact.ts</code> <code>findTarget</code></td>
+</tr>
+<tr>
+<td>C10</td>
+<td>3D→2D 切換</td>
+<td>在 x-y 平面找最近空位（半徑 3、步長 0.05，向下最多 0.5）；找不到則拒絕「這裡塞不下」；記下 <code>z3d</code></td>
+<td><code>logic/switchMode.ts</code>；<code>logic/place.ts</code></td>
+</tr>
+<tr>
+<td>C11</td>
+<td>2D→3D 切換</td>
+<td>還原 <code>z3d</code>；若 2D 腳下有支撐物且該物 3D 存在，z 夾到支撐物範圍內；<code>noLand3d</code> 區域不可落；優先找「踩得到東西」的落點；找不到則拒絕</td>
+<td><code>switchMode.ts</code></td>
+</tr>
+<tr>
+<td>C12</td>
+<td>木箱歸位</td>
+<td>T：全部木箱回初始位置，壓到玩家則挪到最近空位（通關後無效）</td>
+<td><code>mechanisms.ts</code> <code>resetCrates</code></td>
+</tr>
+<tr>
+<td>C13</td>
+<td>掉落與檢查點</td>
+<td>y &lt; <code>voidY</code> 回重生點（保留目前模式，<strong>木箱不歸位</strong>）；站在地上越過 <code>checkpoint.minX</code> 即推進（只會往前）</td>
+<td><code>world.ts</code> <code>respawn</code> / <code>updateCheckpoint</code>；<code>step.ts</code></td>
+</tr>
+<tr>
+<td>C14</td>
+<td>紙條</td>
+<td><code>note</code> 讀出 <code>text</code>（玄關三張，兼作提示）</td>
+<td><code>levels/foyer.ts</code></td>
+</tr>
+<tr>
+<td>C15</td>
+<td>關卡資料化</td>
+<td><code>LevelDef</code>：bounds、voidY、start、checkpoints、narration、nextRoom、objects</td>
+<td><code>types.ts</code>；<code>levels/foyer.ts</code></td>
+</tr>
+<tr>
+<td>C16</td>
+<td>流程 / 存檔</td>
+<td>只有玄關一關（<code>game.ts</code> 直接 import <code>foyer</code>）；R 重來；通關寫入 <code>localStorage[&#39;puzzle:foyer:cleared&#39;]=&#39;1&#39;</code>；切換過場 0.3 秒鎖輸入</td>
+<td><code>game.ts</code></td>
+</tr>
+<tr>
+<td>C17</td>
+<td>測試慣例</td>
+<td>邏輯層純函式，<code>tests/puzzle/helpers.ts</code> 提供 <code>run / place / walkTo / hopUntil</code>；<code>foyerSolution.test.ts</code> 一條完整通關 + 每謎題反例；<code>puzzleLogic.test.ts</code> 機制單元測試</td>
+<td><code>tests/puzzle/</code></td>
+</tr>
+</tbody></table></div>
+<p><strong>現況的隱含規則（設計時要當成「物理定律」）</strong></p>
+<ul>
+<li>R1：<strong>機關只在它存在的視角更新</strong>（<code>updatePlates</code> 跳過非目前模式的壓板）。目前因壓板會鎖定而無感，若加入「非鎖定壓板」就會成為可利用的規則（見 N4）。</li>
+<li>R2：2D 的「位置」只有 x；z 只決定 3D 裡誰擋誰（C2、C6）。玄關與書房都建立在這條直覺上，溫室會刻意推翻它（N6）。</li>
+<li>R3：玩家在 2D 推不動任何東西；能改變世界配置的只有 3D 推箱與互動（C5）。</li>
+<li>R4：可見模式是物件的固定屬性；目前沒有任何方式改變（定稿印 N5 會打破）。</li>
+</ul>
+<p><strong>玄關謎題鏈（現況）</strong>：1-2a 書架過缺口（2D 壓平踩書架）→ 1-2b 推箱到高台旁、2D 踩箱跳上高台取筆尖 → 1-2c 繞後方窄道把箱推到長桌下的圖紙壓板 x、切 2D 壓下、3D 過閘門 → 2D 墨水閥解封 → 出口門。（<code>levels/foyer.ts</code> 註解；<code>foyerSolution.test.ts</code>）</p>
+<p><strong>工程限制（擴充前必處理）</strong>：C8 單一旗標寫死、C16 單關寫死、<code>ObjType</code> 封閉聯集、壓板只認 <code>pushable</code>。見第 10 節 M0。</p>
+<hr>
+<h2 id="spec--3-謎題設計原則可檢查的規則">3. 謎題設計原則（可檢查的規則）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>規則</th>
+<th>依據</th>
+<th>怎麼檢查</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>D1</td>
+<td><strong>每個謎題最多一個新概念</strong>；新概念先在「無失敗風險」的小場景出現一次（教），下一題要求主動使用（測），再下一題換條件（變）</td>
+<td><span class="tg t-src">〔來源〕</span>Portal 開發者評論：每個概念都刻意介紹與訓練；任天堂四段式（導入→發展→轉折→收束）<span class="tg t-src">〔來源，二手分析〕</span></td>
+<td>第 6 節每題新概念 ≤ 1（同一關可依序教多個，如 1-1）</td>
+</tr>
+<tr>
+<td>D2</td>
+<td><strong>每個謎題必須同時用到 2D 與 3D</strong>（支柱 P1）</td>
+<td>本作核心</td>
+<td>每題至少兩條反例測試：只用 3D、只用 2D</td>
+</tr>
+<tr>
+<td>D3</td>
+<td><strong>頓悟必須推翻一個合理的錯誤假設</strong>；在謎題說明中寫出「玩家最可能的錯誤嘗試」</td>
+<td><span class="tg t-src">〔來源〕</span>Blow：刪掉沒有驚喜或彼此重疊的謎題；<span class="tg t-inf">〔推論〕</span>把錯誤嘗試寫進規格才能確認驚喜存在</td>
+<td>第 6 節每題有「錯誤嘗試」欄</td>
+</tr>
+<tr>
+<td>D4</td>
+<td><strong>不得有跳過關鍵步驟的捷徑</strong>，以邏輯層測試證明（取樣木箱位置 × 切換點的反例迴圈，比照玄關 <code>for z of [...]</code> 寫法）</td>
+<td>現有測試慣例 C17</td>
+<td>每關反例測試至少覆蓋「關鍵物件在別處」的取樣</td>
+</tr>
+<tr>
+<td>D5</td>
+<td><strong>不放純粹的紅鯡魚</strong>；允許「誘導性錯誤」——看起來可行、試了會學到東西（如玩家站壓板「太輕」）</td>
+<td>〔查不到〕密室社群對紅鯡魚的系統性論述未找到可信來源；<span class="tg t-inf">〔推論〕</span>浪費時間的假線索會破壞玩家對謎題的信任，對青少年玩家尤其容易直接放棄</td>
+<td>每個非必要物件需寫出它教了什麼或屬於哪個隱藏要素</td>
+</tr>
+<tr>
+<td>D6</td>
+<td><strong>規則一致、不臨時例外</strong>：同外觀 = 同規則（Blow 讓所有不受倒帶影響的物件都發綠光）；新規則用新外觀</td>
+<td><span class="tg t-src">〔來源〕</span>Blow IndieCade 報導</td>
+<td>機制庫每項都有專屬外觀符號</td>
+</tr>
+<tr>
+<td>D7</td>
+<td><strong>提示分三級且三級都抽象</strong>（意象 → 觀察角度 → 缺的性質），不給動作、不點名物件、不給數字（量表見 7.1.1）；把玩家推回邏輯路徑、不給答案；同一級提示被超過 50% 玩家使用 → 謎題要重做；L4 解法筆記被 ≥ 20% 打開 → 重做</td>
+<td><span class="tg t-src">〔來源〕</span>Room Escape Artist 的提示文章</td>
+<td>本機統計（第 8 節 <code>puzzle:stats</code>）＋ 驗證器（7.1.1）</td>
+</tr>
+<tr>
+<td>D8</td>
+<td><strong>錯誤可逆</strong>：任何狀態都能以 T（木箱歸位）、R（重來）或回檢查點復原；不可能進入無解狀態而不自知</td>
+<td>現有 C12、C13</td>
+<td>每個新機制需寫「死局如何復原」</td>
+</tr>
+<tr>
+<td>D9</td>
+<td><strong>整合章只允許用已教過的機制</strong>；筆桿機制（第四次升級）在地下室末段 4-3 教、閣樓首關 5-1 測試 / 變奏，之後 Boss 與終章才整合使用</td>
+<td><span class="tg t-src">〔來源〕</span>Braid / The Witness 先把元素教完，之後難題只在探索已知機制的後果（Blow 相關報導）</td>
+<td>第 5 節第五章「新概念」欄為「—」；6.9 教學順序自檢</td>
+</tr>
+<tr>
+<td>D10</td>
+<td><strong>不靠精準操作</strong>：所有跳躍至少留 0.15 高度餘裕、0.3 水平餘裕；互動一律站穩</td>
+<td>支柱 P3、現有 C9</td>
+<td>數值寫進關卡註解並有測試</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="spec--4-機制擴充庫">4. 機制擴充庫</h2>
+<p>挑選前已對照現況規則 R1～R4 與 C1～C17 檢查衝突。「成本」以現有程式為基準。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>機制</th>
+<th>規則（一句話）</th>
+<th>與 2D/3D 的關係</th>
+<th>成本</th>
+<th>謎題範式</th>
+<th>風險 / 衝突處理</th>
+<th>排入</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>N1</td>
+<td>投影疊合</td>
+<td>不同深度的物體在 2D 裡只按 x 排列：箱子能在紙上「疊在同一格」、能接成階梯</td>
+<td>純粹是 C2 的推論</td>
+<td><strong><span class="tg t-cur">〔現有〕</span></strong> 0</td>
+<td>3D 推箱排出 2D 階梯；3D 擠不下的兩個箱子在紙上重疊</td>
+<td>意外捷徑多 → 反例測試取樣</td>
+<td>書房</td>
+</tr>
+<tr>
+<td>N2</td>
+<td>計重壓板</td>
+<td>壓板 <code>weight: n</code>，x 範圍內（2D 任何 z）同高木箱數 ≥ n 才壓下</td>
+<td>2D 壓板；與 N1 結合 = 「同一格兩箱」</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S：<code>updatePlates</code> 計數</td>
+<td>現實擠不下、紙上能疊</td>
+<td>無</td>
+<td>書房</td>
+</tr>
+<tr>
+<td>N3</td>
+<td>現實壓板</td>
+<td><code>visible:&#39;3d&#39;</code> 壓板，木箱 <strong>x、z 投影重疊</strong> 才算；玩家在現實「夠重」</td>
+<td>與 C6 相反：紙上只算箱，現實也算你</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S</td>
+<td>對照「有些重量只在紙上算數」</td>
+<td>玩家站著就開門 → 只用於需要「人站著」的反向謎題</td>
+<td>地下室</td>
+</tr>
+<tr>
+<td>N4</td>
+<td>非鎖定壓板</td>
+<td><code>latch:false</code>：重量離開即放開；但依 R1，<strong>只在該壓板存在的視角更新</strong></td>
+<td>2D 壓板開 3D 閘門後回現實，閘門維持最後狀態，直到再進圖紙</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S；閘門關閉時若壓到玩家 → <code>resolvePlayerOverlap</code></td>
+<td>「凍結的機關」：先在紙上開門，回現實把壓門的箱子挪去用</td>
+<td>閘門在玩家/木箱位置關上 → 規則：關閉時若重疊則延後關閉</td>
+<td>書房</td>
+</tr>
+<tr>
+<td>N5</td>
+<td>定稿印（筆升級 2）</td>
+<td>G：對標有印框的物件蓋印 → 其可見模式變成 <code>both</code>；全場同時只能有一個印；蓋新的舊的還原；<strong>上面有玩家或木箱時拿不起印</strong></td>
+<td>打破 R4：把只在一邊存在的東西帶到另一邊</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> M：<code>ObjState.pinned</code>、<code>solidsFor</code>/<code>activeIn</code> 讀有效可見性、蓋印時 <code>resolvePlayerOverlap</code></td>
+<td>3D 桌子進紙裡當平台；紙上墨橋進現實讓木箱過河；蓋在重物上讓它進紙上壓板</td>
+<td>破壞唯一解 → 只允許 <code>pinnable:true</code> 物件（每關 1～3 個）</td>
+<td>書房起</td>
+</tr>
+<tr>
+<td>N6</td>
+<td>燈影</td>
+<td>3D 有燈（點光源 z=Lz）時，<code>caster</code> 物件在後牆投下影子；<strong>影子只在 2D 是實體</strong>，寬高按「離燈越近越大」縮放：<code>s=(Lz−wallZ)/(Lz−objZ)</code></td>
+<td>推翻 R2：<strong>z 第一次影響 2D</strong>（靠近燈影子變大）</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> M：每步由燈 + caster 推導影子盒；渲染 2D 剪影</td>
+<td>推盆栽靠近燈 → 影子變寬接成橋；移 x 平移影子；關燈讓影子牆消失</td>
+<td>連續縮放 → 多解；caster 放在軌道上（窄支撐條，用 C5「失去支撐就停」限制軸向）並在反例測試取樣</td>
+<td>溫室起</td>
+</tr>
+<tr>
+<td>N7</td>
+<td>定稿影子</td>
+<td>N5 × N6：對影子蓋印 → 影子凍結形狀，成為 3D 也存在的薄板</td>
+<td>影子「變成真的」</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S（在 N5、N6 之後）</td>
+<td>用光造橋，再把橋定稿給木箱走</td>
+<td>影子薄板落點與 C11 衝突 → 薄板厚度 ≥ 0.6</td>
+<td>溫室</td>
+</tr>
+<tr>
+<td>N8</td>
+<td>剖面尺（筆升級 3）</td>
+<td>C：切換剖面開關（<strong>只能在完成版 / 3D 切換</strong>，已確認；在 2D 按下提示「回到完成版再切換剖面」）；開啟時進 2D 只保留 <strong>z 範圍包含 <code>z3d</code></strong> 的物件（剖到的才存在），壓板也只算剖面內的木箱</td>
+<td>進紙的「位置」決定紙上的世界；R2 再次被推翻</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> M：<code>solidsFor(&#39;2d&#39;)</code> 依 cut 過濾；HUD 顯示剖切線</td>
+<td>站在牆的門洞深度剖切 → 紙上牆只剩楣；同一房間兩個剖面兩種地形</td>
+<td>舊關卡被新能力破解 → <code>LevelDef.abilities</code> 白名單</td>
+<td>地下室起</td>
+</tr>
+<tr>
+<td>N9</td>
+<td>通用鑰匙 / 鎖</td>
+<td>以 <code>items:Set</code> 取代 <code>hasKey</code>；<code>valve.opens</code>、<code>door.requires</code>；章內「墨滴」（小鑰匙，消耗）與「章印」（Boss 鑰匙，1 對 1）</td>
+<td>不改物理</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S～M：重構 C8</td>
+<td>Zelda 式結構（第 5.3 節）</td>
+<td>需保持玄關測試全綠</td>
+<td>M0</td>
+</tr>
+<tr>
+<td>N10</td>
+<td>墨水閥連動</td>
+<td>閥可 <code>opens</code> 任一裝置（墨牆消失、墨橋出現），可設為切換式</td>
+<td>2D 操作改 3D 或 2D 世界</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S</td>
+<td>閥開 A 關 B 的二選一</td>
+<td>狀態爆炸 → 每關 ≤ 2 個切換式閥</td>
+<td>書房起</td>
+</tr>
+<tr>
+<td>N11</td>
+<td>平面圖（俯視壓平 y）</td>
+<td>從上往下看：高度被壓平，任何頂面覆蓋處都是地板，高物是牆</td>
+<td>第三種視角</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> L：新移動軸、新碰撞、新鏡頭</td>
+<td>沿吊燈/橫樑的投影走過坑</td>
+<td><strong>Crush（PSP）已有俯視壓平</strong><span class="tg t-src">〔來源〕</span>→ 新意有限、成本高</td>
+<td><strong>不做（已確認 Q1）</strong></td>
+</tr>
+<tr>
+<td>N13</td>
+<td>反向連動</td>
+<td>裝置可設 <code>invert</code>：壓板壓下時該閘門<strong>關</strong>、放開時開</td>
+<td>與 N4 / R1 結合：利用「另一視角不更新」讓相反的兩扇門輪流開</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S</td>
+<td>2-2c 兩扇門同時開</td>
+<td>閘門在玩家位置關上 → 同 N4 延後關閉</td>
+<td>書房</td>
+</tr>
+<tr>
+<td>N14</td>
+<td>3D 專屬可推物</td>
+<td><code>visible:&#39;3d&#39;</code> 的可推物只在現實存在；壓板只計入<strong>當前視角存在</strong>的可推物（修正現況 <code>updatePlates</code> 不看可見性的隱性行為）</td>
+<td>配合 N5：蓋印時是紙上的階梯 / 牆，拿掉印就是空氣</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S</td>
+<td>2-4c、5-4</td>
+<td>現有關卡只有 both 木箱，不受影響（需測試鎖定）</td>
+<td>書房</td>
+</tr>
+<tr>
+<td>N15</td>
+<td>燈車</td>
+<td>燈可推（單軸軌道），所有影子依新光源重算</td>
+<td>N6 的「移動光源」版</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> S（N6 之後）</td>
+<td>3-4b</td>
+<td>影子同時改變多處 → 每關燈車 ≤ 1</td>
+<td>溫室</td>
+</tr>
+<tr>
+<td>N16</td>
+<td><strong>墨記（筆桿，已確認採用）</strong></td>
+<td>詳見 4.1</td>
+<td>2D 給位置（x、y），3D 給深度（z）</td>
+<td><strong><span class="tg t-new">〔新增〕</span></strong> M</td>
+<td>4-3、4-4b、5-1、5-5c、6-1</td>
+<td>瞬移類，捷徑風險最高 → 區域限制 + 取樣反例</td>
+<td>地下室起</td>
+</tr>
+<tr>
+<td>N12</td>
+<td>帶物切換</td>
+<td>拿起小物（書）跨視角，在 2D 放下成為平台/重量</td>
+<td>—</td>
+<td>M</td>
+<td>書當 2D 墊腳</td>
+<td>與 N5 功能重疊</td>
+<td>不排入</td>
+</tr>
+<tr>
+<td>✕</td>
+<td>時間倒帶 / 潮汐計時</td>
+<td>—</td>
+<td>—</td>
+<td>L</td>
+<td>—</td>
+<td>違反支柱 P3（安靜、無計時）</td>
+<td>否決</td>
+</tr>
+<tr>
+<td>✕</td>
+<td>旋轉 2D 投影軸（Fez 式）</td>
+<td>—</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><span class="tg t-src">〔來源〕</span>Fez 被批評旋轉易致暈、多數解只差一兩次旋轉</td>
+<td>否決</td>
+</tr>
+</tbody></table></div>
+<p><strong>機制首次出現順序</strong>：見 6.9 自檢。第五章、終章不新增機制。</p>
+<h3 id="spec--41-筆桿第四次升級的新物理機制已確認n16-墨記備選案保留作紀錄">4.1 筆桿（第四次升級）的新物理機制——<strong>已確認：N16 墨記</strong>（備選案保留作紀錄）</h3>
+<p>使用者已確認筆桿不能只有敘事用途（Q2）。以下三案都已對照前三個筆升級（定稿印、燈影、剖面尺）檢查互動；<strong>使用者已選定 N16 墨記</strong>，並接受「只能在同一區域內兌現」的限制；第 5、6 節即以 N16 編排。N17、N18 不採用，保留作紀錄。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th><strong>主推 N16 墨記</strong></th>
+<th>備選 N17 擦除</th>
+<th>備選 N18 落款錨定</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>規則一句話</td>
+<td>在 2D 站穩按 V，於 (x, y) 留下一個墨記；回到 3D 任何深度按 V，人移到 (墨記 x, 墨記 y, <strong>目前的 z</strong>)——須該處在現實裡有支撐且空著，否則「這裡接不住你」；同時只有一個墨記，兌現即消失；只能在同一區域內兌現（Q-C）</td>
+<td>對一個標有擦痕框的 both 物件按 V，把它從圖紙上擦掉（變成只在 3D 存在）；同時只能擦一個，再擦別處則前一個還原</td>
+<td>對一個物件落款後，它在 2D <strong>不再被壓平</strong>：只有玩家的 <code>z3d</code> 落在它的 z 範圍內時，紙上才會碰到它</td>
+</tr>
+<tr>
+<td>與 2D/3D 的關係</td>
+<td>把 C11「回來時取支撐物的深度」反過來：紙上決定位置與高度，現實決定深度</td>
+<td>定稿印的反方向（both → 只在 3D）</td>
+<td>單一物件的剖面</td>
+</tr>
+<tr>
+<td>實作成本</td>
+<td>M：放置 / 兌現、落點驗證（重用 <code>nearestFree</code> 與 <code>supportsAt</code>）、區域資料、3D 橫跨深度的墨線渲染</td>
+<td>S：有效可見性已在 N5 引入，多一種覆寫</td>
+<td>S～M：<code>overlaps</code> 在 2D 對落款物件多看一軸</td>
+</tr>
+<tr>
+<td>謎題範式</td>
+<td>紙上的階梯在前方、現實的高處在後方 → 記下高度去另一個深度兌現；先記後拆（記的是位置不是腳下的東西）；剖面裡才到得了的高度（4-3b）；記在影子上要先定稿（5-1a）</td>
+<td>擦掉擋在紙上的牆；擦掉箱子讓它不再算重量；擦掉影子的主人讓影子消失</td>
+<td>讓一個箱子在紙上只對某個深度存在，做出「深度選擇性」的階梯或牆</td>
+</tr>
+<tr>
+<td>唯一解風險</td>
+<td><strong>高</strong>（瞬移）→ 區域限制、只在站穩時可放 / 兌現、反例取樣（高度 × 深度）</td>
+<td><strong>很高</strong>（牆到處都是）→ <code>erasable</code> 白名單；與定稿合用時可見性完全可控，關卡空間會被壓縮</td>
+<td>中</td>
+</tr>
+<tr>
+<td>與定稿印</td>
+<td>互補：記號落在只存在紙上的東西上 → 先定稿才接得住（5-1a）</td>
+<td>功能鏡像，易讓玩家混淆兩個印</td>
+<td>衝突：定稿物件是否也可落款需額外規則</td>
+</tr>
+<tr>
+<td>與燈影</td>
+<td>影子只在紙上 → 記在影子上的高度在現實沒有支撐（新 aha）</td>
+<td>擦掉 caster 是否連影子一起消失需定義</td>
+<td>影子在牆面，落款無意義</td>
+</tr>
+<tr>
+<td>與剖面尺</td>
+<td>組合出新 aha：只在某一刀裡上得去的高處，回現實在別的深度兌現（4-3b）</td>
+<td>與剖面重疊（都在移除紙上的東西）</td>
+<td><strong>換皮</strong>：本質就是單物件剖面</td>
+</tr>
+<tr>
+<td>結論</td>
+<td>唯一能和三個前機制組合出新 aha 的方案；成本可接受</td>
+<td>有力但容易壓縮謎題空間，且是定稿印的反向換皮</td>
+<td>與剖面尺重疊太多，不建議</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="spec--5-整體關卡結構">5. 整體關卡結構</h2>
+<h3 id="spec--51-總數v02主線剛好-50-題">5.1 總數（v0.2：主線剛好 50 題）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>數量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>章節</td>
+<td>5 章 + 終章（玄關、書房、溫室、地下室、閣樓、草地）</td>
+</tr>
+<tr>
+<td>主線關卡</td>
+<td><strong>22 關</strong>（3 + 5 + 4 + 4 + 5 + 1）</td>
+</tr>
+<tr>
+<td>主線謎題</td>
+<td><strong>50 題</strong>（9 + 13 + 9 + 10 + 8 + 1）＝ 核心 42 ＋ 擴充 8</td>
+</tr>
+<tr>
+<td>隱藏房（與主線分開計）</td>
+<td>3 間 × 1 題 = <strong>3 題</strong>（全部屬擴充）→ 全遊戲 25 關、53 題</td>
+</tr>
+<tr>
+<td>筆的升級</td>
+<td>4 次：筆尖（玄關）→ 定稿印（書房）→ 剖面尺（溫室）→ 筆桿·墨記（地下室，N16，已確認，見 4.1）</td>
+</tr>
+<tr>
+<td>收集要素</td>
+<td>日記碎片 ×5（顯示名「開發筆記」，主線、元謎題用）；圖紙碎片 ×6（顯示名「被刪掉的草稿」，3 隱藏房 + 3 隱藏點，結局 B 用）</td>
+</tr>
+</tbody></table></div>
+<p><strong>v0.1 → v0.2 的擴充做法與取捨</strong></p>
+<ul>
+<li>主線 37 → 50 題（+13），<strong>主要靠增加關卡（13 → 22 關），不是每關塞題</strong>：每關仍 1～4 題，平均 2.3 題。</li>
+<li>新增的 13 題來源：玄關章拆出 1-1 門廊（把玄關一次教太多的 C1～C14 拆開教，且挖出現況裡沒被用到的 C11「回來時落在支撐物的深度」）與 1-3 衣帽間；書房多出「凍結 × 反向連動」「定稿 × 落點」「3D 專屬箱 × 定稿」三種新後果；溫室補一關變奏；使用者決定筆桿必須有新物理（Q2），因此地下室 4-3 教「墨記」、閣樓新增首關 5-1 測試 / 變奏它。</li>
+<li>刪掉 / 合併：aha 弱的「一箱兩閘」「疊在一起的兩塊板」「影子的影子」「兩盞燈」「借印過河」「同一條路兩種紙」「你也是砝碼」不採用（為筆桿騰出 2 題後收斂在 50）；第五章三翼各縮為 1 題獨立小關。</li>
+<li>每題標 <strong>核心</strong>（刪掉會斷教學鏈或劇情）或 <strong>擴充</strong>（純變奏 / 挑戰，製作時可砍）；只做核心 = 42 題主線，仍是完整遊戲。</li>
+</ul>
+<p><strong>擴充原定五間房的理由</strong>：每間房擴為一章 4～5 關，讓每個新機制都走完「教 → 測 → 變」（D1）；若一間房只有一關，每關要同時教又考，會出現 Crush 被評論的「中段難度陡升」<span class="tg t-src">〔來源：Crush 評論摘要〕</span>。新增「草地」終章承載元謎題與結局 A 的場景。</p>
+<h3 id="spec--52-章節-關卡表">5.2 章節 / 關卡表</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>關</th>
+<th>名稱</th>
+<th>本關新概念</th>
+<th>題數（核/擴）</th>
+<th>前置能力</th>
+<th>時長(分)</th>
+<th>難度</th>
+<th>一句話劇情（社團版，見 story-bible 第 5 節）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>第一章 玄關（教學章）</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1-1</td>
+<td>門廊</td>
+<td>切換、單邊存在、2D 跳較高、C11 回來的深度</td>
+<td>3（3/0）</td>
+<td>無</td>
+<td>8～10</td>
+<td>1.5</td>
+<td>門把畫在牆上？社長說那是「示意圖」。</td>
+</tr>
+<tr>
+<td>1-2</td>
+<td>玄關（現有）</td>
+<td>推箱、圖紙壓板、點墨 → 取得<strong>筆尖</strong></td>
+<td>4（3/1）</td>
+<td>無</td>
+<td>12～16</td>
+<td>3</td>
+<td>門不見了，牆上寫著：TODO 記得放門。</td>
+</tr>
+<tr>
+<td>1-3</td>
+<td>衣帽間</td>
+<td>C11 × 推箱（組合）</td>
+<td>2（1/1）</td>
+<td>筆尖</td>
+<td>8～12</td>
+<td>3.5</td>
+<td>衣架上貼滿「之後再改」的便利貼。</td>
+</tr>
+<tr>
+<td><strong>第二章 書房（變奏 I：投影疊合）</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2-1</td>
+<td>書架迴廊</td>
+<td>N1 投影疊合、N2 計重壓板</td>
+<td>3（3/0）</td>
+<td>筆尖</td>
+<td>12～16</td>
+<td>4</td>
+<td>書都長一樣，因為只做了一個書的模型。</td>
+</tr>
+<tr>
+<td>2-2</td>
+<td>閱覽室</td>
+<td>N4 非鎖定（R1 凍結）、N13 反向連動 → 取得<strong>定稿印</strong></td>
+<td>3（2/1）</td>
+<td>筆尖</td>
+<td>14～18</td>
+<td>5</td>
+<td>這張桌子的重量，是社長隨手填的。</td>
+</tr>
+<tr>
+<td>2-3</td>
+<td>印房（喘息）</td>
+<td>N5 定稿印</td>
+<td>3（2/1）</td>
+<td>定稿印</td>
+<td>10～14</td>
+<td>4.5</td>
+<td>找到「提交」按鈕。一次只能提交一個喔。</td>
+</tr>
+<tr>
+<td>2-4</td>
+<td>手稿庫</td>
+<td>N5 變奏、<code>heavy</code>、N14 3D 專屬箱</td>
+<td>3（2/1）</td>
+<td>定稿印</td>
+<td>14～18</td>
+<td>5.5</td>
+<td>每份手稿都寫著：第 12 版，最終版（這次真的）。</td>
+</tr>
+<tr>
+<td>2-5</td>
+<td>書房深處（章末）</td>
+<td>—（考試）</td>
+<td>1（1/0）</td>
+<td>定稿印</td>
+<td>8～10</td>
+<td>6</td>
+<td>最後一扇門要蓋驗收章，小格說它很嚴格。</td>
+</tr>
+<tr>
+<td><strong>第三章 溫室（變奏 II：光影）</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3-1</td>
+<td>苗圃（喘息）</td>
+<td>N6 燈影</td>
+<td>2（2/0）</td>
+<td>定稿印</td>
+<td>8～12</td>
+<td>4</td>
+<td>光影 bug：影子居然可以踩。</td>
+</tr>
+<tr>
+<td>3-2</td>
+<td>玻璃長廊</td>
+<td>N6 縮放（z 第一次影響 2D）</td>
+<td>2（2/0）</td>
+<td>定稿印</td>
+<td>10～14</td>
+<td>5.5</td>
+<td>靠近燈，影子變大。這不是 bug，是物理。</td>
+</tr>
+<tr>
+<td>3-3</td>
+<td>夜溫室</td>
+<td>N7 定稿影子</td>
+<td>3（2/1）</td>
+<td>定稿印</td>
+<td>15～19</td>
+<td>6.5</td>
+<td>燈關了，有一個影子忘了消失。</td>
+</tr>
+<tr>
+<td>3-4</td>
+<td>溫室深處（章末）</td>
+<td>N15 燈車 → 取得<strong>剖面尺</strong></td>
+<td>2（1/1）</td>
+<td>定稿印</td>
+<td>12～16</td>
+<td>7</td>
+<td>燈有輪子，因為社長懶得做固定座。</td>
+</tr>
+<tr>
+<td><strong>第四章 地下室（變奏 III：剖面）</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4-1</td>
+<td>酒窖走廊（喘息）</td>
+<td>N8 剖面</td>
+<td>3（3/0）</td>
+<td>剖面尺</td>
+<td>12～16</td>
+<td>5</td>
+<td>牆只做一半，另一半寫著「預算不足」。</td>
+</tr>
+<tr>
+<td>4-2</td>
+<td>鍋爐間</td>
+<td>N3 現實壓板（R1 反向）、剖面 × 影子、定稿 &gt; 剖面</td>
+<td>3（3/0）</td>
+<td>剖面尺</td>
+<td>15～19</td>
+<td>6.5</td>
+<td>這裡的壓力板，真人站上去也算數。</td>
+</tr>
+<tr>
+<td>4-3</td>
+<td>封存書庫（喘息）</td>
+<td>取得<strong>筆桿</strong> → N16 墨記（取得即教學）</td>
+<td>2（2/0）</td>
+<td>剖面尺</td>
+<td>12～16</td>
+<td>6</td>
+<td>封存資料夾裡，有一支會做記號的筆。</td>
+</tr>
+<tr>
+<td>4-4</td>
+<td>最後的抽屜（章末）</td>
+<td>—（考試）</td>
+<td>2（2/0）</td>
+<td>筆桿</td>
+<td>15～19</td>
+<td>8</td>
+<td>抽屜是空的，只有一張「先這樣吧」。</td>
+</tr>
+<tr>
+<td><strong>第五章 閣樓（整合章 + 期末考）</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5-1</td>
+<td>天窗間（喘息）</td>
+<td>—（N16 測試 / 變奏）</td>
+<td>2（1/1）</td>
+<td>全部</td>
+<td>12～16</td>
+<td>7.5</td>
+<td>地上有一個標記點，不是你放的。</td>
+</tr>
+<tr>
+<td>5-2</td>
+<td>東翼「春」</td>
+<td>—（組合）</td>
+<td>1（1/0）</td>
+<td>全部</td>
+<td>8～12</td>
+<td>8</td>
+<td>春天的貼圖還沒上色，只有線稿。</td>
+</tr>
+<tr>
+<td>5-3</td>
+<td>西翼「秋」</td>
+<td>—（組合）</td>
+<td>1（1/0）</td>
+<td>全部</td>
+<td>8～12</td>
+<td>8</td>
+<td>落葉一直掉，因為忘了寫「停」。</td>
+</tr>
+<tr>
+<td>5-4</td>
+<td>北翼「冬」</td>
+<td>—（組合）</td>
+<td>1（1/0）</td>
+<td>全部</td>
+<td>8～12</td>
+<td>8</td>
+<td>每片雪花都一樣，複製貼上的。</td>
+</tr>
+<tr>
+<td>5-5</td>
+<td>未竟之圖（Boss；顯示名「沒做完的最終關」）</td>
+<td>—（三階段考）</td>
+<td>3（3/0）</td>
+<td>全部</td>
+<td>18～22</td>
+<td>9</td>
+<td>最終關一直重生，像在說「再等我一下」。</td>
+</tr>
+<tr>
+<td><strong>終章 草地</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6-1</td>
+<td>草地（標題畫面）</td>
+<td>元謎題（日記碎片 = 開發筆記）</td>
+<td>1（1/0）</td>
+<td>日記 ×5</td>
+<td>10</td>
+<td>6</td>
+<td>這裡是標題畫面，開始鍵還沒放上去。</td>
+</tr>
+<tr>
+<td><strong>主線合計</strong></td>
+<td></td>
+<td></td>
+<td><strong>50（42/8）</strong></td>
+<td></td>
+<td><strong>約 4～5.5 小時</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>H1</td>
+<td>夾層（隱藏，書房）</td>
+<td>N1 + N8</td>
+<td>1（0/1）</td>
+<td>剖面尺</td>
+<td>10</td>
+<td>7</td>
+<td>書櫃後面，是社長說「太難了」刪掉的關。</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>溫床（隱藏，溫室）</td>
+<td>N6 + N8</td>
+<td>1（0/1）</td>
+<td>剖面尺</td>
+<td>10</td>
+<td>8</td>
+<td>一棵被刪掉的樹，還留在設計稿裡。</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>封存室（隱藏，地下室）</td>
+<td>全機制（含墨記）</td>
+<td>1（0/1）</td>
+<td>筆桿</td>
+<td>15</td>
+<td>9</td>
+<td>最大的資料夾，名字叫「也許有一天」。</td>
+</tr>
+</tbody></table></div>
+<p><strong>時長計算<span class="tg t-inf">〔推論〕</span></strong>：各章題均 3.5 / 5 / 6 / 6.5 / 8 分 → 約 32 + 65 + 54 + 65 + 64 + 10 ≈ 290 分（約 4.8 小時），取 4～5.5 小時；隱藏房再加 30～40 分。單關上限約 20 分（Boss 18～22 分為唯一例外，三階段之間有自動檢查點）。</p>
+<p><strong>難度曲線</strong>：1.5, 3, 3.5 │ 4, 5, <strong>4.5</strong>, 5.5, 6 │ <strong>4</strong>, 5.5, 6.5, 7 │ <strong>5</strong>, 6.5, <strong>6</strong>, 8 │ <strong>7.5</strong>, 8, 8, 8, 9 │ <strong>6</strong>。粗體為喘息關：新工具到手的那一關（2-3、3-1、4-1、4-3）與新工具的第一次測試（5-1）刻意降 0.5～2；終章降到 6，讓結局前落在「看懂」而非「卡住」<span class="tg t-inf">〔推論〕</span>。章末逐章上升（3.5 → 6 → 7 → 8 → 9）。第五章三翼難度相同、可任意順序。第五章與終章只用已教過的機制（D9 改寫版：筆桿機制在 4-3 教、5-1 測試）。</p>
+<p><strong>流程結構</strong>：第一～四章與 5-1 線性（<span class="tg t-src">〔來源〕</span>線性利於敘事但易卡關 → 三級提示補）；5-2～5-4 三翼可任意順序（<span class="tg t-src">〔來源〕</span>分支讓卡住的玩家先做別題），匯流到 5-5（<span class="tg t-src">〔來源〕</span>匯流點適合最終謎題與重要劇情）。</p>
+<h3 id="spec--53-薩爾達式結構對照來源mark-brownboss-keys對織夢島的整理小鑰匙多對多惡夢鑰匙一對一地城道具一把開多把鎖">5.3 薩爾達式結構對照<span class="tg t-src">〔來源：Mark Brown《Boss Keys》對《織夢島》的整理：小鑰匙多對多、惡夢鑰匙一對一、地城道具一把開多把鎖〕</span></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>薩爾達</th>
+<th>本作</th>
+<th>規則</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>地城道具（一開多）</td>
+<td>筆的升級（點墨 / 定稿印 / 剖面尺 / 墨記）</td>
+<td>在章中段或章末取得，之後反覆使用</td>
+</tr>
+<tr>
+<td>小鑰匙（多對多）</td>
+<td><strong>墨滴</strong>：開 2D「墨鎖」，用掉即消失，只在該章有效</td>
+<td>N9；每章 1～2 個</td>
+</tr>
+<tr>
+<td>Boss 鑰匙（一對一）</td>
+<td><strong>章印</strong>：開章末門</td>
+<td>每章 1 個</td>
+</tr>
+<tr>
+<td>回頭路與捷徑</td>
+<td>1-2d 回頭再用木箱；2-3b 過橋後由紙上走回；隱藏房需後期能力回到舊章</td>
+<td><code>LevelDef.abilities</code> 控制可用能力</td>
+</tr>
+<tr>
+<td>Boss = 機制考試</td>
+<td>5-5 三階段各考一章的核心 aha（第三階段含墨記）</td>
+<td>無傷害、無計時（P3）</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="spec--6-各關謎題清單">6. 各關謎題清單</h2>
+<p>欄位：<strong>目標 / 機制 / 解法（逐步）/ aha / 錯誤嘗試 / 難度 / 標記 / 實作</strong>。座標單位同玄關（地板頂 y=0、後牆 z=-6）。高度以 C4（3D 跳 1.25、2D 跳 1.6）與 D10 餘裕 ≥ 0.15 推出。<strong><span class="tg t-weak">〔弱〕</span></strong> = 我判斷 aha 偏弱、本質是變奏，砍題時優先考慮。</p>
+<h3 id="spec--第一章-玄關9-題">第一章 玄關（9 題）</h3>
+<p><strong>取捨</strong>：現在的玄關一關教了 C1～C14，資訊密度高；v0.2 在前面加 1-1 門廊把「切換」本身拆開教（每題一概念，D1），玄關本體只加一題回頭再用木箱的 1-4（使用者「可以再困難點」），再用 1-3 衣帽間把 1-1 學到的「回來的深度」與推箱組合起來。玄關仍是教學章，難度 1.5 → 3.5。</p>
+<h4 id="spec--1-1-門廊新關全部現有機制">1-1 門廊（新關，全部<span class="tg t-cur">〔現有〕</span>機制）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>1-1a 兩種牆</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：走到走廊盡頭。x=-4 有 3D 專屬鐵柵（全深、高 4），x=+2 有 2D 專屬墨牆（全高）。解法：3D 被鐵柵擋 → 切 2D 走過 → 被墨牆擋 → 切 3D 走過。aha：兩個視角各缺一樣東西。錯誤嘗試：跳鐵柵（高 4）。難度 1。</td>
+</tr>
+<tr>
+<td><strong>1-1b 紙上跳得高</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：過坑 x∈[8,12]。台階（both，頂 1.4，x∈[4,8]，全深）；台頂後方 z∈[-6,-4] 有 3D 專屬木板橋跨坑。解法：3D 跳不上台階（1.25&lt;1.4）→ 切 2D 跳上（1.6≥1.4）→ 2D 沒有木板橋 → 切 3D、沿台頂走到後方 → 走木板橋過坑。aha：紙上上得去，現實過得去。錯誤嘗試：2D 直接跳坑（寬 4，2D 水平約 2.1）。難度 1.5。</td>
+</tr>
+<tr>
+<td><strong>1-1c 回來的深度</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：後半區的門。z=0 有 3D 專屬玻璃牆把房間分成前後（全寬、全高），玩家在前半。後半有矮石階（both，頂 0.6，x∈[-2,0]，z∈[-5,-1]）。解法：切 2D → 跳上石階 → 切 3D：C11 採支撐物的 z → 落在後半區 → 走到門。aha：回到現實時，你會落在腳下那個東西所在的深度。錯誤嘗試：在地板上來回切換（還原 <code>z3d</code>，仍在前半）。難度 2。測試：反例「地板上切換 20 次不會跑到 z&lt;0」。</td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--1-2-玄關levelsfoyerts">1-2 玄關（<code>levels/foyer.ts</code>）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>1-2a 書架過缺口</strong><span class="tg t-core">〔核心，已實作〕</span></td>
+<td>3D 走到缺口邊 → 切 2D → 沿書架（頂面與地板同高、3D 被木欄圍住）走過 → 回 3D（<code>noLand3d</code> 讓落點在地板）。aha：被圍住的書架在紙上就是腳下的路。錯誤嘗試：3D 跳（缺口 4）、貼後牆（木欄 2.6）。難度 2。</td>
+</tr>
+<tr>
+<td><strong>1-2b 推箱取筆尖</strong><span class="tg t-core">〔核心，已實作〕</span></td>
+<td>3D 把木箱從 x=4.5 推到 x≈7（z 不必對齊高台）→ 切 2D：地板→箱（1.1）→高台（2.7≥2.5）→ E 拾取筆尖（只能 2D）。aha：箱子在現實不必靠著高台。錯誤嘗試：3D 站箱跳（2.35）、空中按 E（C9）。難度 3。</td>
+</tr>
+<tr>
+<td><strong>1-2c 長桌下的壓板</strong><span class="tg t-core">〔核心，已實作〕</span></td>
+<td>箱沿 -z 推進後方窄道 → 推到壓板 x∈[-1.6,-0.4] → 切 2D 壓下（鎖定）→ 3D 穿門洞。aha：長桌在紙上不存在，壓板畫在桌子底下。錯誤嘗試：從桌前推、自己站（太輕）、只在 3D 推上去。難度 3。</td>
+</tr>
+<tr>
+<td><strong>1-2d 高處的墨水閥</strong><span class="tg t-ext">〔擴充〔弱〕</span>；<span class="tg t-cur">〔現有〕</span>只改資料：墨水閥 y 0.55→2.3〕</td>
+<td>閘門開後 → 3D 把箱從壓板沿窄道推回、推到 z∈[-0.4,0.4]（門洞 z∈[-1,1]、箱深 1.2）→ 推過門洞到 x≈15 → 切 2D 站箱頂 → E 轉閥（身體中心 1.55，到閥 0.75≤1.5；站地板 1.85&gt;1.5）。aha：壓板鎖住了，木箱又自由了（與 1-2b 同一個「疊高」手法，故標弱）。難度 3。反例：出口區地面 2D/3D 搆不到閥；閘門未開時箱進不了出口區。</td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--1-3-衣帽間">1-3 衣帽間</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>1-3a 踩前面的箱，站上後面的台</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：後半區高台（both，頂 2.5，z∈[-6,-2]）上的墨滴，<code>interactIn:&#39;3d&#39;</code>。z=0 有 3D 專屬玻璃牆，木箱在前半。解法：3D 把箱推到高台左側的 x（仍在前半）→ 切 2D：箱→高台 → 切 3D：C11 採高台 z → 站在後半區的高台上 → E 取墨滴（現實才拿得到）→ 跳下，走後半區的門（墨滴開墨鎖）。aha：紙上踩的是前面的箱子，回到現實卻站在後面的高台。錯誤嘗試：在 2D 拾取（只能現實）；在箱頂切 3D（落回前半箱頂）。難度 3.5。<span class="tg t-cur">〔現有〕</span>＋ 墨滴 / 墨鎖（N9）。日記碎片 1 在此。</td>
+</tr>
+<tr>
+<td><strong>1-3b 紙上伸手</strong><span class="tg t-ext">〔擴充〔弱〕</span>〕</td>
+<td>目標：3D 專屬玻璃櫃（貼後牆）裡、y=2.0 的紙鎮（<code>interactIn:&#39;both&#39;</code>）。3D 被櫃擋、距離含 z 搆不到；2D 沒有櫃也沒有深度，但站地板到物件 1.55&gt;1.5。解法：3D 推箱到櫃的 x（任意 z）→ 切 2D 站箱頂 → E。aha：紙上沒有深度，也就沒有玻璃與距離（本質是 1-2b 的變奏）。難度 3。<span class="tg t-cur">〔現有〕</span></td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--第二章-書房13-題">第二章 書房（13 題）</h3>
+<h4 id="spec--2-1-書架迴廊教-n1n2">2-1 書架迴廊（教 N1、N2）</h4>
+<p>物件：矮箱 A（1.2×1.1×1.2）、高書車 B（可推，1.2×2.0×1.2）、二樓迴廊（both，頂 3.4，前緣 3D 專屬欄杆）、3D 專屬閱讀桌數張（構成 z 向窄道）。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2-1a 書梯</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：上二樓迴廊。解法：3D 把 B 推到迴廊左緣旁（任意 z）→ A 推到 B 左側（可不同 z）→ 切 2D：地板→A（1.6≥1.1）→B（2.7≥2.0）→迴廊（3.6≥3.4）。aha：階梯只需在紙上連續，現實裡它們可以隔著整個房間。錯誤嘗試：3D 疊爬（B→迴廊 3.25&lt;3.4）；2D 不用 A（1.6&lt;2.0）。難度 4。<span class="tg t-cur">〔現有〕</span>＋ 不同尺寸可推物（資料）。隱藏點：迴廊盡頭書架頂（需 B 換到另一側再疊一次）放圖紙碎片 1。</td>
+</tr>
+<tr>
+<td><strong>2-1b 同一格</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：開往下一區的閘門。2D 壓板 <code>weight:2</code>，寬 1.2，位於兩排閱讀桌夾出的 z 向窄道（寬 1.4，只能從 +z 推入）。解法：3D 先把 A 推到窄道深處 → 再把 B 推入停在 A 前（不能連推，C5）→ 兩箱中心 x 都在板內 → 切 2D 壓下。aha：現實裡塞不下兩個箱子的一格，紙上它們疊在同一處、重量相加。錯誤嘗試：只放一箱（新提示「還不夠重」）、想並排放（寬度不夠）、站上去（太輕）。難度 4。<span class="tg t-new">〔新增：N2〕</span></td>
+</tr>
+<tr>
+<td><strong>2-1c 推到後面也沒用</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：2D 墨台（頂 3.0）上的墨水閥（需筆尖）→ 開出口。2D 裡 B 擋在玩家與墨台之間（高 2.0，2D 跳不過）。B 卡在閱讀桌窄道，只能先沿 z 推到後方橫走道，再沿 x 推。解法：3D 把 B 推到底（紙上仍是牆）→ 沿橫走道把 B 推到墨台左側 → A 推到 B 左側 → 切 2D：A→B→墨台（3.6≥3.0）→ 轉閥。aha：擋在紙上的東西往後推沒用，要往旁邊挪；挪對地方，牆就變成階梯。錯誤嘗試：B 推到最後面就切 2D。難度 5。<span class="tg t-cur">〔現有〕</span>＋ N9 通用閥 / 門。</td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--2-2-閱覽室教-n4r1取得定稿印">2-2 閱覽室（教 N4、R1；取得定稿印）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2-2a 放手就闔上</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：穿過 2D 墨牆取墨滴。2D 非鎖定壓板（weight 1）在墨牆前。解法：3D 推箱到板 x → 切 2D（墨牆消失）→ 走過取墨滴；回頭推走箱子後再進紙，墨牆又出現。aha：這塊壓板不會記住你。錯誤嘗試：自己站上（太輕）。難度 3.5。<span class="tg t-new">〔新增：N4、N10（壓板可開 2D 墨牆）〕</span></td>
+</tr>
+<tr>
+<td><strong>2-2b 凍結的機關</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：3D 專屬講台（頂 2.0）上的<strong>定稿印</strong>（<code>interactIn:&#39;3d&#39;</code>），講台在 3D 玻璃閘門後，閘門由 2D 非鎖定壓板控制。只有一個箱子，既要壓板又要當 3D 墊腳（1.1+1.25=2.35≥2.0；地面 1.25&lt;2.0）。解法：墨滴開墨鎖進房 → 推箱到板 x → 切 2D（閘門開）→ 切 3D（閘門保持開：機關只在它存在的視角更新，R1）→ 推箱進門到講台旁 → 爬上取印。aha：紙上的機關只在紙上才注意到你把箱子拿走了。錯誤嘗試：箱推離後切 2D「確認」→ 閘門落下（T 歸位可復原，D8）。難度 5。<span class="tg t-new">〔新增：N4；R1 為現況，加測試鎖定；閘門關閉遇重疊時延後關閉〕</span></td>
+</tr>
+<tr>
+<td><strong>2-2c 兩扇門同時開</strong><span class="tg t-ext">〔擴充〕</span></td>
+<td>目標：連續穿過 3D 閘門 G1、G2。同一塊 2D 非鎖定壓板：壓下時 G1 開、G2 關（N13 反向連動）。解法：箱放板上 → 切 2D（G1 開 / G2 關）→ 切 3D（凍結）把箱推離板 → 穿過 G1 → 切 2D（此時才更新：G1 關 / G2 開）→ 切 3D 穿過 G2。aha：用「另一個視角不會更新」的時間差，讓相反的兩扇門輪流打開。錯誤嘗試：在 G1 前就推走箱再切 2D（G1 已關）。難度 5.5。<span class="tg t-new">〔新增：N13〕</span></td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--2-3-印房喘息教-n5">2-3 印房（喘息；教 N5）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2-3a 第一個印</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：二樓出口（頂 2.8，3D 被欄杆圍）。可蓋印：3D 專屬書櫃（高 1.4）、2D 專屬墨凳（高 1.0）。解法：G 對書櫃蓋印 → 切 2D：地板→書櫃（1.6≥1.4）→出口（3.0≥2.8）。aha：印讓只存在現實的東西也被畫進紙裡。誘導性錯誤（D5）：蓋墨凳 → 它出現在 3D，但 3D 站上去 2.25&lt;2.8；玩家順帶學到印的反向用法。難度 4。<span class="tg t-new">〔新增：N5〕</span></td>
+</tr>
+<tr>
+<td><strong>2-3b 紙橋落地</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：把木箱推到坑（x∈[-4,2]、全深）對岸。坑上有 2D 專屬墨橋（頂 0、深 2、可蓋印）。解法：G 蓋墨橋 → 3D 墨橋成實體 → 對齊墨橋 z 把箱推過坑。aha：箱子只會在現實移動（R3），所以要讓紙上的橋落地。錯誤嘗試：自己在 2D 過橋找箱；從坑邊推（C5 推不下地板）。難度 4.5。<span class="tg t-new">〔新增：N5〕</span></td>
+</tr>
+<tr>
+<td><strong>2-3c 印在現實的落腳點</strong><span class="tg t-ext">〔擴充〕</span></td>
+<td>目標：3D 專屬高梁（頂 3.6）上的墨滴。2D 專屬墨台（頂 2.5，可蓋印）在高梁正下方 x。解法：推箱到墨台旁 → 2D：箱→墨台 → 切 3D 會落回地板（墨台在現實不存在，C11 找不到支撐）→ 改成先 G 蓋墨台 → 2D 上墨台 → 切 3D 站在墨台上（2.5+1.25=3.75≥3.6）→ 跳上高梁。aha：要在現實站上紙上的高處，得先替它定稿。難度 5。<span class="tg t-new">〔新增：N5〕</span></td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--2-4-手稿庫n5-變奏">2-4 手稿庫（N5 變奏）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2-4a 印只有一個</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：高 2.8 壁龕裡的墨滴。可蓋印：墨橋（蓋著，木箱 A 剛推過）、3D 專屬梯櫃（高 1.4）。解法：確認 A 完全離開墨橋 → G 改蓋梯櫃（墨橋退回紙上，2D 仍可走回）→ 2D：梯櫃→壁龕（3.0≥2.8）。aha：印要按順序用；紙上的橋不定稿也還在紙上。錯誤嘗試：A 還在橋上就改蓋（「印拿不起來：上面還有東西」）。難度 5.5。<span class="tg t-new">〔新增：N5 承載規則〕</span></td>
+</tr>
+<tr>
+<td><strong>2-4b 三份重量</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：2D 計重壓板（weight 3），手上兩箱。板 x 的後方有 3D 專屬「鉛字盤」（<code>heavy</code>、不可推）在玻璃櫃裡，櫃上 2D 墨鎖。解法：墨滴開墨鎖（鉛字盤出現印框）→ G 改蓋鉛字盤（它出現在紙上、正好在板 x）→ 3D 把兩箱沿深度排進板 x → 切 2D：重量 3。aha：印不只帶來形狀，也帶來重量。錯誤嘗試：找第三個箱子、推鉛字盤。難度 6。〔新增：N2、N5、<code>heavy</code>〕</td>
+</tr>
+<tr>
+<td><strong>2-4c 時有時無的箱子</strong><span class="tg t-ext">〔擴充〕</span></td>
+<td>目標：先轉高處墨水閥（頂 3.4 墨台），再走到同一 x 的出口。3D 專屬書車 C（高 2.0，可推，N14：只在現實存在）。解法：推 C 到墨台旁 → G 蓋 C（進入紙上）→ 2D：A→C→墨台 → 轉閥 → 下來、站離 C → G 取消印（C 從紙上消失）→ 2D 走過 C 原本擋住的路到出口。aha：拿掉印，牆就不在了；箱子在現實裡一直都在。錯誤嘗試：站在 C 上取消印（不允許）；2D 跳過 C（1.6&lt;2.0）。難度 6。<span class="tg t-new">〔新增：N14〕</span></td>
+</tr>
+</tbody></table></div>
+<h4 id="spec--2-5-書房深處章末考">2-5 書房深處（章末考）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2-5 印移走了，紙還不知道</strong><span class="tg t-core">〔核心〕</span></td>
+<td>目標：章末門（3D 閘門後）。閘門由 2D 非鎖定壓板控制；板上唯一可用的重量是鉛字盤（蓋印才在紙上）；閘門前是坑，要過坑得蓋墨橋（3D）。只有一個印。解法：G 蓋鉛字盤 → 切 2D（閘門開）→ 切 3D（凍結）→ G 改蓋墨橋（鉛字盤離開紙面，但紙上機關不會更新，R1）→ 3D 走墨橋穿過閘門 → 取章印、日記碎片 2。aha：印搬走了，紙還不知道。錯誤嘗試：改蓋後回 2D 確認 → 閘門落下。難度 6.5。<span class="tg t-new">〔新增：N4、N5（已在前面教過）〕</span></td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--第三章-溫室9-題機制組合-核心-aha">第三章 溫室（9 題，機制組合 + 核心 aha）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>標記</th>
+<th>機制組合</th>
+<th>核心 aha</th>
+<th>難度</th>
+<th>實作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>3-1a 影子的台階</td>
+<td>核心</td>
+<td>N6（開燈）</td>
+<td>現實的光在紙上留下實體</td>
+<td>3.5</td>
+<td>新增 N6</td>
+</tr>
+<tr>
+<td>3-1b 移影</td>
+<td>核心</td>
+<td>N6 + 軌道花盆（C5 窄支撐條限軸）</td>
+<td>推花盆左右，影子跟著平移</td>
+<td>4</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-2a 靠近燈</td>
+<td>核心</td>
+<td>N6 縮放</td>
+<td><strong>z 第一次在紙上有意義</strong>：推近燈，影子變寬接成橋（推翻第二章「z 不重要」）</td>
+<td>5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-2b 先小後大</td>
+<td>核心</td>
+<td>N6 + 順序</td>
+<td>同一個影子先縮小讓路、走過後再放大當橋（在兩視角來回）；放到最大時露出圖紙碎片 2（隱藏點）</td>
+<td>5.5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-3a 定稿影子</td>
+<td>核心</td>
+<td>N7</td>
+<td>用光造的橋，蓋印後木箱也能走</td>
+<td>6</td>
+<td>新增 N7</td>
+</tr>
+<tr>
+<td>3-3b 熄燈之後</td>
+<td>核心</td>
+<td>N7 + N4/R1</td>
+<td>蓋過印的影子在熄燈後仍在；配合凍結機關同時留住兩個狀態</td>
+<td>6.5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-3c 蓋印時的大小</td>
+<td>擴充</td>
+<td>N7 + N6</td>
+<td>先把影子放到最大再蓋印，然後把花盆推走去清另一條路：定稿的影子與它的主人無關</td>
+<td>7</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-4a 月下章印</td>
+<td>核心</td>
+<td>N6 + N7 + N2</td>
+<td>影子沒有重量（誘導性錯誤），但定稿影子板能讓木箱到達壓板 x → 章印、取得<strong>剖面尺</strong>、日記碎片 3</td>
+<td>7</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>3-4b 燈車</td>
+<td>擴充</td>
+<td>N15 + N6</td>
+<td>推不動花盆的地方，改推光源：移動燈，所有影子一起變（也承接被刪的「兩盞燈」：燈一移，橋與牆互換）</td>
+<td>7</td>
+<td>新增 N15</td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--第四章-地下室10-題">第四章 地下室（10 題）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>標記</th>
+<th>機制組合</th>
+<th>核心 aha</th>
+<th>難度</th>
+<th>實作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>4-1a 半面牆</td>
+<td>核心</td>
+<td>N8</td>
+<td>你站在哪個深度進紙，紙上就是那一刀；在門洞深度剖切，牆只剩上方的楣</td>
+<td>4.5</td>
+<td>新增 N8</td>
+</tr>
+<tr>
+<td>4-1b 不在刀上的不存在</td>
+<td>核心</td>
+<td>N8</td>
+<td>剖切避開前景酒架，紙上的牆消失</td>
+<td>5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>4-1c 剖面裡的重量</td>
+<td>核心</td>
+<td>N8 + N2</td>
+<td>剖面只算刀上的箱；兩箱在現實不能同深 → 計重 2 必須<strong>關掉剖面</strong>（工具不是越用越好）</td>
+<td>5.5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>4-2a 你夠重</td>
+<td>核心</td>
+<td>N3 + R1</td>
+<td>現實壓板算你；站著切進紙，紙上墨牆維持開（2-2b 的鏡像）；隱藏點：圖紙碎片 3</td>
+<td>6</td>
+<td>新增 N3</td>
+</tr>
+<tr>
+<td>4-2b 剖到牆上的影</td>
+<td>核心</td>
+<td>N8 + N6</td>
+<td>影子在後牆面；剖面要切到牆面深度影子才在紙上（物不在刀上，影還在）</td>
+<td>6.5</td>
+<td>N6 × N8 規則</td>
+</tr>
+<tr>
+<td>4-2c 逃過那一刀</td>
+<td>核心</td>
+<td>N8 + N5</td>
+<td>定稿的物件不受剖切（規則：定稿 &gt; 剖面）</td>
+<td>7</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>4-3a 第一個墨記</td>
+<td>核心</td>
+<td>N16（取得即教學）</td>
+<td>筆桿放在矮桌上，一拿到，房門就在 3D 專屬高櫃（頂 2.4、貼後牆）上；前方有 2D 專屬墨梯到同一高度。2D 爬墨梯 → V 留墨記 → 切 3D（墨梯在現實不存在，落回地板）→ 走到後牆深度 → V 兌現 → 站上高櫃。aha：紙上記下高度，現實選擇深度</td>
+<td>5.5</td>
+<td>新增 N16</td>
+</tr>
+<tr>
+<td>4-3b 刀上的記號</td>
+<td>核心</td>
+<td>N16 + N8</td>
+<td>只有在某一刀的剖面裡才跳得上去的高處（其他深度有天花板低樑擋住）留下墨記，回現實到另一個深度兌現</td>
+<td>6.5</td>
+<td>〃</td>
+</tr>
+<tr>
+<td>4-4a 凍結的剖面</td>
+<td>核心</td>
+<td>N8 + R1 + N4</td>
+<td>在剖面裡壓下的機關，回現實保持，換一刀再進紙才更新</td>
+<td>7.5</td>
+<td>—</td>
+</tr>
+<tr>
+<td>4-4b 最後一個抽屜</td>
+<td>核心</td>
+<td>N8 + N5 + N16 + N2</td>
+<td>先留墨記、再拆掉當階梯的箱子去壓板，回現實照樣兌現 → 日記碎片 4</td>
+<td>8</td>
+<td>—</td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--第五章-閣樓-終章9-題">第五章 閣樓 / 終章（9 題）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>標記</th>
+<th>機制組合</th>
+<th>核心 aha</th>
+<th>難度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>5-1a 記號要有落腳處</td>
+<td>核心</td>
+<td>N16 + N6 + N7</td>
+<td>墨記留在影子台階上 → 兌現失敗（「這裡接不住你」，影子在現實不存在）→ 先把那片影子定稿再兌現：記號要在現實兌現，現實裡得有東西接住你</td>
+<td>7</td>
+</tr>
+<tr>
+<td>5-1b 先記後拆</td>
+<td>擴充</td>
+<td>N16 + N1</td>
+<td>用三箱疊出紙上的階梯、在頂端留墨記，再把三箱拆去別處；墨記記的是位置，不是腳下的東西（4-4b 的反向延伸）</td>
+<td>7.5</td>
+</tr>
+<tr>
+<td>5-2 東翼「春」</td>
+<td>核心</td>
+<td>N1 + N6 + N7</td>
+<td>用影子與箱子在紙上拼出同一道階梯，再把影子那一階定稿給箱子走</td>
+<td>8</td>
+</tr>
+<tr>
+<td>5-3 西翼「秋」</td>
+<td>核心</td>
+<td>N8 + R1 + N3</td>
+<td>人在現實站著壓板、紙上用剖面通過，兩邊各凍住一個機關</td>
+<td>8</td>
+</tr>
+<tr>
+<td>5-4 北翼「冬」</td>
+<td>核心</td>
+<td>N5 + N2 + N14</td>
+<td>一個印、三次改蓋的正確順序</td>
+<td>8</td>
+</tr>
+<tr>
+<td>5-5a 地板被重畫</td>
+<td>核心</td>
+<td>考第二章</td>
+<td>同一格三重量 + 印搬走紙還不知道</td>
+<td>8.5</td>
+</tr>
+<tr>
+<td>5-5b 搖晃的吊燈</td>
+<td>核心</td>
+<td>考第三章</td>
+<td>吊燈以互動停在三個位置（非計時），影子尺寸決定能否過</td>
+<td>9</td>
+</tr>
+<tr>
+<td>5-5c 收束</td>
+<td>核心</td>
+<td>考第四章 + 印 + 墨記</td>
+<td>剖面 + 定稿 + 凍結 + 墨記；完成後圖紙收束為一扇門 → 日記碎片 5</td>
+<td>9</td>
+</tr>
+<tr>
+<td>6-1 草地（元謎題）</td>
+<td>核心</td>
+<td>N8 + N1 + N5 + N16 + 日記</td>
+<td>五片日記插畫疊起來，是草地從某一深度剖切的天際線；找到那一刀、把兩箱推到缺的兩筆位置 → 紙上畫出門 → 用定稿印讓紙上的門在現實成真（結局 B 改為在畫桌留下最後一個墨記、不再兌現）</td>
+<td>6</td>
+</tr>
+</tbody></table></div>
+<p><strong>元謎題設計</strong>（社團版敘事見 story-bible 6.1：開發筆記每頁畫著標題畫面草圖的一筆）：日記碎片各含一幅輪廓插畫，在日誌（筆記）介面依取得順序疊合 = 草地某深度的剖面輪廓（樹、石、兩個空缺）。防暴力：只沿 z 掃描剖面找不到門，必須同時把兩箱推到空缺的 x<span class="tg t-inf">〔推論：連續空間的兩箱位置組合無法窮舉〕</span>。</p>
+<h3 id="spec--隱藏房另計不含在主線-50-題">隱藏房（另計，不含在主線 50 題）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>房</th>
+<th>入口</th>
+<th>核心 aha</th>
+<th>獎勵</th>
+<th>難度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>H1 夾層（書房 2-1）</td>
+<td>第二章就看得到的牆上墨框；取得剖面尺後，在書櫃間的深度剖切才進得去</td>
+<td>舊房間在新工具下有另一張剖面（回頭路）</td>
+<td>圖紙碎片 4</td>
+<td>7</td>
+</tr>
+<tr>
+<td>H2 溫床（溫室 3-2）</td>
+<td>剖切到玻璃牆深度才有入口</td>
+<td>影子 × 剖面（同 4-2b 規則）：花盆不在刀上也照樣投影，但刀要落在牆面那一帶，影子才出現在紙上；入口所需的那片影子，只有剖到牆面時才踩得到</td>
+<td>圖紙碎片 5</td>
+<td>8</td>
+</tr>
+<tr>
+<td>H3 封存室（地下室 4-4 後）</td>
+<td>取得筆桿後開</td>
+<td>全機制（含墨記）、單一大房間</td>
+<td>圖紙碎片 6</td>
+<td>9</td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--69-題數與標記統計與-52-表一致">6.9 題數與標記統計（與 5.2 表一致）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>章</th>
+<th>關數</th>
+<th>題數</th>
+<th>核心</th>
+<th>擴充</th>
+<th>其中<span class="tg t-weak">〔弱〕</span></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>第一章 玄關</td>
+<td>3</td>
+<td>9</td>
+<td>7</td>
+<td>2</td>
+<td>2（1-2d、1-3b）</td>
+</tr>
+<tr>
+<td>第二章 書房</td>
+<td>5</td>
+<td>13</td>
+<td>10</td>
+<td>3</td>
+<td>0</td>
+</tr>
+<tr>
+<td>第三章 溫室</td>
+<td>4</td>
+<td>9</td>
+<td>7</td>
+<td>2</td>
+<td>0</td>
+</tr>
+<tr>
+<td>第四章 地下室</td>
+<td>4</td>
+<td>10</td>
+<td>10</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>第五章 閣樓</td>
+<td>5</td>
+<td>8</td>
+<td>7</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>終章 草地</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>主線合計</strong></td>
+<td><strong>22</strong></td>
+<td><strong>50</strong></td>
+<td><strong>42</strong></td>
+<td><strong>8</strong></td>
+<td><strong>2</strong></td>
+</tr>
+<tr>
+<td>隱藏房（另計）</td>
+<td>3</td>
+<td>3</td>
+<td>0</td>
+<td>3</td>
+<td>0</td>
+</tr>
+</tbody></table></div>
+<p>擴充 8 題：1-2d、1-3b、2-2c、2-3c、2-4c、3-3c、3-4b、5-1b。<span class="tg t-weak">〔弱〕</span>2 題是我判斷 aha 本質為前題變奏者；其餘擴充題有新後果但刪掉不斷教學鏈。另外誠實標註：2-5、4-4a、5-2～5-4 屬「組合考」，沒有新概念，其 aha 強度取決於關卡排布，需在 G1 試玩後確認。</p>
+<p><strong>製作範圍選項</strong>：只做核心 = 42 題（仍完整：教學鏈與劇情不斷）；核心 + 非弱擴充 = 48 題；全部 = 50 題（+ 隱藏 3）。</p>
+<p><strong>機制教學順序自檢</strong>：C1～C3、C4、C11（1-1）→ C5、C6、C8（1-2）→ N9 墨滴（1-3a）→ N1、N2（2-1）→ N4、R1（2-2a/b）→ N13（2-2c）→ N5（2-3a）→ <code>heavy</code>（2-4b）→ N14（2-4c）→ N6（3-1）→ N7（3-3a）→ N15（3-4b）→ N8（4-1a）→ N3（4-2a）→ N16 墨記（4-3a 教、4-3b 測、5-1 變奏）。所有題目使用的機制都不早於其首次出現；第五章、終章只用已教機制。</p>
+<hr>
+<h2 id="spec--7-提示系統與無障礙">7. 提示系統與無障礙</h2>
+<h3 id="spec--71-三級提示全抽象來源room-escape-artist提示是把玩家推回邏輯路徑不是給答案同一提示被-50-隊伍需要即該修謎題">7.1 三級提示（全抽象）<span class="tg t-src">〔來源：Room Escape Artist——提示是把玩家推回邏輯路徑，不是給答案；同一提示被 ≥50% 隊伍需要即該修謎題〕</span></h3>
+<p>使用者要求：小格的提示要盡量抽象，不要太直接，否則不好玩。三級都只給「想的方向」，動作永遠由玩家自己組出來。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>級</th>
+<th>小格外殼台詞</th>
+<th>給什麼</th>
+<th>不給什麼</th>
+<th>字數上限（不含外殼）</th>
+<th>解鎖（計時已確認）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>L1 意象</td>
+<td>「運算中……」</td>
+<td>一句比喻或意象，指向本題的核心現象；青少年讀得懂但要動腦</td>
+<td>物件名、視角名、動作</td>
+<td>24 字</td>
+<td>進入謎題 3 分鐘</td>
+</tr>
+<tr>
+<td>L2 觀察角度</td>
+<td>「找到線索了！……大概。」</td>
+<td>一個<strong>提問</strong>，只指出該注意哪一類現象或哪個檢視（完成版 / 設計稿）</td>
+<td>物件名、動作、答案</td>
+<td>30 字</td>
+<td>再 3 分鐘，或主動按 H</td>
+</tr>
+<tr>
+<td>L3 缺的性質</td>
+<td>「好吧，直接說——啊不行，只能說這些。」</td>
+<td>縮小範圍：用類比、反例，或說出「現在缺的是什麼性質」；玩家仍須自己組出動作</td>
+<td>動作、順序、位置、數字</td>
+<td>36 字</td>
+<td>再 4 分鐘，且需按 H 兩次確認</td>
+</tr>
+<tr>
+<td>L4 解法筆記（安全閥，暫定，待確認 Q-D）</td>
+<td>小格：「這題我算不動了，借你社長的攻略筆記。」</td>
+<td>逐步解法（原 v0.2 的「步驟級」內容）</td>
+<td>—</td>
+<td>不限（每步一行）</td>
+<td><strong>預設鎖定</strong>：L3 顯示後再 5 分鐘才出現「再給我一點」按鈕，需按住 H 2 秒確認；或在設定開啟「輔助模式」</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>計時解鎖的敘事</strong>：提示由小格在遊戲剩下的記憶體裡「運算」，所以要等；「隨時可用」= 社長開了開發者模式（story-bible 1.2）。L4 是「社長的攻略筆記」，不是小格算的。</li>
+<li><strong>卡關偵測</strong><span class="tg t-inf">〔推論〕</span>（敘事：小格發現你很努力，把你的提示排到前面）：以謎題進度旗標為單位；同一謎題內 T 歸位 ≥ 3 次、或切換 ≥ 12 次無新旗標、或掉落 ≥ 3 次 → 提前解鎖下一級（只亮提示圖示，不自動顯示）。<strong>只作用於 L1～L3</strong>；最多把 L4 的等待縮短到 3 分鐘，不會直接解鎖 L4。</li>
+<li><strong>資料格式</strong>：每題在關卡資料定義 <code>hints: [HintDef, HintDef, HintDef]</code>（<code>HintDef = { textKey, truthRef }</code>）、<code>solutionKey</code>（L4 解法筆記）、<code>keyObjects: ObjId[]</code>（供 H4 檢查）、<code>assistFocus?: ObjId[]</code>（只在「提示輔助」開啟時用於描邊）與進度旗標；詳見 <code>architecture-v0.2.md</code> 4.10。</li>
+<li>現有「看得見，卻碰不到。換個角度試試。」（C9）保留為 0 級即時回饋，文案改由小格說（story-bible 2.3）。它是即時規則回饋，不算提示、不受量表限制。</li>
+<li>提示範例（1-1～1-3、2-1 全部謎題三級）見 story-bible 7.3。</li>
+</ul>
+<h4 id="spec--711-提示撰寫量表可檢查規則">7.1.1 提示撰寫量表（可檢查規則）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>規則</th>
+<th>檢查方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>H1</td>
+<td>字數：L1 ≤ 24、L2 ≤ 30、L3 ≤ 36 字（不含小格外殼台詞）</td>
+<td>關卡驗證器（自動）</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>禁用句型：「把…」「先…再…」「去…」「到…」等祈使句開頭；「推到 / 推去 / 推過 / 站上 / 走到 / 跳上 / 切到」</td>
+<td>驗證器：開頭詞與動詞清單</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>禁用詞：按鍵名（F、Q、E、T、R、G、C、V、H）與「按」；座標與方位精確詞（x、y、z、左邊第、最右邊、正下方）；<strong>任何數字</strong>（正規式：<code>[0-9０-９]</code>，以及中文數字接量詞 <code>[一二兩三四五六七八九十幾][個次格步塊公尺米下]</code>）</td>
+<td>驗證器：詞表 + 數字正規式</td>
+</tr>
+<tr>
+<td>H4</td>
+<td>不得點名本題關鍵物件：提示文字不得包含該題 <code>keyObjects</code> 的 label 或顯示名（可以描述性質：「重的」「只在一邊的」「會動的」）</td>
+<td>驗證器：比對關卡資料 label 與 story-bible 顯示名</td>
+</tr>
+<tr>
+<td>H5</td>
+<td>必須為真、不誤導：每條提示標 <code>truthRef</code>（對應解法大綱的哪一步或哪條規則）</td>
+<td>人工審稿</td>
+</tr>
+<tr>
+<td>H6</td>
+<td>一條提示只對應解法的一步或一個性質，不得一次洩漏兩步</td>
+<td>人工審稿</td>
+</tr>
+<tr>
+<td>H7</td>
+<td>遞增：L2 比 L1 窄（指出現象 / 檢視），L3 比 L2 窄（指出缺的性質），但三級都不是答案</td>
+<td>人工審稿</td>
+</tr>
+<tr>
+<td>H8</td>
+<td><strong>抽象度測試</strong>：給沒玩過該題的人只看三級提示與房間截圖，不應能照做完成；看完解法後應覺得「原來如此，提示沒騙我」</td>
+<td>人工，併入 G1 試玩（每題記錄「照做就過？」「覺得被騙？」）</td>
+</tr>
+<tr>
+<td>H9</td>
+<td>小格口吻：可愛、有點笨拙、愛用資料庫 / 運算比喻；外殼台詞另計，提示本體不放梗</td>
+<td>人工審稿</td>
+</tr>
+</tbody></table></div>
+<p><strong>輔助設定（預設關閉，暫定，待確認 Q-E）</strong>：v0.2 原本 L2「標出相關物件（描邊 + 符號）」與 L3「下一步具體動作」太直接，改為：描邊降級為設定裡的「提示輔助：顯示相關物件」（開啟時 L2 會同時描邊 <code>assistFocus</code> 物件）；具體步驟移到 L4 解法筆記。取捨：預設全抽象保住「想通」的樂趣；需要的人（含無障礙需求）仍可自己打開。</p>
+<h4 id="spec--712-安全閥評估暫定待確認-q-d">7.1.2 安全閥評估（暫定，待確認 Q-D）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>方案</th>
+<th>優點</th>
+<th>缺點</th>
+<th>評估</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>(a) 只有三級全抽象</td>
+<td>最好玩、最一致</td>
+<td>青少年卡太久會直接放棄；一題卡死 = 整章卡死（線性）</td>
+<td>單獨不夠</td>
+</tr>
+<tr>
+<td>(b) 加 L4 解法筆記 / 跳過此題，預設鎖定</td>
+<td>保證不會永久卡關</td>
+<td>太早出現會被濫用、破壞頓悟</td>
+<td><strong>採用</strong>，但要延後、要主動確認</td>
+</tr>
+<tr>
+<td>(c) 卡關偵測提前解鎖（沿用）</td>
+<td>卡住的人更快拿到抽象提示</td>
+<td>只加速 L1～L3，抽象提示仍可能不夠</td>
+<td><strong>採用</strong>，但<strong>不得</strong>提前解鎖 L4</td>
+</tr>
+</tbody></table></div>
+<p><strong>建議（暫定值）</strong>：(a)+(b)+(c)。L4 在 L3 顯示後再 5 分鐘、按住 H 確認才出現；「跳過此題」只開放給<strong>擴充題</strong>（核心題會斷教學鏈，不提供跳過）。理由：目標是青少年，永久卡關的流失成本高於偶爾看解法；用延後與主動確認保住預設體驗。統計 L4 使用率：某題 ≥ 20% 試玩者打開 L4 → 該題或其提示要重做（比 D7 的 50% 更嚴，因為 L4 等同看答案）。</p>
+<ul>
+<li><strong>測試策略</strong>：關卡驗證器自動檢查 H1～H4（字數、禁用句型 / 詞、數字、關鍵物件名）與每題 L1～L3 + L4 齊全；H5～H9 人工審稿；H8 抽象度併入 G1 試玩決策點。</li>
+</ul>
+<h3 id="spec--72-無障礙">7.2 無障礙</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>規格</th>
+<th>依據</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>不只靠顏色</td>
+<td>只在 2D 存在的物件加「墨點」符號；只在 3D 存在的加「實線框」；可蓋印物有方形印框；剖面中的物件有斜線填紋；墨記在 3D 顯示為橫跨所有深度的墨線、在 2D 為一個墨點（形狀區分）；壓板顯示需要的重量（點數）；影子以網點紋區分實體影子與裝飾陰影</td>
+<td><span class="tg t-src">〔來源〕</span>Xbox 無障礙準則 103：不要讓任何提示只靠顏色；可讓玩家自選顏色</td>
+</tr>
+<tr>
+<td>色盲模式</td>
+<td>2D 墨水色可切換三組（預設 / 藍橙 / 高對比黑白紋理）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>視角提示</td>
+<td>HUD 現有模式文字（<code>hud.ts</code> <code>setMode</code>）保留，顯示名改為「完成版 / 設計稿」（日後改程式）；剖面開啟時加「剖面檢視」字樣</td>
+<td>現況</td>
+</tr>
+<tr>
+<td>減少動態</td>
+<td>切換過場（<code>game.ts</code> 墨水暈開）可改為淡入淡出；不做 Fez 式強制旋轉</td>
+<td><span class="tg t-src">〔來源〕</span>Fez 旋轉致暈的批評</td>
+</tr>
+<tr>
+<td>回溯</td>
+<td>T 木箱歸位、R 重來、檢查點（現有）；新增「回到本謎題開始」</td>
+<td>D8</td>
+</tr>
+<tr>
+<td>提示輔助（可選，預設關）</td>
+<td>開啟後 L2 同時描邊相關物件；「輔助模式」可讓 L4 解法筆記不必等待</td>
+<td>7.1.1、Q-E</td>
+</tr>
+<tr>
+<td>操作</td>
+<td>全按鍵可重綁；不需同時按兩鍵；無計時</td>
+<td>P3</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="spec--8-進度與存檔localstorage前綴-puzzle">8. 進度與存檔（localStorage，前綴 <code>puzzle:</code>）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>內容（JSON）</th>
+<th>寫入時機</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>puzzle:save</code></td>
+<td><code>{ v:2, cleared:string[] /* &#39;1-1&#39;…&#39;6-1&#39;,&#39;H1&#39;…&#39;H3&#39; */, current:string, abilities:(&#39;nib&#39;｜&#39;pin&#39;｜&#39;section&#39;｜&#39;mark&#39;)[], diary:number[] /* 1..5 */, scraps:number[] /* 1..6 */, endings:{A:boolean,B:boolean}, name:string /* 玩家暱稱，預設「新社員」，結局與製作人員名單用；新增欄位 */ }</code></td>
+<td>每關通關、取得能力 / 碎片時</td>
+</tr>
+<tr>
+<td><code>puzzle:settings</code></td>
+<td><code>{ hints:&#39;timed&#39;｜&#39;always&#39;｜&#39;off&#39;, hintAssist:boolean /* 描邊輔助，預設 false */, assistMode:boolean /* L4 免等待，預設 false */, inkPalette:&#39;default&#39;｜&#39;blueOrange&#39;｜&#39;mono&#39;, reduceMotion:boolean, keys:{...} }</code></td>
+<td>設定變更</td>
+</tr>
+<tr>
+<td><code>puzzle:stats</code></td>
+<td><code>{ [puzzleId]: { time:number, hints:[n1,n2,n3,n4], skipped:boolean, resets:number } }</code>（只存本機，供試玩調整 D7）</td>
+<td>謎題完成</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>遷移</strong>：讀到舊 <code>puzzle:foyer:cleared=&#39;1&#39;</code> → 寫入 <code>cleared:[&#39;1-1&#39;,&#39;1-2&#39;]</code>、<code>abilities:[&#39;nib&#39;]</code>（舊玄關即新 1-2；1-1 門廊視為已通過以免老玩家重教），刪除舊 key。</li>
+<li><strong>關內不存檔</strong>（已確認；敘事：遊戲的存檔系統只做了「過關時存檔」，見 story-bible 1.2）；Boss 5-5 三階段之間有關內檢查點（不寫入存檔）。墨記不跨關保留。</li>
+<li><strong>章節解鎖</strong>：線性解鎖；5-2、5-3、5-4 在 5-1 通關後同時開放；5-5 需三翼皆完成；6-1 需 5-5；隱藏房在取得所需能力後於章節選單顯示入口。</li>
+<li><strong>重玩規則</strong>：<code>LevelDef.abilities</code> 決定該關可用能力（防新能力破解舊關）；隱藏房入口例外。</li>
+<li><strong>結局旗標</strong>：<code>endings.A</code> 於結局 A 寫入；<code>endings.B</code> 於結局 B 寫入（需 <code>scraps</code> 1～6 齊全）。</li>
+</ul>
+<hr>
+<h2 id="spec--9-劇情與文案骨架摘要完整內容見-story-bible-v01md">9. 劇情與文案骨架（摘要；完整內容見 <code>story-bible-v0.1.md</code>）</h2>
+<ul>
+<li><strong>世界觀</strong>：遊戲社的你和社長被吸進社團做到一半的密室逃脫遊戲《圖紙之間》，要把每個房間修到能通關，遊戲能從頭玩到尾才能回到社辦。2D = 設計稿、3D = 完成版；切換檢視是社長做的除錯功能。</li>
+<li><strong>角色</strong>：你（玩家，新社員、關卡設計，不指定性別）、社長江若晴（開朗、點子多、常說「明天就做完」）、AI 小助手小格（社長以前做的教學 NPC，也是三級提示系統的化身）。</li>
+<li><strong>章 = 沒做完的模組</strong>：玄關 = 教學模組、書房 = 物理（重量）、溫室 = 光影（影子有碰撞箱的 bug）、地下室 = 社長的封存資料夾、閣樓 = 最終關（自動生成器）、草地 = 標題畫面。</li>
+<li><strong>收集物</strong>（數量與位置同第 6 節）：日記碎片 → 開發筆記 ×5（1-3a、2-5、3-4a、4-4b、5-5c）；圖紙碎片 → 被刪掉的草稿 ×6（2-1a、3-2b、4-2a 隱藏點與 H1、H2、H3）。</li>
+<li><strong>結局</strong>（條件不變）：A 一起回去——完成 6-1、提交「開始遊戲」的門並走出，大家回到社辦、趕上發表會。B 製作人員名單——收齊 6 張草稿，在 6-1 只在設計稿裡的編輯桌留下一個標記點、不去用它，它變成下一位玩家的「新遊戲」起點；接著跑製作人員名單與彩蛋。</li>
+<li><strong>文案規則</strong>：國中～高中可讀、每句 ≤ 40 字、無恐怖 / 死亡 / 霸凌、不依賴流行語、不影射現有 IP；對照例句與範例見 story-bible 第 7 節。</li>
+</ul>
+<hr>
+<h2 id="spec--10-技術可行性與製作順序v02-重排先垂直切片">10. 技術可行性與製作順序（v0.2 重排：先垂直切片）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>里程碑</th>
+<th>內容</th>
+<th>新增邏輯</th>
+<th>量</th>
+<th>測試策略</th>
+<th>風險 / 取捨</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>M0 引擎通用化</strong></td>
+<td>主迴圈改固定步長 1/60 秒（已確認，與測試 <code>DT</code> 一致）；關卡登錄表 + 章節選單；<code>game.ts</code> 依存檔載入；N9 通用鑰匙/鎖；<code>ObjType</code> 擴充；<code>LevelDef.abilities</code>；存檔（含舊 key 遷移）</td>
+<td>重構 <code>interact.ts</code> 寫死的 switch、<code>World.hasKey/sealed</code></td>
+<td>M</td>
+<td>現有 <code>tests/puzzle/</code> 全綠（行為不變）＋ 存檔遷移測試</td>
+<td>重構 C8 最易破壞玄關 → 先寫行為不變測試再改</td>
+</tr>
+<tr>
+<td><strong>M1 垂直切片：玄關章 + 書房章</strong></td>
+<td>8 關 22 題（核心 17 / 擴充 5）：1-1～1-3、2-1～2-5；N1、N2、N4、N5、N13、N14、<code>heavy</code>、N10；三級抽象提示 + L4 解法筆記 + 卡關偵測 + 提示驗證器（7.1.1 H1～H4）+ <code>puzzle:stats</code></td>
+<td><code>updatePlates</code> 計數 / 非鎖定 / 反向 / 只算當前視角存在的箱；<code>ObjState.pinned</code> 與有效可見性；移印承載檢查</td>
+<td><strong>L</strong></td>
+<td>每關一條完整通關路徑 + 每題反例（只用 3D、只用 2D、關鍵物件在別處）；<strong>捷徑掃描</strong>：每個可推物網格取樣 × 兩模式，斷言關鍵旗標不成立（比照玄關 <code>for z of [...]</code>）</td>
+<td>最重的一段；N5 最易多解 → <code>pinnable</code> 白名單</td>
+</tr>
+<tr>
+<td><strong>G1 試玩關卡（決策點）</strong></td>
+<td>3～5 人外部試玩切片；看每題時間、提示使用率（D7：L1～L3 ≥50%、L4 ≥20% 需重做）、<strong>提示抽象度（H8：照做就過？覺得被騙？）</strong>、操作手感</td>
+<td>—</td>
+<td>S</td>
+<td><code>puzzle:stats</code> 匯出</td>
+<td>依結果決定後續只做核心（42）還是全部（50）</td>
+</tr>
+<tr>
+<td><strong>M2 溫室</strong></td>
+<td>4 關 9 題；N6、N7、N15</td>
+<td>由燈與 caster 推導影子盒；2D 剪影渲染</td>
+<td>L</td>
+<td>影子尺寸公式單元測試；軌道花盆位置取樣反例</td>
+<td>連續縮放 → 花盆限軌道、取樣步長 0.1</td>
+</tr>
+<tr>
+<td><strong>M3 地下室</strong></td>
+<td>4 關 10 題；N8、N3、N16 墨記；H1、H2</td>
+<td><code>solidsFor(&#39;2d&#39;)</code> 依 cut 過濾；壓板依 cut 計數；定稿 &gt; 剖面；剖面 × 影子；墨記的放置 / 兌現（區域限制、落點驗證）</td>
+<td>L</td>
+<td>所有既有 2D 測試加跑「剖面關閉」確認不變</td>
+<td>剖面讓舊關失效 → <code>abilities</code> 白名單</td>
+</tr>
+<tr>
+<td><strong>M4 閣樓 + 終章</strong></td>
+<td>6 關 9 題、Boss 三階段、元謎題、日誌介面、兩結局</td>
+<td>關內階段切換（重載物件子集）</td>
+<td>L</td>
+<td>各階段通關測試 + 整場測試；結局旗標測試</td>
+<td>內容最集中 → 可先做 Boss 單階段版</td>
+</tr>
+<tr>
+<td><strong>M5 打磨 + 隱藏房 H3</strong></td>
+<td>無障礙設定、色盲調色盤、試玩數據調整</td>
+<td>—</td>
+<td>M</td>
+<td>提示使用率回頭修</td>
+<td>—</td>
+</tr>
+</tbody></table></div>
+<p><strong>工作量</strong>：M0 M ＋ M1 L ＋ G1 S ＋ M2 L ＋ M3 L ＋ M4 L ＋ M5 M。
+<strong>風險（明確）</strong>：題數由 37 → 50、關卡由 13 → 22，<strong>每題都要配完整通關測試 + 反例測試，關卡資料與測試量約為 v0.1 的 1.4～1.6 倍</strong>；另多一個墨記機制（M），整體約 1.4～1.6 倍。若 G1 後只做核心 42 題，約 1.2 倍。墨記（瞬移類）是全機制中最易產生捷徑的，反例測試要對每個可留記號的高度 × 每個深度取樣。</p>
+<hr>
+<h2 id="spec--11-決策紀錄">11. 決策紀錄</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>問題</th>
+<th>決定</th>
+<th>狀態</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Q1</td>
+<td>是否做第三視角「平面圖（俯視）」</td>
+<td>不做</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>筆桿是否只作敘事</td>
+<td>不可以，必須有新物理機制</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>提示解鎖方式</td>
+<td>計時解鎖（3 / 6 / 10 分），設定可改「隨時 / 關閉」</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>關內是否存檔</td>
+<td>不存，以關為單位</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>結局 B 條件</td>
+<td>收齊 6 片圖紙碎片（顯示名「被刪掉的草稿」）才出現</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q6</td>
+<td>玄關本體加難</td>
+<td>只加 1-2d，紙條改為第一級提示</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q-A</td>
+<td>筆桿機制</td>
+<td>N16 墨記（顯示名「標記點」）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q-B</td>
+<td>玄關章新增 1-1 門廊、1-3 衣帽間</td>
+<td>可以</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>Q-C</td>
+<td>墨記限制</td>
+<td>只能在同一區域內兌現（區域由關卡資料劃分）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>A1</td>
+<td>遷移時測試中 <code>hasKey</code> / <code>sealed</code> / <code>MSG_*</code> 可否做等價替換</td>
+<td>允許；替換表固定、以腳本檢查斷言未被改弱（architecture-v0.2 7.3）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>剖面 × 影子規則</td>
+<td>採 4-2b：物不在刀上，影還在（caster 不受剖面過濾，刀落在牆面帶影子才在紙上）；H2 已改寫</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>謎題 id 格式</td>
+<td>玄關 <code>1-2a</code>～<code>1-2d</code>；Boss 同步改 <code>5-5a</code>～<code>5-5c</code>；顯示用編號放文字表</td>
+<td>已確認（5-5 為一致性順帶修改）</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>主迴圈步長</td>
+<td>固定 1/60 秒（M0）</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>剖面開關在哪個檢視切換</td>
+<td>只能在完成版（3D）；已檢查 4-1～4-4、5-3、5-5c、6-1、H1、H2 的解法都在 3D 開關剖面後才進紙</td>
+<td>已確認</td>
+</tr>
+<tr>
+<td><strong>Q-D</strong></td>
+<td>提示安全閥</td>
+<td>(a)+(b)+(c)：三級全抽象 + L4 解法筆記（L3 後再 5 分鐘、按住 H 確認）+ 卡關偵測（不提前解鎖 L4）；「跳過此題」只限擴充題</td>
+<td><strong>暫定，待確認</strong></td>
+</tr>
+<tr>
+<td><strong>Q-E</strong></td>
+<td>原 L2 描邊、L3 具體步驟</td>
+<td>描邊降級為「提示輔助」設定（預設關閉）；具體步驟移到 L4</td>
+<td><strong>暫定，待確認</strong></td>
+</tr>
+</tbody></table></div>
+<p>A1～A5 原為 <code>architecture-v0.2.md</code> 第 9 節的 Q1～Q5。劇情相關的後續選項（角色名、結局 B 呈現等）列在 <code>story-bible-v0.1.md</code>，不影響本規格的題數與機制。</p>
+<hr>
+<h2 id="spec--12-參考資料">12. 參考資料</h2>
+<p>標示：✅ 本文直接引用其主張（多數經由搜尋摘要取得，未逐字核對原文）；⚠️ 查到來源但內容未取得 / 查不到具體主張。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>主題</th>
+<th>來源</th>
+<th>支持章節</th>
+<th>狀態</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>任天堂四段式（起承轉合）</td>
+<td><a href="https://www.mcvuk.com/development/video-nintendos-level-design-secrets-in-four-steps">https://www.mcvuk.com/development/video-nintendos-level-design-secrets-in-four-steps</a> ；<a href="https://kotaku.com/what-made-super-mario-3d-world-so-great-1691916400">https://kotaku.com/what-made-super-mario-3d-world-so-great-1691916400</a></td>
+<td>D1、5.2</td>
+<td>✅（二手分析，非任天堂官方文件）</td>
+</tr>
+<tr>
+<td>Blow：刪掉沒有驚喜/重疊的謎題；規則外觀一致；Braid/Witness 先教後探索後果</td>
+<td><a href="https://gamedeveloper.com/design/indiecade-inside-jonathan-blow-s-puzzle-design-process">https://gamedeveloper.com/design/indiecade-inside-jonathan-blow-s-puzzle-design-process</a> ；<a href="https://mcvuk.com/development-news/blow-braid-designed-itself">https://mcvuk.com/development-news/blow-braid-designed-itself</a> ；<a href="https://www.gamedeveloper.com/design/video-jon-blow-on-the-truth-in-game-design-">https://www.gamedeveloper.com/design/video-jon-blow-on-the-truth-in-game-design-</a></td>
+<td>D3、D6、D9</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>GMTK〈How Jonathan Blow Designs a Puzzle〉</td>
+<td><a href="https://amara.org/v/C3BFd">https://amara.org/v/C3BFd</a></td>
+<td>D3</td>
+<td>⚠️ 逐字稿抓取被拒（403）</td>
+</tr>
+<tr>
+<td>GMTK〈What Makes a Good Puzzle?〉</td>
+<td><a href="https://amara.org/v/C3BEg/">https://amara.org/v/C3BEg/</a></td>
+<td>—</td>
+<td>⚠️ 內容未取得，本文未引用其具體主張</td>
+</tr>
+<tr>
+<td>Portal：刻意介紹與訓練每個概念</td>
+<td><a href="https://theportalwiki.com/wiki/Portal_developer_commentary">https://theportalwiki.com/wiki/Portal_developer_commentary</a> ；<a href="https://giantbomb.com/users/3455/articles/thinking-with-portals">https://giantbomb.com/users/3455/articles/thinking-with-portals</a></td>
+<td>D1</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Zelda《Boss Keys》：鑰匙與鎖的對應、地城道具</td>
+<td><a href="https://amara.org/subtitles/sA8tGCZJvrxP/en-gb/1/download/The%20Legend%20of%20Zelda%20Links%20Awakenings%20dungeon%20design%20%20Boss%20Keys.en-gb.txt">https://amara.org/subtitles/sA8tGCZJvrxP/en-gb/1/download/The%20Legend%20of%20Zelda%20Links%20Awakenings%20dungeon%20design%20%20Boss%20Keys.en-gb.txt</a> ；<a href="https://zeldauniverse.net/2017/01/26/explore-zelda-dungeon-design-in-mark-browns-youtube-series-boss-keys/">https://zeldauniverse.net/2017/01/26/explore-zelda-dungeon-design-in-mark-browns-youtube-series-boss-keys/</a> ；<a href="https://roomescapeartist.com/2017/09/10/boss-keys-analysis-zelda-dungeons/">https://roomescapeartist.com/2017/09/10/boss-keys-analysis-zelda-dungeons/</a></td>
+<td>5.3</td>
+<td>✅（搜尋摘要；直接抓取 403）</td>
+</tr>
+<tr>
+<td>密室流程：線性/開放/多線、匯流點</td>
+<td><a href="https://courses.fit.cvut.cz/NI-ESC/lectures/files/esc-room-design.pdf">https://courses.fit.cvut.cz/NI-ESC/lectures/files/esc-room-design.pdf</a> ；<a href="https://theescapeeffect.com/blog/what-types-of-escape-rooms-are-there">https://theescapeeffect.com/blog/what-types-of-escape-rooms-are-there</a></td>
+<td>5.2 流程結構</td>
+<td>✅（搜尋摘要；PDF 抓取逾時）</td>
+</tr>
+<tr>
+<td>Nicholson《Peeking Behind the Locked Door》(2015)</td>
+<td><a href="https://meaningfulplay.msu.edu/proceedings2016/abstract.php?paperid=14">https://meaningfulplay.msu.edu/proceedings2016/abstract.php?paperid=14</a> ；<a href="https://blogs.baruch.cuny.edu/dollarsandsense/?p=5433">https://blogs.baruch.cuny.edu/dollarsandsense/?p=5433</a></td>
+<td>—</td>
+<td>⚠️ 只確認論文存在，未取得其流程分類原文</td>
+</tr>
+<tr>
+<td>元謎題</td>
+<td><a href="https://www.utupub.fi/bitstream/10024/154310/1/Heinonen_Toni_opinnayte.pdf">https://www.utupub.fi/bitstream/10024/154310/1/Heinonen_Toni_opinnayte.pdf</a></td>
+<td>6 元謎題</td>
+<td>⚠️ 只見目錄</td>
+</tr>
+<tr>
+<td>提示：推回邏輯路徑、50% 門檻、冷卻</td>
+<td><a href="https://roomescapeartist.com/2019/10/24/escape-room-hint-systems/">https://roomescapeartist.com/2019/10/24/escape-room-hint-systems/</a> ；<a href="https://roomescapeartist.com/2021/09/17/my-favorite-escape-room-hinting-styles/">https://roomescapeartist.com/2021/09/17/my-favorite-escape-room-hinting-styles/</a> ；<a href="https://theescapeeffect.com/blog/reinventing-the-escape-room-hints-system">https://theescapeeffect.com/blog/reinventing-the-escape-room-hints-system</a></td>
+<td>D7、7.1</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>色盲：不只靠顏色</td>
+<td><a href="https://devdocs.xbox.com/gaming/accessibility/xbox-accessibility-guidelines/103">https://devdocs.xbox.com/gaming/accessibility/xbox-accessibility-guidelines/103</a> ；<a href="https://caniplaythat.com/?p=8897">https://caniplaythat.com/?p=8897</a></td>
+<td>P4、7.2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Fez：旋轉致暈、解法常只差一兩次旋轉、隱晦謎題</td>
+<td><a href="https://mechanicsofmagic.com/2026/05/08/critical-play-puzzles-fez-4/">https://mechanicsofmagic.com/2026/05/08/critical-play-puzzles-fez-4/</a> ；<a href="https://www.gamedeveloper.com/design/the-dimensions-of-fez">https://www.gamedeveloper.com/design/the-dimensions-of-fez</a> ；<a href="https://entertainium.co/2013/05/29/fez-review/">https://entertainium.co/2013/05/29/fez-review/</a></td>
+<td>4（否決旋轉）、7.2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Super Paper Mario：翻轉解決約九成謎題、用得淺</td>
+<td><a href="https://64ramblings.substack.com/p/super-paper-mario-flipping-through">https://64ramblings.substack.com/p/super-paper-mario-flipping-through</a> ；<a href="https://www.honestgamers.com/6387/wii/super-paper-mario/review.html">https://www.honestgamers.com/6387/wii/super-paper-mario/review.html</a></td>
+<td>老套清單</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Crush：可轉 90° 或俯視後壓扁；中段難度陡升</td>
+<td><a href="https://www.gamesradar.com/crush-review">https://www.gamesradar.com/crush-review</a> ；<a href="https://www.giantbomb.com/games/3030-2665/">https://www.giantbomb.com/games/3030-2665/</a> ；<a href="https://www.pocketgamer.com/crush/review/">https://www.pocketgamer.com/crush/review/</a></td>
+<td>N11、5.1</td>
+<td>✅（搜尋摘要）</td>
+</tr>
+<tr>
+<td>Superliminal：強迫透視、物件依看起來的大小縮放</td>
+<td><a href="https://en.wikipedia.org/wiki/Superliminal">https://en.wikipedia.org/wiki/Superliminal</a></td>
+<td>N6 對照</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Stephen&#39;s Sausage Roll：除移動外幾乎不教學</td>
+<td><a href="https://destructoid.com/reviews/review-stephens-sausage-roll">https://destructoid.com/reviews/review-stephens-sausage-roll</a></td>
+<td>老套清單</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Monument Valley GDC、Baba Is You 設計訪談、Echochrome、Perspective、Neko Ghost Jump</td>
+<td>—</td>
+<td>—</td>
+<td>⚠️ 查不到可信來源，本文不引用</td>
+</tr>
+</tbody></table></div>
+<h3 id="spec--附2d3d-切換類不要重複的老套與創新空間">附：2D/3D 切換類「不要重複的老套」與「創新空間」</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>不要重複</th>
+<th>來源 / 推論</th>
+<th>本作對策</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>切換本身就是答案（「切一下就過了」占大多數謎題）</td>
+<td><span class="tg t-src">〔來源〕</span>Super Paper Mario 被評翻轉解決約九成謎題</td>
+<td>P1：每題必須在 3D 先改變配置；第 6 節每題都有 3D 準備步驟</td>
+</tr>
+<tr>
+<td>強迫旋轉視角、依賴暈眩的轉動</td>
+<td><span class="tg t-src">〔來源〕</span>Fez</td>
+<td>否決旋轉投影；鏡頭固定</td>
+</tr>
+<tr>
+<td>要玩家去查外部資料的隱晦謎題</td>
+<td><span class="tg t-src">〔來源〕</span>Fez 評論</td>
+<td>元謎題所需資訊全部在日誌介面裡</td>
+</tr>
+<tr>
+<td>中段難度陡升</td>
+<td><span class="tg t-src">〔來源〕</span>Crush 評論</td>
+<td>每章首關為喘息關；章末遞增 1</td>
+</tr>
+<tr>
+<td>第三視角（俯視）</td>
+<td><span class="tg t-src">〔來源〕</span>Crush 已有</td>
+<td>不作為主要賣點（Q1）</td>
+</tr>
+</tbody></table></div>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>創新空間<span class="tg t-inf">〔推論〕</span></th>
+<th>本作做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>讓「哪些東西存在」成為可操作的變數</td>
+<td>定稿印 N5</td>
+</tr>
+<tr>
+<td>讓 z 對 2D 的意義逐章改變（無關 → 縮放 → 剖切）</td>
+<td>書房 → 溫室 → 地下室 的 aha 序列</td>
+</tr>
+<tr>
+<td>機關狀態的視角依存（R1）成為謎題規則</td>
+<td>2-2b、4-2a 鏡像設計</td>
+</tr>
+<tr>
+<td>劇情與機制同語彙（遊戲開發：提交、剖面檢視、標記點）</td>
+<td>支柱 P5、結局 B</td>
+</tr>
+</tbody></table></div>
+</article>
+<article class="doc" data-doc="story" data-title="劇情設定"><h1 id="story--圖紙之間劇情設定-story-bible-v01">《圖紙之間》劇情設定 Story Bible v0.1</h1>
+<div class="meta"><b>《圖紙之間》劇情設定 Story Bible v0.1</b>　（此文件內無修訂紀錄）</div>
+<blockquote>
+<p>用途：取代 <code>game-spec-v0.2.md</code> 原本的「建築師沈歸 / 宅邸 / 製圖員」劇情。
+不變的部分：50 題 / 22 關 / 隱藏房 3、關卡 ID、N 機制編號、解法大綱，一律以規格為準。本文件只管<strong>敘事、命名、文案</strong>。
+目標讀者：國中到高中的玩家。原則：<strong>一句話就懂</strong>，不寫隱喻與哲思。</p>
+</blockquote>
+<hr>
+<h2 id="story--1-世界觀">1. 世界觀</h2>
+<h3 id="story--11-一句話">1.1 一句話</h3>
+<p>遊戲社的你和社長，被吸進社團做到一半的密室逃脫遊戲《圖紙之間》，得把每個房間修好、讓遊戲能從頭玩到尾，才能回到社辦。</p>
+<h3 id="story--12-設定細節">1.2 設定細節</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>問題</th>
+<th>答案（給玩家的說法）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>《圖紙之間》是什麼？</td>
+<td>遊戲社準備在校慶發表會展出的作品：在一棟老房子裡逃脫的解謎遊戲。目前只做到一半。</td>
+</tr>
+<tr>
+<td>怎麼進去的？</td>
+<td>發表會前一週，社長在社辦按下「測試執行」，螢幕一白，兩個人就站在遊戲的門廊裡了。不解釋原理，一句帶過。</td>
+</tr>
+<tr>
+<td>怎麼出去？</td>
+<td>遊戲必須能「從開頭玩到結尾」，最後一個畫面的「回到桌面」才會出現。所以每個房間都要修到能通關。</td>
+</tr>
+<tr>
+<td>為什麼能切換 2D / 3D？</td>
+<td>社長做了一個除錯用的「切換檢視」鍵，用來對照「設計稿」（2D 平面圖）和「完成版」（3D 實際做出來的樣子）。被吸進來時，這個鍵跟著你，變成手上的畫筆。</td>
+</tr>
+<tr>
+<td>為什麼兩邊不一樣？</td>
+<td>因為遊戲沒做完：有些東西<strong>畫進了設計稿但還沒做出來</strong>（只在 2D），有些東西<strong>做出來了卻忘了補進設計稿</strong>（只在 3D）。設計稿是一張平面的圖，所以沒有前後深度。</td>
+</tr>
+<tr>
+<td>為什麼設計稿裡跳得比較高？</td>
+<td>設計稿的重力參數還是預設值，比較輕。（社長：「我之後會調……」）</td>
+</tr>
+<tr>
+<td>為什麼是密室逃脫？</td>
+<td>遊戲本來就是密室逃脫。每個房間的門，就是那一關的「通關判定」。</td>
+</tr>
+<tr>
+<td>為什麼要一關一關修？</td>
+<td>每一章是遊戲裡一個沒做完的模組（見 1.3）。前一個模組沒修好，下一個不會載入。</td>
+</tr>
+<tr>
+<td>掉進坑會怎樣？</td>
+<td>掉出地圖，被傳回最近的檢查點。不會死，也不會受傷。</td>
+</tr>
+<tr>
+<td>為什麼中途不能存檔？（規格 Q4 關內不存檔）</td>
+<td>存檔系統只做了「過關時存檔」。社長：「中途存檔……下一版一定做！」所以每個房間要一口氣修完，按 R 是「重新載入這個房間」。</td>
+</tr>
+<tr>
+<td>為什麼提示要等？（規格 7.1 計時解鎖）</td>
+<td>提示是 AI 小助手「小格」在算，而且社長給它定了規矩：只能給方向、不能直接說答案。小格跑在遊戲剩下的一點記憶體上，所以每一級提示都要「運算」一段時間。小格發現你很努力（一直重置物件、一直切換），會把你的提示排到前面先算（卡關偵測）。設定裡的「提示隨時可用」= 社長幫你開了「開發者模式」。</td>
+</tr>
+</tbody></table></div>
+<h3 id="story--13-章節-沒做完的模組">1.3 章節 = 沒做完的模組</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>章</th>
+<th>房間</th>
+<th>遊戲裡的模組</th>
+<th>這章要修的東西</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>第一章</td>
+<td>門廊 / 玄關 / 衣帽間</td>
+<td>教學模組</td>
+<td>門、開關、最基本的切換</td>
+</tr>
+<tr>
+<td>第二章</td>
+<td>書房</td>
+<td>物理模組（重量）</td>
+<td>壓力板的重量、物件「提交」</td>
+</tr>
+<tr>
+<td>第三章</td>
+<td>溫室</td>
+<td>光影模組</td>
+<td>影子意外有了碰撞箱（bug 變成路）</td>
+</tr>
+<tr>
+<td>第四章</td>
+<td>地下室</td>
+<td>社長的「封存」資料夾</td>
+<td>被刪掉一半的功能：剖面檢視、標記點</td>
+</tr>
+<tr>
+<td>第五章</td>
+<td>閣樓</td>
+<td>最終關（自動生成器）</td>
+<td>一直重生、還沒定案的最終關</td>
+</tr>
+<tr>
+<td>終章</td>
+<td>草地</td>
+<td>標題畫面</td>
+<td>「開始遊戲」的門還沒放上去</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="story--2-角色">2. 角色</h2>
+<blockquote>
+<p>玩家稱呼一律用「你」；系統文字用玩家暱稱（開始時輸入，預設「新社員」）。不使用「他 / 她」指稱玩家。</p>
+</blockquote>
+<h3 id="story--21-你玩家">2.1 你（玩家）</h3>
+<ul>
+<li>身分：遊戲社今年的新社員，負責關卡設計。</li>
+<li>性格：由玩家決定；文案裡的「你」話不多、動手比較快。</li>
+<li>在故事裡的功能：拿著畫筆修 bug 的人。社長出點子，小格給提示，你把它做完。</li>
+</ul>
+<h3 id="story--22-社長江若晴大家叫社長或若晴">2.2 社長：江若晴（大家叫「社長」或「若晴」）</h3>
+<ul>
+<li>高二，遊戲社社長兼企劃兼美術兼「什麼都說好」。</li>
+<li>性格：開朗、點子很多、很會鼓勵人；缺點是常常開了頭就跑去做下一個點子，留下一堆「之後再改」。真心希望大家的作品被看見。</li>
+<li>口頭禪：「沒問題，明天就做完！」</li>
+<li>代表台詞：「我做的都只有一半……可是有你在，另一半好像就做得完了。」</li>
+<li>在故事裡的功能：每章開場與機制取得時說話；不負責給提示（避免和小格重疊）。</li>
+</ul>
+<h3 id="story--23-ai-小助手小格">2.3 AI 小助手：小格</h3>
+<ul>
+<li>社長很久以前做的教學 NPC，外型是一個方塊頭、會飄的小格子。做到一半被擱著，所以說話偶爾卡頓。</li>
+<li>性格：認真、講話像說明書、會吐槽社長；對你很有耐心。</li>
+<li>口頭禪：「運算中……」</li>
+<li>代表台詞：「提示運算完成。你其實已經想到一半了，我只是幫你按下確認。」</li>
+<li><strong>提示系統的化身</strong>（對應規格 7.1 三級提示，<strong>三級全抽象</strong>）：小格只給「想的方向」，從不說要按什麼、推什麼、站哪裡。</li>
+</ul>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>級</th>
+<th>小格的外殼台詞</th>
+<th>顯示</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>「運算中……」</td>
+<td>小格頭上轉圈圈</td>
+<td>一句比喻（≤ 24 字）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>「找到線索了！……大概。」</td>
+<td>小格歪頭</td>
+<td>一個提問：該注意哪一類現象、哪個檢視（≤ 30 字）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>「好吧，直接說——啊不行，只能說這些。」</td>
+<td>小格捂嘴</td>
+<td>現在缺的是什麼性質（≤ 36 字），仍不給做法</td>
+</tr>
+<tr>
+<td>4（安全閥，暫定）</td>
+<td>「這題我算不動了，借你社長的攻略筆記。」</td>
+<td>社長的筆記頁</td>
+<td>逐步解法；預設鎖定，要等、要主動確認（規格 7.1.2）</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li>小格的笨拙是性格的一部分：它「想直接說」但被自己的規則擋住（L3 外殼），讓抽象提示有劇情理由。</li>
+<li>0 級即時回饋（規格 C9「看得見，卻碰不到」）也由小格說：「看得到，但搆不到喔。換個檢視試試？」</li>
+</ul>
+<hr>
+<h2 id="story--3-主線弧線起承轉合">3. 主線弧線（起承轉合）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>段</th>
+<th>章</th>
+<th>發生什麼（一句話）</th>
+<th>主題</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>起</td>
+<td>玄關</td>
+<td>社長按下測試，兩人被吸進遊戲；小格說：讓遊戲能玩到結尾就能回去。</td>
+<td>合作的開始</td>
+</tr>
+<tr>
+<td>承</td>
+<td>書房、溫室</td>
+<td>邊修邊發現社長留了好多「之後再改」，但每個點子都很好玩；你們越修越有默契。</td>
+<td>友情、互補</td>
+</tr>
+<tr>
+<td>轉</td>
+<td>地下室</td>
+<td>找到社長的「封存」資料夾：她怕做不好而刪掉的功能。社長說：「我怕大家覺得很爛。」你回：「先做完，再一起改。」</td>
+<td>不完美也沒關係</td>
+</tr>
+<tr>
+<td>合</td>
+<td>閣樓、草地</td>
+<td>最終關一直重生，三個人用所有工具一起把它定下來；放上開始鍵，回到社辦，趕上發表會。</td>
+<td>把作品做完的成就感</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="story--4-機制命名對照表">4. 機制命名對照表</h2>
+<p>「需改程式碼」= 現在程式裡已有文字，日後要換（<strong>本次不改</strong>）；「未實作」= 規格 N 機制尚未寫程式，直接用新名。N 編號不變。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>規格代號</th>
+<th>關卡資料 / 程式識別</th>
+<th>HUD / 玩家看到的名稱</th>
+<th>需改程式碼？</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>3D「現實」</td>
+<td><code>mode:&#39;3d&#39;</code></td>
+<td><strong>完成版</strong></td>
+<td>是：<code>hud.ts</code> <code>setMode</code>、<code>puzzle.html</code> <code>#pz-mode</code></td>
+</tr>
+<tr>
+<td>2D「圖紙」</td>
+<td><code>mode:&#39;2d&#39;</code></td>
+<td><strong>設計稿</strong></td>
+<td>同上</td>
+</tr>
+<tr>
+<td>切換（F / Q）</td>
+<td><code>trySwitchMode</code></td>
+<td>切換檢視</td>
+<td>是：<code>puzzle.html</code> 操作說明</td>
+</tr>
+<tr>
+<td>筆尖（玄關取得，點墨）</td>
+<td><code>type:&#39;key&#39;</code>、<code>hasKey</code></td>
+<td><strong>畫筆工具</strong></td>
+<td>是：<code>foyer.ts</code> label、<code>interact.ts</code> <code>MSG_KEY</code>、<code>hud.ts</code> 持有物文字與圖示</td>
+</tr>
+<tr>
+<td>墨水閥</td>
+<td><code>type:&#39;valve&#39;</code></td>
+<td>設計稿開關</td>
+<td>是：<code>foyer.ts</code> label、<code>interact.ts</code> 閥的訊息</td>
+</tr>
+<tr>
+<td>出口門封印</td>
+<td><code>sealed</code></td>
+<td>「門還沒接上判定」</td>
+<td>是：<code>interact.ts</code> 門的訊息</td>
+</tr>
+<tr>
+<td>紙條</td>
+<td><code>type:&#39;note&#39;</code></td>
+<td>便利貼（社員留的開發便條）</td>
+<td>是：<code>foyer.ts</code> label / text、<code>game.ts</code> <code>VERBS</code></td>
+</tr>
+<tr>
+<td>壓板 / 計重壓板 N2</td>
+<td><code>type:&#39;plate&#39;</code>、<code>weight</code></td>
+<td>壓力板（顯示需要幾個重量）</td>
+<td>是：<code>mechanisms.ts</code> <code>MSG_PLATE_ON / LIGHT</code></td>
+</tr>
+<tr>
+<td>閘門</td>
+<td><code>type:&#39;gate&#39;</code></td>
+<td>柵門</td>
+<td>是：<code>interact.ts</code> <code>MSG_GATE</code></td>
+</tr>
+<tr>
+<td>T 木箱歸位</td>
+<td><code>resetCrates</code></td>
+<td>重置物件</td>
+<td>是：<code>puzzle.html</code>、<code>MSG_CRATE_RESET</code></td>
+</tr>
+<tr>
+<td>R 重來</td>
+<td><code>restart</code></td>
+<td>重新載入房間</td>
+<td>是：<code>puzzle.html</code></td>
+</tr>
+<tr>
+<td>掉落</td>
+<td><code>MSG_FELL</code></td>
+<td>「掉出地圖了，回到檢查點。」</td>
+<td>是：<code>step.ts</code></td>
+</tr>
+<tr>
+<td>塞不下</td>
+<td><code>MSG_SQUEEZE</code></td>
+<td>「這裡塞不下」（沿用）</td>
+<td>否</td>
+</tr>
+<tr>
+<td>墨滴（小鑰匙）</td>
+<td><code>inkdrop</code>（未實作）</td>
+<td><strong>修補包</strong></td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>墨鎖</td>
+<td><code>inklock</code></td>
+<td>待修補（需要修補包）</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>章印（Boss 鑰匙）</td>
+<td><code>seal</code></td>
+<td><strong>驗收章</strong></td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>墨牆 / 墨橋 / 墨台</td>
+<td><code>inkwall</code> 等</td>
+<td>線稿牆 / 線稿橋 / 線稿平台</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N5 定稿印</td>
+<td><code>pinned</code> / <code>pinnable</code></td>
+<td><strong>提交</strong>（可提交物件有「提交框」）；一次只能提交一個</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td><code>heavy</code> 鉛字盤</td>
+<td><code>heavy</code></td>
+<td>超重物件（例：一整箱課本）</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N6 燈影</td>
+<td><code>shadow</code></td>
+<td>影子碰撞（光影模組的 bug）</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N7 定稿影子</td>
+<td>—</td>
+<td>提交影子</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N8 剖面尺</td>
+<td><code>section</code></td>
+<td><strong>剖面檢視</strong>（除錯模式；只能在完成版開關）</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N15 燈車</td>
+<td><code>lampcart</code></td>
+<td>燈光推車</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>N16 墨記（筆桿，已確認採用，只能在同一區域內兌現）</td>
+<td><code>mark</code></td>
+<td><strong>標記點</strong></td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>日記碎片 ×5</td>
+<td><code>diary</code></td>
+<td><strong>開發筆記</strong> ×5</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>圖紙碎片 ×6</td>
+<td><code>scraps</code></td>
+<td><strong>被刪掉的草稿</strong> ×6</td>
+<td>未實作</td>
+</tr>
+<tr>
+<td>通關畫面</td>
+<td><code>#pz-clear h1</code></td>
+<td>「玄關 · 修好了！」</td>
+<td>是：<code>puzzle.html</code></td>
+</tr>
+<tr>
+<td>玄關旁白</td>
+<td><code>foyer.narration</code></td>
+<td>見 7.2</td>
+<td>是：<code>foyer.ts</code></td>
+</tr>
+<tr>
+<td>玩家暱稱</td>
+<td><code>puzzle:save.name</code>（新欄位）</td>
+<td>結局與製作人員名單使用</td>
+<td>新增</td>
+</tr>
+</tbody></table></div>
+<p><strong>命名說明</strong></p>
+<ul>
+<li>墨記（N16，已確認）改叫「<strong>標記點</strong>」，不用任務建議的「書籤」：書籤容易讓人以為是存檔。標記點只記一個位置，用掉就消失，也不會帶到下一關。規格 Q4「關內不存檔」不受影響。</li>
+<li>定稿印叫「提交」：遊戲開發裡「提交」就是把改動確定下來，兩個檢視都會看到。</li>
+<li>測試字串：<code>tests/puzzle/puzzleLogic.test.ts</code> 有直接比對紙條文字（「看不見的地方，不代表不存在……」），改文案時要一起改測試；<code>foyerSolution.test.ts</code> 引用的是常數，改常數即可。</li>
+<li>任務提到的 <code>isTeacher</code> 只出現在 <code>src/game/CampusLife.ts</code>（校園主遊戲），與 <code>src/puzzle/</code> 無關，不需更動。</li>
+</ul>
+<hr>
+<h2 id="story--5-關卡一句話劇情22-關-3-隱藏房每句-30-字">5. 關卡一句話劇情（22 關 + 3 隱藏房，每句 ≤ 30 字）</h2>
+<h3 id="story--章節旁白">章節旁白</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>章</th>
+<th>旁白（1～2 句）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>第一章 玄關</td>
+<td>歡迎來到《圖紙之間》！……目前只有教學關能玩。</td>
+</tr>
+<tr>
+<td>第二章 書房</td>
+<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
+</tr>
+<tr>
+<td>第三章 溫室</td>
+<td>光影模組上線！副作用：影子有碰撞箱。</td>
+</tr>
+<tr>
+<td>第四章 地下室</td>
+<td>這裡是社長放「先不要」的資料夾。請不要亂翻……來不及了。</td>
+</tr>
+<tr>
+<td>第五章 閣樓</td>
+<td>最終關生成中，請稍候……大概。</td>
+</tr>
+<tr>
+<td>終章 草地</td>
+<td>你們走到遊戲的第一個畫面，也是最後一個。</td>
+</tr>
+</tbody></table></div>
+<h3 id="story--各關">各關</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>關</th>
+<th>名稱</th>
+<th>一句話劇情</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-1</td>
+<td>門廊</td>
+<td>門把畫在牆上？社長說那是「示意圖」。</td>
+</tr>
+<tr>
+<td>1-2</td>
+<td>玄關</td>
+<td>門不見了，牆上寫著：TODO 記得放門。</td>
+</tr>
+<tr>
+<td>1-3</td>
+<td>衣帽間</td>
+<td>衣架上貼滿「之後再改」的便利貼。</td>
+</tr>
+<tr>
+<td>2-1</td>
+<td>書架迴廊</td>
+<td>書都長一樣，因為只做了一個書的模型。</td>
+</tr>
+<tr>
+<td>2-2</td>
+<td>閱覽室</td>
+<td>這張桌子的重量，是社長隨手填的。</td>
+</tr>
+<tr>
+<td>2-3</td>
+<td>印房</td>
+<td>找到「提交」按鈕。一次只能提交一個喔。</td>
+</tr>
+<tr>
+<td>2-4</td>
+<td>手稿庫</td>
+<td>每份手稿都寫著：第 12 版，最終版（這次真的）。</td>
+</tr>
+<tr>
+<td>2-5</td>
+<td>書房深處</td>
+<td>最後一扇門要蓋驗收章，小格說它很嚴格。</td>
+</tr>
+<tr>
+<td>3-1</td>
+<td>苗圃</td>
+<td>光影 bug：影子居然可以踩。</td>
+</tr>
+<tr>
+<td>3-2</td>
+<td>玻璃長廊</td>
+<td>靠近燈，影子變大。這不是 bug，是物理。</td>
+</tr>
+<tr>
+<td>3-3</td>
+<td>夜溫室</td>
+<td>燈關了，有一個影子忘了消失。</td>
+</tr>
+<tr>
+<td>3-4</td>
+<td>溫室深處</td>
+<td>燈有輪子，因為社長懶得做固定座。</td>
+</tr>
+<tr>
+<td>4-1</td>
+<td>酒窖走廊</td>
+<td>牆只做一半，另一半寫著「預算不足」。</td>
+</tr>
+<tr>
+<td>4-2</td>
+<td>鍋爐間</td>
+<td>這裡的壓力板，真人站上去也算數。</td>
+</tr>
+<tr>
+<td>4-3</td>
+<td>封存書庫</td>
+<td>封存資料夾裡，有一支會做記號的筆。</td>
+</tr>
+<tr>
+<td>4-4</td>
+<td>最後的抽屜</td>
+<td>抽屜是空的，只有一張「先這樣吧」。</td>
+</tr>
+<tr>
+<td>5-1</td>
+<td>天窗間</td>
+<td>地上有一個標記點，不是你放的。</td>
+</tr>
+<tr>
+<td>5-2</td>
+<td>東翼「春」</td>
+<td>春天的貼圖還沒上色，只有線稿。</td>
+</tr>
+<tr>
+<td>5-3</td>
+<td>西翼「秋」</td>
+<td>落葉一直掉，因為忘了寫「停」。</td>
+</tr>
+<tr>
+<td>5-4</td>
+<td>北翼「冬」</td>
+<td>每片雪花都一樣，複製貼上的。</td>
+</tr>
+<tr>
+<td>5-5</td>
+<td>沒做完的最終關（Boss，原「未竟之圖」）</td>
+<td>最終關一直重生，像在說「再等我一下」。</td>
+</tr>
+<tr>
+<td>6-1</td>
+<td>草地（標題畫面）</td>
+<td>這裡是標題畫面，開始鍵還沒放上去。</td>
+</tr>
+<tr>
+<td>H1</td>
+<td>夾層</td>
+<td>書櫃後面，是社長說「太難了」刪掉的關。</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>溫床</td>
+<td>一棵被刪掉的樹，還留在設計稿裡。</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>封存室</td>
+<td>最大的資料夾，名字叫「也許有一天」。</td>
+</tr>
+</tbody></table></div>
+<blockquote>
+<p>5-1 的伏筆：那個不是你放的標記點，是社長以前測試標記點功能時留下的，結局 B 揭曉（見 6.2）。</p>
+</blockquote>
+<hr>
+<h2 id="story--6-收集物與結局">6. 收集物與結局</h2>
+<h3 id="story--61-收集物數量位置與規格相同">6.1 收集物（數量、位置與規格相同）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>原名</th>
+<th>新名</th>
+<th>數量</th>
+<th>位置（同規格）</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>日記碎片</td>
+<td><strong>開發筆記</strong></td>
+<td>5</td>
+<td>1-3a、2-5、3-4a、4-4b、5-5c</td>
+<td>社長的筆記本頁，每頁 1～2 句碎碎念，加一張標題畫面的草圖</td>
+</tr>
+<tr>
+<td>圖紙碎片</td>
+<td><strong>被刪掉的草稿</strong></td>
+<td>6</td>
+<td>2-1a 隱藏點、3-2b 隱藏點、4-2a 隱藏點、H1、H2、H3</td>
+<td>社長覺得「太難」「太怪」而刪掉的點子，每張一句話</td>
+</tr>
+</tbody></table></div>
+<p><strong>元謎題 6-1 在新設定下怎麼成立</strong>（結構與規格相同）：</p>
+<ol>
+<li>每頁開發筆記都畫著標題畫面草圖的「其中一筆」（社長每改一版就畫一筆）。</li>
+<li>在筆記介面把 5 頁疊起來，會拼成標題畫面背景的輪廓（樹、石頭、兩個空缺），而且是<strong>從某一個深度剖切看到的樣子</strong>。</li>
+<li>在 6-1 開剖面檢視、找到那個深度，再把兩個木箱推到缺的兩筆位置 → 設計稿裡畫出「開始遊戲」的門 → 對門按提交，完成版裡就有這扇門 → 走出去。</li>
+<li>解謎所需的資訊全部在筆記介面裡，不用查外部資料。</li>
+</ol>
+<h3 id="story--62-結局">6.2 結局</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>結局</th>
+<th>條件（同規格）</th>
+<th>一句話</th>
+<th>場景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A 一起回去（一般結局）</td>
+<td>完成 6-1，提交「開始遊戲」的門並走出去</td>
+<td>遊戲終於能從頭玩到尾，大家一起回到社辦。</td>
+<td>你們回到社辦，窗外是放學的天色。螢幕上的遊戲顯示「建置成功」。社長大叫：「發表會趕上了！」小格在螢幕裡揮手：「下次見。」</td>
+</tr>
+<tr>
+<td>B 製作人員名單（真結局）</td>
+<td>收齊 6 張被刪掉的草稿；6-1 的門出現後，切到設計稿，站上只在設計稿裡的編輯桌按 V</td>
+<td>你留下一個標記點，它變成下一位玩家的起點。</td>
+<td>你在標題畫面的設計稿上放一個標記點，但<strong>不去用它</strong>。它在標題畫面亮起，變成「新遊戲」按鈕：以後每個玩家都會從你放的地方開始。接著跑製作人員名單：關卡設計是你的暱稱、企劃是社長（加註「與拖稿」）、提示系統是小格。名單後彩蛋：5-1 那個標記點，是社長第一次做這個功能時留下的；回到社辦，電腦桌面右下角跳出小格：「我也出來了！」</td>
+</tr>
+</tbody></table></div>
+<p><strong>與規格的差異說明</strong>：原結局 B 是「留下」（主角留在圖裡）。新設定下沒有人被留下（避免讓人不安），改成「留下一個標記點給後來的人」。機制呼應不變：同樣是放一個標記點、不回完成版用它。</p>
+<hr>
+<h2 id="story--7-文案風格指南與範例">7. 文案風格指南與範例</h2>
+<h3 id="story--71-規則">7.1 規則</h3>
+<ul>
+<li>讀者：國中到高中。句子短，一句只講一件事。</li>
+<li>每段旁白 / 便利貼 / 提示 ≤ 40 字；一句話劇情 ≤ 30 字。</li>
+<li>幽默來源：遊戲開發的日常（TODO、最終版、參數亂填、複製貼上）、社長的不靠譜、小格的吐槽。</li>
+<li>不寫：恐怖、死亡、霸凌、身材外貌梗、會過時的網路流行語、影射現有作品或真人。</li>
+<li>不擋解謎：對白一次最多 2 句，可按任意鍵跳過（沿用 <code>game.ts</code> 跳過旁白）。</li>
+<li>提示三級都抽象，不搶走「想通」的那一刻（規格 D7、7.1.1 量表）：不寫「把 X 推到 Y」、不寫按鍵、不給數字、不叫出關鍵物件的名字。</li>
+</ul>
+<h3 id="story--72-可以這樣寫-不要這樣寫">7.2 可以這樣寫 / 不要這樣寫</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>可以這樣寫</th>
+<th>不要這樣寫</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>門不見了，牆上寫著：TODO 記得放門。</td>
+<td>門消失了，彷彿從未存在於這個世界。</td>
+<td>太文藝、太深</td>
+</tr>
+<tr>
+<td>2</td>
+<td>社長：「沒問題，明天就做完！」</td>
+<td>社長：「我是不是永遠都做不完任何事……」</td>
+<td>太沉重</td>
+</tr>
+<tr>
+<td>3</td>
+<td>小格：「運算中……想站得高，需要一位願意被踩的朋友。」</td>
+<td>小格：「運算中……你先看看那個木箱？」</td>
+<td>提示不點名物件、不給動作</td>
+</tr>
+<tr>
+<td>4</td>
+<td>掉出地圖了，回到檢查點。</td>
+<td>你摔死了。</td>
+<td>無死亡</td>
+</tr>
+<tr>
+<td>5</td>
+<td>這張桌子的重量，是社長隨手填的。</td>
+<td>這張桌子跟社長一樣重。</td>
+<td>不開身材玩笑</td>
+</tr>
+<tr>
+<td>6</td>
+<td>影子有碰撞箱，這是 bug，但很好用。</td>
+<td>影子裡藏著某種東西在看你。</td>
+<td>無恐怖</td>
+</tr>
+<tr>
+<td>7</td>
+<td>每份手稿都寫著：第 12 版，最終版。</td>
+<td>（任何當下流行的網路梗或縮寫）</td>
+<td>會過時</td>
+</tr>
+<tr>
+<td>8</td>
+<td>社長：「謝啦，你超可靠。」</td>
+<td>社長：「你這麼笨也修得好？」</td>
+<td>幽默不傷人</td>
+</tr>
+<tr>
+<td>9</td>
+<td>按下提交，設計稿和完成版都會有它。</td>
+<td>定稿之後，它就不再只是你心裡的草稿。</td>
+<td>直白優先</td>
+</tr>
+<tr>
+<td>10</td>
+<td>小格：「看得到，但搆不到喔。換個檢視？」</td>
+<td>小格：「錯誤代碼 0x00F3：互動失敗。」</td>
+<td>玩家看不懂技術訊息</td>
+</tr>
+</tbody></table></div>
+<h3 id="story--73-範例玄關章1-11-3與書房第一關2-1">7.3 範例：玄關章（1-1～1-3）與書房第一關（2-1）</h3>
+<h4 id="story--旁白與通關台詞">旁白與通關台詞</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>關</th>
+<th>開場旁白</th>
+<th>通關台詞</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-1 門廊</td>
+<td>社長：「這裡是門廊，教學關！……教學是什麼來著？」</td>
+<td>小格：「切換檢視，學會了。社長，這本來是妳要教的。」</td>
+</tr>
+<tr>
+<td>1-2 玄關</td>
+<td>門不見了，牆上寫著：TODO 記得放門。</td>
+<td>社長：「門回來了！我就說明天就做完……好啦是你做完的。」</td>
+</tr>
+<tr>
+<td>1-3 衣帽間</td>
+<td>衣架上貼滿「之後再改」的便利貼。</td>
+<td>小格：「教學模組修復完成。下一個：物理模組。」</td>
+</tr>
+<tr>
+<td>2-1 書架迴廊</td>
+<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
+<td>社長：「兩個在設計稿裡疊在一起，這樣也算？好聰明！」</td>
+</tr>
+</tbody></table></div>
+<h4 id="story--三級提示全抽象外殼台詞見-23此處只列提示本體">三級提示（全抽象；外殼台詞見 2.3，此處只列提示本體）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>題</th>
+<th>L1 意象（運算中……）</th>
+<th>L2 觀察角度（找到線索了！）</th>
+<th>L3 缺的性質（只能說這些）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-1a 兩種牆</td>
+<td>這條走廊，好像照著不同的施工圖蓋的。</td>
+<td>擋住你的東西，換了檢視也還在嗎？</td>
+<td>每道牆，都只缺席在其中一邊。</td>
+</tr>
+<tr>
+<td>1-1b 紙上跳得高</td>
+<td>在設計稿裡，大家的身體都輕一點。</td>
+<td>上得去的地方和過得去的地方，在同樣的檢視裡嗎？</td>
+<td>上去靠的是輕；過去靠的是深度。</td>
+</tr>
+<tr>
+<td>1-1c 回來的深度</td>
+<td>平面圖上，沒有前面和後面。</td>
+<td>每次回到完成版，你是怎麼決定站在哪裡的？</td>
+<td>回來時的深度，是向腳下借來的。</td>
+</tr>
+<tr>
+<td>1-2a 書架過缺口</td>
+<td>有些路，只有在沒有深度的地方才連得起來。</td>
+<td>那道缺口，在設計稿裡還是缺口嗎？</td>
+<td>圍住它的東西只蓋在完成版；被圍住的那一層，紙上沒人擋。</td>
+</tr>
+<tr>
+<td>1-2b 推箱取筆尖</td>
+<td>想站得高，需要一位願意被踩的朋友。</td>
+<td>在設計稿裡，東西要多近才算挨在一起？</td>
+<td>它不必在完成版裡靠過去，紙上排在旁邊就夠。</td>
+</tr>
+<tr>
+<td>1-2c 長桌下的壓板</td>
+<td>有些重量，只在紙上才算數。</td>
+<td>哪些東西，設計稿根本沒畫？</td>
+<td>重的東西要抵達那裡，得走一條平常不會注意的窄路。</td>
+</tr>
+<tr>
+<td>1-2d 高處的墨水閥</td>
+<td>用過的東西，不一定用完了。</td>
+<td>鎖住之後，還需要一直壓著嗎？</td>
+<td>高處要的不是新東西，是之前幫過你的那位。</td>
+</tr>
+<tr>
+<td>1-3a 踩前面，站後面</td>
+<td>一樣的高度，可以有好幾種深度。</td>
+<td>在設計稿裡踩著的，回到完成版還是它嗎？</td>
+<td>回來時，腳下得是靠後面的那一層。</td>
+</tr>
+<tr>
+<td>1-3b 紙上伸手</td>
+<td>玻璃在平面圖上，只是沒畫出來的框。</td>
+<td>設計稿裡量距離時，前後還算數嗎？</td>
+<td>搆不到的是高度，不是深度。</td>
+</tr>
+<tr>
+<td>2-1a 書梯</td>
+<td>樓梯，不一定要排在同一排。</td>
+<td>在設計稿裡，什麼樣的排列看起來像樓梯？</td>
+<td>階梯只要左右挨著、越往上越高；前後隨意。</td>
+</tr>
+<tr>
+<td>2-1b 同一格</td>
+<td>排隊的人，從正面只看得到最前面那位。</td>
+<td>這裡要的重量，一定得並排放嗎？</td>
+<td>重量看的是左右位置；深度是另一回事。</td>
+</tr>
+<tr>
+<td>2-1c 推到後面也沒用</td>
+<td>躲到後面，不等於躲開了。</td>
+<td>在設計稿裡，前後移動會改變什麼嗎？</td>
+<td>擋路的東西，只有往旁邊挪才算真的挪開。</td>
+</tr>
+</tbody></table></div>
+<p>（1-2 原有 3 張紙條改為便利貼，兼作 L1：「看不到的東西，換個檢視可能就在。——社長」「有些重量，只在設計稿裡才算。」「想站高一點，先找個可以踩的。」）</p>
+<h4 id="story--改寫前-改寫後感受差異">改寫前 → 改寫後（感受差異）</h4>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>改寫前（太直接）</th>
+<th>改寫後（抽象）</th>
+<th>差在哪</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>1-1a：運算中……鐵柵只做在完成版，設計稿裡沒有它。</td>
+<td>運算中……這條走廊，好像照著不同的施工圖蓋的。</td>
+<td>不點名鐵柵、不說哪邊沒有</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1-2a：運算中……被圍起來的書架，在設計稿裡好像沒有欄杆？</td>
+<td>找到線索了！……那道缺口，在設計稿裡還是缺口嗎？</td>
+<td>不點名書架，只問現象</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1-3a：運算中……從設計稿回來時，你會站在腳下那個東西的位置。</td>
+<td>運算中……一樣的高度，可以有好幾種深度。</td>
+<td>原句直接說出規則</td>
+</tr>
+<tr>
+<td>4</td>
+<td>2-1b：設計稿裡只看左右。箱子前後差多遠，沒關係。</td>
+<td>運算中……排隊的人，從正面只看得到最前面那位。</td>
+<td>用比喻代替規則與物件名</td>
+</tr>
+<tr>
+<td>5</td>
+<td>規格 v0.2 L3：「把書車推到迴廊左緣旁」</td>
+<td>只能說這些……階梯只要左右挨著、越往上越高；前後隨意。</td>
+<td>不給動作與位置，玩家仍要自己排</td>
+</tr>
+</tbody></table></div>
+<h3 id="story--74-其餘章節旁白-機制取得台詞">7.4 其餘章節：旁白 + 機制取得台詞</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>章</th>
+<th>開場旁白</th>
+<th>機制取得台詞</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>玄關（1-2 取得畫筆工具）</td>
+<td>歡迎來到《圖紙之間》！……目前只有教學關能玩。</td>
+<td>小格：「取得：畫筆工具。可以操作設計稿上的開關。」</td>
+</tr>
+<tr>
+<td>書房（2-2b 取得提交）</td>
+<td>書房負責「重量」。社長：重量參數我是用猜的。</td>
+<td>社長：「按提交，它就同時在兩個檢視裡！一次只能一個喔。」</td>
+</tr>
+<tr>
+<td>溫室（3-4a 取得剖面檢視）</td>
+<td>光影模組上線！副作用：影子有碰撞箱。</td>
+<td>小格：「解鎖除錯功能：剖面檢視。只顯示你站的那一層。」</td>
+</tr>
+<tr>
+<td>地下室（4-3a 取得標記點）</td>
+<td>這裡是社長放「先不要」的資料夾。請不要亂翻……來不及了。</td>
+<td>社長：「這是我刪掉的功能！在設計稿點一下，回到完成版還能回到那個高度。」</td>
+</tr>
+<tr>
+<td>地下室（轉折，4-4b 後）</td>
+<td>—</td>
+<td>社長：「我怕大家覺得很爛，所以刪了。」／你：「先做完，再一起改。」</td>
+</tr>
+<tr>
+<td>閣樓</td>
+<td>最終關生成中，請稍候……大概。</td>
+<td>—</td>
+</tr>
+<tr>
+<td>草地</td>
+<td>你們走到遊戲的第一個畫面，也是最後一個。</td>
+<td>—</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="story--8-風險與取捨5">8. 風險與取捨（≤5）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>風險</th>
+<th>取捨</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>meta 梗（bug、TODO、最終版）太多會變成一直在講同一個笑話</td>
+<td>每關最多 1 個開發梗；謎題本身的提示不用梗</td>
+</tr>
+<tr>
+<td>2</td>
+<td>角色說話擋住解謎節奏</td>
+<td>對白一次 ≤ 2 句、可跳過；提示只在玩家需要時出現；社長只在章開場與取得機制時說話</td>
+</tr>
+<tr>
+<td>3</td>
+<td>小格同時是角色和提示系統，玩家可能覺得被催；提示全抽象又可能讓人卡太久</td>
+<td>小格只在計時解鎖後才「舉手」，不主動說話；設定可關閉；卡太久時才出現 L4「社長的攻略筆記」（預設鎖定，規格 7.1.2）</td>
+</tr>
+<tr>
+<td>4</td>
+<td>「被吸進遊戲」太常見</td>
+<td>不花篇幅解釋原理，重點放在「把作品做完」與兩人一 AI 的互動</td>
+</tr>
+<tr>
+<td>5</td>
+<td>結局 B 的「標記點變成新遊戲按鈕」對沒玩過 4-3 以後的人不好懂</td>
+<td>5-1 先埋「不是你放的標記點」伏筆，結局 B 用一句話揭曉，不做長篇說明</td>
+</tr>
+</tbody></table></div>
+</article>
+<article class="doc" data-doc="arch" data-title="架構設計"><h1 id="arch--圖紙之間程式架構設計-v02">《圖紙之間》程式架構設計 v0.2</h1>
+<div class="meta"><b>最後修訂紀錄</b>：v0.2（2026-11-02）— 第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；<code>HintDef</code> / <code>PuzzleDef</code> / <code>Settings</code> 格式更新；謎題 id <code>1-2a</code>～<code>1-2d</code>、<code>5-5a</code>～<code>5-5c</code></div>
+<blockquote>
+<p><strong>修訂紀錄</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>版本</th>
+<th>日期</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>v0.1</td>
+<td>2026-11-02</td>
+<td>初版架構（commit <code>97bc79c</code>）</td>
+</tr>
+<tr>
+<td>v0.2</td>
+<td>2026-11-02</td>
+<td>第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；<code>HintDef</code> / <code>PuzzleDef</code> / <code>Settings</code> 格式更新；謎題 id <code>1-2a</code>～<code>1-2d</code>、<code>5-5a</code>～<code>5-5c</code></td>
+</tr>
+</tbody></table></div>
+</blockquote>
+<blockquote>
+<p>狀態：草案（2026-11-02），對應 <code>game-spec-v0.2.md</code>（下稱「規格」）與 <code>story-bible-v0.1.md</code>（下稱「劇情」）。基準程式為 commit <code>52635aa</code> 的 <code>src/puzzle/</code>（20 檔、約 2.3k 行）與 <code>tests/puzzle/</code>（36 個測試；全專案 <code>vitest run</code> 共 584 個測試）。
+範圍：只寫架構，不改任何程式碼。標記：<strong>〔規格 X〕</strong> = 依據規格章節或 N 編號；<strong>〔碼 file:line〕</strong> = 依據現有程式；<strong><span class="tg t-inf">〔推論〕</span></strong> = 我的判斷，未經實作驗證。
+總原則：<strong>每個抽象都對應一個已知需求</strong>；對應不到的一律不做（見第 8 節）。</p>
+</blockquote>
+<hr>
+<h2 id="arch--1-現況盤點與痛點">1. 現況盤點與痛點</h2>
+<h3 id="arch--11-模組圖與依賴方向現況">1.1 模組圖與依賴方向（現況）</h3>
+<pre><code>puzzle.html ── main.ts ── game.ts ─┬─ levels/foyer.ts ──(type)──┐
+                                   ├─ logic/* (純函式，無 three) ◄┘
+                                   ├─ input.ts  (DOM keydown)
+                                   ├─ hud.ts    (DOM，import logic/types)
+                                   └─ render/scene.ts ─┬─ render/models/* ─ materials/palette/textures
+                                                       └─ logic/geometry (activeIn)、logic/types
+logic 內部：step → push, mechanisms, world, geometry；switchMode → place, geometry, world；interact → geometry, world
+</code></pre>
+<ul>
+<li>好的部分（保留）：<code>logic/</code> 完全不 import three，測試在 Node 下以合成輸入跑完整通關〔碼 tests/puzzle/foyerSolution.test.ts:81〕；<code>Painter</code> 一個網格兩套材質，切換視角不重建場景〔碼 render/materials.ts:35-107〕；關卡已資料化為 <code>LevelDef</code>〔碼 logic/types.ts:34〕。</li>
+<li>依賴方向單純（logic ← render/hud/game），但 <strong>game.ts 是所有東西的交會點</strong>，且 logic 只有「移動」走 <code>stepWorld</code>，切換 / 互動 / 歸位由 game.ts 直接呼叫〔碼 game.ts:103-106〕。</li>
+</ul>
+<h3 id="arch--12-寫死之處逐項標位置">1.2 寫死之處（逐項標位置）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>位置</th>
+<th>現況</th>
+<th>問題</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>H1</td>
+<td><code>logic/interact.ts:50-68</code></td>
+<td><code>switch (t.def.type)</code> 處理 note/key/gate/valve/door</td>
+<td>新物件類型必改核心；鑰匙鏈寫死（規格 C8）</td>
+</tr>
+<tr>
+<td>H2</td>
+<td><code>logic/types.ts:67-68</code>、<code>world.ts:10</code>、<code>interact.ts:53,59,63</code></td>
+<td><code>World.hasKey</code>、<code>World.sealed</code> 全域單一旗標</td>
+<td>無法多鑰匙 / 墨滴 / 章印（N9）；門的狀態不在門身上</td>
+</tr>
+<tr>
+<td>H3</td>
+<td><code>logic/types.ts:4-6</code></td>
+<td><code>ObjType</code> 封閉聯集</td>
+<td>新類型要改核心型別；render <code>BUILDERS</code> 也綁同一聯集〔碼 render/scene.ts:15〕</td>
+</tr>
+<tr>
+<td>H4</td>
+<td><code>logic/types.ts:10-30</code></td>
+<td><code>ObjDef</code> 混雜通用欄位與類型專屬欄位（<code>text</code> 只給 note、<code>opens</code> 只給 plate）</td>
+<td>每加一機制就往同一介面塞欄位</td>
+</tr>
+<tr>
+<td>H5</td>
+<td><code>logic/mechanisms.ts:20</code></td>
+<td>壓板只看 <code>pushable &amp;&amp; !gone</code>，<strong>不看木箱在當前視角是否存在</strong>；只認「有沒有」不計數</td>
+<td>擋 N14、N2、N5（heavy 進紙）、N8（剖面計數）</td>
+</tr>
+<tr>
+<td>H6</td>
+<td><code>logic/mechanisms.ts:21-24</code></td>
+<td>壓下即 <code>used=true</code> 永久鎖定，直接把單一閘門 <code>used=true</code></td>
+<td>擋 N4 非鎖定、N10 一對多、N13 反向</td>
+</tr>
+<tr>
+<td>H7</td>
+<td><code>geometry.ts:4,35</code>；<code>interact.ts:11,45</code>；<code>mechanisms.ts:17</code>；<code>switchMode.ts:24,39</code>；<code>render/scene.ts:142</code></td>
+<td>共 7 處直接讀 <code>activeIn(o.def.visible, mode)</code></td>
+<td>可見性是靜態欄位；N5 定稿印要「有效可見性」，得同時改 7 處</td>
+</tr>
+<tr>
+<td>H8</td>
+<td><code>geometry.ts:31</code></td>
+<td><code>isOpenGate</code> 在幾何核心判斷 <code>type === &#39;gate&#39;</code></td>
+<td>機制知識漏進核心；N10 墨橋「開啟 = 出現」無處表達</td>
+</tr>
+<tr>
+<td>H9</td>
+<td><code>geometry.ts:18,42</code>；<code>interact.ts:20</code>；<code>step.ts:33,39,42,53</code>；<code>place.ts:8,38-40</code>；<code>switchMode.ts:12</code>；<code>cameras.ts:43,60</code></td>
+<td><code>mode === &#39;2d&#39; ? … : …</code> 散落</td>
+<td>每個規則分歧點都要重找一遍</td>
+</tr>
+<tr>
+<td>H10</td>
+<td><code>switchMode.ts:13 → 16</code></td>
+<td>先算 <code>solidsFor(&#39;2d&#39;)</code> 才記錄 <code>z3d</code></td>
+<td>N8 剖面需要「進紙深度」先確定，順序要反過來</td>
+</tr>
+<tr>
+<td>H11</td>
+<td><code>step.ts:55</code></td>
+<td><code>updatePlates(w)</code> 寫死在步進；沒有掛點</td>
+<td>N6 影子要每步推導、N4/N13 連動要在同一處更新</td>
+</tr>
+<tr>
+<td>H12</td>
+<td><code>game.ts:3,23,75</code></td>
+<td>直接 <code>import { foyer }</code></td>
+<td>單關寫死（規格 C16）</td>
+</tr>
+<tr>
+<td>H13</td>
+<td><code>game.ts:107</code></td>
+<td><code>localStorage.setItem(&#39;puzzle:foyer:cleared&#39;,&#39;1&#39;)</code> 直接寫</td>
+<td>無 schema、無注入、無遷移（規格 8）</td>
+</tr>
+<tr>
+<td>H14</td>
+<td><code>game.ts:88,103-105</code>；<code>input.ts:23-26</code></td>
+<td><code>KeyR/KeyF/KeyQ/KeyT/KeyE</code>、WASD 寫死</td>
+<td>規格 7.2「全按鍵可重綁」、觸控 / 手把無處接</td>
+</tr>
+<tr>
+<td>H15</td>
+<td><code>game.ts:17,19-20,121</code></td>
+<td><code>VERBS</code> 中文字串、過場漸層、提示組字</td>
+<td>文案與過場寫死在主迴圈；7.2「減少動態」要換過場</td>
+</tr>
+<tr>
+<td>H16</td>
+<td><code>hud.ts:33,44</code>、<code>hud.ts:6-14</code></td>
+<td>「現實 / 圖紙」「筆尖」、單一 <code>KEY_ICON</code>、<code>setInventory(boolean)</code></td>
+<td>劇情 4 節改名（完成版 / 設計稿 / 畫筆工具）；多物品無法顯示</td>
+</tr>
+<tr>
+<td>H17</td>
+<td><code>puzzle.html:13-28</code></td>
+<td>模式文字、操作說明、「玄關 · 通關」寫在 HTML</td>
+<td>同上；重綁後說明會不一致</td>
+</tr>
+<tr>
+<td>H18</td>
+<td><code>levels/foyer.ts:9-56</code>；<code>interact.ts:6-7,47,58-65</code>；<code>mechanisms.ts:6-8</code>；<code>step.ts:8</code>；<code>constants.ts:11</code></td>
+<td>所有玩家可見文字是程式字面值</td>
+<td>劇情 4 節列了 12 項「需改程式碼」，未來多語系無從下手</td>
+</tr>
+<tr>
+<td>H19</td>
+<td><code>render/scene.ts:63,70-81</code></td>
+<td>場景只在建構時依 <code>world.objs</code> 建模型；<code>key</code> 特例</td>
+<td>N6 影子、N7 定稿影子、N16 墨記是<strong>執行期才出現</strong>的物件，無法顯示</td>
+</tr>
+<tr>
+<td>H20</td>
+<td><code>render/models/devices.ts:144</code></td>
+<td>門模型讀 <code>c.world.sealed</code></td>
+<td>渲染依賴全域旗標（H2 的連帶）</td>
+</tr>
+<tr>
+<td>H21</td>
+<td><code>render/models/room.ts:150-160,128-147</code></td>
+<td>掛畫 / 吊燈 / 地毯座標為玄關專屬常數</td>
+<td>每關都會長出玄關的裝飾；章節主題（書房 / 溫室…）無處設定</td>
+</tr>
+<tr>
+<td>H22</td>
+<td><code>render/palette.ts:2-32</code></td>
+<td>單一 <code>PAL</code> 常數</td>
+<td>規格 7.2 色盲三組墨水色</td>
+</tr>
+<tr>
+<td>H23</td>
+<td><code>logic/types.ts:60-73</code></td>
+<td><code>World</code> 含 <code>Map</code>、<code>def</code> 參照，無快照</td>
+<td>無法做「回到本謎題開始」（規格 7.2）、Boss 階段檢查點（規格 8）、捷徑掃描分支</td>
+</tr>
+</tbody></table></div>
+<h3 id="arch--13-n1n18-會卡在哪裡">1.3 N1～N18 會卡在哪裡</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>機制</th>
+<th>卡點（對應 1.2）</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>N1 投影疊合</td>
+<td>無</td>
+<td>C2 的推論，現況即成立</td>
+</tr>
+<tr>
+<td>N2 計重壓板</td>
+<td>H5</td>
+<td>只判「有沒有」，要改成計數</td>
+</tr>
+<tr>
+<td>N3 現實壓板</td>
+<td>H5、H9</td>
+<td>3D 壓板要看 x、z 投影並算玩家；現況只寫了 2D 判法</td>
+</tr>
+<tr>
+<td>N4 非鎖定壓板</td>
+<td>H6、H11</td>
+<td>鎖定寫死；閘門關閉遇重疊要延後（規格 N4 風險欄）無處放</td>
+</tr>
+<tr>
+<td>N5 定稿印</td>
+<td>H7、H10、H19</td>
+<td>7 處讀靜態可見性；新按鍵 G 要改 game.ts</td>
+</tr>
+<tr>
+<td>N6 燈影</td>
+<td>H11、H19</td>
+<td>影子是每步推導的實體，核心沒有「推導物件」概念；渲染不能動態加模型</td>
+</tr>
+<tr>
+<td>N7 定稿影子</td>
+<td>N5＋N6 的卡點</td>
+<td>還要「推導物件被定稿 → 變成實體」的轉換</td>
+</tr>
+<tr>
+<td>N8 剖面尺</td>
+<td>H7、H10、H5</td>
+<td>存在條件要多一層；切換順序；壓板要依剖面計數</td>
+</tr>
+<tr>
+<td>N9 通用鑰匙</td>
+<td>H1、H2、H16、H20</td>
+<td>正是 M0 指名的重構〔規格 10 M0〕</td>
+</tr>
+<tr>
+<td>N10 墨水閥連動</td>
+<td>H6、H8</td>
+<td>閥只能解 <code>sealed</code>；「開啟 = 出現」無處表達</td>
+</tr>
+<tr>
+<td>N13 反向連動</td>
+<td>H6</td>
+<td>無連結資料結構</td>
+</tr>
+<tr>
+<td>N14 3D 專屬可推物</td>
+<td>H5</td>
+<td>正好是 H5 的隱性行為</td>
+</tr>
+<tr>
+<td>N15 燈車</td>
+<td>N6 卡點</td>
+<td>影子依燈位置重算；推燈本身走 C5 推箱即可</td>
+</tr>
+<tr>
+<td>N16 墨記</td>
+<td>H14、H23</td>
+<td>新按鍵 V；區域資料（Q-C）無欄位；落點驗證可重用 <code>place.ts</code></td>
+</tr>
+<tr>
+<td>N11、N12、N17、N18</td>
+<td>—</td>
+<td>規格標為不做 / 不排入 / 不採用，本架構不為它們預留任何東西</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="arch--2-目標架構總覽">2. 目標架構總覽</h2>
+<h3 id="arch--21-分層">2.1 分層</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>層</th>
+<th>資料夾</th>
+<th>職責（一句話）</th>
+<th>可 import</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>L0 核心模擬</td>
+<td><code>core/</code></td>
+<td>世界狀態、幾何、步進、切換、推箱、互動分派、機制掛點、快照；確定性、無 I/O</td>
+<td>只有 <code>core/</code></td>
+</tr>
+<tr>
+<td>L1 機制</td>
+<td><code>mechanics/</code></td>
+<td>每檔一個機制（壓板、連動、物品、定稿、燈影、剖面、墨記…），經掛點插入核心</td>
+<td><code>core/</code>；其他 mechanics（須無環，見 4.2）</td>
+</tr>
+<tr>
+<td>L2 內容</td>
+<td><code>content/</code></td>
+<td>關卡、章節、物品表、提示、文字表（純資料）</td>
+<td><code>core/</code>、<code>mechanics/</code> 的<strong>型別</strong>（<code>import type</code>）</td>
+</tr>
+<tr>
+<td>L2&#39; 文字</td>
+<td><code>text/</code></td>
+<td><code>t(key, params)</code>、插值、詞彙表解析（純函式）</td>
+<td>無</td>
+</tr>
+<tr>
+<td>L3 外圍規則</td>
+<td><code>meta/</code></td>
+<td>存檔 / 遷移、設定、統計、解鎖、提示策略（純函式＋注入 storage）</td>
+<td><code>core/</code>、<code>content/</code>、<code>text/</code></td>
+</tr>
+<tr>
+<td>L4 呈現</td>
+<td><code>render/</code>、<code>ui/</code>、<code>input/</code></td>
+<td>three 場景、DOM HUD / 選單、輸入來源</td>
+<td><code>render</code>→<code>core</code>；<code>ui</code>→<code>text</code>；<code>input</code>→<code>core</code>（型別）</td>
+</tr>
+<tr>
+<td>L5 外殼</td>
+<td><code>app/</code></td>
+<td>主迴圈、畫面狀態機、把上述接起來</td>
+<td>全部</td>
+</tr>
+<tr>
+<td>工具</td>
+<td><code>devtools/</code></td>
+<td>關卡驗證器、腳本回放、捷徑掃描（純函式，測試與開發用）</td>
+<td><code>core</code>、<code>mechanics</code>、<code>content</code>、<code>meta</code>、<code>text</code></td>
+</tr>
+</tbody></table></div>
+<h3 id="arch--22-依賴矩陣列-匯入方欄-被匯入方-可t-僅-import-type-禁止">2.2 依賴矩陣（列 = 匯入方，欄 = 被匯入方；✓ 可、T 僅 <code>import type</code>、✗ 禁止）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>匯入方 \ 被匯入</th>
+<th>core</th>
+<th>mechanics</th>
+<th>content</th>
+<th>text</th>
+<th>meta</th>
+<th>render</th>
+<th>ui</th>
+<th>input</th>
+<th>app</th>
+<th>devtools</th>
+<th>three</th>
+<th>DOM API</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>core</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>mechanics</td>
+<td>✓</td>
+<td>✓(無環)</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>content</td>
+<td>T</td>
+<td>T</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>text</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>meta</td>
+<td>✓</td>
+<td>T</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>devtools</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+</tr>
+<tr>
+<td>render</td>
+<td>✓</td>
+<td>T</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>ui</td>
+<td>T</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>input</td>
+<td>T</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+<td>✗</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>app</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓(僅 DEV)</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+</tbody></table></div>
+<p>另：<code>src/puzzle/**</code> 不得 import <code>src/puzzle</code> 以外的專案檔（GTA 隔離）；<code>src/**</code> 其餘檔案不得 import <code>src/puzzle/**</code>。<code>render</code> 讀 <code>core</code> 只用查詢函式（<code>isActiveIn</code>、<code>allObjs</code>），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。</p>
+<h3 id="arch--23-可自動檢查的依賴規則測試設計不實作">2.3 可自動檢查的依賴規則（測試設計，不實作）</h3>
+<p><code>tests/puzzle/architecture.test.ts</code>：</p>
+<ol>
+<li>以 <code>fs</code> 遞迴列出 <code>src/puzzle/**/*.ts</code>，用正規式擷取 <code>import … from &#39;…&#39;</code>、<code>import(&#39;…&#39;)</code>、<code>export … from &#39;…&#39;</code>，並記錄是否為 <code>import type</code>。</li>
+<li>依路徑第一段決定層（<code>core/…</code> → core；根目錄 <code>main.ts</code> 視為 app）。相對路徑解析成目標檔再判層；裸模組只允許 <code>three</code>（且只在 render / app）。</li>
+<li>對照 2.2 矩陣，違規列出 <code>檔案 → 目標（層）</code>，非空即失敗。</li>
+<li>額外字串規則：<code>core/</code>、<code>mechanics/</code>、<code>content/</code>、<code>meta/</code>、<code>text/</code>、<code>devtools/</code> 內不得出現 <code>document.</code>、<code>window.</code>、<code>localStorage</code>、<code>performance.now</code>、<code>Date.now</code>、<code>Math.random</code>（確定性與 Node 可跑）。</li>
+<li><code>mechanics/</code> 內部 import 圖做 DFS，有環即失敗。</li>
+<li>反向隔離：掃 <code>src/**/*.ts</code>（排除 <code>src/puzzle</code>），不得出現指向 <code>puzzle/</code> 的 import；掃 <code>src/puzzle</code> 不得出現 <code>../main</code>、<code>../game/</code> 等跳出 puzzle 的路徑。</li>
+<li>render 對 core 的值匯入名稱必須在白名單（<code>isActiveIn</code>、<code>allObjs</code>、<code>objBox</code>、型別）內。</li>
+</ol>
+<hr>
+<h2 id="arch--3-目錄結構">3. 目錄結構</h2>
+<pre><code>src/puzzle/
+  main.ts                    入口（puzzle.html 指向此檔，保留路徑）：建立 App
+  core/                      L0 純模擬
+    types.ts                 Mode、Visibility、ObjBase、ObjKinds、ObjDef、ObjState、Player、World、LevelDef
+    constants.ts             物理常數（無文字）
+    modes.ts                 ModeSpec（2d/3d 差異集中處）
+    geometry.ts              Box、overlaps、sweepAxis、supportsAt（讀 ModeSpec.axes）
+    presence.ts              isActiveIn、effectiveVisibility、solidsFor、allObjs（掛點匯流處）
+    place.ts                 inBounds、nearestFree、hits、resolvePlayerOverlap
+    push.ts                  pushCrate、resetCrates（C5、C12）
+    switchMode.ts            trySwitchMode（C10、C11），落點掛 canLand
+    interact.ts              findTarget、interact 分派（通用 requires/grants/opens → 類型 handler）
+    step.ts                  step(world, frame, dt)、stepWorld 相容包裝
+    world.ts                 createWorld、say、emit、respawn、updateCheckpoint、flags
+    registry.ts              Mechanic / ObjTypeSpec 介面、compileMechanics（衝突檢查）
+    snapshot.ts              snapshot / restore（JSON）
+    actions.ts               WorldAction、ActionFrame、ACTION_ORDER
+  mechanics/                 L1 每檔一機制
+    index.ts                 DEFAULT_MECHANICS（註冊順序即執行順序）
+    basics.ts                floor/wall/rail/table/plinth/shelf/crate 類型宣告（無行為）
+    items.ts                 C8/N9：物品、requires/grants、key/pickup/inklock 類型
+    links.ts                 C7/N10/N13：opens 連結、gate/inkwall/inkbridge、延後關閉
+    plates.ts                C6/N2/N3/N4/N14：壓板計重
+    notes.ts                 C14：便利貼
+    exit.ts                  出口門 → cleared
+    pin.ts                   N5（N7 的定稿入口）
+    light.ts                 N6/N7/N15：燈、caster、影子推導與定稿
+    section.ts               N8：剖面
+    mark.ts                  N16：墨記、區域限制
+  content/                   L2 純資料
+    items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
+    chapters.ts              CHAPTERS（章、主題 id、旁白 key）
+    levels/index.ts          LEVELS 登錄表（id、章、解鎖、def）
+    levels/ch1/1-2-foyer.ts  現有玄關（export 名仍為 foyer）
+    levels/ch1/…、ch2/…      各關一檔（22 + 3）
+    text/zh-Hant/index.ts    zh-Hant 文字表（ui / msg / obj / lvl / hint / story / term 分檔）
+  text/                      L2&#39; 文字系統
+    text.ts                  createText(bundle, fallback)、插值、[[term.*]] 解析
+  meta/                      L3 外圍規則
+    storage.ts               KeyValueStorage 介面、memoryStorage
+    save.ts                  SaveV2、loadSave / writeSave、遷移鏈
+    settings.ts              Settings、預設值、校正
+    stats.ts                 puzzle:stats
+    progress.ts              解鎖規則、能力計算
+    hints.ts                 HintStrategy（timed/always/off）、卡關偵測
+  input/                     L4 輸入
+    types.ts                 InputSource、Bindings、ShellAction
+    bindings.ts              DEFAULT_BINDINGS、重綁合併
+    keyboard.ts              KeyboardSource（取代 input.ts）
+  render/                    L4 three
+    scene.ts                 PuzzleScene：依 allObjs 對帳（新增 / 移除 / 更新）
+    cameras.ts               沿用
+    materials.ts             Painter 沿用（2D/3D 雙材質）
+    textures.ts              沿用
+    transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
+    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線）
+    themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組
+    models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
+    models/*.ts              沿用 props/devices/key/player/room；新類型一檔
+    decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯…由關卡資料擺放）
+    debug.ts                 DEV：碰撞盒線框（可選）
+  ui/                        L4 DOM
+    hud.ts                   依 HudModel 繪製（模式、物品列、提示、吐司）
+    icons.ts                 物品 id → SVG
+    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）
+    hintPanel.ts             小格提示面板
+    puzzle.css               沿用
+  app/                       L5 外殼
+    app.ts                   畫面狀態機
+    loop.ts                  主迴圈（固定步長）、過場鎖
+    hudModel.ts              deriveHud(world, text, …) 純函式
+    services.ts              組裝 storage/save/settings/text/theme
+  devtools/                  工具（純）
+    validateLevel.ts         schema 與內容規則
+    script.ts                通關腳本 → ActionFrame 序列（取代 tests helpers 的控制器）
+    shortcutScan.ts          捷徑掃描器
+tests/puzzle/
+  architecture.test.ts、core/*、mechanics/*、levels/&lt;id&gt;.test.ts（通關＋反例）、meta/*、content.test.ts（全關驗證）
+</code></pre>
+<h3 id="arch--31-遷移對照表">3.1 遷移對照表</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>現有檔案</th>
+<th>目標</th>
+<th>備註</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>logic/types.ts</code></td>
+<td><code>core/types.ts</code></td>
+<td><code>ObjType</code> 改開放式 <code>ObjKinds</code>；<code>hasKey/sealed</code> 移除（改 <code>inv</code> 與門的 <code>used</code>）</td>
+</tr>
+<tr>
+<td><code>logic/constants.ts</code></td>
+<td><code>core/constants.ts</code></td>
+<td><code>MSG_SQUEEZE</code> → 文字 key <code>msg.squeeze</code></td>
+</tr>
+<tr>
+<td><code>logic/geometry.ts</code></td>
+<td><code>core/geometry.ts</code> + <code>core/presence.ts</code></td>
+<td><code>solidsFor</code>/<code>activeIn</code> 移至 presence；<code>isOpenGate</code> → <code>mechanics/links.ts</code> 的 <code>passable</code></td>
+</tr>
+<tr>
+<td><code>logic/world.ts</code></td>
+<td><code>core/world.ts</code></td>
+<td><code>say</code> 改收 key</td>
+</tr>
+<tr>
+<td><code>logic/place.ts</code>、<code>push.ts</code>、<code>switchMode.ts</code>、<code>step.ts</code></td>
+<td><code>core/</code> 同名</td>
+<td><code>resetCrates</code> 從 mechanisms 移入 <code>core/push.ts</code></td>
+</tr>
+<tr>
+<td><code>logic/interact.ts</code></td>
+<td><code>core/interact.ts</code> + <code>mechanics/{items,notes,exit,links}.ts</code></td>
+<td>switch 拆成類型 handler</td>
+</tr>
+<tr>
+<td><code>logic/mechanisms.ts</code></td>
+<td><code>mechanics/plates.ts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>levels/foyer.ts</code></td>
+<td><code>content/levels/ch1/1-2-foyer.ts</code> + <code>content/text/zh-Hant/lvl-1-2.ts</code></td>
+<td>字面值換 key，字串原樣搬</td>
+</tr>
+<tr>
+<td><code>game.ts</code></td>
+<td><code>app/app.ts</code>、<code>app/loop.ts</code>、<code>app/hudModel.ts</code>、<code>render/transitions.ts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>hud.ts</code></td>
+<td><code>ui/hud.ts</code>、<code>ui/icons.ts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>input.ts</code></td>
+<td><code>input/keyboard.ts</code>、<code>input/bindings.ts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>puzzle.css</code></td>
+<td><code>ui/puzzle.css</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>render/palette.ts</code></td>
+<td><code>render/themes/</code></td>
+<td><code>PAL</code> 保留為預設主題</td>
+</tr>
+<tr>
+<td><code>render/models/room.ts</code> <code>buildDecor</code></td>
+<td><code>render/decor/</code> + <code>LevelDef.decor</code></td>
+<td>玄關座標搬進關卡資料</td>
+</tr>
+<tr>
+<td><code>render/scene.ts</code> <code>BUILDERS</code></td>
+<td><code>render/models/index.ts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>main.ts</code></td>
+<td>保留</td>
+<td><code>puzzle.html</code> 不必改 script 路徑</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="arch--4-核心介面">4. 核心介面</h2>
+<h3 id="arch--41-世界狀態步進快照coretypestscoresteptscoresnapshotts">4.1 世界狀態、步進、快照（<code>core/types.ts</code>、<code>core/step.ts</code>、<code>core/snapshot.ts</code>）</h3>
+<pre><code class="language-ts">export type Mode = &#39;3d&#39; | &#39;2d&#39;;
+export type Visibility = &#39;both&#39; | &#39;2d&#39; | &#39;3d&#39;;
+export type ObjId = string;
+export type ItemId = string;                         // &#39;nib&#39; | &#39;inkdrop&#39; | &#39;seal&#39; | &#39;diary:1&#39; | &#39;scrap:4&#39; …（content/items.ts 定義）
+export type AbilityId = &#39;nib&#39; | &#39;pin&#39; | &#39;section&#39; | &#39;mark&#39;;   // 規格 8 save.abilities
+export type TextKey = string;
+export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
+
+export interface Player { x: number; y: number; z: number; vy: number; onGround: boolean; mode: Mode; z3d: number; facing: number }
+
+/** 機制可擴充的世界狀態（各 mechanics 檔以 declaration merging 加欄位；值必須可 JSON 序列化） */
+export interface WorldExt {}
+
+export interface World {
+  level: LevelDef;
+  objs: ObjState[];                 // 關卡物件 + 執行期生成的實體（N7 定稿影子）
+  derived: ObjState[];              // 每步由機制推導（N6 影子）；不進快照，restore 後重算
+  byId: Map&lt;ObjId, ObjState&gt;;       // objs 與 derived 的索引
+  player: Player;
+  checkpoint: number;
+  cleared: boolean;
+  inv: Record&lt;ItemId, number&gt;;      // 取代 hasKey（N9）
+  abilities: AbilityId[];           // 本關可用能力（4.9）
+  flags: Record&lt;string, true&gt;;      // 進度旗標：&#39;item:nib&#39;、&#39;on:plate&#39;、&#39;zone:hall&#39; …（提示 / 謎題完成判定）
+  ext: Partial&lt;WorldExt&gt;;
+  msg: string; msgKey: TextKey; msgSeq: number;   // msg = 已解析字串（相容現有測試，見 7.3）
+  events: GameEvent[];              // 本步事件外送匣，外殼每幀取走清空
+  time: number;
+  readonly rt: Runtime;             // 不序列化：機制表與文字解析器
+}
+export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, p?: Record&lt;string, string | number&gt;) =&gt; string }
+
+export type GameEvent =
+  | { t: &#39;switch&#39;; to: Mode } | { t: &#39;switchDenied&#39; } | { t: &#39;reset&#39; } | { t: &#39;fall&#39; }
+  | { t: &#39;flag&#39;; flag: string } | { t: &#39;item&#39;; id: ItemId; n: number } | { t: &#39;cleared&#39; };
+
+export interface ActionFrame { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[] }
+export type WorldAction = &#39;flip&#39; | &#39;reset&#39; | &#39;interact&#39; | &#39;pin&#39; | &#39;section&#39; | &#39;mark&#39;;
+export const ACTION_ORDER: readonly WorldAction[] = [&#39;flip&#39;, &#39;reset&#39;, &#39;interact&#39;, &#39;pin&#39;, &#39;section&#39;, &#39;mark&#39;];
+
+export function createWorld(level: LevelDef, opts: { mechanics: readonly Mechanic[]; abilities?: AbilityId[]; text?: Runtime[&#39;text&#39;] }): World;
+/** 確定性：相同 (snapshot, frame 序列, dt 序列) → 相同結果；不讀時鐘 / 亂數 / DOM */
+export function step(w: World, f: ActionFrame, dt: number): void;
+/** 相容包裝：現有測試 helpers 的 run/place 不必改 */
+export function stepWorld(w: World, input: { moveX: number; moveZ: number; jump: boolean }, dt: number): void;
+
+export interface WorldSnapshot {
+  v: 1; levelId: string; player: Player; checkpoint: number; cleared: boolean;
+  objs: Array&lt;{ id: ObjId; x: number; y: number; z: number; gone: boolean; used: boolean; touched: boolean; ext?: Json; spawned?: ObjDef }&gt;;
+  inv: Record&lt;ItemId, number&gt;; abilities: AbilityId[]; flags: string[]; ext: Json; time: number; msgKey: TextKey;
+}
+export function snapshot(w: World): WorldSnapshot;
+export function restore(level: LevelDef, s: WorldSnapshot, opts: Parameters&lt;typeof createWorld&gt;[1]): World;
+</code></pre>
+<p><strong>step 內固定順序</strong>（保留現況 <code>game.ts:103-106</code> 的「切換 → 歸位 → 互動 → 移動」）：</p>
+<ol>
+<li><code>refreshDerived(w)</code>（各機制 <code>derive</code>）</li>
+<li>依 <code>ACTION_ORDER</code> 處理 <code>f.pressed</code>；<code>flip/reset/interact</code> 是核心動作，其餘交給擁有該動作的機制（4.2）；每個動作後 <code>refreshDerived</code></li>
+<li><code>beforePhysics</code> 掛點（依註冊順序）</li>
+<li>核心物理：現有 <code>stepWorld</code> 本體（移動 / 推箱 / 重力 / 邊界）</li>
+<li><code>afterPhysics</code> 掛點：<code>plates</code> → <code>links</code>（取代 <code>step.ts:55 updatePlates</code>，位置不變）</li>
+<li><code>updateCheckpoint</code>、掉落 <code>respawn</code>（順序同 <code>step.ts:56-57</code>）</li>
+</ol>
+<p><strong>為什麼不做「回傳新 World」的純函式</strong>：現有程式與 helpers 都是就地修改，且每幀複製數百物件無必要；「純」的需求（測試分支、回到謎題開始、Boss 階段檢查點〔規格 7.2、8〕）由 <code>snapshot/restore</code> 滿足。需要純函式形式時用 <code>restore → step → snapshot</code>。</p>
+<h3 id="arch--42-機制模組介面coreregistryts">4.2 機制模組介面（<code>core/registry.ts</code>）</h3>
+<pre><code class="language-ts">export type MechanicId = string;
+
+export interface Mechanic {
+  readonly id: MechanicId;
+  /** 設了則 actions 只在 world.abilities 含它時有效（LevelDef.abilities 白名單，規格 N8 風險欄） */
+  readonly ability?: AbilityId;
+  /** 此機制擁有的物件類型（類型只能有一個擁有者） */
+  readonly types?: Readonly&lt;Record&lt;string, ObjTypeSpec&gt;&gt;;
+  /** 此機制擁有的玩家動作（動作只能有一個擁有者） */
+  readonly actions?: Partial&lt;Record&lt;WorldAction, (w: World) =&gt; void&gt;&gt;;
+
+  init?(w: World): void;                                             // 建 w.ext 初始狀態
+  visibility?(w: World, o: ObjState): Visibility | undefined;        // 有效可見性覆寫（N5）
+  presence?(w: World, o: ObjState, mode: Mode): boolean;             // 額外存在條件，AND 合成（N8）
+  passable?(w: World, o: ObjState): boolean;                         // 存在但不擋路（C7 開門），OR 合成
+  derive?(w: World): ObjState[];                                     // 推導物件，id 必須以 `${id}:` 開頭（N6）
+  materialize?(w: World, derived: ObjState): ObjState | null;        // 推導物件被定稿 → 生成實體（N7）
+  canLand?(w: World, box: Box, mode: Mode): boolean;                 // 切換落點否決，AND 合成（noLand3d）
+  beforePhysics?(w: World, dt: number): void;
+  afterPhysics?(w: World, dt: number): void;                         // plates、links
+  onModeSwitch?(w: World, from: Mode, to: Mode): void;               // 切換成功後
+  validate?(level: LevelDef): LevelIssue[];                          // 關卡驗證器呼叫
+}
+
+export interface ObjTypeSpec {
+  defaults?: Partial&lt;ObjBase&gt;;      // 例：gate 預設 interactable、visible:&#39;3d&#39;
+  verbKey?: TextKey;                // [E] 動詞（取代 game.ts:17 VERBS）
+  /** 通用前置（requires 不滿足 → 說 lockedKey 並中止；滿足 → consume / grants / opens / useKey）之後呼叫 */
+  interact?(w: World, o: ObjState): void;
+  mass?(o: ObjState): number;       // 壓板計重；預設 (pushable || heavy) ? 1 : 0
+}
+
+export interface CompiledMechanics {
+  list: readonly Mechanic[];
+  types: ReadonlyMap&lt;string, { owner: MechanicId; spec: ObjTypeSpec }&gt;;
+  actions: ReadonlyMap&lt;WorldAction, { owner: Mechanic; run: (w: World) =&gt; void }&gt;;
+  // 各掛點預先篩出的陣列，避免每次呼叫掃全表
+}
+export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics;  // 重複類型 / 動作 / id → throw
+</code></pre>
+<p><strong>註冊方式</strong>：<code>mechanics/index.ts</code> 匯出 <code>DEFAULT_MECHANICS = [basics, items, links, plates, notes, exit, pin, section, light, mark]</code>。<strong>陣列順序 = 執行順序</strong>；<code>createWorld</code> 必須傳入機制表（核心不 import mechanics，測試可只傳子集）。不做全域副作用註冊（import 順序決定行為會讓測試不穩定）。</p>
+<p><strong>衝突規則</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>掛點</th>
+<th>合成方式</th>
+<th>衝突處理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>types</code> / <code>actions</code></td>
+<td>唯一擁有者</td>
+<td>重複 → <code>compileMechanics</code> 拋錯</td>
+</tr>
+<tr>
+<td><code>visibility</code></td>
+<td>第一個回傳非 undefined 者勝</td>
+<td>目前只有 pin 使用；驗證器禁止同一物件同時 <code>pinnable</code> 與其他覆寫</td>
+</tr>
+<tr>
+<td><code>presence</code></td>
+<td>AND</td>
+<td>優先序寫在機制內（如 section 對 <code>isPinned</code> 放行 =「定稿 &gt; 剖面」，規格 4-2c）</td>
+</tr>
+<tr>
+<td><code>passable</code></td>
+<td>OR</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>derive</code></td>
+<td>串接</td>
+<td>id 前綴必須是機制 id，重複 → 拋錯</td>
+</tr>
+<tr>
+<td><code>canLand</code></td>
+<td>AND</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>beforePhysics/afterPhysics/onModeSwitch</code></td>
+<td>依陣列順序</td>
+<td>plates 必須在 links 之前（index.ts 註解＋單元測試鎖定）</td>
+</tr>
+</tbody></table></div>
+<p><strong>物件類型與機制的關係</strong>：類型由機制註冊（<code>types</code> 欄）；一個機制可擁有多個類型（links 擁有 gate/inkwall/inkbridge）；不屬任何行為的類型（floor、wall…）由 <code>basics</code> 註冊，讓驗證器能偵測「未註冊類型」。<strong>通用特性</strong>（solid、pushable、requires…）放在 <code>ObjBase</code>，任何類型可用；<strong>類型專屬參數</strong>放在 <code>ObjKinds[type]</code>。</p>
+<p><strong>機制間依賴</strong>：允許 mechanics 互相 import <strong>查詢函式</strong>（例：<code>section.ts</code> import <code>isPinned</code> from <code>pin.ts</code>），必須無環（2.3 第 5 條）。不做事件匯流排；跨機制只有兩條通道：查詢函式、<code>materialize</code>。</p>
+<h3 id="arch--43-物件與關卡-schema">4.3 物件與關卡 schema</h3>
+<pre><code class="language-ts">export type LinkSpec = ObjId | { id: ObjId; invert?: boolean };          // N13
+export type ItemReq = ItemId | { item: ItemId; consume?: boolean };     // N9：墨滴消耗、筆尖不消耗
+
+export interface ObjBase {
+  id: ObjId;
+  x: number; y: number; z: number; w: number; h: number; d: number;   // x,z 中心、y 底部（沿用）
+  visible: Visibility;
+  solid: boolean;
+  interactable?: boolean; interactIn?: Visibility;
+  pushable?: boolean;
+  heavy?: boolean;                  // 不可推但有重量（規格 2-4b 鉛字盤）
+  noLand3d?: boolean;
+  pinnable?: boolean;               // N5 白名單（規格 N5 風險欄）
+  caster?: boolean;                 // N6 會投影
+  requires?: ItemReq;               // N9
+  grants?: ItemId | AbilityId;      // N9：拾取即得（拾取後 gone）
+  opens?: LinkSpec | LinkSpec[];    // C6/N10/N13；保留字串形式（現有測試比對 opens === &#39;gate&#39;）
+  labelKey?: TextKey; textKey?: TextKey; lockedKey?: TextKey; useKey?: TextKey;
+}
+
+/** 開放式類型表：每個機制檔以 declaration merging 加入自己的類型與專屬欄位 */
+export interface ObjKinds {
+  floor: {}; wall: {}; rail: {}; table: {}; plinth: {}; shelf: {}; crate: {};
+}
+export type ObjType = keyof ObjKinds;
+export type ObjDef = { [K in ObjType]: ObjBase &amp; { type: K } &amp; ObjKinds[K] }[ObjType];
+
+// mechanics/plates.ts 內：
+declare module &#39;../core/types&#39; {
+  interface ObjKinds { plate: { weight?: number /* N2，預設 1 */; latch?: boolean /* N4，預設 true */; countsPlayer?: boolean /* N3，預設 visible===&#39;3d&#39; */ } }
+}
+
+export interface ObjState {
+  def: ObjDef; x: number; y: number; z: number;
+  gone: boolean;
+  used: boolean;        // 沿用：閘門已開 / 壓板已壓 / 閥已轉（測試直接讀寫，見 foyerSolution.test.ts:54-59）
+  touched: boolean;     // 沿用：壓板「太輕」提示已顯示
+  ext?: Record&lt;string, Json&gt;;   // 機制私有的逐物件狀態
+  derivedBy?: MechanicId;       // 推導物件的擁有者
+}
+
+export interface Region { id: string; minX: number; maxX: number }              // Q-C 墨記區域（x 分區；2D 只有 x）
+export interface Zone { id: string; min: V3; max: V3; flag: string }             // 走到某處即設旗標（1-1a「走到盡頭」）
+export interface DecorItem { kind: string; x: number; y: number; z: number; [k: string]: Json }
+
+export interface LevelDef {
+  id: string;                       // &#39;1-2&#39;（內部 id 不隨劇情改名；現有 &#39;foyer&#39; 於遷移時保留為 alias）
+  titleKey: TextKey; narrationKey: TextKey;
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  voidY: number;
+  start: { x: number; y: number; z: number };
+  checkpoints?: Checkpoint[];
+  abilities: AbilityId[];           // 開場可用能力白名單（規格 8 重玩規則）
+  regions?: Region[]; zones?: Zone[];
+  puzzles: PuzzleDef[];             // 4.10
+  theme?: string; decor?: DecorItem[];
+  phases?: PhaseDef[];              // M4 Boss 三階段（規格 10 M4「重載物件子集」）；型別於 M4 定義，之前不實作
+  initial?: Json;                   // 機制狀態初值，由各機制 init 自行解讀（6.3 發現的缺口：5-1 預置墨記）
+  objects: ObjDef[];
+}
+
+/** content/items.ts：物品表（N9；規格 5.3 墨滴 / 章印、5.1 收集物） */
+export interface ItemDef { id: ItemId; scope: &#39;level&#39; | &#39;persist&#39;; nameKey: TextKey; icon: string }
+// nib/pin/section/mark → persist（寫入 save.abilities）；inkdrop/seal → level；diary:n/scrap:n → persist（寫入 save.diary/scraps）
+</code></pre>
+<p><code>ObjBase</code> 本身也是 interface：機制若需要「任何類型都可帶」的特性（例：mark 的 <code>markFlag?: string</code>，6.3），同樣以 declaration merging 加在 <code>ObjBase</code>。</p>
+<p><strong>擴充自訂欄位的做法</strong>：<code>ObjKinds</code> 是開放 interface，新機制在自己的檔案 <code>declare module</code> 加類型，<code>ObjDef</code> 自動變成新的判別聯集，核心型別檔零修改；<code>switch (def.type)</code> 在 TS 下仍能窄化。逐物件執行期狀態走 <code>ObjState.ext</code>，世界級狀態走 <code>WorldExt</code>（同樣 declaration merging）。不用「任意 props bag」是為了保留型別檢查。</p>
+<h3 id="arch--44-視角策略coremodestscorepresencets">4.4 視角策略（<code>core/modes.ts</code>、<code>core/presence.ts</code>）</h3>
+<pre><code class="language-ts">export interface ModeSpec {
+  id: Mode; other: Mode;
+  axes: 2 | 3;              // overlaps / sweepAxis / distanceTo 的比較軸數（取代 H9 的散落 if）
+  moveZ: boolean;           // 2D 只能左右（C2）
+  jumpV: number;            // C4
+  boundsZ: boolean;         // inBounds 是否檢查 z
+  enter(w: World): boolean; // 進入此模式的落點求解（3d→2d：C10；2d→3d：C11）；失敗回 false
+}
+export const MODES: Readonly&lt;Record&lt;Mode, ModeSpec&gt;&gt;;
+
+/** 單一真相來源：所有「這東西在此模式存在嗎」都走這裡（取代 H7 的 7 處） */
+export function effectiveVisibility(w: World, o: ObjState): Visibility;    // 機制 visibility 覆寫 ?? def.visible
+export function isActiveIn(w: World, o: ObjState, mode: Mode): boolean;    // !gone &amp;&amp; activeIn(effVis) &amp;&amp; 所有 presence
+export function allObjs(w: World): readonly ObjState[];                    // objs ++ derived
+export function solidsFor(w: World, mode: Mode): ObjState[];               // isActiveIn &amp;&amp; def.solid &amp;&amp; !passable
+</code></pre>
+<ul>
+<li>只有兩種模式（N11 已否決），所以 <code>MODES</code> 是兩筆常數表，不是插件點；它的價值是把 2D/3D 差異收在一處。</li>
+<li><code>trySwitchMode(w)</code> = <code>MODES[w.player.mode].other</code> 的 <code>enter</code>；<strong>先記錄 <code>z3d</code> 再求解</strong>（修 H10，失敗時還原），落點檢查合成 <code>canLand</code>（<code>noLand3d</code> 改由 <code>basics</code> 機制提供，現況行為不變）。</li>
+<li><strong>剖面（N8）不是第三種模式</strong>，是 <code>presence</code> 掛點：在 2D 依 <code>player.z3d</code> 過濾。因此 solids、壓板計數、互動、渲染全部自動吃到剖面。</li>
+<li>投影：2D 渲染位置的 z 由 render 決定（<code>FRONT_2D</code>），邏輯層 2D 只是 <code>axes=2</code>，不做投影矩陣。</li>
+</ul>
+<h3 id="arch--45-渲染層render">4.5 渲染層（<code>render/</code>）</h3>
+<pre><code class="language-ts">export type ModelFactory = (paint: Painter, def: ObjDef, theme: Theme) =&gt; PropModel;   // PropModel 沿用 render/models/types.ts
+export const MODELS: Partial&lt;Record&lt;string, ModelFactory&gt;&gt;;          // render/models/index.ts；找不到 → boxModel（開發期不會隱形）
+
+export interface Theme {
+  id: string;                       // &#39;foyer&#39; | &#39;study&#39; | &#39;greenhouse&#39; | &#39;cellar&#39; | &#39;attic&#39; | &#39;meadow&#39;
+  pal: Palette;                     // 現 PAL（材質色）
+  ink: InkPalette;                  // 2D 專屬物件墨水色；設定 inkPalette 切換（規格 7.2）
+  bg2d: string[]; bg3d: number;
+}
+export function resolveTheme(chapterTheme: string, ink: &#39;default&#39; | &#39;blueOrange&#39; | &#39;mono&#39;): Theme;
+
+export type DecorFactory = (paint: Painter, item: DecorItem, level: LevelDef, theme: Theme) =&gt; DecorPart;
+export const DECOR: Record&lt;string, DecorFactory&gt;;    // &#39;painting&#39; | &#39;pendant&#39; | &#39;rug&#39; | &#39;wallShelf&#39; | &#39;walls&#39; | &#39;pit&#39;
+
+export interface Transition { start(to: Mode): void; tick(dt: number): { done: boolean; swapNow: boolean } }
+export const TRANSITIONS: { ink: () =&gt; Transition; plain: () =&gt; Transition };   // reduceMotion → plain
+
+export class PuzzleScene {
+  constructor(world: World, theme: Theme);
+  /** 每幀：對 allObjs(world) 做 id 對帳（新增 / 移除 derived 與 spawned 的模型），再同步位置與可見性 */
+  update(renderMode: Mode, dt: number, t: number, camera: THREE.Camera): void;
+  dispose(): void;
+}
+</code></pre>
+<ul>
+<li><strong>同一份物件資料產生兩種外觀</strong>：沿用 <code>Painter</code>（每個網格一組 3D 材質 + 一組 2D 扁平色＋描邊），模型工廠只寫一次；不另做 2D 模型。</li>
+<li>可見性一律 <code>isActiveIn(world, obj, renderMode)</code>（修 H7 的渲染那一處）；模型 <code>update</code> 讀 <code>obj.used/ext</code>，不讀全域旗標（修 H20：門讀自己的 <code>used</code>）。</li>
+<li><strong>P4 形狀符號</strong>（規格 7.2）由 <code>markers.ts</code> 依特性統一加：<code>visible:&#39;2d&#39;</code> → 墨點、<code>&#39;3d&#39;</code> → 實線框、<code>pinnable</code> → 印框、剖面中 → 斜線、影子 → 網點。新物件類型不必各自畫符號。</li>
+<li>主題切換 = 重建場景（只在設定變更或換關時發生，不影響切換視角的流暢度）。</li>
+<li>效能：切換視角只換材質與相機（現況做法）；derived 物件 id 穩定（<code>light:shadow:&lt;casterId&gt;</code>），對帳只在增減時建 / 拆模型，縮放走 <code>update</code>。數百物件不需 instancing<span class="tg t-inf">〔推論〕</span>。</li>
+</ul>
+<h3 id="arch--46-輸入層input">4.6 輸入層（<code>input/</code>）</h3>
+<pre><code class="language-ts">export type ShellAction = &#39;restart&#39; | &#39;hint&#39; | &#39;skip&#39; | &#39;menu&#39;;
+export type InputAction = WorldAction | ShellAction;
+export type Axis = &#39;left&#39; | &#39;right&#39; | &#39;up&#39; | &#39;down&#39; | &#39;jump&#39;;
+export type Bindings = Record&lt;InputAction | Axis, string[]&gt;;   // KeyboardEvent.code
+export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H hint（規格 N5/N8/4.1/7.1）
+
+export interface InputSource {
+  /** 每幀取樣：持續軸 + 本幀新按下的動作（取走即清空） */
+  poll(): { moveX: number; moveZ: number; jump: boolean; pressed: InputAction[]; anyKey: boolean };
+  clear(): void; dispose(): void;
+}
+export class KeyboardSource implements InputSource { constructor(bindings: Bindings) }
+export function mergeSources(sources: InputSource[]): InputSource;   // 觸控 / 手把日後各加一個 source
+</code></pre>
+<ul>
+<li>重綁：<code>settings.keys</code> 覆蓋 <code>DEFAULT_BINDINGS</code>；操作說明由 <code>ui</code> 依 bindings 產生（修 H17）。</li>
+<li>新增輸入方式只需新增 <code>input/touch.ts</code> 實作 <code>InputSource</code> 並在 <code>app/services.ts</code> 合併。</li>
+</ul>
+<h3 id="arch--47-應用外殼app">4.7 應用外殼（<code>app/</code>）</h3>
+<pre><code class="language-ts">type Screen =
+  | { id: &#39;boot&#39; } | { id: &#39;nickname&#39; } | { id: &#39;menu&#39; }
+  | { id: &#39;level&#39;; levelId: string } | { id: &#39;clear&#39;; levelId: string }
+  | { id: &#39;journal&#39; } | { id: &#39;ending&#39;; which: &#39;A&#39; | &#39;B&#39; };
+// boot →(無暱稱) nickname → menu → level → clear → (下一關 | menu)；6-1 → ending → menu
+</code></pre>
+<p>資料流（單向）：</p>
+<pre><code>InputSource.poll ─► ShellAction ─► App（restart/hint/menu/skip）
+                └─► ActionFrame ─► step(world) ─► world.events ─► meta（hints 計數、stats、save）
+                                         │
+                                         ├─► deriveHud(world, text, hintState, bindings) ─► ui.render(HudModel)
+                                         └─► PuzzleScene.update(world)
+UI 按鈕 ─► App 指令（不直接改 world）
+</code></pre>
+<ul>
+<li><code>app/loop.ts</code>：固定步長 1/60 累加器（測試 <code>DT=1/60</code> 相同；決策 Q4 已確認）、過場鎖 0.3 秒期間不呼叫 <code>step</code>（沿用 <code>game.ts:90-101</code> 語意）。</li>
+<li><code>deriveHud</code> 是純函式（可在 Node 測）：<code>{ modeText, items: {id, n}[], prompt, toast, narration, hint }</code>；<code>ui/hud.ts</code> 只做 diff 後寫 DOM。</li>
+<li>畫面狀態機用一個 <code>switch</code> + <code>enter/exit</code>，不引入狀態機函式庫（只有 7 個狀態）。</li>
+</ul>
+<h3 id="arch--48-內容載入contentlevelsindextsmetaprogressts">4.8 內容載入（<code>content/levels/index.ts</code>、<code>meta/progress.ts</code>）</h3>
+<pre><code class="language-ts">export interface LevelEntry {
+  id: string; chapter: 1 | 2 | 3 | 4 | 5 | 6 | &#39;H&#39;;
+  def: LevelDef;
+  unlock: Unlock; core: boolean;   // core：只做核心題時的範圍篩選（規格 6.9）
+}
+export type Unlock =
+  | { after: string[] }                               // 線性；5-5 = after [&#39;5-2&#39;,&#39;5-3&#39;,&#39;5-4&#39;]
+  | { ability: AbilityId; seenIn: string };           // 隱藏房：取得能力且通過入口所在關（規格 8 章節解鎖）
+export interface ChapterDef { id: number | &#39;H&#39;; titleKey: TextKey; narrationKey: TextKey; theme: string; levels: string[] }
+
+export const LEVELS: readonly LevelEntry[];
+export const CHAPTERS: readonly ChapterDef[];
+export function isUnlocked(e: LevelEntry, save: SaveV2): boolean;
+export function startAbilities(e: LevelEntry, save: SaveV2): AbilityId[];   // def.abilities ∩ save.abilities
+</code></pre>
+<ul>
+<li><strong>能力白名單</strong>：<code>createWorld</code> 的 <code>abilities</code> = <code>def.abilities ∩ save.abilities</code>；關內拾取（<code>grants: &#39;pin&#39;</code>）直接加入 <code>world.abilities</code>。1-2 的 <code>abilities: []</code>，所以重玩玄關仍需先撿筆尖（現況行為）。</li>
+<li><strong>不採用動態 import</strong>：每關資料數 KB、25 關合計估 &lt;150 KB<span class="tg t-inf">〔推論〕</span>，模型程式按類型共用；動態 import 會讓測試與驗證器變非同步、增加 chunk 管理，換來的載入節省可忽略。若 M4 後總量 &gt;500 KB 再改 <code>load: () =&gt; import()</code>（介面只差一個欄位）。</li>
+</ul>
+<h3 id="arch--49-存檔-設定-統計meta">4.9 存檔 / 設定 / 統計（<code>meta/</code>）</h3>
+<pre><code class="language-ts">export interface KeyValueStorage { get(k: string): string | null; set(k: string, v: string): void; remove(k: string): void }
+export const memoryStorage: () =&gt; KeyValueStorage;      // 測試用；app 注入 localStorage 包裝
+
+export interface SaveV2 {                                // 規格 8
+  v: 2; cleared: string[]; current: string; abilities: AbilityId[];
+  diary: number[]; scraps: number[]; endings: { A: boolean; B: boolean }; name: string;
+}
+type Migration = (raw: unknown, s: KeyValueStorage) =&gt; unknown;
+/** MIGRATIONS[n] 把 v=n 轉成 v=n+1；v0 = 「沒有 puzzle:save」 */
+export const MIGRATIONS: Record&lt;number, Migration&gt; = {
+  0: (_r, s) =&gt; s.get(&#39;puzzle:foyer:cleared&#39;) === &#39;1&#39;
+    ? { v: 1, cleared: [&#39;1-1&#39;, &#39;1-2&#39;], abilities: [&#39;nib&#39;] } : { v: 1, cleared: [], abilities: [] },
+  1: r =&gt; ({ ...defaults(), ...(r as object), v: 2 }),
+};
+export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
+export function writeSave(s: KeyValueStorage, save: SaveV2): void;
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, hintAssist, assistMode, inkPalette, reduceMotion, keys }（hintAssist / assistMode 預設 false，規格 8）
+export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial&lt;PuzzleStat&gt;): void;
+</code></pre>
+<ul>
+<li><strong>壞資料回退</strong>：JSON 解析失敗或校正後不合法 → 原字串備份到 <code>puzzle:save:corrupt</code>、回傳預設存檔，不丟例外（遊戲照樣能開）。校正是手寫 type guard（不引入 zod 等相依）。</li>
+<li>關內不存檔（規格 Q4）：<code>snapshot</code> 只供記憶體內使用（回到謎題開始、Boss 階段），不寫 storage。</li>
+</ul>
+<h3 id="arch--410-提示系統content-資料-metahintsts-uihintpanelts">4.10 提示系統（<code>content</code> 資料 + <code>meta/hints.ts</code> + <code>ui/hintPanel.ts</code>）</h3>
+<pre><code class="language-ts">export interface PuzzleDef {
+  id: string;                       // &#39;1-2a&#39;～&#39;1-2d&#39;、&#39;5-5a&#39;～&#39;5-5c&#39;（決策 Q3，已確認）
+  core: boolean;
+  doneFlag: string;                 // 完成判定，例 &#39;item:nib&#39;、&#39;on:plate&#39;、&#39;zone:exit&#39;
+  hints: [HintDef, HintDef, HintDef];   // L1 意象 / L2 觀察角度 / L3 缺的性質，三級全抽象（規格 7.1、D7）
+  solutionKey: TextKey;                 // L4 解法筆記（安全閥，預設鎖定；規格 7.1.2）
+  keyObjects: ObjId[];                  // 本題關鍵物件：驗證器據此檢查提示不得點名（規格 7.1.1 H4）
+  assistFocus?: ObjId[];                // 只在 Settings.hintAssist 開啟時用於 L2 描邊（規格 Q-E，預設關）
+}
+export interface HintDef { textKey: TextKey; truthRef: string }   // truthRef：對應解法大綱的步驟或規則（H5 人工審稿用）
+
+export interface HintState { puzzleId: string | null; unlocked: 0 | 1 | 2 | 3 | 4; ready: 0 | 1 | 2 | 3 | 4; shown: 0 | 1 | 2 | 3 | 4 }   // 4 = L4 解法筆記
+export interface HintStrategy {
+  /** realSec 為真實經過秒數（暫停不計）；events 為本幀 world.events */
+  update(s: HintState, realSec: number, events: readonly GameEvent[]): HintState;
+  request(s: HintState, hold?: boolean): HintState;   // 按 H；L4 需 hold（按住 2 秒）
+}
+export const HINT_STRATEGIES: Record&lt;&#39;timed&#39; | &#39;always&#39; | &#39;off&#39;, () =&gt; HintStrategy&gt;;
+</code></pre>
+<ul>
+<li><strong>目前謎題</strong> = <code>level.puzzles</code> 中第一個 <code>doneFlag</code> 未成立者（關內謎題線性，規格 6；<span class="tg t-inf">〔推論〕</span>5-x 若需並行再加欄位）。新旗標事件 → 計時與計數歸零。</li>
+<li><strong>計時</strong>（規格 7.1）：L1 3 分、L2 +3 分、L3 +4 分；L4 在 L3 <strong>顯示後</strong>再 5 分鐘（<code>Settings.assistMode</code> 開啟則免等待）。</li>
+<li><strong>卡關偵測</strong>（規格 7.1）只吃 <code>world.events</code>：<code>reset ≥3</code>、<code>switch ≥12 且無 flag</code>、<code>fall ≥3</code> → <code>ready+1</code>（只亮圖示），<strong>上限 L3</strong>；對 L4 只把等待縮短到 3 分鐘。</li>
+<li><strong>跳過此題</strong>：只在 <code>core === false</code>（擴充題）時提供，與 L4 同條件出現；寫入 <code>stats.skipped</code>。</li>
+<li><strong>與「小格」的關係</strong>：策略只產生「第幾級可用」；小格的台詞外殼（「運算中……」「找到線索了！……大概。」「好吧，直接說——啊不行，只能說這些。」；L4「借你社長的攻略筆記」）是 <code>ui/hintPanel.ts</code> + 文字表 <code>story.xiaoge.*</code>，換角色或關閉小格只動 UI 與文字。0 級回饋（C9「看得見，卻碰不到」）仍由核心 <code>say(&#39;msg.unreachable&#39;)</code>，劇情改由小格說只需改文字。</li>
+</ul>
+<h3 id="arch--411-文字-文案系統textcontenttext">4.11 文字 / 文案系統（<code>text/</code>、<code>content/text/</code>）</h3>
+<pre><code class="language-ts">export type TextBundle = Readonly&lt;Record&lt;TextKey, string&gt;&gt;;
+export interface Text {
+  (key: TextKey, params?: Record&lt;string, string | number&gt;): string;
+  has(key: TextKey): boolean;
+}
+/** 插值：{name}、{n}；詞彙引用：[[term.nib]] 展開為 bundle[&#39;term.nib&#39;]（一層） */
+export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   // 缺 key → fallback → 回傳 key 本身（DEV 警告）
+</code></pre>
+<ul>
+<li>key 命名：<code>ui.*</code>（HUD / 選單）、<code>msg.*</code>（系統訊息）、<code>obj.&lt;type&gt;.*</code>（類型預設 label / verb）、<code>lvl.&lt;levelId&gt;.*</code>（標題、旁白、便利貼、物件 label）、<code>hint.&lt;puzzleId&gt;.&lt;1|2|3|sol&gt;</code>、<code>story.*</code>（角色台詞、結局）、<code>term.*</code>（詞彙表）。</li>
+<li><strong>劇情詞彙與內部 id 分離</strong>：內部一律用規格代號（<code>key</code>、<code>valve</code>、<code>pin</code>、<code>mark</code>、模式 <code>&#39;2d&#39;</code>）；玩家看到的名稱集中在 <code>term.*</code>：<code>term.mode3d=&#39;現實&#39;</code>、<code>term.nib=&#39;筆尖&#39;</code>。劇情 4 節的改名 = 改 <code>term.*</code> 幾行，其他字串透過 <code>[[term.nib]]</code> 自動跟著變。</li>
+<li>暱稱：<code>{name}</code> 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。</li>
+<li>多語系：新增 <code>content/text/en/</code> 同 key 表，<code>createText(en, zhHant)</code> 以中文回退；驗證器檢查各語系 key 集合。</li>
+</ul>
+<h3 id="arch--412-開發與測試工具devtools">4.12 開發與測試工具（<code>devtools/</code>）</h3>
+<pre><code class="language-ts">// validateLevel.ts
+export interface LevelIssue { level: string; obj?: ObjId; rule: string; message: string }
+export function validateLevel(def: LevelDef, ctx: { mechanics: readonly Mechanic[]; text: Text; items: typeof ITEMS }): LevelIssue[];
+
+// script.ts：取代 tests/puzzle/helpers.ts 的 walkTo/hopUntil，輸出 ActionFrame 序列
+export type Cmd =
+  | { walkTo: [number | null, number | null]; zFirst?: boolean } | { hop: 1 | -1; until: (w: World) =&gt; boolean }
+  | { act: WorldAction } | { wait: number } | { expect: (w: World) =&gt; void };
+export function runScript(w: World, cmds: readonly Cmd[], dt?: number): void;
+
+// shortcutScan.ts：規格 M1「網格取樣 × 兩模式，斷言關鍵旗標不成立」
+export interface ScanSpec {
+  level: LevelDef;
+  setup?: (w: World) =&gt; void;                          // 例：先把狀態推進到某謎題開始（或 restore 快照）
+  movable: Array&lt;{ id: ObjId; xs: number[]; zs: number[] }&gt;;   // 可推物取樣格
+  playerAt: Array&lt;{ x: number; y: number; z: number }&gt;;
+  probes: Cmd[][];                                     // 每個取樣點要嘗試的短操作（跳、切換、互動、往左右走）
+  forbidden: string[];                                 // 不得成立的旗標（如 &#39;item:nib&#39;）
+}
+export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): Array&lt;{ sample: string; flag: string }&gt;;
+</code></pre>
+<p><strong>驗證器規則</strong>（每條附規格依據）：id 唯一；類型已註冊；<code>opens/requires/grants</code> 參照存在；<code>requires</code> 的能力在 <code>abilities</code> 或關內可得（規格 8）；每個 puzzle 三級提示 + <code>solutionKey</code> 齊全、<code>hint.*</code> key 存在（規格 7.1）；<strong>提示 lint</strong>（規格 7.1.1 H1～H4）：L1 ≤24、L2 ≤30、L3 ≤36 字，禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，且不得含 <code>keyObjects</code> 的 label / 顯示名（H5～H9 為人工審稿與 G1 試玩項，不自動化）；每關 <code>pinnable</code> 1～3 個（規格 N5）；切換式閥 ≤2（規格 N10）；燈車 ≤1（規格 N15）；墨記關卡必有 <code>regions</code> 且不重疊（Q-C）；起點與檢查點在兩模式站得住（現有測試 <code>puzzleLogic.test.ts:24</code>）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 <code>*Key</code> 在 zh-Hant 存在；各機制 <code>validate</code>。
+<strong>捷徑掃描</strong>是取樣器而非求解器：誠實地說，它只能證明「取樣到的配置 × 探針」沒有捷徑；探針與取樣格由寫關卡的人負責。成本估計：3 箱 × 10×6 格 × 數個玩家點 × 6 探針，每探針 ≤3 秒模擬，單關約數秒<span class="tg t-inf">〔推論〕</span>。
+<strong>通關回放</strong>：每關一個 <code>tests/puzzle/levels/&lt;id&gt;.test.ts</code>，以 <code>runScript</code> 從 <code>createWorld</code> 走到 <code>cleared</code>。
+<strong>Debug 疊層</strong>（可選，DEV only）：<code>render/debug.ts</code> 畫 <code>solidsFor(renderMode)</code> 線框與 flags 清單；<code>main.ts</code> 已有 <code>window.__puzzle</code>（<code>main.ts:5</code>）沿用。</p>
+<hr>
+<h2 id="arch--5-擴充劇本">5. 擴充劇本</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>情境</th>
+<th>新增</th>
+<th>修改</th>
+<th>核心修改</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>新增機制（例：N6 燈影）</td>
+<td><code>mechanics/light.ts</code>；<code>render/models/lamp.ts</code>、<code>shadow.ts</code>；<code>tests/puzzle/mechanics/light.test.ts</code>；<code>content/text/zh-Hant</code> 補 <code>obj.lamp.*</code>、<code>msg.light.*</code></td>
+<td><code>mechanics/index.ts</code> 加一行；<code>render/models/index.ts</code> 加兩行</td>
+<td>無</td>
+</tr>
+<tr>
+<td>新增物件類型（例：墨橋 inkbridge）</td>
+<td>在擁有它的機制檔 <code>declare module</code> + <code>types.inkbridge</code>；<code>render/models/inkbridge.ts</code></td>
+<td><code>render/models/index.ts</code> 一行</td>
+<td>無</td>
+</tr>
+<tr>
+<td>新增一關（例：2-1）</td>
+<td><code>content/levels/ch2/2-1-shelves.ts</code>；<code>content/text/zh-Hant/lvl-2-1.ts</code>、<code>hint-2-1.ts</code>；<code>tests/puzzle/levels/2-1.test.ts</code>（通關＋反例＋掃描）</td>
+<td><code>content/levels/index.ts</code> 一行；<code>chapters.ts</code> 的 levels 陣列</td>
+<td>無</td>
+</tr>
+<tr>
+<td>新增一章</td>
+<td>該章各關檔；<code>render/themes/&lt;theme&gt;.ts</code>；必要的 <code>render/decor/*</code></td>
+<td><code>chapters.ts</code> 一筆；<code>themes/index.ts</code> 一行</td>
+<td>無</td>
+</tr>
+<tr>
+<td>新增輸入（觸控）</td>
+<td><code>input/touch.ts</code>（實作 <code>InputSource</code>）；<code>ui/touchPad.ts</code>（虛擬按鈕 DOM）</td>
+<td><code>app/services.ts</code> 合併 source</td>
+<td>無</td>
+</tr>
+<tr>
+<td>改一個顯示名稱（筆尖 → 畫筆工具）</td>
+<td>—</td>
+<td><code>content/text/zh-Hant/term.ts</code> 一行；必要時字串內改用 <code>[[term.nib]]</code></td>
+<td>無；測試若比對字面文字，需同步（劇情 4 節已指出 <code>puzzleLogic.test.ts:230</code>）</td>
+</tr>
+<tr>
+<td>新增語言</td>
+<td><code>content/text/en/*.ts</code></td>
+<td><code>app/services.ts</code> 依設定選 bundle；<code>settings.ts</code> 加 <code>lang</code></td>
+<td>無</td>
+</tr>
+<tr>
+<td>新提示策略</td>
+<td>在 <code>meta/hints.ts</code> 加一個 factory</td>
+<td><code>Settings.hints</code> 聯集加值</td>
+<td>無</td>
+</tr>
+<tr>
+<td>新渲染風格 / 色盲組</td>
+<td><code>render/themes/&lt;id&gt;.ts</code> 或 <code>InkPalette</code> 一組</td>
+<td><code>themes/index.ts</code></td>
+<td>無</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="arch--6-設計驗證">6. 設計驗證</h2>
+<h3 id="arch--61-n6-燈影規格-43-13-4">6.1 N6 燈影（規格 4、3-1～3-4）</h3>
+<ul>
+<li>資料：<code>lamp</code> 類型（<code>ObjKinds.lamp: { on?: boolean; wallZ?: number }</code>，燈的 z 即 <code>Lz</code>）；caster 用通用特性 <code>caster: true</code>。</li>
+<li>掛點：<code>derive</code> —— 對每盞 <code>on</code> 的燈與每個 caster 計算影子盒：<code>s = (Lz − wallZ) / (Lz − objZ)</code>，x、y 邊界以燈的 (x, y) 為中心縮放；產生 <code>ObjState{ id:&#39;light:shadow:&lt;casterId&gt;&#39;, def:{ type:&#39;shadow&#39;, visible:&#39;2d&#39;, solid:true, z: wallZ+band/2, d: band }, derivedBy:&#39;light&#39; }</code>。<code>band</code>（貼牆厚度）讓 N8 能以「剖到牆面深度」判定（見 6.2）。</li>
+<li>連續縮放：每步重算即可（<code>refreshDerived</code> 在動作後與每步開頭），花盆 / 燈被推 → 下一步影子跟著變；推的時候玩家在 3D，影子是 2D 實體，3D 物理不受影響。</li>
+<li>影子沒有重量（3-4a 誘導性錯誤）：<code>ObjTypeSpec.mass</code> 對 shadow 回 0。</li>
+<li>關燈：燈是互動物件（<code>types.lamp.interact</code> 切換 <code>used</code>）；或由 <code>opens</code> 連結（N10 一般化）。</li>
+<li>渲染：<code>MODELS.shadow</code> 畫 2D 網點剪影（P4），模型 <code>update</code> 依 def 尺寸縮放；scene 對帳負責出現 / 消失。</li>
+<li>需要的新介面：<code>derive</code>、<code>ObjState.derivedBy</code>、scene 對帳（都已在第 4 節）。<strong>放得下。</strong></li>
+</ul>
+<h3 id="arch--62-n8-剖面規格-44-14-4">6.2 N8 剖面（規格 4、4-1～4-4）</h3>
+<ul>
+<li>狀態：<code>WorldExt.section = { on: boolean }</code>；<code>actions.section</code>（C，<code>ability:&#39;section&#39;</code>）。切換剖面限 3D（已確認，決策 Q5）；2D 按 C 只 <code>say(&#39;msg.section.only3d&#39;)</code>。</li>
+<li>掛點 <code>presence(w, o, &#39;2d&#39;)</code>：<code>!on || isPinned(w, o) || zRangeContains(o, w.player.z3d)</code>；3D 恆 true。<ul>
+<li><code>solidsFor(&#39;2d&#39;)</code> 依 cut 過濾：因 <code>solidsFor</code> 建在 <code>isActiveIn</code> 上，自動成立。</li>
+<li>壓板依 cut 計數：plates 的重量來源是 <code>solidsFor(mode)</code>（6.4、N14），自動成立；壓板本身不在刀上 → 不存在 → 不更新（R1 的延伸，4-4a 需要的正是這個）。</li>
+<li>「定稿 &gt; 剖面」（4-2c）：<code>section.ts</code> import <code>isPinned</code>。</li>
+<li>剖到牆上的影（4-2b）：影子盒在牆面帶 <code>band</code> 內，刀落在帶內才存在。</li>
+</ul>
+</li>
+<li><code>trySwitchMode</code> 已改為先記 <code>z3d</code> 再求解（H10），所以「進紙深度決定紙上世界」成立。</li>
+<li>HUD「剖面檢視」字樣與剖切線：<code>deriveHud</code> 讀 <code>w.ext.section</code>。<strong>放得下。</strong></li>
+</ul>
+<h3 id="arch--63-n16-墨記規格-41q-c">6.3 N16 墨記（規格 4.1、Q-C）</h3>
+<ul>
+<li>狀態：<code>WorldExt.mark = { x: number; y: number; region: string } | null</code>；<code>LevelDef.regions</code>；<code>actions.mark</code>（V，<code>ability:&#39;mark&#39;</code>）。</li>
+<li>放置（2D、站穩）：記 <code>(x, y)</code> 與 <code>regions</code> 中涵蓋 x 的 region；已有墨記則覆蓋（同時只有一個）。</li>
+<li>兌現（3D、站穩）：玩家目前 x 所在 region ≠ 墨記 region → <code>say(&#39;msg.mark.region&#39;)</code>；否則目標盒 <code>boxAt(mx, my, p.z)</code> 須 <code>inBounds</code>、<code>!hits(solidsFor(&#39;3d&#39;))</code>、<code>supportsAt(…,&#39;3d&#39;)</code> 非空、通過 <code>canLand</code>；為吸收浮點誤差以 <code>nearestFree</code> 在半徑 0.1 內找點<span class="tg t-inf">〔推論〕</span>；失敗 → <code>say(&#39;msg.mark.noSupport&#39;)</code>（「這裡接不住你」）；成功 → 移動玩家、清除墨記、<code>emit flag &#39;mark:redeemed&#39;</code>。</li>
+<li>「記在影子上要先定稿」（5-1a）：影子只在 2D 存在，3D <code>supportsAt</code> 找不到 → 自然失敗；定稿後是實體 slab → 成功。無需特例。</li>
+<li>「先記後拆」（4-4b、5-1b）：墨記只存座標，不參照物件，自然成立。</li>
+<li>5-1「不是你放的標記點」：物件資料無法表達「世界狀態初值」→ 走查時發現缺口，<strong>已回頭在 4.3 補 <code>LevelDef.initial?: Json</code></strong>，由 <code>mark.init</code> 讀取 <code>initial.mark</code>。</li>
+<li>結局 B（劇情 6.2：在編輯桌放墨記不兌現）：<code>mark</code> 放置時若腳下支撐物有 <code>markFlag</code> 欄位 → <code>flags[markFlag]</code>；外殼依 <code>ending.B</code> 旗標 + <code>save.scraps</code> 齊全判定。</li>
+<li>渲染：<code>derive</code> 產生 <code>mark:marker</code>（visible both、solid false）；<code>MODELS[&#39;mark&#39;]</code> 3D 畫橫跨深度墨線、2D 畫墨點（規格 7.2）。<strong>放得下（補一欄位）。</strong></li>
+</ul>
+<h3 id="arch--64-n5-提交-定稿規格-42-32-5">6.4 N5 提交 / 定稿（規格 4、2-3～2-5）</h3>
+<ul>
+<li>狀態：<code>WorldExt.pin = { target: ObjId | null }</code>；<code>actions.pin</code>（G，<code>ability:&#39;pin&#39;</code>）。</li>
+<li>有效可見性：<code>visibility(w, o)</code> → <code>o.def.id === pin.target ? &#39;both&#39; : undefined</code>。所有讀可見性的地方都經 <code>isActiveIn</code>，一次生效。</li>
+<li>動作流程：找範圍內、當前模式存在、<code>pinnable</code> 的最近物件（重用 <code>findTarget</code> 的距離函式，加篩選參數）；<ol>
+<li><strong>承載檢查</strong>（2-4a「上面還有東西」）：若舊目標的原始可見性不是 both，在它將消失的模式中，任何 pushable / heavy / 玩家以它為支撐（<code>supportsAt</code>）→ 拒絕。</li>
+<li>新目標出現的模式中若與木箱重疊 → 拒絕（<code>msg.pin.blocked</code>）<span class="tg t-inf">〔推論，規格未定〕</span>；與玩家重疊 → <code>resolvePlayerOverlap</code>（規格 N5 成本欄）。</li>
+<li>目標是推導物件（影子）→ 呼叫擁有者 <code>materialize</code>，以生成的實體為目標（N7）。</li>
+</ol>
+</li>
+<li>重量進紙（2-4b）：鉛字盤 <code>heavy:true</code> 被定稿 → 在 2D <code>solidsFor</code> 出現 → plates 計入。N14（2-4c）：C 只有 3D，定稿進紙成牆 / 階梯，取消即消失。</li>
+<li>「印搬走了，紙還不知道」（2-5）：pin 改變只影響「存在」，plates 只在其存在模式於 <code>afterPhysics</code> 更新（R1），回到 2D 才重算 → 自然成立。<strong>放得下。</strong></li>
+</ul>
+<h3 id="arch--65-其他機制快速驗證">6.5 其他機制快速驗證</h3>
+<ul>
+<li><strong>N13 反向連動</strong>：<code>opens: [{id:&#39;G1&#39;}, {id:&#39;G2&#39;, invert:true}]</code>。links 在<strong>來源狀態改變時</strong>才推送（不是每步重算），所以 3D 中壓板凍結 → 閘門凍結（2-2c 的時間差）；初始化時以「來源全未觸發」推一次，使反向門開著。關閉遇重疊 → 標記 pending、每步重試（N4 風險欄）。也因為「改變時才推送」，現有測試手動 <code>gate.used = true</code>（<code>puzzleLogic.test.ts:239</code>）不會被覆寫。</li>
+<li><strong>N14 3D 專屬可推物</strong>：plates 的重量來源 = <code>solidsFor(w, mode).filter(mass&gt;0)</code>，3D 專屬箱在 2D 不在清單中。這是相對現況（H5）的行為修正；玄關只有 both 木箱，加一條測試鎖定。</li>
+<li><strong>N15 燈車</strong>：燈 <code>pushable:true</code>，沿 C5 推箱規則（窄支撐條限軸）；影子由 <code>derive</code> 每步重算，零新程式。驗證器限每關燈車 ≤1。</li>
+<li><strong>N9 通用鑰匙</strong>：<code>key</code> 類型 <code>grants:&#39;nib&#39;</code>；閥 <code>requires:&#39;nib&#39;</code>、<code>opens:&#39;door&#39;</code>；門（<code>exit</code> 類型）在 <code>used=false</code> 時說 <code>lockedKey</code>，<code>used=true</code> 時 <code>cleared</code>。墨滴 <code>requires:{item:&#39;inkdrop&#39;, consume:true}</code>；章印 1 對 1。<code>items.ts</code> 在 <code>core/interact.ts</code> 的通用前置中處理，類型 handler 只管各自台詞。</li>
+<li><strong>N10 墨水閥連動</strong>：閥 <code>opens</code> 任一目標；目標類型決定「開」的意義——gate 開 = <code>passable</code>（仍顯示升起的門）；inkwall 開 = <code>presence</code> 為 false（消失）；inkbridge 開 = <code>presence</code> 為 true（出現）。三者都由 <code>links.ts</code> 擁有，切換式閥 = 閥的 <code>latch:false</code> 互動切換 <code>used</code>。</li>
+<li><strong>N2 / N3 / N4</strong>：plates 參數 <code>weight</code>、<code>countsPlayer</code>、<code>latch</code>；N1、N10 已涵蓋於上。</li>
+</ul>
+<hr>
+<h2 id="arch--7-遷移計畫行為不變對應規格-m0">7. 遷移計畫（行為不變，對應規格 M0）</h2>
+<h3 id="arch--71-驗收基準每步都要">7.1 驗收基準（每步都要）</h3>
+<ul>
+<li><code>npx vitest run</code> 584 通過（puzzle 36 個），<code>npm run build</code>（含 <code>tsc</code>）通過。</li>
+<li><strong>斷言不得改弱</strong>：<code>git diff -U0 tests/puzzle</code> 中，<code>expect(</code> 開頭的增刪行只允許 7.3 對照表內的機械替換；其餘只能是 import 路徑變更。以腳本檢查（<code>grep &#39;^[-+].*expect&#39;</code> 逐行比對對照表）。</li>
+<li>手動：<code>npm run dev</code> 開 <code>puzzle.html</code> 走一次玄關（可用 Playwright 透過 <code>window.__puzzle</code>）。</li>
+</ul>
+<h3 id="arch--72-步驟">7.2 步驟</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>目標</th>
+<th>動到的檔案</th>
+<th>風險</th>
+<th>驗證</th>
+<th>依賴</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>S1</td>
+<td>搬目錄：<code>logic→core</code>、<code>levels→content/levels/ch1</code>、<code>hud/input/css→ui/input</code>；只改 import</td>
+<td>全部 import；tests 只改路徑</td>
+<td>低</td>
+<td>7.1</td>
+<td>—</td>
+</tr>
+<tr>
+<td>S2</td>
+<td><code>ModeSpec</code> 收斂 H9 的 if；<code>presence.ts</code> 建立 <code>isActiveIn/solidsFor</code>，取代 H7 的 7 處；<code>trySwitchMode</code> 先記 <code>z3d</code>（H10）</td>
+<td>core/*、render/scene.ts</td>
+<td>中：切換落點</td>
+<td>既有切換 / 落點測試；新增「切換失敗時 z3d 還原」測試</td>
+<td>S1</td>
+</tr>
+<tr>
+<td>S3</td>
+<td><code>registry.ts</code> + <code>createWorld({mechanics})</code>；<code>step(w, ActionFrame)</code> 吸收 flip/reset/interact（保留 <code>stepWorld</code>、<code>trySwitchMode</code>、<code>interact</code>、<code>resetCrates</code> 匯出）</td>
+<td>core/*、tests/puzzle/helpers.ts（傳入機制表）</td>
+<td>中</td>
+<td>7.1；新增「ACTION_ORDER 與舊順序一致」測試</td>
+<td>S2</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>機制抽出：<code>basics</code>、<code>plates</code>（行為照舊，仍鎖定、不計數）、<code>links</code>（gate、<code>passable</code>）、<code>items</code>（<code>inv</code> 取代 hasKey；門用 <code>used</code> 取代 sealed）、<code>notes</code>、<code>exit</code></td>
+<td>mechanics/*、core/interact.ts、render/models/devices.ts:144</td>
+<td><strong>高</strong>：C8 鑰匙鏈（規格 M0 風險欄）</td>
+<td>先補行為鎖定測試（鑰匙 / 閥 / 門各狀態訊息）再改；7.3 替換</td>
+<td>S3</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>文字系統：<code>text/</code>、<code>content/text/zh-Hant</code>；所有字面值搬成 key（<strong>字串原樣</strong>）；<code>say(key)</code>；<code>puzzle.html</code> 靜態字改由 ui 產生</td>
+<td>text/<em>、content/</em>、core/<em>、mechanics/</em>、ui/*、puzzle.html</td>
+<td>中：漏字</td>
+<td>驗證器「key 齊全」；7.1；全字串 grep 測試：<code>src/puzzle/{core,mechanics}</code> 無 CJK 字元</td>
+<td>S4</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>輸入與外殼：<code>InputSource/Bindings</code>、<code>app/loop</code>、<code>app/app</code>（先只有 level 畫面）、<code>deriveHud</code>、<code>transitions</code></td>
+<td>app/<em>、input/</em>、ui/*、render/transitions.ts、main.ts</td>
+<td>中：手感</td>
+<td><code>deriveHud</code> 單元測試；手動遊玩</td>
+<td>S5（HUD 文字）</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>渲染登錄表、主題、scene 對帳、<code>LevelDef.decor</code>（玄關裝飾座標搬進資料）</td>
+<td>render/*</td>
+<td>低～中：外觀回歸</td>
+<td>截圖比對 S6 前後（Playwright，兩模式各一張）</td>
+<td>S4</td>
+</tr>
+<tr>
+<td>S8</td>
+<td>內容登錄表、章節、<code>meta/save</code>（遷移含舊 key）、<code>settings</code>、選單畫面</td>
+<td>content/levels/index.ts、meta/<em>、ui/screens/</em>、app/app.ts</td>
+<td>中</td>
+<td>新測試：遷移（舊 key→v2、壞 JSON 回退、v2 原樣）、解鎖規則</td>
+<td>S6</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>devtools：<code>validateLevel</code>、<code>runScript</code>（helpers 改薄包裝）、<code>shortcutScan</code>；<code>architecture.test.ts</code> 啟用</td>
+<td>devtools/<em>、tests/puzzle/</em></td>
+<td>低</td>
+<td>用玄關跑：驗證器 0 issue；以 <code>runScript</code> 重寫一份通關（舊測試保留）</td>
+<td>S4</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>必須序列</strong>：S1 → S2 → S3 → S4（核心 API 定型）。</li>
+<li><strong>可平行</strong>（S4 完成後）：{S5 → S6 → S8} 一條線；S7；S9。S7 與 S6 都碰 <code>render/scene.ts</code> 的建構參數，約定 S7 先合併或由同一子任務做<span class="tg t-inf">〔推論〕</span>。</li>
+<li><strong>派工建議</strong>（給主 agent；這是 TypeScript 前端專案，<code>sb-circus</code> 系列為 Spring Boot 專用，不適用）：<ul>
+<li>子任務 A（general-purpose，序列）：S1～S4，每步一個 commit。</li>
+<li>子任務 B：S5 → S6 → S8。子任務 C：S7。子任務 D：S9（含架構測試）。B/C/D 可用 <code>isolation: worktree</code> 平行，合併時以 7.1 驗收。</li>
+<li>每個子任務完成後由另一個子任務只讀審查 <code>git diff tests/puzzle</code>（防斷言被改弱）。</li>
+</ul>
+</li>
+<li>M0 的新功能（N9 一般化、<code>abilities</code>、存檔遷移、章節選單）在 S4/S8 內完成；<strong>N14 計數修正、N2/N4/N13 留到 M1</strong>，避免 M0 混入行為改變。</li>
+</ul>
+<h3 id="arch--73-測試的機械替換對照唯一允許的斷言改寫">7.3 測試的機械替換對照（唯一允許的斷言改寫）</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>現況</th>
+<th>替換為</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>expect(w.hasKey).toBe(B)</code></td>
+<td><code>expect(hasItem(w, &#39;nib&#39;)).toBe(B)</code></td>
+<td>foyerSolution.test.ts:35,124,137,145</td>
+</tr>
+<tr>
+<td><code>expect(w.sealed).toBe(B)</code></td>
+<td><code>expect(get(w, &#39;door&#39;).used).toBe(!B)</code></td>
+<td>foyerSolution.test.ts:73,227；puzzleLogic.test.ts:215</td>
+</tr>
+<tr>
+<td><code>import { MSG_X } from &#39;…/logic/…&#39;</code></td>
+<td><code>import { MSG_X } from &#39;./msgs&#39;</code>（<code>tests/puzzle/msgs.ts</code> = 以 zh-Hant 解析後的字串）</td>
+<td>兩個測試檔的 import 行</td>
+</tr>
+</tbody></table></div>
+<p><code>w.msg</code> 仍是解析後的字串（<code>createWorld</code> 注入 <code>text</code>），所以 <code>expect(w.msg).toBe(&#39;這裡塞不下&#39;)</code> 等字面值斷言不動。</p>
+<hr>
+<h2 id="arch--8-取捨與風險">8. 取捨與風險</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>取捨 / 風險</th>
+<th>決定與理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>T1</td>
+<td><strong>不做 ECS</strong></td>
+<td>物件數百、機制 10 個、每機制只關心少數類型；現有 <code>ObjState</code> 陣列 + 掛點已足夠。ECS 會重寫全部 2.3k 行並讓 36 個測試大改，與 M0「行為不變」衝突</td>
+</tr>
+<tr>
+<td>T2</td>
+<td><strong>不做事件匯流排（訂閱式）</strong></td>
+<td>只用 <code>world.events</code> 外送匣（單向、每幀清空），服務提示卡關偵測與統計（規格 7.1、8）。機制之間用查詢函式；訂閱式匯流排會讓執行順序隱形，不利確定性</td>
+</tr>
+<tr>
+<td>T3</td>
+<td><strong>不做插件系統 / 動態註冊</strong></td>
+<td>機制表是一個明確陣列；順序可讀、可測。「註冊」= 在 index 加一行</td>
+</tr>
+<tr>
+<td>T4</td>
+<td><strong>不做狀態機函式庫</strong></td>
+<td>外殼 7 個畫面，一個 switch 即可；遊戲內狀態由 <code>step</code> 推進</td>
+</tr>
+<tr>
+<td>T5</td>
+<td><strong>step 就地修改而非不可變</strong></td>
+<td>效能與現有程式風格；純度靠 snapshot/restore 滿足（4.1）</td>
+</tr>
+<tr>
+<td>T6</td>
+<td><strong>不做動態 import、不做 instancing / 物件池</strong></td>
+<td>4.8、4.5 已述；資料量與物件數不需要</td>
+</tr>
+<tr>
+<td>T7</td>
+<td><strong>N11/N12/N17/N18 不預留任何介面</strong></td>
+<td>規格已否決；<code>ModeSpec</code> 只有兩筆，不為第三視角設計</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>風險：<code>presence/visibility</code> 掛點讓 <code>isActiveIn</code> 每次呼叫跑多個函式</td>
+<td>估計每步數千次呼叫、各為 O(1)<span class="tg t-inf">〔推論〕</span>；若 profiling 顯示問題，再加「每步快取 solidsFor」——快取失效點只有動作與 afterPhysics，容易加</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>風險：mechanics 互相 import 演變成網狀</td>
+<td>架構測試禁環；只允許 import 查詢函式（命名 <code>is*/get*</code>）</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>風險：declaration merging 讓型別分散在各機制檔</td>
+<td>好處是新增零核心修改；以「每機制檔開頭集中宣告」慣例緩解；驗證器檢查未註冊類型</td>
+</tr>
+<tr>
+<td>T11</td>
+<td>風險：<code>w.msg</code> 同時存 key 與解析字串，是為相容現有測試的過渡設計</td>
+<td>新測試一律斷言 <code>msgKey</code>；未來文案大改時再把舊測試改為 key 斷言（屆時劇情 4 節也要求同步改測試）</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>風險：捷徑掃描給人「已證明無捷徑」的錯覺</td>
+<td>文件與測試名稱明寫「取樣」；N16 依規格對每個可留記號高度 × 深度取樣</td>
+</tr>
+<tr>
+<td>T13</td>
+<td><strong>刻意不做</strong>：關卡編輯器、遠端存檔、音效系統、本地化工具鏈、內容熱重載</td>
+<td>規格未要求</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="arch--9-決策紀錄已全部確認2026-11-02使用者回覆全部照建議">9. 決策紀錄（已全部確認，2026-11-02，使用者回覆「全部照建議」）</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>問題</th>
+<th>決定</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Q1</td>
+<td>M0 遷移時，是否允許測試中 <code>w.hasKey</code>、<code>w.sealed</code>、<code>MSG_*</code> 匯入路徑做 7.3 的<strong>等價機械替換</strong>？（否則只能在 World 保留兩個相容欄位）</td>
+<td><strong>允許</strong>；替換表固定、以腳本檢查，其餘斷言一字不改（<strong>已確認</strong>）</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>規格內部矛盾（規格已改 H2，並列為規格 A2）：4-2b 說「物不在刀上，影還在」（caster 不受剖面影響），H2 說「只有剖到的花盆會投影」（caster 受剖面影響）。兩者需同一條規則</td>
+<td><strong>採 4-2b</strong>（caster 不受剖面過濾、影子要剖到牆面帶才存在）；H2 改寫為「剖到牆面才看得到影子」的變奏。架構兩者都放得下（只差 light 的 caster 來源是否經 section 過濾）（<strong>已確認</strong>）</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>謎題 id 格式：1-2 原本的圈號編號是否統一為 <code>1-2a</code>～<code>1-2d</code>（存檔 / 統計 key 用）</td>
+<td><strong>是</strong>；顯示用編號放文字表（<strong>已確認</strong>）</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>瀏覽器主迴圈改為固定步長 1/60（與測試一致，可錄製試玩輸入回放 G1 問題），手感可能有極細微差異</td>
+<td><strong>採用</strong>，於 S6 實作並手動確認（<strong>已確認</strong>）</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變</td>
+<td><strong>只能在 3D</strong>；2D 按下提示「回到完成版再切換剖面」（<strong>已確認</strong>）</td>
+</tr>
+</tbody></table></div>
+</article>
+</main>
+</div>
+<div id="scrim"></div>
+<button id="top" aria-label="回到頂端">↑</button>
+<script>
+(function(){
+var P='puzzle-docs:',$=function(s,r){return (r||document).querySelector(s)},$$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var docs=$$('.doc'),cur=null;
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(P+k);localStorage.setItem(P+k,v)}catch(e){return null}}
+// theme
+function theme(d){document.documentElement.classList.toggle('dark',d);$('#dm').textContent=d?'☀️':'🌙'}
+var sv=ls('theme');theme(sv?sv==='dark':matchMedia('(prefers-color-scheme: dark)').matches);
+$('#dm').onclick=function(){var d=!document.documentElement.classList.contains('dark');theme(d);ls('theme',d?'dark':'light')};
+// toc
+var toc=$('#toc');
+docs.forEach(function(d){
+ var g=document.createElement('div');g.className='grp';g.textContent=d.dataset.title;toc.appendChild(g);
+ $$('h2,h3',d).forEach(function(h){var a=document.createElement('a');a.href='#'+h.id;a.className=h.tagName==='H2'?'l2':'l3';a.textContent=h.textContent;a.dataset.doc=d.dataset.doc;a.dataset.t=h.id;toc.appendChild(a)});
+});
+// collapse
+function applyCollapse(d){
+ var hide=null,kids=Array.prototype.slice.call(d.children);
+ kids.forEach(function(e){
+  var m=/^H([1-6])$/.exec(e.tagName);e.classList.remove('hid');
+  if(m){var l=+m[1];if(hide!==null&&l<=hide)hide=null;if(hide===null&&e.classList.contains('collapsed'))hide=l;}
+  else if(hide!==null)e.classList.add('hid');
+ });
+}
+function setAll(c){var d=$('.doc.show');$$('h2,h3,h4',d).forEach(function(h){h.classList.toggle('collapsed',c)});applyCollapse(d)}
+docs.forEach(function(d){$$('h2,h3,h4',d).forEach(function(h){h.onclick=function(){h.classList.toggle('collapsed');applyCollapse(d)}})});
+$('#ex').onclick=function(){setAll(false)};$('#co').onclick=function(){setAll(true)};
+// reveal ancestors of an element
+function reveal(el){var d=el.closest('.doc'),ch=d.children,i=Array.prototype.indexOf.call(ch,el),need=7,ch2=[];
+ for(var j=i;j>=0&&need>1;j--){var m=/^H([1-6])$/.exec(ch[j].tagName);if(m&&+m[1]<need){need=+m[1];if(j!==i||0)ch2.push(ch[j])}}
+ ch2.forEach(function(h){h.classList.remove('collapsed')});applyCollapse(d)}
+// tabs
+function show(name,keepScroll){
+ docs.forEach(function(d){d.classList.toggle('show',d.dataset.doc===name)});
+ $$('.tab').forEach(function(t){t.setAttribute('aria-selected',t.dataset.doc===name)});
+ $$('#toc a').forEach(function(a){a.style.display=a.dataset.doc===name?'':'none'});
+ $$('#toc .grp').forEach(function(g,i){g.style.display=docs[i].dataset.doc===name?'':'none'});
+ cur=name;clearMarks();$('#q').value='';$('#cnt').textContent='';ls('doc',name);
+ if(!keepScroll)window.scrollTo(0,0);spy();
+}
+$$('.tab').forEach(function(t){t.onclick=function(){location.hash=t.dataset.doc}});
+function route(){
+ var h=decodeURIComponent(location.hash.slice(1)),name=h.split('--')[0];
+ if(!docs.some(function(d){return d.dataset.doc===name}))name=ls('doc')||docs[0].dataset.doc;
+ if(!docs.some(function(d){return d.dataset.doc===name}))name=docs[0].dataset.doc;
+ if(name!==cur)show(name,true);
+ var el=h&&document.getElementById(h);
+ if(el&&el.closest('.doc').dataset.doc===name){reveal(el);setTimeout(function(){el.scrollIntoView()},0)}
+ else if(!el)window.scrollTo(0,0);
+ closeDrawer();
+}
+window.addEventListener('hashchange',route);
+// drawer
+function closeDrawer(){document.body.classList.remove('drawer')}
+$('#menu').onclick=function(){document.body.classList.toggle('drawer')};$('#scrim').onclick=closeDrawer;
+toc.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&location.hash==='#'+a.dataset.t){route()}});
+// scrollspy
+var tick=false;
+function spy(){
+ var d=$('.doc.show');if(!d)return;var best=null,y=innerWidth<=900?60:150;
+ $$('h2,h3',d).forEach(function(h){if(h.offsetParent!==null&&h.getBoundingClientRect().top<=y)best=h.id});
+ $$('#toc a').forEach(function(a){var on=a.dataset.t===best;a.classList.toggle('on',on);if(on&&a.offsetParent&&!tick){var r=a.getBoundingClientRect(),t=toc.getBoundingClientRect();if(r.top<t.top||r.bottom>t.bottom)toc.scrollTop+=r.top-t.top-80}});
+ $('#top').classList.toggle('show',window.scrollY>400);
+}
+addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(function(){tick=false;spy()})}},{passive:true});
+// search
+var marks=[],idx=-1;
+function clearMarks(){marks.forEach(function(m){var p=m.parentNode;if(p){p.replaceChild(document.createTextNode(m.textContent),m);p.normalize()}});marks=[];idx=-1}
+function doSearch(){
+ clearMarks();var q=$('#q').value.trim();if(!q){$('#cnt').textContent='';return}
+ var d=$('.doc.show');setAll(false);
+ var w=document.createTreeWalker(d,NodeFilter.SHOW_TEXT),nodes=[],n;while(n=w.nextNode())nodes.push(n);
+ var ql=q.toLowerCase();
+ nodes.forEach(function(t){
+  var s=t.nodeValue,sl=s.toLowerCase(),i=sl.indexOf(ql);if(i<0)return;
+  var f=document.createDocumentFragment(),last=0;
+  while(i>=0){f.appendChild(document.createTextNode(s.slice(last,i)));var m=document.createElement('mark');m.textContent=s.slice(i,i+q.length);f.appendChild(m);marks.push(m);last=i+q.length;i=sl.indexOf(ql,last)}
+  f.appendChild(document.createTextNode(s.slice(last)));t.parentNode.replaceChild(f,t);
+ });
+ $('#cnt').textContent=marks.length?'0/'+marks.length:'無符合';
+ if(marks.length)go(1);
+}
+function go(dir){
+ if(!marks.length)return;
+ if(idx>=0)marks[idx].classList.remove('cur');
+ idx=(idx+dir+marks.length)%marks.length;var m=marks[idx];m.classList.add('cur');
+ m.scrollIntoView({block:'center'});$('#cnt').textContent=(idx+1)+'/'+marks.length;
+}
+var qt;$('#q').addEventListener('input',function(){clearTimeout(qt);qt=setTimeout(doSearch,200)});
+$('#q').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();go(e.shiftKey?-1:1)}});
+$('#next').onclick=function(){go(1)};$('#prev').onclick=function(){go(-1)};
+$('#top').onclick=function(){window.scrollTo({top:0})};
+// header height var
+function hh(){document.documentElement.style.setProperty('--hh',$('#hd').offsetHeight+'px');document.documentElement.style.scrollPaddingTop=(innerWidth<=900?16:$('#hd').offsetHeight+16)+'px'}
+hh();addEventListener('resize',hh);
+route();hh();
+})();
+</script>
+</body>
+</html>
