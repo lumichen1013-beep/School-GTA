@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, run, walkTo, place, DT } from './helpers';
+import { onCrateAtValve } from './helpers';
 import { stepWorld } from '../../src/puzzle/core/step';
 import { MSG_FELL, MSG_GATE, MSG_CRATE_RESET } from './msgs';
 import { trySwitchMode } from '../../src/puzzle/core/switchMode';
@@ -212,7 +213,7 @@ describe('狀態機、檢查點與掉落', () => {
     const w = newWorld();
     place(w, 15, 0, -5.2);
     expect(findTarget(w)).toBeNull();
-    place(w, 15, 0, -5.2, '2d');
+    onCrateAtValve(w);
     expect(findTarget(w)?.def.id).toBe('valve');
     interact(w);
     expect(get(w, 'door').used).toBe(false);
@@ -230,7 +231,7 @@ describe('狀態機、檢查點與掉落', () => {
     const w = newWorld();
     place(w, -17, 0, -5.2);
     interact(w);
-    expect(w.msg).toBe('看不見的地方，不代表不存在。換個角度，它就在那裡。');
+    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的。');
   });
 
   it('閘門關著時可查看提示，打開後不再互動也不擋路', () => {

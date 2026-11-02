@@ -4,6 +4,7 @@ import { trySwitchMode } from '../../src/puzzle/core/switchMode';
 import { findTarget, interact } from '../../src/puzzle/core/interact';
 import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from './msgs';
 import { hasItem } from '../../src/puzzle/mechanics/items';
+import { resetCrates } from '../../src/puzzle/core/push';
 import type { World } from '../../src/puzzle/core/types';
 
 const get = (w: World, id: string) => w.byId.get(id)!;
@@ -67,7 +68,19 @@ function solveGate(w: World): void {
 
 /** 終章：2D 墨水閥 → 出口門 */
 function solveExit(w: World): void {
+  // 1-2d：墨水閥在高處 (y=2.3)；物歸原處讓木箱回到起點 (踏板 / 閘門已鎖定)，3D 推到 z=0、推過門洞到 x≈15，2D 跳上箱頂
+  resetCrates(w);
+  expect(get(w, 'gate').used).toBe(true);
+  walkTo(w, 6, null);
+  walkTo(w, null, 3.5);
+  walkTo(w, 4.5, null);
+  walkTo(w, null, 0.9);                    // 從 +z 側往 -z 推：木箱 z 2 → 0
+  walkTo(w, 3, null);
+  walkTo(w, null, 0);
+  walkTo(w, 14.1, null);                   // 沿 z=0 往右推過門洞：木箱 x ≈ 15
+  expect(get(w, 'crate').x).toBeCloseTo(15, 1);
   expect(trySwitchMode(w).ok).toBe(true);
+  expect(hopUntil(w, 1, () => w.player.onGround && w.player.y > 1.05 && w.player.x > 14.5)).toBe(true);
   walkTo(w, 15, null);
   expect(findTarget(w)?.def.id).toBe('valve');
   interact(w);

@@ -52,6 +52,9 @@ export type ObjDef = { [K in ObjType]: ObjBase & { type: K } & ObjKinds[K] }[Obj
 
 export interface Checkpoint { minX: number; x: number; y: number; z: number }
 
+/** 謎題 (architecture 4.10 PuzzleDef 的子集)：id 用規格編號 ('1-2a')，titleKey = 顯示編號與名稱 (文字表) */
+export interface PuzzleRef { id: string; titleKey: TextKey }
+
 export interface LevelDef {
   id: string;
   titleKey: TextKey;
@@ -62,6 +65,8 @@ export interface LevelDef {
   /** 站上 x ≥ minX 的地面後，掉落改回此處重生 (依序遞進) */
   checkpoints?: Checkpoint[];
   narrationKey: TextKey;
+  /** 本關謎題 (依解題順序；目前只供文字 / 測試 / 驗證器使用) */
+  puzzles?: PuzzleRef[];
   /** 通關畫面的「下一間房」文字 */
   nextKey: TextKey;
   /** 呈現主題 id (render/themes)；未給 = 章節主題 */

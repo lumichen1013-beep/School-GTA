@@ -38,8 +38,16 @@ const FOYER: readonly Cmd[] = [
   { act: 'flip' },
   { walkTo: [1.5, null] }, { walkTo: [null, 0] }, { walkTo: [12, null] },
   { expect: w => expect(w.player.x).toBeCloseTo(12, 1), label: '③ 過閘門' },
+  // 1-2d：物歸原處 (踏板 / 閘門已鎖定) → 3D 把木箱推到 z=0、推過門洞到 x≈15 → 2D 跳上箱頂轉高處的墨水閥
+  { act: 'reset' },
+  { expect: w => { expect(get(w, 'gate').used).toBe(true); expect(get(w, 'crate').x).toBe(4.5); }, label: '1-2d 物歸原處' },
+  { walkTo: [6, null] }, { walkTo: [null, 3.5] }, { walkTo: [4.5, null] }, { walkTo: [null, 0.9] },
+  { walkTo: [3, null] }, { walkTo: [null, 0] }, { walkTo: [14.1, null] },
+  { expect: w => expect(get(w, 'crate').x).toBeCloseTo(15, 1), label: '1-2d 木箱過門洞' },
   // 終章：2D 墨水閥 → 3D 出口門
-  { act: 'flip' }, { walkTo: [15, null] }, target('valve'),
+  { act: 'flip' },
+  { hop: 1, until: w => w.player.onGround && w.player.y > 1.05 && w.player.x > 14.5, label: '1-2d 跳上箱頂' },
+  { walkTo: [15, null] }, target('valve'),
   { act: 'interact' }, { expect: w => expect(get(w, 'door').used).toBe(true) },
   { act: 'flip' }, { walkTo: [18, -4.6] }, target('door'),
   { act: 'interact' }

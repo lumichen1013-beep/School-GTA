@@ -161,3 +161,44 @@ describe('渲染：深度打架 (共面)：1-1 門廊', () => {
     view.dispose();
   });
 });
+
+describe('渲染：深度打架 (共面)：1-2 玄關改版 (1-2d)', () => {
+  beforeAll(stubCanvas);
+
+  it('1-2d 完成時的配置 (閘門開、木箱推到出口區閥下、閥轉開、門解封) 3D 鏡頭看得到的面沒有共面', () => {
+    const w = newWorld();
+    for (const id of ['plate', 'gate', 'valve', 'door']) w.byId.get(id)!.used = true;
+    const c = w.byId.get('crate')!;
+    c.x = 15; c.z = 0;
+    const view = new PuzzleScene(w);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 300; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene)).toEqual([]);
+    view.dispose();
+  });
+
+  it('藏寶圖 (正交鏡頭從 +z 看)：高處墨水閥的網格 (含新增墨點) 彼此、與其他物件的朝前面都不共面', () => {
+    const w = newWorld();
+    const c = w.byId.get('crate')!;
+    c.x = 15; c.z = 0;
+    w.player.mode = '2d';
+    const view = new PuzzleScene(w);
+    const cams = new PuzzleCameras(w);
+    view.update('2d', 1 / 60, 0, cams.active('2d'));
+    view.scene.updateMatrixWorld(true);
+    const valveRoot = view.modelRoot('valve')!;
+    const inValve = (m: THREE.Object3D) => { for (let o: THREE.Object3D | null = m; o; o = o.parent) if (o === valveRoot) return true; return false; };
+    const faces: Face[] = [];
+    view.scene.traverseVisible(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const look = lookOf(m);
+      if (look) faces.push(...facesOf(m, look).filter(f => f.ax === 'z' && f.dir > 0));
+    });
+    const mine = faces.filter(f => inValve(f.mesh));
+    expect(mine.length).toBeGreaterThan(8);
+    const bad = mine.flatMap(a => faces.filter(b => b.mesh !== a.mesh && Math.abs(a.c - b.c) <= 1e-4 && a.look !== b.look
+      && Math.min(a.u1, b.u1) - Math.max(a.u0, b.u0) > 1e-4 && Math.min(a.w1, b.w1) - Math.max(a.w0, b.w0) > 1e-4).map(b => `${a.name}@${a.c.toFixed(3)} / ${b.name}`));
+    expect(bad).toEqual([]);
+  });
+});

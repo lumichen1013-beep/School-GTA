@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, place, DT } from '../helpers';
+import { onCrateAtValve } from '../helpers';
 import { FIXED_DT, LevelLoop } from '../../../src/puzzle/app/loop';
 import { step } from '../../../src/puzzle/core/step';
 import { interact } from '../../../src/puzzle/core/interact';
@@ -53,7 +54,7 @@ describe('LevelLoop：固定步長 1/60', () => {
     expect(w.msgSeq).toBe(seq);
     loop.frame(1 / 30, still);
     expect(w.msgSeq).toBe(seq + 1);
-    expect(w.msg).toBe('看不見的地方，不代表不存在。換個角度，它就在那裡。');
+    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的。');
   });
 
   it('切換成功 → 過場鎖：期間不推進世界、丟棄按鍵；換畫面點呼叫 onSwap，結束後恢復', () => {
@@ -94,7 +95,7 @@ describe('LevelLoop：固定步長 1/60', () => {
   it('通關只通知一次，之後不再推進', () => {
     const w = newWorld();
     place(w, 8.5, 2.5, -4.5, '2d'); interact(w);
-    place(w, 15, 0, -5.2, '2d'); interact(w);
+    onCrateAtValve(w); interact(w);
     place(w, 18, 0, -4.6);
     let cleared = 0;
     const loop = new LevelLoop(w, null, { onCleared: () => cleared++ });

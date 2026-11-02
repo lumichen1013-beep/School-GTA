@@ -157,7 +157,7 @@ export function doorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   return { root: g, update };
 }
 
-/** 墨水閥 (僅圖紙)：墨藍閥輪 + 輪輻 + 紫色墨瓶 + 脈動光暈；轉開後光暈熄滅、閥輪轉一圈 */
+/** 墨水閥 (僅圖紙)：墨藍閥輪 + 輪輻 + 紫色墨瓶 + 脈動光暈 + 外圈墨點 (只在藏寶圖存在的符號，同墨牆，P4)；轉開後光暈熄滅、閥輪轉一圈 */
 export function valveModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   const s = d.w;
@@ -184,6 +184,15 @@ export function valveModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     wheel.add(spoke);
   }
   g.add(wheel);
+  // 外圈墨點 (不隨閥輪轉；在閥輪 / 輪軸最前面 (0.12) 之前，不與閥輪共面)
+  const dots: THREE.Mesh[] = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4 + Math.PI / 8;
+    const dot = p.mesh(new THREE.CircleGeometry(0.05, 12), pal.inkGlow, { outline: false, shadow: false });
+    dot.position.set(Math.cos(a) * s * 0.66, s / 2 + Math.sin(a) * s * 0.66, 0.14);
+    dots.push(dot);
+    g.add(dot);
+  }
   const drops: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const drop = p.mesh(new THREE.SphereGeometry(0.045, 8, 6), pal.inkBlue, { outline: false, shadow: false });
@@ -196,6 +205,7 @@ export function valveModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     wheel.rotation.z = approach(wheel.rotation.z, used ? -Math.PI * 2 : Math.sin(c.t * 1.5) * 0.08, c.dt * 2);
     halo.material.opacity = used ? approach(halo.material.opacity, 0, c.dt * 2) : 0.55 + 0.3 * Math.sin(c.t * 3);
     halo.scale.setScalar(1.7 + 0.2 * Math.sin(c.t * 3));
+    dots.forEach((m, i) => m.scale.setScalar(0.85 + 0.15 * Math.sin(c.t * 2 + i * 0.7)));
     drops.forEach((dr, i) => {
       const f = (c.t * 0.6 + i / 3) % 1;
       dr.visible = !used;

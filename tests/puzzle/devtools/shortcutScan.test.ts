@@ -119,7 +119,8 @@ describe('shortcutScan：反向驗證掃描器有效 (故意放寬的關卡必�
   });
 
   it('開場先給筆尖 → 終章的門被打開 (setup 生效)', () => {
-    const r = scanShortcuts({ ...EXIT, setup: w => addItem(w, 'nib', 1) });
+    // 1-2d：墨水閥在高處，木箱擺到閥下、玩家站箱頂才搆得到
+    const r = scanShortcuts({ ...EXIT, movable: [{ id: 'crate', xs: [15], zs: [0] }], playerAt: [...EXIT.playerAt, { on: 'crate' }], setup: w => addItem(w, 'nib', 1) });
     expect(r.hits.map(h => h.flag)).toContain('used:door');
     expect(r.hits.map(h => h.flag)).toContain('cleared');
   });

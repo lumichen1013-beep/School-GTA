@@ -51,9 +51,9 @@ const covers = (v: Visibility, m: Mode): boolean => v === 'both' || v === m;
 
 interface KeyRef { key: string; obj?: ObjId }
 
-/** 關卡引用的文字 key (順序：title、narration、next，然後每個物件的 label / lockedText / useText / note.textKey) */
+/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / note.textKey) */
 function levelKeyRefs(level: LevelDef): KeyRef[] {
-  const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey].map(key => ({ key }));
+  const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey)].map(key => ({ key }));
   for (const o of level.objects) {
     const keys = [o.labelKey, o.lockedText, o.useText, o.type === 'note' ? o.textKey : undefined].filter((k): k is string => k !== undefined);
     refs.push(...keys.map(key => ({ key, obj: o.id })));

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, place } from '../helpers';
+import { onCrateAtValve } from '../helpers';
 import { TEXT } from '../msgs';
 import { deriveHelp, deriveHud } from '../../../src/puzzle/app/hudModel';
 import { DEFAULT_BINDINGS, mergeBindings } from '../../../src/puzzle/input/bindings';
@@ -26,8 +27,8 @@ describe('deriveHud (純函式)', () => {
     interact(w);
     const m = deriveHud(w, TEXT, view);
     expect(m.items).toEqual([{ id: 'nib', n: 1, name: '鋼筆筆尖' }]);
-    expect(m.toast).toEqual({ seq: w.msgSeq, text: '拿到了「鋼筆筆尖」。它還帶著一點未乾的墨。' });
-    place(w, 15, 0, -5.2, '2d');
+    expect(m.toast).toEqual({ seq: w.msgSeq, text: '拿到了「鋼筆筆尖」。筆尖還是濕的。像有人剛用過。' });
+    onCrateAtValve(w);
     expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 轉動　墨水閥');
     place(w, 18, 0, -4.6);
     expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 開門　出口門');

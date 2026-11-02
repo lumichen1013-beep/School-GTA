@@ -34,7 +34,7 @@ describe('step(ActionFrame)', () => {
     place(w, -17, 0, -5.2);
     const seq = w.msgSeq;
     step(w, { moveX: 0, moveZ: 0, jump: false, pressed: ['interact', 'reset'] }, DT);
-    expect(w.msg).toBe('看不見的地方，不代表不存在。換個角度，它就在那裡。');
+    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的。');
     expect(w.msgSeq).toBe(seq + 2);
   });
 

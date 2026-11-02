@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, place, run } from '../helpers';
+import { onCrateAtValve } from '../helpers';
 import { findTarget, interact } from '../../../src/puzzle/core/interact';
 import { resetCrates } from '../../../src/puzzle/core/push';
 import type { World } from '../../../src/puzzle/core/types';
 
 // S4 行為鎖定：鑰匙 / 閥 / 門 / 閘門 / 字條在各狀態下的訊息與結果 (只看行為，不看內部旗標)
-const MSG_KEY = '拿到了「鋼筆筆尖」。它還帶著一點未乾的墨。';
+const MSG_KEY = '拿到了「鋼筆筆尖」。筆尖還是濕的。像有人剛用過。';
 const MSG_VALVE_DRY = '墨水閥乾涸了。需要一支能引墨的東西。';
 const MSG_VALVE_OPEN = '鋼筆筆尖點下，墨線像退潮一樣散開了。';
 const MSG_DOOR_SEALED = '門被墨線封印著。藏寶圖裡似乎有它的機關。';
@@ -20,7 +21,7 @@ function takeKey(w: World): void {
 }
 function openValve(w: World): void {
   takeKey(w);
-  place(w, 15, 0, -5.2, '2d');
+  onCrateAtValve(w);
   interact(w);
 }
 
@@ -53,7 +54,7 @@ describe('行為鎖定：筆尖 (key)', () => {
 describe('行為鎖定：墨水閥 (valve)', () => {
   it('沒有筆尖：乾涸訊息、閥未轉、仍可再互動', () => {
     const w = newWorld();
-    place(w, 15, 0, -5.2, '2d');
+    onCrateAtValve(w);
     interact(w);
     expect(w.msg).toBe(MSG_VALVE_DRY);
     expect(get(w, 'valve').used).toBe(false);
@@ -155,7 +156,7 @@ describe('行為鎖定：閘門與字條', () => {
     interact(w);
     const seq = w.msgSeq;
     interact(w);
-    expect(w.msg).toBe('站得夠高之前，先找一個肯讓你踩的。');
+    expect(w.msg).toBe('想要高一點？我小時候都踩著朋友的肩膀。');
     expect(w.msgSeq).toBe(seq + 1);
   });
 });
