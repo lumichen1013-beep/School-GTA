@@ -4,6 +4,7 @@
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2（提示改便利貼） | 2026-11-02 | 移除提示角色與提示面板；提示改為場景 `note` 物件（`hint` 屬性、延遲顯字、預算檢查）；L4 改為暫停選單攻略筆記頁（規格 7.1、7.1.2、7.1.3、H10） |
 > | v0.2 | 2026-11-02 | 第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；`HintDef` / `PuzzleDef` / `Settings` 格式更新；謎題 id `1-2a`～`1-2d`、`5-5a`～`5-5c` |
 
 > 狀態：草案（2026-11-02），對應 `game-spec-v0.2.md`（下稱「規格」）與 `story-bible-v0.1.md`（下稱「劇情」）。基準程式為 commit `52635aa` 的 `src/puzzle/`（20 檔、約 2.3k 行）與 `tests/puzzle/`（36 個測試；全專案 `vitest run` 共 584 個測試）。
@@ -162,7 +163,7 @@ src/puzzle/
     levels/index.ts          LEVELS 登錄表（id、章、解鎖、def）
     levels/ch1/1-2-foyer.ts  現有玄關（export 名仍為 foyer）
     levels/ch1/…、ch2/…      各關一檔（22 + 3）
-    text/zh-Hant/index.ts    zh-Hant 文字表（ui / msg / obj / lvl / hint / story / term 分檔）
+    text/zh-Hant/index.ts    zh-Hant 文字表（ui / msg / obj / lvl / note / guide / story / term 分檔）
   text/                      L2' 文字系統
     text.ts                  createText(bundle, fallback)、插值、[[term.*]] 解析
   meta/                      L3 外圍規則
@@ -171,7 +172,7 @@ src/puzzle/
     settings.ts              Settings、預設值、校正
     stats.ts                 puzzle:stats
     progress.ts              解鎖規則、能力計算
-    hints.ts                 HintStrategy（timed/always/off）、卡關偵測
+    hints.ts                 NoteRevealStrategy（timed/always/off）、卡關偵測、攻略筆記解鎖
   input/                     L4 輸入
     types.ts                 InputSource、Bindings、ShellAction
     bindings.ts              DEFAULT_BINDINGS、重綁合併
@@ -182,17 +183,16 @@ src/puzzle/
     materials.ts             Painter 沿用（2D/3D 雙材質）
     textures.ts              沿用
     transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
-    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線）
+    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線、便利貼浮現字跡與邊角發光）
     themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組
     models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
     decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯…由關卡資料擺放）
     debug.ts                 DEV：碰撞盒線框（可選）
   ui/                        L4 DOM
-    hud.ts                   依 HudModel 繪製（模式、物品列、提示、吐司）
+    hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
     icons.ts                 物品 id → SVG
-    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）
-    hintPanel.ts             小格提示面板
+    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的便利貼，唯讀）、guide（社長的攻略筆記頁，攻略模式）
     puzzle.css               沿用
   app/                       L5 外殼
     app.ts                   畫面狀態機
@@ -497,11 +497,11 @@ export class PuzzleScene {
 ### 4.6 輸入層（`input/`）
 
 ```ts
-export type ShellAction = 'restart' | 'hint' | 'skip' | 'menu';
+export type ShellAction = 'restart' | 'notes' | 'menu';   // 'skip' 移到攻略筆記頁內（只限擴充題）
 export type InputAction = WorldAction | ShellAction;
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';
 export type Bindings = Record<InputAction | Axis, string[]>;   // KeyboardEvent.code
-export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H hint（規格 N5/N8/4.1/7.1）
+export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H notes（重看已出現的便利貼；規格 N5/N8/4.1/7.1）
 
 export interface InputSource {
   /** 每幀取樣：持續軸 + 本幀新按下的動作（取走即清空） */
@@ -528,16 +528,16 @@ type Screen =
 資料流（單向）：
 
 ```
-InputSource.poll ─► ShellAction ─► App（restart/hint/menu/skip）
-                └─► ActionFrame ─► step(world) ─► world.events ─► meta（hints 計數、stats、save）
+InputSource.poll ─► ShellAction ─► App（restart/notes/menu）
+                └─► ActionFrame ─► step(world) ─► world.events ─► meta（便利貼顯字計時與卡關計數、stats、save）
                                          │
-                                         ├─► deriveHud(world, text, hintState, bindings) ─► ui.render(HudModel)
+                                         ├─► deriveHud(world, text, noteState, bindings) ─► ui.render(HudModel)
                                          └─► PuzzleScene.update(world)
 UI 按鈕 ─► App 指令（不直接改 world）
 ```
 
 - `app/loop.ts`：固定步長 1/60 累加器（測試 `DT=1/60` 相同；決策 Q4 已確認）、過場鎖 0.3 秒期間不呼叫 `step`（沿用 `game.ts:90-101` 語意）。
-- `deriveHud` 是純函式（可在 Node 測）：`{ modeText, items: {id, n}[], prompt, toast, narration, hint }`；`ui/hud.ts` 只做 diff 後寫 DOM。
+- `deriveHud` 是純函式（可在 Node 測）：`{ modeText, items: {id, n}[], prompt, toast, narration, newNoteGlow }`（`newNoteGlow` 只是「有新便利貼浮現」的小圖示狀態，不顯示內容）；`ui/hud.ts` 只做 diff 後寫 DOM。
 - 畫面狀態機用一個 `switch` + `enter/exit`，不引入狀態機函式庫（只有 7 個狀態）。
 
 ### 4.8 內容載入（`content/levels/index.ts`、`meta/progress.ts`）
@@ -581,41 +581,49 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, hintAssist, assistMode, inkPalette, reduceMotion, keys }（hintAssist / assistMode 預設 false，規格 8）
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, inkPalette, reduceMotion, keys }（guideMode 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<PuzzleStat>): void;
 ```
 
 - **壞資料回退**：JSON 解析失敗或校正後不合法 → 原字串備份到 `puzzle:save:corrupt`、回傳預設存檔，不丟例外（遊戲照樣能開）。校正是手寫 type guard（不引入 zod 等相依）。
 - 關內不存檔（規格 Q4）：`snapshot` 只供記憶體內使用（回到謎題開始、Boss 階段），不寫 storage。
 
-### 4.10 提示系統（`content` 資料 + `meta/hints.ts` + `ui/hintPanel.ts`）
+### 4.10 提示系統（場景便利貼：`content` 資料 + `meta/hints.ts` + `render/markers.ts`；無提示面板、無對話框）
+
+規格 7.1：提示只用場景裡的便利貼（`type:'note'`），沒有提示角色。L1 一開始可讀；L2、L3 是空白便利貼，時間到或卡關偵測才「浮現字跡」。
 
 ```ts
 export interface PuzzleDef {
   id: string;                       // '1-2a'～'1-2d'、'5-5a'～'5-5c'（決策 Q3，已確認）
   core: boolean;
+  difficulty: number;               // 規格 6 的難度；驗證器據此檢查便利貼預算（規格 7.1.3）
+  stuckProne?: boolean;             // 「易卡關」：難度 3～4.5 也可放 L2
   doneFlag: string;                 // 完成判定，例 'item:nib'、'on:plate'、'zone:exit'
-  hints: [HintDef, HintDef, HintDef];   // L1 意象 / L2 觀察角度 / L3 缺的性質，三級全抽象（規格 7.1、D7）
-  solutionKey: TextKey;                 // L4 解法筆記（安全閥，預設鎖定；規格 7.1.2）
-  keyObjects: ObjId[];                  // 本題關鍵物件：驗證器據此檢查提示不得點名（規格 7.1.1 H4）
-  assistFocus?: ObjId[];                // 只在 Settings.hintAssist 開啟時用於 L2 描邊（規格 Q-E，預設關）
+  area: Box2;                       // 謎題範圍（x、y），提示便利貼必須在內（驗證器）
+  aha: TextKey;                     // 本題 aha 一句（審稿用，不顯示），H10 人工比對
+  ahaTerms: string[];               // H10 自動比對詞表（例 2-1b：['深度','疊','並排','左右']）
+  keyObjects: ObjId[];              // H4：便利貼不得點名
+  solutionKey: TextKey;             // 攻略筆記頁內容（規格 7.1.2）
 }
-export interface HintDef { textKey: TextKey; truthRef: string }   // truthRef：對應解法大綱的步驟或規則（H5 人工審稿用）
 
-export interface HintState { puzzleId: string | null; unlocked: 0 | 1 | 2 | 3 | 4; ready: 0 | 1 | 2 | 3 | 4; shown: 0 | 1 | 2 | 3 | 4 }   // 4 = L4 解法筆記
-export interface HintStrategy {
+/** 提示便利貼 = 一般 note 物件多一個 hint 屬性；位置、可見模式（預設 both）都在關卡資料裡 */
+export interface NoteHint { puzzle: string; level: 1 | 2 | 3; truthRef: string }
+// ObjDef（4.3）新增選填欄位：hint?: NoteHint；文字 key = `note.<puzzleId>.<1|2|3>`
+
+export interface NoteState { puzzleId: string | null; revealed: Record<ObjId, true>; sinceSec: number; guideReady: boolean }
+export interface NoteRevealStrategy {
   /** realSec 為真實經過秒數（暫停不計）；events 為本幀 world.events */
-  update(s: HintState, realSec: number, events: readonly GameEvent[]): HintState;
-  request(s: HintState, hold?: boolean): HintState;   // 按 H；L4 需 hold（按住 2 秒）
+  update(s: NoteState, realSec: number, events: readonly GameEvent[]): NoteState;
 }
-export const HINT_STRATEGIES: Record<'timed' | 'always' | 'off', () => HintStrategy>;
+export const NOTE_STRATEGIES: Record<'timed' | 'always' | 'off', () => NoteRevealStrategy>;
 ```
 
 - **目前謎題** = `level.puzzles` 中第一個 `doneFlag` 未成立者（關內謎題線性，規格 6；〔推論〕5-x 若需並行再加欄位）。新旗標事件 → 計時與計數歸零。
-- **計時**（規格 7.1）：L1 3 分、L2 +3 分、L3 +4 分；L4 在 L3 **顯示後**再 5 分鐘（`Settings.assistMode` 開啟則免等待）。
-- **卡關偵測**（規格 7.1）只吃 `world.events`：`reset ≥3`、`switch ≥12 且無 flag`、`fall ≥3` → `ready+1`（只亮圖示），**上限 L3**；對 L4 只把等待縮短到 3 分鐘。
-- **跳過此題**：只在 `core === false`（擴充題）時提供，與 L4 同條件出現；寫入 `stats.skipped`。
-- **與「小格」的關係**：策略只產生「第幾級可用」；小格的台詞外殼（「運算中……」「找到線索了！……大概。」「好吧，直接說——啊不行，只能說這些。」；L4「借你社長的攻略筆記」）是 `ui/hintPanel.ts` + 文字表 `story.xiaoge.*`，換角色或關閉小格只動 UI 與文字。0 級回饋（C9「看得見，卻碰不到」）仍由核心 `say('msg.unreachable')`，劇情改由小格說只需改文字。
+- **顯字計時**：L1 不計時（場景物件，`always` 可讀）；L2 進入謎題 4 分鐘、L3 8 分鐘。`always` = 一開始就顯字；`off` = L2、L3 便利貼不生成（L1 照常）。
+- **卡關偵測**只吃 `world.events`：`reset ≥3`、`switch ≥12 且無 flag`、`fall ≥3` → 下一張空白便利貼提前顯字；不影響攻略筆記以外的任何東西。
+- **「便利貼浮現」事件**：`meta/hints.ts` 產生 `{ type:'noteRevealed', id }` 給 app；app 把 `revealed` 寫進 `world.ext.notes`（供 `interact` 讀到文字：未顯字時互動只顯示「這張還是空白的。」），`render/markers.ts` 依 `revealed` 畫字跡淡入與邊角發光，HUD 只亮 `newNoteGlow` 小圖示。不彈窗、不暫停遊戲。
+- **攻略筆記**（規格 7.1.2，暫定）：`guideReady` 在進入謎題 10 分鐘後成立（卡關偵測可縮至 6 分）或 `Settings.guideMode` 開啟；`ui/screens/guide.ts` 在暫停選單顯示，打開前需確認警語；擴充題（`core === false`）另有「跳過此題」，寫入 `stats.skipped`。
+- C9「看得見，卻碰不到」仍由核心 `say('msg.unreachable')`，是系統訊息，無說話者。
 
 ### 4.11 文字 / 文案系統（`text/`、`content/text/`）
 
@@ -629,7 +637,7 @@ export interface Text {
 export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   // 缺 key → fallback → 回傳 key 本身（DEV 警告）
 ```
 
-- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、便利貼、物件 label）、`hint.<puzzleId>.<1|2|3|sol>`、`story.*`（角色台詞、結局）、`term.*`（詞彙表）。
+- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、便利貼、物件 label）、`note.<puzzleId>.<1|2|3>`（提示便利貼；劇情便利貼仍在 `lvl.<levelId>.note.*`）、`guide.<puzzleId>`（攻略筆記）、`story.*`（社長台詞、系統字、結局）、`term.*`（詞彙表）。
 - **劇情詞彙與內部 id 分離**：內部一律用規格代號（`key`、`valve`、`pin`、`mark`、模式 `'2d'`）；玩家看到的名稱集中在 `term.*`：`term.mode3d='現實'`、`term.nib='筆尖'`。劇情 4 節的改名 = 改 `term.*` 幾行，其他字串透過 `[[term.nib]]` 自動跟著變。
 - 暱稱：`{name}` 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。
 - 多語系：新增 `content/text/en/` 同 key 表，`createText(en, zhHant)` 以中文回退；驗證器檢查各語系 key 集合。
@@ -659,7 +667,7 @@ export interface ScanSpec {
 export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): Array<{ sample: string; flag: string }>;
 ```
 
-**驗證器規則**（每條附規格依據）：id 唯一；類型已註冊；`opens/requires/grants` 參照存在；`requires` 的能力在 `abilities` 或關內可得（規格 8）；每個 puzzle 三級提示 + `solutionKey` 齊全、`hint.*` key 存在（規格 7.1）；**提示 lint**（規格 7.1.1 H1～H4）：L1 ≤24、L2 ≤30、L3 ≤36 字，禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，且不得含 `keyObjects` 的 label / 顯示名（H5～H9 為人工審稿與 G1 試玩項，不自動化）；每關 `pinnable` 1～3 個（規格 N5）；切換式閥 ≤2（規格 N10）；燈車 ≤1（規格 N15）；墨記關卡必有 `regions` 且不重疊（Q-C）；起點與檢查點在兩模式站得住（現有測試 `puzzleLogic.test.ts:24`）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 `*Key` 在 zh-Hant 存在；各機制 `validate`。
+**驗證器規則**（每條附規格依據）：id 唯一；類型已註冊；`opens/requires/grants` 參照存在；`requires` 的能力在 `abilities` 或關內可得（規格 8）；**便利貼預算**（規格 7.1.3）：每題提示便利貼張數符合難度表（`stuckProne` 例外）、每關提示便利貼 ≤ 謎題數 + 1、每關便利貼總數（提示 + 劇情）≤ 謎題數 + 3、同一 2D 畫面寬（約 16）內 ≤ 3 張且間距 ≥ 3；每張提示便利貼位於所屬謎題 `area` 內、兩模式都站得到（重用 `place` 檢查）、`note.*` 與 `guide.<id>` key 存在；**便利貼 lint**（規格 7.1.1 H1～H4、H10）：L1 ≤24、L2 ≤30、L3 ≤36 字（署名不計），禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，不得含 `keyObjects` 的 label / 顯示名，不得含該題 `ahaTerms`（H5～H10 語意部分為人工審稿與 G1 試玩項）；起點與檢查點在兩模式站得住（現有測試 `puzzleLogic.test.ts:24`）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 `*Key` 在 zh-Hant 存在；各機制 `validate`。
 **捷徑掃描**是取樣器而非求解器：誠實地說，它只能證明「取樣到的配置 × 探針」沒有捷徑；探針與取樣格由寫關卡的人負責。成本估計：3 箱 × 10×6 格 × 數個玩家點 × 6 探針，每探針 ≤3 秒模擬，單關約數秒〔推論〕。
 **通關回放**：每關一個 `tests/puzzle/levels/<id>.test.ts`，以 `runScript` 從 `createWorld` 走到 `cleared`。
 **Debug 疊層**（可選，DEV only）：`render/debug.ts` 畫 `solidsFor(renderMode)` 線框與 flags 清單；`main.ts` 已有 `window.__puzzle`（`main.ts:5`）沿用。
@@ -672,12 +680,12 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 |------|------|------|---------|
 | 新增機制（例：N6 燈影） | `mechanics/light.ts`；`render/models/lamp.ts`、`shadow.ts`；`tests/puzzle/mechanics/light.test.ts`；`content/text/zh-Hant` 補 `obj.lamp.*`、`msg.light.*` | `mechanics/index.ts` 加一行；`render/models/index.ts` 加兩行 | 無 |
 | 新增物件類型（例：墨橋 inkbridge） | 在擁有它的機制檔 `declare module` + `types.inkbridge`；`render/models/inkbridge.ts` | `render/models/index.ts` 一行 | 無 |
-| 新增一關（例：2-1） | `content/levels/ch2/2-1-shelves.ts`；`content/text/zh-Hant/lvl-2-1.ts`、`hint-2-1.ts`；`tests/puzzle/levels/2-1.test.ts`（通關＋反例＋掃描） | `content/levels/index.ts` 一行；`chapters.ts` 的 levels 陣列 | 無 |
+| 新增一關（例：2-1） | `content/levels/ch2/2-1-shelves.ts`；`content/text/zh-Hant/lvl-2-1.ts`、`note-2-1.ts`（便利貼與攻略筆記）；`tests/puzzle/levels/2-1.test.ts`（通關＋反例＋掃描） | `content/levels/index.ts` 一行；`chapters.ts` 的 levels 陣列 | 無 |
 | 新增一章 | 該章各關檔；`render/themes/<theme>.ts`；必要的 `render/decor/*` | `chapters.ts` 一筆；`themes/index.ts` 一行 | 無 |
 | 新增輸入（觸控） | `input/touch.ts`（實作 `InputSource`）；`ui/touchPad.ts`（虛擬按鈕 DOM） | `app/services.ts` 合併 source | 無 |
 | 改一個顯示名稱（筆尖 → 畫筆工具） | — | `content/text/zh-Hant/term.ts` 一行；必要時字串內改用 `[[term.nib]]` | 無；測試若比對字面文字，需同步（劇情 4 節已指出 `puzzleLogic.test.ts:230`） |
 | 新增語言 | `content/text/en/*.ts` | `app/services.ts` 依設定選 bundle；`settings.ts` 加 `lang` | 無 |
-| 新提示策略 | 在 `meta/hints.ts` 加一個 factory | `Settings.hints` 聯集加值 | 無 |
+| 新的便利貼顯字策略 | 在 `meta/hints.ts` 加一個 factory | `Settings.hints` 聯集加值 | 無 |
 | 新渲染風格 / 色盲組 | `render/themes/<id>.ts` 或 `InkPalette` 一組 | `themes/index.ts` | 無 |
 
 ---
@@ -784,7 +792,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 | # | 取捨 / 風險 | 決定與理由 |
 |---|------------|-----------|
 | T1 | **不做 ECS** | 物件數百、機制 10 個、每機制只關心少數類型；現有 `ObjState` 陣列 + 掛點已足夠。ECS 會重寫全部 2.3k 行並讓 36 個測試大改，與 M0「行為不變」衝突 |
-| T2 | **不做事件匯流排（訂閱式）** | 只用 `world.events` 外送匣（單向、每幀清空），服務提示卡關偵測與統計（規格 7.1、8）。機制之間用查詢函式；訂閱式匯流排會讓執行順序隱形，不利確定性 |
+| T2 | **不做事件匯流排（訂閱式）** | 只用 `world.events` 外送匣（單向、每幀清空），服務便利貼卡關偵測與統計（規格 7.1、8）。機制之間用查詢函式；訂閱式匯流排會讓執行順序隱形，不利確定性 |
 | T3 | **不做插件系統 / 動態註冊** | 機制表是一個明確陣列；順序可讀、可測。「註冊」= 在 index 加一行 |
 | T4 | **不做狀態機函式庫** | 外殼 7 個畫面，一個 switch 即可；遊戲內狀態由 `step` 推進 |
 | T5 | **step 就地修改而非不可變** | 效能與現有程式風格；純度靠 snapshot/restore 滿足（4.1） |
