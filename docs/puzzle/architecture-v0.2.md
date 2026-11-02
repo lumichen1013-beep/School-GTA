@@ -4,6 +4,7 @@
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2（劇情演出） | 2026-11-03 | 新增 4.15 過場系統（`text/readingTime.ts`、`app/cutscene.ts`、`ui/cutscene.ts`、`render/cutscene/`、`content/cutscenes/`）與畫面狀態 `cutscene`；設計見 `cutscenes-v0.1.md` |
 > | v0.2（手機觸控） | 2026-11-02 | 4.6 輸入層加入觸控（`input/touch.ts`、`touchLayout.ts`、`merge.ts`、`ui/touchOverlay.ts`）、純檔案 DOM 規則、文字 key、擴充劇本「新增一種輸入」；設計細節見 `mobile-controls-v0.1.md` |
 > | v0.2（老宅尋寶・單人詭異版） | 2026-11-02 | 劇情改為老宅尋寶（顯示名見 `story-bible-v0.2.md`）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 `mechanics/chase`（N19 追逐，確定性）與 `chase` 事件；`calmTension` 語意擴大（驚嚇平靜版、追逐自動通過） |
 > | v0.2（緊張感） | 2026-11-02 | 新增 4.13 緊張感呈現（`render/tension/`、`audio/`、`LevelEntry.mood`），依賴規則與 `validateMood`；`Settings.calmTension` |
@@ -113,7 +114,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 | input | T | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ |
 | app | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓(僅 DEV) | ✓ | ✓ |
 
-另：`audio/` 的權限同 `render`（DOM / Web Audio 可用，不得 import three 以外的裸模組）；`render/tension/` 與 `audio/` 對 `content` 只能 `import type` `content/moodTypes.ts`（4.13）；`core / mechanics / meta / text / devtools` 不得 import `render/`、`audio/`。`src/puzzle/**` 不得 import `src/puzzle` 以外的專案檔（GTA 隔離，含 `src/audio/`）；`src/**` 其餘檔案不得 import `src/puzzle/**`。`render` 讀 `core` 只用查詢函式（`isActiveIn`、`allObjs`），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。
+另：`audio/` 的權限同 `render`（DOM / Web Audio 可用，不得 import three 以外的裸模組）；`render/tension/` 與 `audio/` 對 `content` 只能 `import type` `content/moodTypes.ts`（4.13）；`ui/cutscene.ts` 與 `render/cutscene/` 對 `content` 只能 `import type` `content/cutsceneTypes.ts`（4.15）；`core / mechanics / meta / text / devtools` 不得 import `render/`、`audio/`。`src/puzzle/**` 不得 import `src/puzzle` 以外的專案檔（GTA 隔離，含 `src/audio/`）；`src/**` 其餘檔案不得 import `src/puzzle/**`。`render` 讀 `core` 只用查詢函式（`isActiveIn`、`allObjs`），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。
 
 ### 2.3 可自動檢查的依賴規則（測試設計，不實作）
 
@@ -165,6 +166,8 @@ src/puzzle/
     items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
     chapters.ts              CHAPTERS（章、主題 id、旁白 key）
     moodTypes.ts             MoodDef 純型別（零依賴，4.13）
+    cutsceneTypes.ts         CutsceneDef / ShotDef 純型別（零依賴，4.15）
+    cutscenes/*.ts           每場過場一檔（cs:prologue … cs:endB）
     levels/index.ts          LEVELS 登錄表（id、章、解鎖、def）
     levels/ch1/1-2-foyer.ts  現有玄關（export 名仍為 foyer）
     levels/ch1/…、ch2/…      各關一檔（22 + 3）
@@ -210,6 +213,7 @@ src/puzzle/
   app/                       L5 外殼
     app.ts                   畫面狀態機
     loop.ts                  主迴圈（固定步長）、過場鎖
+    cutscene.ts              過場時間軸狀態機（純邏輯：鏡 / 段 / 淡入停留淡出、minDwell、自動播放、跳過確認、暫停；4.15）
     hudModel.ts              deriveHud(world, text, …) 純函式
     services.ts              組裝 storage/save/settings/text/theme
   devtools/                  工具（純）
@@ -554,8 +558,9 @@ export interface TouchSink { down(id: number, x: number, y: number, tMs: number)
 type Screen =
   | { id: 'boot' } | { id: 'nickname' } | { id: 'menu' }
   | { id: 'level'; levelId: string } | { id: 'clear'; levelId: string }
-  | { id: 'journal' } | { id: 'ending'; which: 'A' | 'B' };
-// boot →(無暱稱) nickname → menu → level → clear → (下一關 | menu)；6-1 → ending → menu
+  | { id: 'journal' } | { id: 'ending'; which: 'A' | 'B' }
+  | { id: 'cutscene'; cutsceneId: CutsceneId; next: Screen };   // 4.15
+// boot →(無暱稱) nickname →(未看序章) cutscene(prologue) → level 1-1；clear →(該關有未看過場) cutscene → (下一關 | menu)；6-1 → cutscene(endA|endB) → menu；選單「回憶」→ cutscene → menu
 ```
 
 資料流（單向）：
@@ -616,7 +621,7 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, inkPalette, reduceMotion, keys, touchLayout, handedness, buttonScale, buttonOpacity, haptics, jumpCarry, quality }（guideMode / calmTension 預設 false，規格 8）
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, autoAdvance, textSpeed, skipConfirm, inkPalette, reduceMotion, keys, touchLayout, handedness, buttonScale, buttonOpacity, haptics, jumpCarry, quality }（guideMode / calmTension 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<PuzzleStat>): void;
 ```
 
@@ -790,6 +795,22 @@ export interface ChaseDef {
 - 走道位於謎題 `area` 之外；`validate` 檢查：走道與任何謎題 `area` 不相交、走道沒有可推物、`region` 與相鄰區域不重疊、`startFlag` 只在某題 `doneFlag` 之後可達（規格：追逐不屬於任何謎題）。
 - **測試策略**（規格 4.2）：`runScript` 腳本回放——成功路徑必過；一直待在 2D 必被追上且旗標不變；同輸入兩次逐幀位置相同；`calmTension` 下進入即通過；被追上 3 次後速度 ×0.8；加入走道後該關既有通關腳本與捷徑掃描結果不變。
 
+
+### 4.15 過場系統（劇情演出；`cutscenes-v0.1.md` 6）
+
+| 檔案 | 層 | 職責 |
+|------|----|------|
+| `content/cutsceneTypes.ts` | content | 純型別（零依賴）；ui / render 以 `import type` 使用（比照 `moodTypes.ts`，2.3 例外清單加入） |
+| `content/cutscenes/*.ts` | content | 每場一檔：鏡頭（剪紙 `paper` 或引擎 `engine`）、文字 key `cs.<id>.<鏡>.<段>`、轉場、音訊提示；**不寫秒數** |
+| `text/readingTime.ts` | text | `readingSeconds(s, { cps, nameLen })` = `max(3, 1.5 + n/cps + 標點停頓)`；純函式 |
+| `app/cutscene.ts` | app | 時間軸狀態機（純邏輯，可 Node 測）：淡入 → 停留（`minDwell` 1.2 秒後才接受推進）→ 淡出；自動播放、跳過確認（與重新進房共用 300 ms 確認保護）、暫停 |
+| `ui/cutscene.ts` | ui | 字幕帶（≤ 2 行 × 16 字、字級 ≥ 20 px）、跳過按鈕與長按進度、確認窗；文字由 key 與 `{name}` 插值取得 |
+| `render/cutscene/` | render | `paper.ts` 剪紙元件（紙邊、描邊、陰影、剪影、常用物件）、分鏡場景；`engine` 鏡頭重用 `PuzzleScene` + 鏡頭路徑 |
+
+- **單向**：`app` 依存檔與觸發條件決定進入 `cutscene` 畫面，把 `CutsceneDef` 交給 ui / render；`core`、`mechanics` 不知道過場存在。
+- **設定 / 存檔**：`autoAdvance`、`textSpeed`、`skipConfirm`（沿用 `reduceMotion`、`noteScale`、`calmTension`）；`seenCutscenes`、`skippedCutscenes`。
+- **驗證器**（`devtools/validate.ts`）：每段 ≤ 2 行 × 16 字（`{name}` 以 `NAME_MAX` 計）、每場總長在目標區間、key 齊全、`engine` 鏡頭的關卡已登錄或有 `paper` 替代、無驚嚇提示。
+- **文字 key**：`cs.<id>.title`、`cs.<id>.<鏡>.<段>`、`ui.cutscene.<skip|hold|replay|log|unfinished>`。
 
 ---
 
