@@ -1,27 +1,19 @@
 import * as THREE from 'three';
-import type { Mode, ObjDef, ObjType, World } from '../core/types';
+import type { Mode, ObjDef, World } from '../core/types';
 import { isActiveIn } from '../core/presence';
 import { Painter } from './materials';
 import { PAL } from './palette';
 import { paperBackground } from './textures';
 import { DraftsmanModel } from './models/player';
-import { NibKeyModel } from './models/key';
-import { crateModel, noteModel, plinthModel, railModel, shelfModel, tableModel } from './models/props';
-import { doorModel, gateModel, plateModel, valveModel, wallModel } from './models/devices';
-import { buildDecor, floorModel, type Decor } from './models/room';
+import { buildDecor, type Decor } from './models/room';
+import { modelFor } from './models';
 import type { PropModel } from './models/types';
-
-type Builder = (p: Painter, d: ObjDef) => PropModel;
-const BUILDERS: Partial<Record<ObjType, Builder>> = {
-  floor: floorModel, shelf: shelfModel, crate: crateModel, plinth: plinthModel, rail: railModel, table: tableModel,
-  note: noteModel, wall: wallModel, gate: gateModel, door: doorModel, valve: valveModel, plate: plateModel
-};
 
 /** 圖紙專屬物件在 2D 畫在最前面 (不被牆 / 地板擋住)，玩家再前面一層 */
 const FRONT_2D = 6.3;
 const PLAYER_2D = 7;
 
-interface Entry { id: string; model: PropModel; key?: NibKeyModel }
+interface Entry { id: string; model: PropModel }
 
 /** 場景：依世界狀態建立 / 更新模型，並依模式切換「現實」(光影材質) 或「圖紙」(扁平描邊色塊) 外觀 */
 export class PuzzleScene {
@@ -67,14 +59,9 @@ export class PuzzleScene {
     this.lastX = p.x; this.lastY = p.y; this.lastZ = p.z;
   }
 
+  /** 依登錄表 (models/index.ts) 建模型；未登錄類型用後備盒模型 */
   private build(def: ObjDef): Entry {
-    if (def.type === 'key') {
-      const key = new NibKeyModel(this.paint);
-      this.scene.add(key.root);
-      return { id: def.id, model: { root: key.root }, key };
-    }
-    const builder = BUILDERS[def.type];
-    const model = builder ? builder(this.paint, def) : { root: new THREE.Group() };
+    const model = modelFor(def.type)(this.paint, def);
     this.scene.add(model.root);
     if (model.occluders) this.occluders.push(...model.occluders);
     return { id: def.id, model };
@@ -144,7 +131,6 @@ export class PuzzleScene {
       root.position.set(o.x, o.y, z);
       if (!root.visible) continue;
       e.model.update?.({ obj: o, world: w, mode: renderMode, t, dt });
-      e.key?.update(t, is2d);
     }
     this.decor.update(t, is2d);
     if (!is2d) this.fadeOccluders(camera, dt);
