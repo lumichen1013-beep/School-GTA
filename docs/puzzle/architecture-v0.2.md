@@ -4,6 +4,7 @@
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2（緊張感） | 2026-11-02 | 新增 4.13 緊張感呈現（`render/tension/`、`audio/`、`LevelEntry.mood`），依賴規則與 `validateMood`；`Settings.calmTension` |
 > | v0.2（提示改便利貼） | 2026-11-02 | 移除提示角色與提示面板；提示改為場景 `note` 物件（`hint` 屬性、延遲顯字、預算檢查）；L4 改為暫停選單攻略筆記頁（規格 7.1、7.1.2、7.1.3、H10） |
 > | v0.2 | 2026-11-02 | 第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；`HintDef` / `PuzzleDef` / `Settings` 格式更新；謎題 id `1-2a`～`1-2d`、`5-5a`～`5-5c` |
 
@@ -91,7 +92,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 | L2 內容 | `content/` | 關卡、章節、物品表、提示、文字表（純資料） | `core/`、`mechanics/` 的**型別**（`import type`） |
 | L2' 文字 | `text/` | `t(key, params)`、插值、詞彙表解析（純函式） | 無 |
 | L3 外圍規則 | `meta/` | 存檔 / 遷移、設定、統計、解鎖、提示策略（純函式＋注入 storage） | `core/`、`content/`、`text/` |
-| L4 呈現 | `render/`、`ui/`、`input/` | three 場景、DOM HUD / 選單、輸入來源 | `render`→`core`；`ui`→`text`；`input`→`core`（型別） |
+| L4 呈現 | `render/`、`ui/`、`input/`、`audio/` | three 場景、DOM HUD / 選單、輸入來源 | `render`→`core`；`ui`→`text`；`input`→`core`（型別） |
 | L5 外殼 | `app/` | 主迴圈、畫面狀態機、把上述接起來 | 全部 |
 | 工具 | `devtools/` | 關卡驗證器、腳本回放、捷徑掃描（純函式，測試與開發用） | `core`、`mechanics`、`content`、`meta`、`text` |
 
@@ -110,7 +111,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 | input | T | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ |
 | app | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓(僅 DEV) | ✓ | ✓ |
 
-另：`src/puzzle/**` 不得 import `src/puzzle` 以外的專案檔（GTA 隔離）；`src/**` 其餘檔案不得 import `src/puzzle/**`。`render` 讀 `core` 只用查詢函式（`isActiveIn`、`allObjs`），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。
+另：`audio/` 的權限同 `render`（DOM / Web Audio 可用，不得 import three 以外的裸模組）；`render/tension/` 與 `audio/` 對 `content` 只能 `import type` `content/moodTypes.ts`（4.13）；`core / mechanics / meta / text / devtools` 不得 import `render/`、`audio/`。`src/puzzle/**` 不得 import `src/puzzle` 以外的專案檔（GTA 隔離，含 `src/audio/`）；`src/**` 其餘檔案不得 import `src/puzzle/**`。`render` 讀 `core` 只用查詢函式（`isActiveIn`、`allObjs`），不得呼叫會改狀態的函式（4.7 規則，測試以白名單檢查）。
 
 ### 2.3 可自動檢查的依賴規則（測試設計，不實作）
 
@@ -160,6 +161,7 @@ src/puzzle/
   content/                   L2 純資料
     items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
     chapters.ts              CHAPTERS（章、主題 id、旁白 key）
+    moodTypes.ts             MoodDef 純型別（零依賴，4.13）
     levels/index.ts          LEVELS 登錄表（id、章、解鎖、def）
     levels/ch1/1-2-foyer.ts  現有玄關（export 名仍為 foyer）
     levels/ch1/…、ch2/…      各關一檔（22 + 3）
@@ -189,6 +191,9 @@ src/puzzle/
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
     decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯…由關卡資料擺放）
     debug.ts                 DEV：碰撞盒線框（可選）
+    tension/director.ts      TensionDirector：暈影、色溫、鏡頭緩推、環境漸變（4.13）
+  audio/                     L4 最小 Web Audio 合成（4.13）
+    synth.ts                 PuzzleAudio：分層音軌、脈動低音、鐘音、回饋音
   ui/                        L4 DOM
     hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
     icons.ts                 物品 id → SVG
@@ -547,6 +552,7 @@ export interface LevelEntry {
   id: string; chapter: 1 | 2 | 3 | 4 | 5 | 6 | 'H';
   def: LevelDef;
   unlock: Unlock; core: boolean;   // core：只做核心題時的範圍篩選（規格 6.9）
+  mood?: MoodDef;                  // 緊張感呈現資料（4.13；只在章末考、Boss、終章）
 }
 export type Unlock =
   | { after: string[] }                               // 線性；5-5 = after ['5-2','5-3','5-4']
@@ -581,7 +587,7 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, inkPalette, reduceMotion, keys }（guideMode 預設 false，規格 8）
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, inkPalette, reduceMotion, keys }（guideMode / calmTension 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<PuzzleStat>): void;
 ```
 
@@ -671,6 +677,52 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 **捷徑掃描**是取樣器而非求解器：誠實地說，它只能證明「取樣到的配置 × 探針」沒有捷徑；探針與取樣格由寫關卡的人負責。成本估計：3 箱 × 10×6 格 × 數個玩家點 × 6 探針，每探針 ≤3 秒模擬，單關約數秒〔推論〕。
 **通關回放**：每關一個 `tests/puzzle/levels/<id>.test.ts`，以 `runScript` 從 `createWorld` 走到 `cleared`。
 **Debug 疊層**（可選，DEV only）：`render/debug.ts` 畫 `solidsFor(renderMode)` 線框與 flags 清單；`main.ts` 已有 `window.__puzzle`（`main.ts:5`）沿用。
+
+### 4.13 緊張感呈現（`render/tension/`、`audio/`；規格 9.1）
+
+只用於章末考、Boss 與終章；**純呈現層**，核心與機制不知道它存在。
+
+- **資料位置**：放在 content 層 `LevelEntry`（4.8）的 `mood?: MoodDef` 欄位，**不放進 core 的 `LevelDef`**（否則核心型別得認識呈現資料）。型別在 `content/moodTypes.ts`（純型別、零依賴）。
+
+```ts
+// content/moodTypes.ts
+export interface MoodDef {
+  intensity: 0 | 1 | 2 | 3;                         // 關卡基準；Boss 由 stages 覆寫
+  vignette?: { edgeDark: number /* ≤ 0.30 */; clearCenter: number /* ≥ 0.75 */ };
+  tint?: { hue: 'cool' | 'warm'; amount: number /* ≤ 0.12 */; fromFlag?: string };
+  cameraDrift?: { dolly3d: number /* ≤ 0.10 */; zoom2d: number /* ≤ 0.08 */; inSec: number /* ≥ 8 */; outSec: number /* ≥ 2 */ };
+  ambience?: { layers: Array<'pad' | 'pulse' | 'arp'>; pulseBpm: [number, number] /* 60～96 */ };
+  envSteps?: { decorIds: string[]; byFlags: string[] }; // 環境漸變：每個旗標成立推進一步（只動 decor）
+  events: MoodEventDef[];
+  stages?: Array<{ untilFlag: string; patch: Partial<MoodDef> }>;   // Boss 三階段，以階段旗標切換
+}
+export interface MoodEventDef {
+  id: string;
+  kind: 'envStep' | 'shrinkBackdrop' | 'silenceThenChime' | 'tintShift' | 'cameraDrift';
+  on: { flag?: string; cleared?: true };            // 只由進度旗標 / 通關觸發，不用時間
+  category: 'env' | 'sound' | 'visual';
+}
+
+// render/tension/director.ts
+export interface TensionDirector {
+  load(def: MoodDef | undefined, calm: boolean): void;   // calm = Settings.calmTension（減弱緊張效果）
+  update(dt: number, events: readonly GameEvent[]): void; // 只讀 flag / cleared / fall（fall → 退回基準強度）
+  dispose(): void;
+}
+// audio/synth.ts（新增；最小 Web Audio 合成，不得 import src/audio/）
+export interface PuzzleAudio {
+  setLayers(layers: readonly ('pad' | 'pulse' | 'arp')[], fadeSec: number): void;
+  setPulseBpm(bpm: number, rampSec: number): void;
+  chime(afterSilenceSec: number): void;
+  thump(): void;                                          // 關鍵動作回饋音
+  stopAll(): void;
+}
+```
+
+- **單向訂閱**：`app/loop.ts` 每幀把 `world.events` 交給 `TensionDirector.update`；director 只讀，不回寫 world。Boss 階段以旗標表示（`stages[].untilFlag`），與 4.3 的 `phases` 同一組旗標。
+- **減弱緊張效果**（`Settings.calmTension`，預設 false）：`load(def, true)` 時暈影、色溫、鏡頭推近、脈動低音、環境漸變全部停用，只留一般環境音與關鍵動作回饋音（輕版）。
+- **依賴規則**：`render/tension/`、`audio/` 可 `import type` `content/moodTypes.ts` 與 `core` 的 `GameEvent`；`core/`、`mechanics/`、`meta/`、`text/`、`devtools/` 不得 import `render/` 或 `audio/`；`content/moodTypes.ts` 不得 import 任何檔（2.3 測試加一條）。
+- **測試策略**：邏輯測試不載入 tension / audio，因此不受影響；`devtools/validate.ts` 加 `validateMood(LEVELS)`：參數上下限（上方註解）、`intensity > 0` 只出現在 2-5、3-4、4-4、5-5、6-1、同時類別 ≤ 2、事件數 ≤ 強度上限、`envSteps.decorIds` 只指向 decor（不是 ObjDef）；`TensionDirector` 的預算與回復邏輯以假事件序列在 Node 單元測試；視覺與聲音以 G1 / M4 人工試玩檢查。
 
 ---
 
