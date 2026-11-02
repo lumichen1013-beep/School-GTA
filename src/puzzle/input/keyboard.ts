@@ -1,35 +1,51 @@
-// 鍵盤輸入：持續按鍵 + 單次觸發 (只用於《圖紙之間》，不依賴 GTA 的 InputManager)
+// 鍵盤輸入來源 (只用於《圖紙之間》，不依賴 GTA 的 InputManager)
+import type { Bindings, InputFrame, InputSource } from './types';
+import { INPUT_ACTIONS } from './bindings';
+
 const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
-export class PuzzleInput {
+export class KeyboardSource implements InputSource {
   private down = new Set<string>();
   private pressed = new Set<string>();
-  /** 任意鍵按下的回呼 (跳過旁白) */
-  onAnyKey: (() => void) | null = null;
+  private anyKey = false;
+  private readonly onDown = (e: KeyboardEvent): void => {
+    if (BLOCK.has(e.code)) e.preventDefault();
+    if (!e.repeat) this.pressed.add(e.code);
+    this.down.add(e.code);
+    this.anyKey = true;
+  };
+  private readonly onUp = (e: KeyboardEvent): void => { this.down.delete(e.code); };
+  private readonly onBlur = (): void => { this.down.clear(); };
 
-  constructor() {
-    window.addEventListener('keydown', e => {
-      if (BLOCK.has(e.code)) e.preventDefault();
-      if (!e.repeat) this.pressed.add(e.code);
-      this.down.add(e.code);
-      this.onAnyKey?.();
-    });
-    window.addEventListener('keyup', e => this.down.delete(e.code));
-    window.addEventListener('blur', () => this.down.clear());
+  constructor(private bindings: Bindings, private target: Window = window) {
+    target.addEventListener('keydown', this.onDown);
+    target.addEventListener('keyup', this.onUp);
+    target.addEventListener('blur', this.onBlur);
   }
 
-  private any(...codes: string[]): boolean { return codes.some(c => this.down.has(c)); }
+  private held(codes: readonly string[]): boolean { return codes.some(c => this.down.has(c)); }
 
-  get moveX(): number { return (this.any('KeyD', 'ArrowRight') ? 1 : 0) - (this.any('KeyA', 'ArrowLeft') ? 1 : 0); }
-  /** W = 往房間深處 (-z)，S = 往鏡頭 (+z) */
-  get moveZ(): number { return (this.any('KeyS', 'ArrowDown') ? 1 : 0) - (this.any('KeyW', 'ArrowUp') ? 1 : 0); }
-  get jump(): boolean { return this.any('Space'); }
-
-  /** 取走單次按鍵事件 */
-  take(...codes: string[]): boolean {
-    let hit = false;
-    for (const c of codes) if (this.pressed.delete(c)) hit = true;
-    return hit;
+  poll(): InputFrame {
+    const b = this.bindings;
+    const frame: InputFrame = {
+      moveX: (this.held(b.right) ? 1 : 0) - (this.held(b.left) ? 1 : 0),
+      moveZ: (this.held(b.down) ? 1 : 0) - (this.held(b.up) ? 1 : 0),
+      jump: this.held(b.jump),
+      pressed: INPUT_ACTIONS.filter(a => b[a].some(c => this.pressed.has(c))),
+      anyKey: this.anyKey
+    };
+    this.pressed.clear();
+    this.anyKey = false;
+    return frame;
   }
-  clearPressed(): void { this.pressed.clear(); }
+
+  clear(): void { this.pressed.clear(); this.anyKey = false; }
+
+  dispose(): void {
+    this.target.removeEventListener('keydown', this.onDown);
+    this.target.removeEventListener('keyup', this.onUp);
+    this.target.removeEventListener('blur', this.onBlur);
+    this.down.clear();
+    this.clear();
+  }
 }

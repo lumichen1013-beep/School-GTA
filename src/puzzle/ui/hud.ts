@@ -1,20 +1,19 @@
 import type { Mode } from '../core/types';
 import type { Text } from '../text/text';
+import { ITEM_ICONS } from './icons';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 
-/** 筆尖鑰匙的 HUD 圖示 (與 3D 模型同配色：金色環、柄、齒、筆尖、墨藍寶石) */
-const KEY_ICON = `<svg viewBox="0 0 64 28" width="46" height="20" aria-hidden="true">
-  <g stroke="#3a2618" stroke-width="2.2" stroke-linejoin="round">
-    <circle cx="12" cy="14" r="8.5" fill="#f5c242"/><circle cx="12" cy="14" r="3.4" fill="#3d63ff"/>
-    <rect x="20" y="11" width="24" height="6" rx="2" fill="#f5c242"/>
-    <rect x="30" y="17" width="4.5" height="5" fill="#f5c242"/><rect x="37" y="17" width="4.5" height="7" fill="#f5c242"/>
-    <path d="M44 9 L60 14 L44 19 Z" fill="#f5c242"/>
-  </g>
-  <path d="M47 14 L58 14" stroke="#3a2618" stroke-width="1.4"/>
-</svg>`;
+/** ui 只認得的 HUD 資料形狀 (由 app/hudModel 的 deriveHud 產生) */
+export interface HudData {
+  mode: Mode;
+  modeText: string;
+  items: ReadonlyArray<{ id: string; n: number; name: string }>;
+  prompt: string | null;
+  toast: { seq: number; text: string };
+}
 
-/** HUD：模式、持有物、互動提示、訊息、旁白、通關畫面 (DOM 由 ui/dom.ts 建立) */
+/** HUD：依 HudData 做 diff 後寫 DOM；旁白、通關畫面 (DOM 由 ui/dom.ts 建立) */
 export class PuzzleHud {
   private root = $('pz-root');
   private modeEl = $('pz-mode');
@@ -25,39 +24,60 @@ export class PuzzleHud {
   private clearEl = $('pz-clear');
   private toastUntil = 0;
   private mode: Mode | null = null;
-  private hasKey: boolean | null = null;
+  private invKey: string | null = null;
+  private invCount = 0;
   private prompt: string | null = null;
+  private toastSeq = 0;
 
   constructor(private text: Text) {}
 
-  setMode(m: Mode): void {
+  /** 新世界開始：只記下目前訊息序號 (不重播舊訊息)；物品欄下次重畫但不播取得動畫 */
+  reset(msgSeq: number): void {
+    this.toastSeq = msgSeq;
+    this.invKey = null;
+  }
+
+  render(m: HudData, nowMs: number): void {
+    if (m.toast.seq !== this.toastSeq) { this.toastSeq = m.toast.seq; this.toast(m.toast.text, nowMs); }
+    this.tick(nowMs);
+    this.setMode(m.mode, m.modeText);
+    this.setItems(m.items);
+    this.setPrompt(m.prompt);
+  }
+
+  private setMode(m: Mode, label: string): void {
     if (m === this.mode) return;
     this.mode = m;
-    this.modeEl.textContent = this.text(m === '3d' ? 'term.mode3d' : 'term.mode2d');
+    this.modeEl.textContent = label;
     this.root.classList.toggle('mode2d', m === '2d');
   }
-  setInventory(hasKey: boolean): void {
-    if (hasKey === this.hasKey) return;
-    if (hasKey && this.hasKey === false) {
+  private setItems(items: HudData['items']): void {
+    const key = items.map(i => `${i.id}:${i.n}`).join(',');
+    if (key === this.invKey) return;
+    const count = items.reduce((s, i) => s + i.n, 0);
+    if (this.invKey !== null && count > this.invCount) {
       this.invEl.classList.remove('got');
       void this.invEl.offsetWidth; // 重新觸發取得動畫
       this.invEl.classList.add('got');
     }
-    this.hasKey = hasKey;
-    this.invEl.innerHTML = hasKey ? `${this.text('ui.inv.label')} ${KEY_ICON}<b>${this.text('term.nib')}</b>` : this.text('ui.inv.none');
+    this.invKey = key;
+    this.invCount = count;
+    this.invEl.innerHTML = items.length
+      ? `${this.text('ui.inv.label')} ${items.map(i => `${ITEM_ICONS[i.id] ?? ''}<b>${i.name}</b>`).join('')}`
+      : this.text('ui.inv.none');
   }
-  setPrompt(text: string | null): void {
+  private setPrompt(text: string | null): void {
     if (text === this.prompt) return;
     this.prompt = text;
     this.promptEl.textContent = text ?? '';
     this.promptEl.classList.toggle('show', !!text);
   }
-  toast(text: string, nowMs: number, ms = 3500): void {
+  private toast(text: string, nowMs: number, ms = 3500): void {
     this.toastEl.textContent = text;
     this.toastEl.classList.toggle('show', !!text);
     this.toastUntil = nowMs + ms;
   }
-  tick(nowMs: number): void {
+  private tick(nowMs: number): void {
     if (this.toastUntil && nowMs > this.toastUntil) { this.toastEl.classList.remove('show'); this.toastUntil = 0; }
   }
   showNarration(text: string): void {
