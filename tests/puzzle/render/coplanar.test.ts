@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { newWorld } from '../helpers';
 import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
+import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
 function stubCanvas(): void {
@@ -48,11 +49,11 @@ function facesOf(m: THREE.Mesh, look: string): Face[] {
   return [...planes.values()];
 }
 
-/** 3D 跟隨鏡頭可到的範圍 (cameras.ts：水平限制在房間內縮 3 / 2、偏移 (0, 5.4, 8.2)) 看得到這個面的正面嗎 */
-function seenBy3dCamera(f: Face): boolean {
+/** 3D 跟隨鏡頭可到的範圍 (cameras.ts：水平限制在房間內縮 3 / 2、偏移 (0, 5.4, 8.2)) 看得到這個面的正面嗎；camX = 鏡頭 x 範圍 (預設玄關 [-17, 17]) */
+function seenBy3dCamera(f: Face, camX: readonly [number, number] = [-17, 17]): boolean {
   if (f.ax === 'z') return f.dir > 0 ? true : false; // 鏡頭 z ≥ 4.2，看 -z 面只會看到背面
   if (f.ax === 'y') return f.dir > 0; // 鏡頭在上方 (y ≥ 6.2)
-  return f.dir > 0 ? f.c < 17 : f.c > -17; // 鏡頭 x ∈ [-17, 17]
+  return f.dir > 0 ? f.c < camX[1] : f.c > camX[0]; // 鏡頭 x ∈ camX
 }
 
 function lookOf(m: THREE.Mesh): string | null {
@@ -76,7 +77,7 @@ function hidden(r: Rect, boxes: THREE.Box3[], faces: Face[]): boolean {
     && f.u0 <= r.u0 + E && f.u1 >= r.u1 - E && f.w0 <= r.w0 + E && f.w1 >= r.w1 - E);
 }
 
-function zFightPairs(scene: THREE.Scene): string[] {
+function zFightPairs(scene: THREE.Scene, camX?: readonly [number, number]): string[] {
   scene.updateMatrixWorld(true);
   const faces: Face[] = [];
   const boxes: THREE.Box3[] = [];
@@ -85,7 +86,7 @@ function zFightPairs(scene: THREE.Scene): string[] {
     if (!m.isMesh) return;
     const look = lookOf(m);
     if (!look) return;
-    faces.push(...facesOf(m, look).filter(seenBy3dCamera));
+    faces.push(...facesOf(m, look).filter(f => seenBy3dCamera(f, camX)));
     if (m.geometry.type === 'BoxGeometry' && !(m.material as THREE.Material).transparent) {
       // 只取網格本身 (setFromObject 會把子物件 2D 描邊的放大盒算進去)
       m.geometry.computeBoundingBox();
@@ -132,5 +133,31 @@ describe('渲染：深度打架 (共面)', () => {
   it('3D 鏡頭 near / far 比值不超過 200 (深度精度)', () => {
     const cams = new PuzzleCameras(newWorld());
     expect(cams.persp.far / cams.persp.near).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('渲染：深度打架 (共面)：1-1 門廊', () => {
+  beforeAll(stubCanvas);
+
+  /** 門廊跟隨鏡頭的 x 範圍 (cameras.ts follow：[minX + 3, maxX - 3]) */
+  const CAM_X = [porch.bounds.minX + 3, porch.bounds.maxX - 3] as const;
+
+  it('門廊 3D 場景 (鐵柵、台階、木板橋、隔牆、玻璃牆、石階、字條、門) 鏡頭看得到的面沒有共面', () => {
+    const w = newWorld(porch);
+    const view = new PuzzleScene(w);
+    const cams = new PuzzleCameras(w);
+    view.update('3d', 1 / 60, 0, cams.active('3d'));
+    expect(zFightPairs(view.scene, CAM_X)).toEqual([]);
+    view.dispose();
+  });
+
+  it('門廊通關開門後 (門扇轉開) 也沒有共面', () => {
+    const w = newWorld(porch);
+    w.cleared = true;
+    const view = new PuzzleScene(w);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 300; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, CAM_X)).toEqual([]);
+    view.dispose();
   });
 });

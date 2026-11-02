@@ -145,6 +145,8 @@ export function doorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   g.add(hinge);
   const seal = inkSeal(p, pal, w, h);
   seal.position.set(0, 0, d.d / 2 + 0.06);
+  // 沒有封印的門 (unsealed，開場即解封)：一開始就不畫封印，不播收起動畫
+  if (d.type === 'door' && d.unsealed) { seal.scale.setScalar(0.001); seal.visible = false; }
   g.add(seal);
   const update = (c: ModelCtx) => {
     const k = approach(seal.scale.x, c.obj.used ? 0.001 : 1, c.dt * 3);

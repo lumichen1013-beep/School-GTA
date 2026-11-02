@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
+import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { LEVELS } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
 import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
@@ -21,6 +22,24 @@ describe('validateLevel：玄關', () => {
   it('玄關 1-2 零問題 (關卡與登錄表)', () => {
     expect(validateLevel(foyer, ctx)).toEqual([]);
     expect(LEVELS.flatMap(e => validateEntry(e, reg))).toEqual([]);
+  });
+});
+
+describe('validateLevel：門廊 1-1', () => {
+  it('門廊 1-1 零問題 (關卡與登錄表)；登錄表兩關都驗', () => {
+    expect(validateLevel(porch, ctx)).toEqual([]);
+    expect(validateEntry(LEVELS.find(e => e.id === '1-1')!, reg)).toEqual([]);
+    expect(validateEntry(LEVELS.find(e => e.id === '1-2')!, reg)).toEqual([]);
+    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2']);
+  });
+
+  it('沒有封印的門 (unsealed) 不需要打開它的物件；拿掉 unsealed 就回報 ref.exitLocked', () => {
+    const sealed = { ...porch, objects: porch.objects.map(o => (o.id === 'door' ? { ...o, unsealed: false } : o)) };
+    expect(codes(validateLevel(sealed, ctx))).toEqual([['ref.exitLocked', 'door']]);
+    // 玄關的門照舊：要有物件 opens 它，unsealed 不影響其他門的檢查
+    const two = foyerWith({}, [{ id: 'door2', type: 'door', x: -15, y: 0, z: -5.85, w: 1.6, h: 2.4, d: 0.3, visible: 'both', solid: false, interactable: true, unsealed: true }]);
+    expect(validateLevel(two, ctx)).toEqual([]);
+    expect(codes(validateLevel(foyerWith({ valve: { opens: 'gate' } }, [two.objects.at(-1)!]), ctx))).toEqual([['ref.exitLocked', 'door']]);
   });
 });
 

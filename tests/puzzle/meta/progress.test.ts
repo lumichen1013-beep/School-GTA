@@ -62,3 +62,40 @@ describe('線性解鎖與能力', () => {
     expect(recordClear(s1, '1-2', newWorld()).abilities).toEqual(['nib']);
   });
 });
+
+describe('第一章：1-1 門廊 → 1-2 玄關', () => {
+  const s = (cleared: string[]) => ({ ...defaultSave(), cleared });
+  const states = (save: ReturnType<typeof defaultSave>) => LEVELS.map(e => [e.id, levelState(e, save)]);
+
+  it('登錄順序：1-1 在章節 levels 最前面；1-1 無前置、白名單為空；1-2 前置為 1-1', () => {
+    expect(CHAPTERS.find(c => c.id === 1)!.levels).toEqual(['1-1', '1-2']);
+    expect(LEVELS[0].id).toBe('1-1');
+    const e = levelById('1-1')!;
+    expect([e.chapter, e.abilities, e.unlock.after, e.load().id]).toEqual([1, [], [], '1-1']);
+    expect(levelById('1-2')!.unlock.after).toEqual(['1-1']);
+  });
+
+  it('全新存檔只能玩 1-1；通關 1-1 後 1-2 開放', () => {
+    expect(states(defaultSave())).toEqual([['1-1', 'open'], ['1-2', 'locked']]);
+    expect(states(s(['1-1']))).toEqual([['1-1', 'cleared'], ['1-2', 'open']]);
+  });
+
+  it('已通關 1-2 (1-1 加入前的存檔) 不被擋：1-2 仍可玩，1-1 也可玩', () => {
+    expect(states(s(['1-2']))).toEqual([['1-1', 'open'], ['1-2', 'cleared']]);
+    expect(isUnlocked(levelById('1-2')!, s(['1-2']))).toBe(true);
+  });
+
+  it('本關或以本關為 (遞移) 前置的後續關已通關 → 保持可玩；無關的關卡不算', () => {
+    const levels = [entry('1-1', []), entry('1-2', ['1-1']), entry('1-3', ['1-2']), entry('9-9', [])];
+    const [a, b, c] = levels;
+    expect(isUnlocked(b, s(['1-3']), levels)).toBe(true);   // 後續的後續
+    expect(isUnlocked(c, s(['1-3']), levels)).toBe(true);   // 本關
+    expect(isUnlocked(c, s(['9-9']), levels)).toBe(false);  // 不依賴 1-3 的關卡
+    expect(isUnlocked(b, s([]), levels)).toBe(false);
+    expect(isUnlocked(a, s([]), levels)).toBe(true);
+  });
+
+  it('舊玄關存檔遷移 (cleared 1-1、1-2)：兩關都是已通關', () => {
+    expect(states(s(['1-1', '1-2']))).toEqual([['1-1', 'cleared'], ['1-2', 'cleared']]);
+  });
+});

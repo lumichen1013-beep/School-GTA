@@ -2,7 +2,7 @@
 export const lvl12 = {
   'lvl.1-2.title': '玄關',
   'lvl.1-2.narration': '門消失了。牆上多了一條墨線，像有人剛畫完，墨還沒乾。',
-  'lvl.1-2.next': '第二間房：書房（尚未開放）',
+  'lvl.1-2.next': '下一間房：衣帽間（尚未開放）',
   'lvl.1-2.rail': '木欄',
   'lvl.1-2.wall': '隔牆',
   'lvl.1-2.note': '叔公的字條',

@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
+import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { MODELS, boxModel, modelFor } from '../../../src/puzzle/render/models';
 import { Painter } from '../../../src/puzzle/render/materials';
 import type { ObjDef } from '../../../src/puzzle/core/types';
@@ -15,6 +16,19 @@ describe('渲染：模型登錄表', () => {
     const types = [...new Set(foyer.objects.map(o => o.type))];
     expect(types.filter(t => !MODELS[t])).toEqual([]);
     for (const t of types) expect(modelFor(t)).toBe(MODELS[t]);
+  });
+
+  it('門廊所有物件類型 (含新增的鐵柵 / 墨牆 / 玻璃牆 / 木板橋 / 石階) 都有登錄的模型工廠，不落到洋紅後備盒', () => {
+    const types = [...new Set(porch.objects.map(o => o.type))];
+    expect(types.filter(t => !MODELS[t])).toEqual([]);
+    for (const t of ['bars', 'inkwall', 'glass', 'plank', 'stone']) expect(types).toContain(t);
+    const p = new Painter(DEFAULT_THEME.pal.outline);
+    for (const d of porch.objects) {
+      const root = modelFor(d.type)(p, d, DEFAULT_THEME).root;
+      const colors = new Set<string>();
+      root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) colors.add((m.material as THREE.MeshStandardMaterial).color.getHexString()); });
+      expect(colors.has('ff00ff')).toBe(false);
+    }
   });
 
   it('未登錄類型改用後備盒模型 (不隱形)，尺寸同邏輯盒、原點在底面中心', () => {

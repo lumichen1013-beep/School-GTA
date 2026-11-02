@@ -27,7 +27,7 @@ export type IssueCode =
   | 'object.outOfBounds'     // 物件中心在房間外
   | 'ref.opens'           // opens 指向不存在的物件或自己
   | 'ref.requires'        // requires 的物品在本關取不到、也不在開場能力白名單
-  | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它 (永遠解不開)
+  | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它、也不是 unsealed (永遠解不開)
   | 'text.missing'        // 文字 key 不存在於文字表
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
@@ -137,6 +137,8 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
   const doors = def.objects.filter(o => o.type === 'door');
   if (doors.length === 0) add('level.noExit', 'level has no exit door');
   for (const d of doors) {
+    // 沒有封印的門 (unsealed) 開場即可開，不需要打開它的物件
+    if (d.type === 'door' && d.unsealed) continue;
     if (!def.objects.some(o => o.opens === d.id)) add('ref.exitLocked', `exit door "${d.id}" is never opened by any object`, d.id);
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
+import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
 import { createWorld, say } from '../../../src/puzzle/core/world';
 import { missingLevelKeys, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
@@ -18,6 +19,15 @@ describe('文字 key 齊全', () => {
     expect(validateLevel(foyer, { mechanics: DEFAULT_MECHANICS, bundle: zhHant }).filter(i => i.code === 'text.missing')).toEqual([]);
     expect(validateLevel({ ...foyer, titleKey: 'lvl.x.nope' }, { mechanics: DEFAULT_MECHANICS, bundle: zhHant }).map(i => [i.code, i.message]))
       .toEqual([['text.missing', 'text key "lvl.x.nope" is missing']]);
+  });
+
+  it('門廊所有文字 key 存在於 zh-Hant；字條 (1-1c L1) 為 story-bible 7.3 原文且 ≤ 24 字、不含數字', () => {
+    expect(missingLevelKeys(porch, zhHant)).toEqual([]);
+    const note = TEXT('lvl.1-1.note.1');
+    expect(note).toBe('玻璃這一邊太擠了。另一邊，我替你留了位子。');
+    expect([...note].length).toBeLessThanOrEqual(24);
+    expect(/[0-9０-９]|[一二兩三四五六七八九十幾][個次格步塊公尺米下]/.test(note)).toBe(false);
+    expect(porch.objects.filter(o => o.type === 'note').length).toBe(1);
   });
 
   it('機制類型的 verbKey 都存在', () => {

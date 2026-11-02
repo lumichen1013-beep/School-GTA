@@ -191,3 +191,31 @@ export const paperBackground = (pal: Palette): THREE.Texture => cachedFor(pal, '
     g.fillRect(r() * 512, r() * 512, 1.5, 1.5);
   }
 }));
+
+/** 石階：錯縫砌石塊 + 灰縫 + 斑點 */
+export function stoneBlocks(pal: Palette, repeatX: number, repeatY: number): THREE.Texture {
+  const base = cachedFor(pal, 'stone', () => canvas(256, 128, g => {
+    const r = rng(23);
+    g.fillStyle = toCss(pal.stoneDark);
+    g.fillRect(0, 0, 256, 128);
+    const rows = 2;
+    for (let i = 0; i < rows; i++) {
+      const y = (i * 128) / rows;
+      const off = (i % 2) * 64;
+      for (let k = -1; k < 3; k++) {
+        const x = off + k * 128;
+        g.fillStyle = shade(pal.stone, 0.9 + r() * 0.16);
+        g.fillRect(x + 3, y + 3, 122, 58);
+        for (let n = 0; n < 14; n++) {
+          g.fillStyle = shade(pal.stone, 0.78 + r() * 0.1);
+          g.fillRect(x + 6 + r() * 112, y + 6 + r() * 50, 3, 3);
+        }
+      }
+    }
+  }));
+  const t = base.clone();
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  t.needsUpdate = true;
+  return t;
+}

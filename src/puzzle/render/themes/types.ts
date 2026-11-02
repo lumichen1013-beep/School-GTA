@@ -17,6 +17,8 @@ export interface Palette {
   readonly rail: number; readonly railDark: number;
   readonly table: number; readonly tableTop: number;
   readonly gate: number; readonly iron: number;
+  // 門廊 (1-1)：石階、玻璃牆
+  readonly stone: number; readonly stoneDark: number; readonly stoneTop: number; readonly glass: number;
   readonly door: number; readonly doorPanel: number; readonly doorFrame: number; readonly brass: number;
   readonly sealInk: number;
   readonly paperNote: number; readonly pin: number;

@@ -19,6 +19,8 @@ export interface PaintOpts {
   outline?: boolean;
   /** 3D 陰影 (預設 true) */
   shadow?: boolean;
+  /** 3D 不透明度 (< 1 = 半透明且不寫深度，例：玻璃)；2D 不受影響 */
+  opacity?: number;
   /** 不共用材質 (需要個別調整透明度時) */
   unique?: boolean;
   side?: THREE.Side;
@@ -91,13 +93,14 @@ export class Painter {
   }
 
   private mat3(color: number, o: PaintOpts): THREE.Material {
-    const key = [color, o.map?.uuid ?? '', o.emissive ?? '', o.emissiveIntensity ?? '', o.roughness ?? '', o.metalness ?? '', o.side ?? ''].join('|');
+    const key = [color, o.map?.uuid ?? '', o.emissive ?? '', o.emissiveIntensity ?? '', o.roughness ?? '', o.metalness ?? '', o.side ?? '', o.opacity ?? ''].join('|');
     const hit = !o.unique && this.cache3.get(key);
     if (hit) return hit;
     const m = new THREE.MeshStandardMaterial({
       color, map: o.map ?? null, roughness: o.roughness ?? 0.82, metalness: o.metalness ?? 0,
       emissive: o.emissive ?? 0x000000, emissiveIntensity: o.emissiveIntensity ?? 1, side: o.side ?? THREE.FrontSide
     });
+    if (o.opacity !== undefined && o.opacity < 1) { m.transparent = true; m.opacity = o.opacity; m.depthWrite = false; }
     if (!o.unique) this.cache3.set(key, m);
     return m;
   }

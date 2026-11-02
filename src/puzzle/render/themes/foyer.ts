@@ -17,6 +17,7 @@ export const FOYER_PAL: Palette = {
   rail: 0xb07440, railDark: 0x84522b,
   table: 0xa8693a, tableTop: 0xc2844e,
   gate: 0x8a5531, iron: 0x4d4f5c,
+  stone: 0xc8b49a, stoneDark: 0x8f7b63, stoneTop: 0xc9b38f, glass: 0xbfe6f0,
   door: 0x4f8a72, doorPanel: 0x3f735e, doorFrame: 0x704426, brass: 0xf0c050,
   sealInk: 0x15110f,
   paperNote: 0xfff6de, pin: 0xd64545,

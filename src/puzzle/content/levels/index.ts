@@ -1,4 +1,5 @@
 import type { AbilityId, LevelDef } from '../../core/types';
+import { porch } from './ch1/1-1-porch';
 import { foyer } from './ch1/1-2-foyer';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
@@ -17,11 +18,13 @@ export interface LevelEntry {
 
 /**
  * 已實作的關卡 (順序 = 選單順序)。
- * 1-2 玄關：現有關卡 (規格 6「1-2 玄關 (levels/foyer.ts)」、8 節遷移「舊玄關即新 1-2」)。
- * 1-1 門廊尚未實作，所以 1-2 暫無前置；加入 1-1 時改為 after: ['1-1']。
+ * 1-1 門廊：第一關 (規格 6「1-1 門廊」)，無前置、無能力。
+ * 1-2 玄關：現有關卡 (規格 6「1-2 玄關 (levels/foyer.ts)」、8 節遷移「舊玄關即新 1-2」)，前置 1-1
+ * (已通關 1-2 或之後關卡的存檔不被擋，見 meta/progress isUnlocked)。
  */
 export const LEVELS: readonly LevelEntry[] = [
-  { id: '1-2', chapter: 1, titleKey: 'lvl.1-2.title', abilities: [], unlock: { after: [] }, load: () => foyer }
+  { id: '1-1', chapter: 1, titleKey: 'lvl.1-1.title', abilities: [], unlock: { after: [] }, load: () => porch },
+  { id: '1-2', chapter: 1, titleKey: 'lvl.1-2.title', abilities: [], unlock: { after: ['1-1'] }, load: () => foyer }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);
