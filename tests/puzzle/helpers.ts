@@ -3,9 +3,10 @@ import { createWorld } from '../../src/puzzle/core/world';
 import { DEFAULT_MECHANICS } from '../../src/puzzle/mechanics';
 import { stepWorld } from '../../src/puzzle/core/step';
 import type { InputState, LevelDef, Mode, World } from '../../src/puzzle/core/types';
+import { TEXT } from './msgs';
 
 export const DT = 1 / 60;
-export const newWorld = (level: LevelDef = foyer): World => createWorld(level, { mechanics: DEFAULT_MECHANICS });
+export const newWorld = (level: LevelDef = foyer): World => createWorld(level, { mechanics: DEFAULT_MECHANICS, text: TEXT });
 
 export function run(w: World, input: Partial<InputState>, seconds: number, each?: () => void): void {
   const inp: InputState = { moveX: 0, moveZ: 0, jump: false, ...input };

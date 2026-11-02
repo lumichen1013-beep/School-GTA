@@ -4,6 +4,8 @@ export type MechanicId = string;
 
 /** 物件類型規格 (S4 起由機制註冊；類型只能有一個擁有者) */
 export interface ObjTypeSpec {
+  /** [E] 提示的動詞文字 key (未設 → obj.default.verb) */
+  verbKey?: string;
   /** used 之後仍可互動 (出口門：解封 = used，解封後才開得了) */
   usableWhenUsed?: boolean;
   /** 通用前置 (requires / grants / opens) 處理完之後呼叫 */
@@ -39,11 +41,11 @@ export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics {
   const ids = new Set<MechanicId>();
   const types = new Map<string, { owner: MechanicId; spec: ObjTypeSpec }>();
   for (const m of list) {
-    if (ids.has(m.id)) throw new Error(`重複的機制 id：${m.id}`);
+    if (ids.has(m.id)) throw new Error(`duplicate mechanic id: ${m.id}`);
     ids.add(m.id);
     for (const [type, spec] of Object.entries(m.types ?? {})) {
       const prev = types.get(type);
-      if (prev) throw new Error(`物件類型 ${type} 同時由 ${prev.owner} 與 ${m.id} 註冊`);
+      if (prev) throw new Error(`object type ${type} registered by both ${prev.owner} and ${m.id}`);
       types.set(type, { owner: m.id, spec });
     }
   }

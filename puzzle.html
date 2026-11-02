@@ -4,29 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:," />
-  <title>圖紙之間 · 玄關</title>
+  <title></title>
 </head>
 <body>
-  <div id="pz-root">
-    <div id="pz-canvas"></div>
-    <div id="pz-fade"></div>
-    <div id="pz-hud">
-      <div id="pz-status"><span id="pz-mode">現實</span><span id="pz-inv">持有物：無</span></div>
-      <div id="pz-help">
-        <b>操作</b>
-        <div><kbd>WASD</kbd>移動</div><div><kbd>Space</kbd>跳</div><div><kbd>F</kbd><kbd>Q</kbd>切換視角</div>
-        <div><kbd>E</kbd>互動</div><div><kbd>T</kbd>木箱歸位</div><div><kbd>R</kbd>重新開始</div>
-      </div>
-      <div id="pz-prompt"></div>
-      <div id="pz-toast"></div>
-    </div>
-    <div id="pz-narration"></div>
-    <div id="pz-clear">
-      <h1>玄關 · 通關</h1>
-      <p id="pz-next"></p>
-      <button id="pz-replay" type="button">重玩</button>
-    </div>
-  </div>
+  <!-- 畫面內容 (含所有文字) 由 src/puzzle/ui 依文字表產生 -->
+  <div id="pz-root"></div>
   <script type="module" src="/src/puzzle/main.ts"></script>
 </body>
 </html>

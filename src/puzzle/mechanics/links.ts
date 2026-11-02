@@ -9,14 +9,12 @@ declare module '../core/types' {
   }
 }
 
-export const MSG_GATE = '閘門紋絲不動。門軸上沾著墨，像在等紙上的什麼。';
-
 /** 已開啟的閘門不再擋路 */
 export const isOpenGate = (o: ObjState): boolean => o.def.type === 'gate' && o.used;
 
 /** C7：閘門 (opens 連結的目標) */
 export const links: Mechanic = {
   id: 'links',
-  types: { gate: { interact: w => say(w, MSG_GATE) } },
+  types: { gate: { verbKey: 'obj.gate.verb', interact: w => say(w, 'msg.gate') } },
   passable: (_w, o) => isOpenGate(o)
 };

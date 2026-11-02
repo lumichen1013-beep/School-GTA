@@ -1,5 +1,5 @@
 import type { Mode, World } from './types';
-import { MSG_SQUEEZE, PLAYER_HW } from './constants';
+import { PLAYER_HW } from './constants';
 import { boxAt, clamp, objBox, overlapsXZ, supportsAt, supportsOf } from './geometry';
 import { hits, inBounds, nearestFree, nearestFree2d } from './place';
 import { MODES } from './modes';
@@ -66,7 +66,7 @@ export function trySwitchMode(w: World): SwitchResult {
   const prevZ3d = p.z3d;
   if (!ENTER[MODES[p.mode].other](w)) {
     p.z3d = prevZ3d;
-    say(w, MSG_SQUEEZE);
+    say(w, 'msg.squeeze');
     return { ok: false };
   }
   p.vy = 0;

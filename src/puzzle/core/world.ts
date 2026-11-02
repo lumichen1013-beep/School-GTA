@@ -1,7 +1,13 @@
-import type { ItemId, LevelDef, ObjState, World } from './types';
+import type { ItemId, LevelDef, ObjState, Runtime, TextKey, TextParams, World } from './types';
 import { compileMechanics, type Mechanic } from './registry';
 
-export interface WorldOptions { mechanics: readonly Mechanic[] }
+export interface WorldOptions {
+  mechanics: readonly Mechanic[];
+  /** 文字解析器 (app / 測試注入 zh-Hant)；省略時 msg 即 key */
+  text?: Runtime['text'];
+}
+
+const identity = (key: TextKey): string => key;
 
 export function createWorld(level: LevelDef, opts: WorldOptions): World {
   const objs: ObjState[] = level.objects.map(def => ({ def, x: def.x, y: def.y, z: def.z, gone: false, used: false, touched: false }));
@@ -10,9 +16,9 @@ export function createWorld(level: LevelDef, opts: WorldOptions): World {
     byId: new Map(objs.map(o => [o.def.id, o])),
     player: { x: level.start.x, y: level.start.y, z: level.start.z, vy: 0, onGround: false, mode: '3d', z3d: level.start.z, facing: 0 },
     checkpoint: -1,
-    inv: {}, cleared: false, msg: '', msgSeq: 0, time: 0,
+    inv: {}, cleared: false, msg: '', msgKey: '', msgSeq: 0, time: 0,
     events: [],
-    rt: { mechanics: compileMechanics(opts.mechanics) }
+    rt: { mechanics: compileMechanics(opts.mechanics), text: opts.text ?? identity }
   };
   for (const m of w.rt.mechanics.init) m.init!(w);
   return w;
@@ -33,8 +39,10 @@ export function openLinks(w: World, o: ObjState): void {
   if (target) target.used = true;
 }
 
-export function say(w: World, text: string): void {
-  w.msg = text;
+/** 送出訊息：記下 key，msg 為解析後字串 */
+export function say(w: World, key: TextKey, params?: TextParams): void {
+  w.msgKey = key;
+  w.msg = w.rt.text(key, params);
   w.msgSeq++;
 }
 
@@ -44,13 +52,13 @@ export function spawnPoint(w: World): { x: number; y: number; z: number } {
 }
 
 /** 回到重生點 (保留目前模式) */
-export function respawn(w: World, text: string): void {
+export function respawn(w: World, key: TextKey): void {
   const p = w.player;
   const s = spawnPoint(w);
   p.x = s.x; p.y = s.y; p.vy = 0; p.onGround = false;
   p.z3d = s.z;
   p.z = p.mode === '3d' ? s.z : 0;
-  say(w, text);
+  say(w, key);
 }
 
 /** 站在地面上越過檢查點門檻就推進重生點 (只會往前) */

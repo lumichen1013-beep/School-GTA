@@ -5,8 +5,6 @@ import { MODES } from './modes';
 import { activeIn, effectiveVisibility, isActiveIn } from './presence';
 import { addItem, hasItem, openLinks, say } from './world';
 
-const MSG_UNREACHABLE = '看得見，卻碰不到。換個角度試試。';
-
 /** 未觸發，或類型允許觸發後仍可互動 (出口門) */
 function usable(w: World, o: ObjState): boolean {
   return !o.used || !!w.rt.mechanics.types.get(o.def.type)?.spec.usableWhenUsed;
@@ -56,7 +54,7 @@ export function interact(w: World): void {
   if (!t) {
     const unreachable = w.player.onGround && w.objs.some(o => isActiveIn(w, o, w.player.mode) && usable(w, o) && o.def.interactable
       && !canUse(w, o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
-    if (unreachable) say(w, MSG_UNREACHABLE);
+    if (unreachable) say(w, 'msg.unreachable');
     return;
   }
   const d = t.def;

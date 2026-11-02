@@ -8,4 +8,3 @@ export const INTERACT_RANGE = 1.5;
 export const EPS = 1e-4;
 export const SEARCH_RADIUS = 3;
 export const SEARCH_STEP = 0.05;
-export const MSG_SQUEEZE = '這裡塞不下';

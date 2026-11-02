@@ -1,4 +1,5 @@
 import type { Mode } from '../core/types';
+import type { Text } from '../text/text';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 
@@ -13,7 +14,7 @@ const KEY_ICON = `<svg viewBox="0 0 64 28" width="46" height="20" aria-hidden="t
   <path d="M47 14 L58 14" stroke="#3a2618" stroke-width="1.4"/>
 </svg>`;
 
-/** HUD：模式、持有物、互動提示、訊息、旁白、通關畫面 */
+/** HUD：模式、持有物、互動提示、訊息、旁白、通關畫面 (DOM 由 ui/dom.ts 建立) */
 export class PuzzleHud {
   private root = $('pz-root');
   private modeEl = $('pz-mode');
@@ -27,10 +28,12 @@ export class PuzzleHud {
   private hasKey: boolean | null = null;
   private prompt: string | null = null;
 
+  constructor(private text: Text) {}
+
   setMode(m: Mode): void {
     if (m === this.mode) return;
     this.mode = m;
-    this.modeEl.textContent = m === '3d' ? '現實' : '圖紙';
+    this.modeEl.textContent = this.text(m === '3d' ? 'term.mode3d' : 'term.mode2d');
     this.root.classList.toggle('mode2d', m === '2d');
   }
   setInventory(hasKey: boolean): void {
@@ -41,7 +44,7 @@ export class PuzzleHud {
       this.invEl.classList.add('got');
     }
     this.hasKey = hasKey;
-    this.invEl.innerHTML = hasKey ? `持有物 ${KEY_ICON}<b>筆尖</b>` : '持有物：無';
+    this.invEl.innerHTML = hasKey ? `${this.text('ui.inv.label')} ${KEY_ICON}<b>${this.text('term.nib')}</b>` : this.text('ui.inv.none');
   }
   setPrompt(text: string | null): void {
     if (text === this.prompt) return;
@@ -62,7 +65,8 @@ export class PuzzleHud {
     this.narrationEl.classList.remove('hide');
   }
   hideNarration(): void { this.narrationEl.classList.add('hide'); }
-  showClear(nextRoom: string): void {
+  showClear(title: string, nextRoom: string): void {
+    $('pz-clear-title').textContent = title;
     $('pz-next').textContent = nextRoom;
     this.clearEl.classList.add('show');
   }

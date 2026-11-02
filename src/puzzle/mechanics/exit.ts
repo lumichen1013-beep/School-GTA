@@ -13,6 +13,7 @@ export const exit: Mechanic = {
   id: 'exit',
   types: {
     door: {
+      verbKey: 'obj.door.verb',
       usableWhenUsed: true,
       interact: (w, o) => {
         if (!o.used) { say(w, o.def.lockedText ?? ''); return; }

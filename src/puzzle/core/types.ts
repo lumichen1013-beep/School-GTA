@@ -5,6 +5,9 @@ export type Mode = '3d' | '2d';
 export type Visibility = 'both' | '2d' | '3d';
 export type V3 = [number, number, number];
 export type ObjId = string;
+/** 文字 key (解析於 content/text；核心只存 key) */
+export type TextKey = string;
+export type TextParams = Readonly<Record<string, string | number>>;
 /** 物品 id ('nib' …；N9) */
 export type ItemId = string;
 /** 鎖的需求：字串 = 需持有、不消耗；consume = 使用時消耗一個 */
@@ -22,8 +25,8 @@ export interface ObjBase {
   /** 只在此模式可互動 (預設同 visible) */
   interactIn?: Visibility;
   pushable?: boolean;
-  /** 顯示名稱 */
-  label?: string;
+  /** 顯示名稱的文字 key */
+  labelKey?: TextKey;
   /** 切回 3D 時不可落在其範圍內 (3D 下被圍住、走不出去的區域)；會改落到最近可站處 */
   noLand3d?: boolean;
   /** 互動前須持有的物品 (N9)；不滿足時說 lockedText 並中止 */
@@ -32,10 +35,10 @@ export interface ObjBase {
   grants?: ItemId;
   /** 觸發 (互動 / 壓板壓下) 時開啟的物件 id (C6、C8) */
   opens?: ObjId;
-  /** requires 不滿足時的訊息 */
-  lockedText?: string;
-  /** requires / grants / opens 生效時的訊息 */
-  useText?: string;
+  /** requires 不滿足時的訊息 (文字 key；未登錄的字串原樣顯示) */
+  lockedText?: TextKey;
+  /** requires / grants / opens 生效時的訊息 (文字 key；未登錄的字串原樣顯示) */
+  useText?: TextKey;
 }
 
 /** 開放式類型表：每個機制檔以 declaration merging 加入自己的類型與專屬欄位 */
@@ -49,15 +52,16 @@ export interface Checkpoint { minX: number; x: number; y: number; z: number }
 
 export interface LevelDef {
   id: string;
-  title: string;
+  titleKey: TextKey;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** 低於此高度視為掉入坑洞 */
   voidY: number;
   start: { x: number; y: number; z: number };
   /** 站上 x ≥ minX 的地面後，掉落改回此處重生 (依序遞進) */
   checkpoints?: Checkpoint[];
-  narration: string;
-  nextRoom: string;
+  narrationKey: TextKey;
+  /** 通關畫面的「下一間房」文字 */
+  nextKey: TextKey;
   objects: ObjDef[];
 }
 
@@ -83,16 +87,18 @@ export interface World {
   /** 持有物品數量 (取代 hasKey；N9) */
   inv: Record<ItemId, number>;
   cleared: boolean;
+  /** 最後一則訊息：msg = 已解析字串 (相容既有測試)，msgKey = 其文字 key */
   msg: string;
+  msgKey: TextKey;
   msgSeq: number;
   time: number;
   /** 本步事件外送匣，外殼每幀取走清空 */
   events: GameEvent[];
-  /** 不序列化：編譯後的機制表 */
+  /** 不序列化：編譯後的機制表與文字解析器 */
   readonly rt: Runtime;
 }
 
-export interface Runtime { mechanics: CompiledMechanics }
+export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, params?: TextParams) => string }
 
 export type GameEvent = { t: 'switch'; to: Mode } | { t: 'switchDenied' };
 

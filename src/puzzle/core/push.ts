@@ -4,8 +4,6 @@ import { solidsFor } from './presence';
 import { resolvePlayerOverlap } from './place';
 import { say } from './world';
 
-export const MSG_CRATE_RESET = '木箱回到了原來的地方。';
-
 /** 木箱底下是否仍有支撐 (中心點落在某個頂面等高的實體上) */
 function supported(w: World, crate: ObjState, x: number, z: number): boolean {
   return solidsFor(w, '3d').some(s => {
@@ -47,5 +45,5 @@ export function resetCrates(w: World): void {
     o.x = o.def.x; o.y = o.def.y; o.z = o.def.z;
   }
   resolvePlayerOverlap(w);
-  say(w, MSG_CRATE_RESET);
+  say(w, 'msg.crateReset');
 }

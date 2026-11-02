@@ -15,5 +15,5 @@ export { hasItem, addItem } from '../core/world';
 /** C8 / N9：通用鑰匙與鎖，行為全由物件資料 (requires / grants / opens / lockedText / useText) 驅動 */
 export const items: Mechanic = {
   id: 'items',
-  types: { key: {}, valve: {} }
+  types: { key: { verbKey: 'obj.key.verb' }, valve: { verbKey: 'obj.valve.verb' } }
 };

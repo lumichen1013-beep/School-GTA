@@ -10,8 +10,6 @@ import { trySwitchMode } from './switchMode';
 import { interact } from './interact';
 import { respawn, updateCheckpoint } from './world';
 
-export const MSG_FELL = '你掉進了縫隙裡……醒來時，又回到了熟悉的地方。';
-
 function moveAxis(w: World, axis: 0 | 2, delta: number): void {
   const p = w.player;
   let remaining = delta;
@@ -78,5 +76,5 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
 
   for (const m of w.rt.mechanics.afterPhysics) m.afterPhysics!(w, dt);
   updateCheckpoint(w);
-  if (p.y < w.level.voidY) respawn(w, MSG_FELL);
+  if (p.y < w.level.voidY) respawn(w, 'msg.fell');
 }
