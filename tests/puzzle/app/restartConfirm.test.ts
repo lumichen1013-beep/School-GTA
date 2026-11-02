@@ -92,7 +92,7 @@ describe('確認窗文字與說明', () => {
     const { TEXT } = await import('../msgs');
     const { deriveHelp } = await import('../../../src/puzzle/app/hudModel');
     expect([TEXT('ui.confirm.restart.title'), TEXT('ui.confirm.restart.body'), TEXT('ui.confirm.restart.ok'), TEXT('ui.confirm.restart.cancel')])
-      .toEqual(['要重新開始這一關嗎？', '這一關的進度會歸零。', '重新開始', '繼續玩']);
+      .toEqual(['要重新進房嗎？', '這個房間的機關會回到原樣。', '重新進房', '繼續玩']);
     const row = deriveHelp(DEFAULT_BINDINGS).find(r => r.labelKey === 'ui.help.restart')!;
     expect(TEXT(row.noteKey!)).toBe('（需確認）');
   });

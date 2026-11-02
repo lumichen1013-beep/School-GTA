@@ -13,26 +13,26 @@ describe('deriveHud (純函式)', () => {
     place(w, -17, 0, -5.2);
     const m = deriveHud(w, TEXT, view);
     expect(m.mode).toBe('3d');
-    expect(m.modeText).toBe('現實');
+    expect(m.modeText).toBe('實景');
     expect(m.items).toEqual([]);
-    expect(m.prompt).toBe('[E] 閱讀　紙條');
-    expect(deriveHud(w, TEXT, { ...view, renderMode: '2d' }).modeText).toBe('圖紙');
+    expect(m.prompt).toBe('[E] 閱讀　叔公的字條');
+    expect(deriveHud(w, TEXT, { ...view, renderMode: '2d' }).modeText).toBe('藏寶圖');
   });
 
   it('各物件動詞與名稱 (筆尖 / 墨水閥 / 出口門 / 閘門)', () => {
     const w = newWorld();
     place(w, 8.5, 2.5, -4.5, '2d');
-    expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 拾取　筆尖');
+    expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 拾取　鋼筆筆尖');
     interact(w);
     const m = deriveHud(w, TEXT, view);
-    expect(m.items).toEqual([{ id: 'nib', n: 1, name: '筆尖' }]);
-    expect(m.toast).toEqual({ seq: w.msgSeq, text: '拿到了「筆尖」。它還帶著一點未乾的墨。' });
+    expect(m.items).toEqual([{ id: 'nib', n: 1, name: '鋼筆筆尖' }]);
+    expect(m.toast).toEqual({ seq: w.msgSeq, text: '拿到了「鋼筆筆尖」。它還帶著一點未乾的墨。' });
     place(w, 15, 0, -5.2, '2d');
     expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 轉動　墨水閥');
     place(w, 18, 0, -4.6);
     expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 開門　出口門');
     place(w, 9.6, 0, 0);
-    expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 查看　閘門');
+    expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 查看　鐵柵門');
   });
 
   it('過場中、通關後、空中不顯示提示', () => {
@@ -49,14 +49,14 @@ describe('deriveHud (純函式)', () => {
   it('提示的按鍵名跟著重綁', () => {
     const w = newWorld();
     place(w, -17, 0, -5.2);
-    expect(deriveHud(w, TEXT, { ...view, bindings: mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }) }).prompt).toBe('[G] 閱讀　紙條');
+    expect(deriveHud(w, TEXT, { ...view, bindings: mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }) }).prompt).toBe('[G] 閱讀　叔公的字條');
   });
 });
 
 describe('deriveHelp', () => {
   it('預設按鍵產生與舊 puzzle.html 相同的操作說明', () => {
     expect(deriveHelp(DEFAULT_BINDINGS).map(r => [r.keys, TEXT(r.labelKey)])).toEqual([
-      [['WASD'], '移動'], [['Space'], '跳'], [['F', 'Q'], '切換視角'], [['E'], '互動'], [['T'], '木箱歸位'], [['R'], '重新開始']
+      [['WASD'], '移動'], [['Space'], '跳'], [['F', 'Q'], '點鋼筆（切換）'], [['E'], '互動'], [['T'], '物歸原處'], [['R'], '重新進房']
     ]);
   });
 

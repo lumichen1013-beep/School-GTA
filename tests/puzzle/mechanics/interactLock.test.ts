@@ -5,12 +5,12 @@ import { resetCrates } from '../../../src/puzzle/core/push';
 import type { World } from '../../../src/puzzle/core/types';
 
 // S4 行為鎖定：鑰匙 / 閥 / 門 / 閘門 / 字條在各狀態下的訊息與結果 (只看行為，不看內部旗標)
-const MSG_KEY = '拿到了「筆尖」。它還帶著一點未乾的墨。';
+const MSG_KEY = '拿到了「鋼筆筆尖」。它還帶著一點未乾的墨。';
 const MSG_VALVE_DRY = '墨水閥乾涸了。需要一支能引墨的東西。';
-const MSG_VALVE_OPEN = '筆尖點下，墨線像退潮一樣散開了。';
-const MSG_DOOR_SEALED = '門被墨線封印著。圖紙裡似乎有它的機關。';
+const MSG_VALVE_OPEN = '鋼筆筆尖點下，墨線像退潮一樣散開了。';
+const MSG_DOOR_SEALED = '門被墨線封印著。藏寶圖裡似乎有它的機關。';
 const MSG_DOOR_OPEN = '門開了。';
-const MSG_GATE = '閘門紋絲不動。門軸上沾著墨，像在等紙上的什麼。';
+const MSG_GATE = '鐵柵門紋絲不動。門軸上沾著墨，像在等藏寶圖上的什麼。';
 const MSG_UNREACHABLE = '看得見，卻碰不到。換個角度試試。';
 
 const get = (w: World, id: string) => w.byId.get(id)!;

@@ -25,7 +25,7 @@ describe('step(ActionFrame)', () => {
     step(a, { moveX: 1, moveZ: 0, jump: false, pressed: ['interact', 'reset', 'flip'] }, DT);
     expect(snap(a)).toEqual(snap(b));
     expect(a.player.mode).toBe('2d');
-    expect(a.msg).toBe('木箱回到了原來的地方。'); // 切換後懸空，互動無效 (同舊流程)
+    expect(a.msg).toBe('物歸原處：木箱回到了原來的地方。'); // 切換後懸空，互動無效 (同舊流程)
     expect(a.events).toEqual([{ t: 'switch', to: '2d' }]);
   });
 
