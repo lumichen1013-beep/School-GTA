@@ -1,4 +1,10 @@
-# 《圖紙之間》程式架構設計 v0.1
+# 《圖紙之間》程式架構設計 v0.2
+
+> **修訂紀錄**
+> | 版本 | 日期 | 內容 |
+> |------|------|------|
+> | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2 | 2026-11-02 | 第 9 節 Q1～Q5 全部確認（照建議）；提示系統改為三級全抽象 + L4 解法筆記 + 提示驗證器（規格 7.1、7.1.1、7.1.2）；`HintDef` / `PuzzleDef` / `Settings` 格式更新；謎題 id `1-2a`～`1-2d`、`5-5a`～`5-5c` |
 
 > 狀態：草案（2026-11-02），對應 `game-spec-v0.2.md`（下稱「規格」）與 `story-bible-v0.1.md`（下稱「劇情」）。基準程式為 commit `52635aa` 的 `src/puzzle/`（20 檔、約 2.3k 行）與 `tests/puzzle/`（36 個測試；全專案 `vitest run` 共 584 個測試）。
 > 範圍：只寫架構，不改任何程式碼。標記：**〔規格 X〕** = 依據規格章節或 N 編號；**〔碼 file:line〕** = 依據現有程式；**〔推論〕** = 我的判斷，未經實作驗證。
@@ -530,7 +536,7 @@ InputSource.poll ─► ShellAction ─► App（restart/hint/menu/skip）
 UI 按鈕 ─► App 指令（不直接改 world）
 ```
 
-- `app/loop.ts`：固定步長 1/60 累加器（測試 `DT=1/60` 相同；見決策 Q4）、過場鎖 0.3 秒期間不呼叫 `step`（沿用 `game.ts:90-101` 語意）。
+- `app/loop.ts`：固定步長 1/60 累加器（測試 `DT=1/60` 相同；決策 Q4 已確認）、過場鎖 0.3 秒期間不呼叫 `step`（沿用 `game.ts:90-101` 語意）。
 - `deriveHud` 是純函式（可在 Node 測）：`{ modeText, items: {id, n}[], prompt, toast, narration, hint }`；`ui/hud.ts` 只做 diff 後寫 DOM。
 - 畫面狀態機用一個 `switch` + `enter/exit`，不引入狀態機函式庫（只有 7 個狀態）。
 
@@ -575,7 +581,7 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, inkPalette, reduceMotion, keys }
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, hintAssist, assistMode, inkPalette, reduceMotion, keys }（hintAssist / assistMode 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<PuzzleStat>): void;
 ```
 
@@ -586,25 +592,30 @@ export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<Puzz
 
 ```ts
 export interface PuzzleDef {
-  id: string;                       // '1-2a'（規格 ①～④ 對應 a～d，見決策 Q3）
+  id: string;                       // '1-2a'～'1-2d'、'5-5a'～'5-5c'（決策 Q3，已確認）
   core: boolean;
   doneFlag: string;                 // 完成判定，例 'item:nib'、'on:plate'、'zone:exit'
-  hints: [HintDef, HintDef, HintDef];   // 方向 / 焦點 / 步驟（規格 7.1、D7）
+  hints: [HintDef, HintDef, HintDef];   // L1 意象 / L2 觀察角度 / L3 缺的性質，三級全抽象（規格 7.1、D7）
+  solutionKey: TextKey;                 // L4 解法筆記（安全閥，預設鎖定；規格 7.1.2）
+  keyObjects: ObjId[];                  // 本題關鍵物件：驗證器據此檢查提示不得點名（規格 7.1.1 H4）
+  assistFocus?: ObjId[];                // 只在 Settings.hintAssist 開啟時用於 L2 描邊（規格 Q-E，預設關）
 }
-export interface HintDef { textKey: TextKey; focus?: ObjId[] }   // focus 用於第 2 級描邊
+export interface HintDef { textKey: TextKey; truthRef: string }   // truthRef：對應解法大綱的步驟或規則（H5 人工審稿用）
 
-export interface HintState { puzzleId: string | null; unlocked: 0 | 1 | 2 | 3; ready: 0 | 1 | 2 | 3; shown: 0 | 1 | 2 | 3 }
+export interface HintState { puzzleId: string | null; unlocked: 0 | 1 | 2 | 3 | 4; ready: 0 | 1 | 2 | 3 | 4; shown: 0 | 1 | 2 | 3 | 4 }   // 4 = L4 解法筆記
 export interface HintStrategy {
   /** realSec 為真實經過秒數（暫停不計）；events 為本幀 world.events */
   update(s: HintState, realSec: number, events: readonly GameEvent[]): HintState;
-  request(s: HintState): HintState;   // 按 H
+  request(s: HintState, hold?: boolean): HintState;   // 按 H；L4 需 hold（按住 2 秒）
 }
 export const HINT_STRATEGIES: Record<'timed' | 'always' | 'off', () => HintStrategy>;
 ```
 
 - **目前謎題** = `level.puzzles` 中第一個 `doneFlag` 未成立者（關內謎題線性，規格 6；〔推論〕5-x 若需並行再加欄位）。新旗標事件 → 計時與計數歸零。
-- **卡關偵測**（規格 7.1）只吃 `world.events`：`reset ≥3`、`switch ≥12 且無 flag`、`fall ≥3` → `ready+1`（只亮圖示）。
-- **與「小格」的關係**：策略只產生「第幾級可用」；小格的台詞外殼（「運算中……」「找到線索了！」）是 `ui/hintPanel.ts` + 文字表 `story.xiaoge.*`，換角色或關閉小格只動 UI 與文字。0 級回饋（C9「看得見，卻碰不到」）仍由核心 `say('msg.unreachable')`，劇情改由小格說只需改文字。
+- **計時**（規格 7.1）：L1 3 分、L2 +3 分、L3 +4 分；L4 在 L3 **顯示後**再 5 分鐘（`Settings.assistMode` 開啟則免等待）。
+- **卡關偵測**（規格 7.1）只吃 `world.events`：`reset ≥3`、`switch ≥12 且無 flag`、`fall ≥3` → `ready+1`（只亮圖示），**上限 L3**；對 L4 只把等待縮短到 3 分鐘。
+- **跳過此題**：只在 `core === false`（擴充題）時提供，與 L4 同條件出現；寫入 `stats.skipped`。
+- **與「小格」的關係**：策略只產生「第幾級可用」；小格的台詞外殼（「運算中……」「找到線索了！……大概。」「好吧，直接說——啊不行，只能說這些。」；L4「借你社長的攻略筆記」）是 `ui/hintPanel.ts` + 文字表 `story.xiaoge.*`，換角色或關閉小格只動 UI 與文字。0 級回饋（C9「看得見，卻碰不到」）仍由核心 `say('msg.unreachable')`，劇情改由小格說只需改文字。
 
 ### 4.11 文字 / 文案系統（`text/`、`content/text/`）
 
@@ -618,7 +629,7 @@ export interface Text {
 export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   // 缺 key → fallback → 回傳 key 本身（DEV 警告）
 ```
 
-- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、便利貼、物件 label）、`hint.<puzzleId>.<1|2|3>`、`story.*`（角色台詞、結局）、`term.*`（詞彙表）。
+- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、便利貼、物件 label）、`hint.<puzzleId>.<1|2|3|sol>`、`story.*`（角色台詞、結局）、`term.*`（詞彙表）。
 - **劇情詞彙與內部 id 分離**：內部一律用規格代號（`key`、`valve`、`pin`、`mark`、模式 `'2d'`）；玩家看到的名稱集中在 `term.*`：`term.mode3d='現實'`、`term.nib='筆尖'`。劇情 4 節的改名 = 改 `term.*` 幾行，其他字串透過 `[[term.nib]]` 自動跟著變。
 - 暱稱：`{name}` 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。
 - 多語系：新增 `content/text/en/` 同 key 表，`createText(en, zhHant)` 以中文回退；驗證器檢查各語系 key 集合。
@@ -648,7 +659,7 @@ export interface ScanSpec {
 export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): Array<{ sample: string; flag: string }>;
 ```
 
-**驗證器規則**（每條附規格依據）：id 唯一；類型已註冊；`opens/requires/grants` 參照存在；`requires` 的能力在 `abilities` 或關內可得（規格 8）；每個 puzzle 三級提示齊全、`hint.*` key 存在（規格 7.1「測試檢查 50 題三級齊全」）；每關 `pinnable` 1～3 個（規格 N5）；切換式閥 ≤2（規格 N10）；燈車 ≤1（規格 N15）；墨記關卡必有 `regions` 且不重疊（Q-C）；起點與檢查點在兩模式站得住（現有測試 `puzzleLogic.test.ts:24`）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 `*Key` 在 zh-Hant 存在；各機制 `validate`。
+**驗證器規則**（每條附規格依據）：id 唯一；類型已註冊；`opens/requires/grants` 參照存在；`requires` 的能力在 `abilities` 或關內可得（規格 8）；每個 puzzle 三級提示 + `solutionKey` 齊全、`hint.*` key 存在（規格 7.1）；**提示 lint**（規格 7.1.1 H1～H4）：L1 ≤24、L2 ≤30、L3 ≤36 字，禁用祈使開頭與動詞清單、按鍵名、方位精確詞、任何數字，且不得含 `keyObjects` 的 label / 顯示名（H5～H9 為人工審稿與 G1 試玩項，不自動化）；每關 `pinnable` 1～3 個（規格 N5）；切換式閥 ≤2（規格 N10）；燈車 ≤1（規格 N15）；墨記關卡必有 `regions` 且不重疊（Q-C）；起點與檢查點在兩模式站得住（現有測試 `puzzleLogic.test.ts:24`）；全遊戲 diary=5、scraps=6 且位置符合劇情 6.1；所有 `*Key` 在 zh-Hant 存在；各機制 `validate`。
 **捷徑掃描**是取樣器而非求解器：誠實地說，它只能證明「取樣到的配置 × 探針」沒有捷徑；探針與取樣格由寫關卡的人負責。成本估計：3 箱 × 10×6 格 × 數個玩家點 × 6 探針，每探針 ≤3 秒模擬，單關約數秒〔推論〕。
 **通關回放**：每關一個 `tests/puzzle/levels/<id>.test.ts`，以 `runScript` 從 `createWorld` 走到 `cleared`。
 **Debug 疊層**（可選，DEV only）：`render/debug.ts` 畫 `solidsFor(renderMode)` 線框與 flags 清單；`main.ts` 已有 `window.__puzzle`（`main.ts:5`）沿用。
@@ -685,7 +696,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 
 ### 6.2 N8 剖面（規格 4、4-1～4-4）
 
-- 狀態：`WorldExt.section = { on: boolean }`；`actions.section`（C，`ability:'section'`）。切換剖面限 3D〔推論，見決策 Q5〕。
+- 狀態：`WorldExt.section = { on: boolean }`；`actions.section`（C，`ability:'section'`）。切換剖面限 3D（已確認，決策 Q5）；2D 按 C 只 `say('msg.section.only3d')`。
 - 掛點 `presence(w, o, '2d')`：`!on || isPinned(w, o) || zRangeContains(o, w.player.z3d)`；3D 恆 true。
   - `solidsFor('2d')` 依 cut 過濾：因 `solidsFor` 建在 `isActiveIn` 上，自動成立。
   - 壓板依 cut 計數：plates 的重量來源是 `solidsFor(mode)`（6.4、N14），自動成立；壓板本身不在刀上 → 不存在 → 不更新（R1 的延伸，4-4a 需要的正是這個）。
@@ -788,12 +799,12 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 
 ---
 
-## 9. 待使用者決策的問題
+## 9. 決策紀錄（已全部確認，2026-11-02，使用者回覆「全部照建議」）
 
-| # | 問題 | 建議預設 |
+| # | 問題 | 決定 |
 |---|------|---------|
-| Q1 | M0 遷移時，是否允許測試中 `w.hasKey`、`w.sealed`、`MSG_*` 匯入路徑做 7.3 的**等價機械替換**？（否則只能在 World 保留兩個相容欄位） | **允許**；替換表固定、以腳本檢查，其餘斷言一字不改 |
-| Q2 | 規格內部矛盾：4-2b 說「物不在刀上，影還在」（caster 不受剖面影響），H2 說「只有剖到的花盆會投影」（caster 受剖面影響）。兩者需同一條規則 | **採 4-2b**（caster 不受剖面過濾、影子要剖到牆面帶才存在）；H2 改寫為「剖到牆面才看得到影子」的變奏。架構兩者都放得下（只差 light 的 caster 來源是否經 section 過濾） |
-| Q3 | 謎題 id 格式：1-2 的 ①～④ 是否統一為 `1-2a`～`1-2d`（存檔 / 統計 key 用） | **是**；顯示用編號放文字表 |
-| Q4 | 瀏覽器主迴圈改為固定步長 1/60（與測試一致，可錄製試玩輸入回放 G1 問題），手感可能有極細微差異 | **採用**，於 S6 實作並手動確認 |
-| Q5 | 剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變 | **只能在 3D**；2D 按下提示「回到完成版再切換剖面」 |
+| Q1 | M0 遷移時，是否允許測試中 `w.hasKey`、`w.sealed`、`MSG_*` 匯入路徑做 7.3 的**等價機械替換**？（否則只能在 World 保留兩個相容欄位） | **允許**；替換表固定、以腳本檢查，其餘斷言一字不改（**已確認**） |
+| Q2 | 規格內部矛盾（規格已改 H2，並列為規格 A2）：4-2b 說「物不在刀上，影還在」（caster 不受剖面影響），H2 說「只有剖到的花盆會投影」（caster 受剖面影響）。兩者需同一條規則 | **採 4-2b**（caster 不受剖面過濾、影子要剖到牆面帶才存在）；H2 改寫為「剖到牆面才看得到影子」的變奏。架構兩者都放得下（只差 light 的 caster 來源是否經 section 過濾）（**已確認**） |
+| Q3 | 謎題 id 格式：1-2 原本的圈號編號是否統一為 `1-2a`～`1-2d`（存檔 / 統計 key 用） | **是**；顯示用編號放文字表（**已確認**） |
+| Q4 | 瀏覽器主迴圈改為固定步長 1/60（與測試一致，可錄製試玩輸入回放 G1 問題），手感可能有極細微差異 | **採用**，於 S6 實作並手動確認（**已確認**） |
+| Q5 | 剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變 | **只能在 3D**；2D 按下提示「回到完成版再切換剖面」（**已確認**） |
