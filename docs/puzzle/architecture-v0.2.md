@@ -4,6 +4,7 @@
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2（手機觸控） | 2026-11-02 | 4.6 輸入層加入觸控（`input/touch.ts`、`touchLayout.ts`、`merge.ts`、`ui/touchOverlay.ts`）、純檔案 DOM 規則、文字 key、擴充劇本「新增一種輸入」；設計細節見 `mobile-controls-v0.1.md` |
 > | v0.2（老宅尋寶・單人詭異版） | 2026-11-02 | 劇情改為老宅尋寶（顯示名見 `story-bible-v0.2.md`）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 `mechanics/chase`（N19 追逐，確定性）與 `chase` 事件；`calmTension` 語意擴大（驚嚇平靜版、追逐自動通過） |
 > | v0.2（緊張感） | 2026-11-02 | 新增 4.13 緊張感呈現（`render/tension/`、`audio/`、`LevelEntry.mood`），依賴規則與 `validateMood`；`Settings.calmTension` |
 > | v0.2（提示改便利貼） | 2026-11-02 | 移除提示角色與提示面板；提示改為場景 `note` 物件（`hint` 屬性、延遲顯字、預算檢查）；L4 改為暫停選單解答手稿頁（規格 7.1、7.1.2、7.1.3、H10） |
@@ -120,7 +121,7 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 1. 以 `fs` 遞迴列出 `src/puzzle/**/*.ts`，用正規式擷取 `import … from '…'`、`import('…')`、`export … from '…'`，並記錄是否為 `import type`。
 2. 依路徑第一段決定層（`core/…` → core；根目錄 `main.ts` 視為 app）。相對路徑解析成目標檔再判層；裸模組只允許 `three`（且只在 render / app）。
 3. 對照 2.2 矩陣，違規列出 `檔案 → 目標（層）`，非空即失敗。
-4. 額外字串規則：`core/`、`mechanics/`、`content/`、`meta/`、`text/`、`devtools/` 內不得出現 `document.`、`window.`、`localStorage`、`performance.now`、`Date.now`、`Math.random`（確定性與 Node 可跑）。
+4. 額外字串規則：`core/`、`mechanics/`、`content/`、`meta/`、`text/`、`devtools/` 以及 `input/touch.ts`、`input/touchLayout.ts`、`input/merge.ts`（觸控純邏輯）內不得出現 `document.`、`window.`、`localStorage`、`performance.now`、`Date.now`、`Math.random`（確定性與 Node 可跑）。
 5. `mechanics/` 內部 import 圖做 DFS，有環即失敗。
 6. 反向隔離：掃 `src/**/*.ts`（排除 `src/puzzle`），不得出現指向 `puzzle/` 的 import；掃 `src/puzzle` 不得出現 `../main`、`../game/` 等跳出 puzzle 的路徑。
 7. render 對 core 的值匯入名稱必須在白名單（`isActiveIn`、`allObjs`、`objBox`、型別）內。
@@ -181,6 +182,9 @@ src/puzzle/
     types.ts                 InputSource、Bindings、ShellAction
     bindings.ts              DEFAULT_BINDINGS、重綁合併
     keyboard.ts              KeyboardSource（取代 input.ts）
+    touch.ts                 TouchSource：搖桿、死區、按鈕狀態機（純邏輯，不碰 DOM；mobile-controls 5）
+    touchLayout.ts           觸控版面矩形與情境式按鈕可見性（純函式）
+    merge.ts                 mergeSources：鍵盤 + 觸控並存
   render/                    L4 three
     scene.ts                 PuzzleScene：依 allObjs 對帳（新增 / 移除 / 更新）
     cameras.ts               沿用
@@ -200,6 +204,7 @@ src/puzzle/
   ui/                        L4 DOM
     hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
     icons.ts                 物品 id → SVG
+    touchOverlay.ts          觸控疊層 DOM、Pointer Events、pointer capture、阻止瀏覽器手勢；事件經 TouchSink 交給 app
     screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的字條，唯讀）、guide（叔公的解答手稿頁，解答模式）
     puzzle.css               沿用
   app/                       L5 外殼
@@ -515,14 +520,33 @@ export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R
 export interface InputSource {
   /** 每幀取樣：持續軸 + 本幀新按下的動作（取走即清空） */
   poll(): { moveX: number; moveZ: number; jump: boolean; pressed: InputAction[]; anyKey: boolean };
-  clear(): void; dispose(): void;
+  clear(): void;
+  releaseAll(): void;   // 確認窗開關、失焦、背景、翻轉時：視為全部放開（已實作於 KeyboardSource）
+  dispose(): void;
 }
 export class KeyboardSource implements InputSource { constructor(bindings: Bindings) }
-export function mergeSources(sources: InputSource[]): InputSource;   // 觸控 / 手把日後各加一個 source
+export function mergeSources(sources: InputSource[]): InputSource;   // input/merge.ts：軸取絕對值較大者、jump OR、pressed 依 INPUT_ACTIONS 聯集
+
+// input/touch.ts（純邏輯）
+export type TouchControlId = 'stick' | 'jump' | 'flip' | 'interact' | 'reset' | 'pause' | 'notes' | 'pin' | 'section' | 'mark';
+export class TouchSource implements InputSource {
+  constructor(opts: { deadZone: number /* 0.15 */; full2d: number /* 0.6 */; holdMs: { reset: number /* 500 */ } });
+  setContext(c: { mode: Mode; layout: TouchLayout; visible: readonly TouchControlId[] }): void;
+  down(id: number, x: number, y: number, tMs: number): void;   // 依 layout 把手指分配給一個元件（之後只屬於它）
+  move(id: number, x: number, y: number, tMs: number): void;
+  up(id: number, tMs: number): void;
+  cancel(id: number): void;
+}
+// input/touchLayout.ts（純函式）
+export function layoutTouch(view: { w: number; h: number; safe: Insets }, s: Pick<Settings, 'handedness' | 'buttonScale'>): TouchLayout;
+export function visibleButtons(ctx: { screen: string; mode: Mode; canInteract: boolean; abilities: readonly AbilityId[]; hasPushable: boolean; notesSeen: boolean }): TouchControlId[];
+// ui/touchOverlay.ts（DOM）：ui 不得 import input，故自行宣告 TouchSink，TouchSource 以結構型別符合、由 app 接線
+export interface TouchSink { down(id: number, x: number, y: number, tMs: number): void; move(...a: [number, number, number, number]): void; up(id: number, tMs: number): void; cancel(id: number): void }
 ```
 
 - 重綁：`settings.keys` 覆蓋 `DEFAULT_BINDINGS`；操作說明由 `ui` 依 bindings 產生（修 H17）。
-- 新增輸入方式只需新增 `input/touch.ts` 實作 `InputSource` 並在 `app/services.ts` 合併。
+- 新增輸入方式：新增一個 `InputSource` 並在 `app` 以 `mergeSources` 合併（觸控見 `mobile-controls-v0.1.md` 第 5 節；偵測 `(pointer: coarse)` / `ontouchstart` 與 `Settings.touchLayout`）。
+- 觸控模式下 `deriveHud` 的互動提示改用 `ui.prompt.touch`，操作說明改由 `deriveTouchHelp(layout)` 產生；暱稱、確認窗、通關畫面時隱藏觸控疊層並 `releaseAll`。
 
 ### 4.7 應用外殼（`app/`）
 
@@ -592,7 +616,7 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 export function loadSave(s: KeyValueStorage): SaveV2;    // 依序套遷移 → 校正 → 寫回；舊 key 在成功寫回後才刪
 export function writeSave(s: KeyValueStorage, save: SaveV2): void;
-export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, inkPalette, reduceMotion, keys }（guideMode / calmTension 預設 false，規格 8）
+export function loadSettings(s: KeyValueStorage): Settings;   // { hints, guideMode, noteScale, calmTension, inkPalette, reduceMotion, keys, touchLayout, handedness, buttonScale, buttonOpacity, haptics, jumpCarry, quality }（guideMode / calmTension 預設 false，規格 8）
 export function recordPuzzle(s: KeyValueStorage, id: string, delta: Partial<PuzzleStat>): void;
 ```
 
@@ -649,6 +673,7 @@ export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   /
 ```
 
 - key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、字條、物件 label）、`note.<puzzleId>.<1|2|3>`（提示字條；劇情字條仍在 `lvl.<levelId>.note.*`）、`guide.<puzzleId>`（解答手稿）、`story.*`（旁白、叔公日記 `story.diary.<1..5>`、殘片背面 `story.scrap.<1..6>`、律師來信 `story.letter.<章>`、結局 `story.ending.<A|B>`）、`term.*`（詞彙表）。
+- 觸控 key（`mobile-controls-v0.1.md` 5）：`ui.prompt.touch`、`ui.touch.btn.<控制 id>`（aria-label）、`ui.touch.hold`、`ui.touch.rotate`、`ui.help.touch.*`、`ui.settings.touch.*`；不得在 `ui/touchOverlay.ts` 寫死文字。
 - **劇情詞彙與內部 id 分離**：內部一律用規格代號（`key`、`valve`、`pin`、`mark`、模式 `'2d'`）；玩家看到的名稱集中在 `term.*`：`term.mode3d='現實'`、`term.nib='筆尖'`。劇情 4 節的改名 = 改 `term.*` 幾行，其他字串透過 `[[term.nib]]` 自動跟著變。
 - 暱稱：`{name}` 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。
 - 多語系：新增 `content/text/en/` 同 key 表，`createText(en, zhHant)` 以中文回退；驗證器檢查各語系 key 集合。
@@ -774,6 +799,7 @@ export interface ChaseDef {
 |------|------|------|---------|
 | 新增機制（例：N6 燈影） | `mechanics/light.ts`；`render/models/lamp.ts`、`shadow.ts`；`tests/puzzle/mechanics/light.test.ts`；`content/text/zh-Hant` 補 `obj.lamp.*`、`msg.light.*` | `mechanics/index.ts` 加一行；`render/models/index.ts` 加兩行 | 無 |
 | 新增物件類型（例：墨橋 inkbridge） | 在擁有它的機制檔 `declare module` + `types.inkbridge`；`render/models/inkbridge.ts` | `render/models/index.ts` 一行 | 無 |
+| 新增一種輸入（以觸控驗證一次） | `input/<name>.ts`（純邏輯 `InputSource`）、必要時 `ui/<name>Overlay.ts`（DOM）、`ui.*` 文字 key、`tests/puzzle/input/<name>.test.ts`；檢查清單：① `poll / clear / releaseAll / dispose` 語意與鍵盤一致 ② 經 `mergeSources` 與鍵盤並存 ③ 確認窗 / 暱稱 / 背景時 `releaseAll` ④ 操作說明與提示文字由文字 key 產生 ⑤ 純邏輯檔加入 2.3 第 4 條 ⑥ 現有通關腳本仍通過 | `app/app.ts` 偵測與合併、`meta/settings.ts` 欄位 | 無 |
 | 新增一關（例：2-1） | `content/levels/ch2/2-1-shelves.ts`；`content/text/zh-Hant/lvl-2-1.ts`、`note-2-1.ts`（字條與解答手稿）；`tests/puzzle/levels/2-1.test.ts`（通關＋反例＋掃描） | `content/levels/index.ts` 一行；`chapters.ts` 的 levels 陣列 | 無 |
 | 新增一章 | 該章各關檔；`render/themes/<theme>.ts`；必要的 `render/decor/*` | `chapters.ts` 一筆；`themes/index.ts` 一行 | 無 |
 | 新增輸入（觸控） | `input/touch.ts`（實作 `InputSource`）；`ui/touchPad.ts`（虛擬按鈕 DOM） | `app/services.ts` 合併 source | 無 |
