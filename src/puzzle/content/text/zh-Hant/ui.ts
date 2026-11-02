@@ -13,5 +13,16 @@ export const ui = {
   'ui.help.reset': '木箱歸位',
   'ui.help.restart': '重新開始',
   'ui.clear.title': '{level} · 通關',
-  'ui.clear.replay': '重玩'
+  'ui.clear.replay': '重玩',
+  'ui.clear.menu': '回到選單',
+  'ui.docTitle.menu': '圖紙之間',
+  'ui.menu.title': '圖紙之間',
+  'ui.menu.player': '玩家：{name}',
+  'ui.menu.rename': '更改暱稱',
+  'ui.menu.cleared': '已通關',
+  'ui.menu.locked': '未解鎖',
+  'ui.nickname.title': '你的名字',
+  'ui.nickname.hint': '老宅的遺囑上，只寫了這個名字。',
+  'ui.nickname.placeholder': '輸入暱稱',
+  'ui.nickname.ok': '確定'
 } as const;

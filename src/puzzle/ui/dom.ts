@@ -22,7 +22,9 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   const clear = el('div', 'pz-clear');
   const replay = el('button', 'pz-replay', text('ui.clear.replay')) as HTMLButtonElement;
   replay.type = 'button';
-  clear.append(el('h1', 'pz-clear-title'), el('p', 'pz-next'), replay);
+  const toMenu = el('button', 'pz-tomenu', text('ui.clear.menu')) as HTMLButtonElement;
+  toMenu.type = 'button';
+  clear.append(el('h1', 'pz-clear-title'), el('p', 'pz-next'), replay, toMenu);
   root.append(el('div', 'pz-canvas'), el('div', 'pz-fade'), hud, el('div', 'pz-narration'), clear);
 }
 

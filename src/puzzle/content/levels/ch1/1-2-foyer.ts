@@ -48,7 +48,7 @@ const objects: ObjDef[] = [
 ];
 
 export const foyer: LevelDef = {
-  id: 'foyer',
+  id: '1-2',
   titleKey: 'lvl.1-2.title',
   bounds: { minX: -20, maxX: 20, minZ: -6, maxZ: 6 },
   voidY: -5,

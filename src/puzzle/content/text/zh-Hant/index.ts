@@ -4,5 +4,6 @@ import { msg } from './msg';
 import { obj } from './obj';
 import { ui } from './ui';
 import { lvl12 } from './lvl-1-2';
+import { ch } from './ch';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...lvl12 };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl12 };

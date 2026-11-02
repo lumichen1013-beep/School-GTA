@@ -1,10 +1,12 @@
-import type { ItemId, LevelDef, ObjState, Runtime, TextKey, TextParams, World } from './types';
+import type { AbilityId, ItemId, LevelDef, ObjState, Runtime, TextKey, TextParams, World } from './types';
 import { compileMechanics, type Mechanic } from './registry';
 
 export interface WorldOptions {
   mechanics: readonly Mechanic[];
   /** 文字解析器 (app / 測試注入 zh-Hant)；省略時 msg 即 key */
   text?: Runtime['text'];
+  /** 開場可用能力 (預設無) */
+  abilities?: readonly AbilityId[];
 }
 
 const identity = (key: TextKey): string => key;
@@ -16,7 +18,7 @@ export function createWorld(level: LevelDef, opts: WorldOptions): World {
     byId: new Map(objs.map(o => [o.def.id, o])),
     player: { x: level.start.x, y: level.start.y, z: level.start.z, vy: 0, onGround: false, mode: '3d', z3d: level.start.z, facing: 0 },
     checkpoint: -1,
-    inv: {}, cleared: false, msg: '', msgKey: '', msgSeq: 0, time: 0,
+    inv: {}, abilities: [...(opts.abilities ?? [])], cleared: false, msg: '', msgKey: '', msgSeq: 0, time: 0,
     events: [],
     rt: { mechanics: compileMechanics(opts.mechanics), text: opts.text ?? identity }
   };

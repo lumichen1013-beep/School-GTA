@@ -1,0 +1,52 @@
+import { isRecord, readJson, type KeyValueStorage } from './storage';
+
+export const SETTINGS_KEY = 'puzzle:settings';
+
+/** 設定 (規格 8)；calmTension 只預留欄位，效果於氛圍 / 追逐實作時接上 */
+export interface Settings {
+  hints: 'timed' | 'always' | 'off';
+  guideMode: boolean;
+  calmTension: boolean;
+  noteScale: number;
+  inkPalette: 'default' | 'blueOrange' | 'mono';
+  reduceMotion: boolean;
+  /** 按鍵覆寫：動作 / 軸名稱 → KeyboardEvent.code 清單 (由 input 的 mergeBindings 合併) */
+  keys: Record<string, string[]>;
+}
+
+export const defaultSettings = (): Settings => ({
+  hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false, keys: {}
+});
+
+const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts as readonly unknown[]).includes(v) ? v as T : d;
+const bool = (v: unknown, d: boolean): boolean => typeof v === 'boolean' ? v : d;
+
+/** 校正：不認得 / 型別不符的欄位回預設值 */
+export function sanitizeSettings(v: unknown): Settings {
+  const d = defaultSettings();
+  if (!isRecord(v)) return d;
+  const keys: Record<string, string[]> = {};
+  if (isRecord(v.keys)) {
+    for (const [k, codes] of Object.entries(v.keys)) {
+      if (Array.isArray(codes) && codes.length && codes.every(c => typeof c === 'string')) keys[k] = [...codes];
+    }
+  }
+  return {
+    hints: oneOf(v.hints, ['timed', 'always', 'off'] as const, d.hints),
+    guideMode: bool(v.guideMode, d.guideMode),
+    calmTension: bool(v.calmTension, d.calmTension),
+    noteScale: typeof v.noteScale === 'number' && v.noteScale >= 0.8 && v.noteScale <= 1.6 ? v.noteScale : d.noteScale,
+    inkPalette: oneOf(v.inkPalette, ['default', 'blueOrange', 'mono'] as const, d.inkPalette),
+    reduceMotion: bool(v.reduceMotion, d.reduceMotion),
+    keys
+  };
+}
+
+export function loadSettings(s: KeyValueStorage): Settings {
+  const r = readJson(s, SETTINGS_KEY);
+  return sanitizeSettings(r === 'corrupt' ? undefined : r);
+}
+
+export function writeSettings(s: KeyValueStorage, v: Settings): void {
+  s.set(SETTINGS_KEY, JSON.stringify(sanitizeSettings(v)));
+}

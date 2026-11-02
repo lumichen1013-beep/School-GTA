@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { LevelDef, Mode, World } from '../core/types';
+import type { AbilityId, LevelDef, Mode, World } from '../core/types';
 import { createWorld } from '../core/world';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
@@ -30,8 +30,8 @@ export class LevelSession {
   private cams: PuzzleCameras;
   private renderMode: Mode = '3d';
 
-  constructor(private ctx: SessionContext, level: LevelDef, hooks: { onCleared(): void }) {
-    this.world = createWorld(level, { mechanics: DEFAULT_MECHANICS, text: ctx.text });
+  constructor(private ctx: SessionContext, level: LevelDef, hooks: { abilities: readonly AbilityId[]; onCleared(): void }) {
+    this.world = createWorld(level, { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities });
     this.loop = new LevelLoop(this.world, ctx.transition, {
       onSwap: () => {
         this.renderMode = this.world.player.mode;

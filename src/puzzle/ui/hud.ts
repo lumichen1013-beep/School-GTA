@@ -92,4 +92,5 @@ export class PuzzleHud {
   }
   hideClear(): void { this.clearEl.classList.remove('show'); }
   onReplay(fn: () => void): void { $('pz-replay').addEventListener('click', fn); }
+  onMenu(fn: () => void): void { $('pz-tomenu').addEventListener('click', fn); }
 }

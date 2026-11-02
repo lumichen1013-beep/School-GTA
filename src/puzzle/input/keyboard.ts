@@ -2,6 +2,12 @@
 import type { Bindings, InputFrame, InputSource } from './types';
 import { INPUT_ACTIONS } from './bindings';
 
+/** 事件目標是否為文字輸入欄位 */
+const isTextField = (t: EventTarget | null): boolean => {
+  const tag = (t as { tagName?: string } | null)?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA';
+};
+
 const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 export class KeyboardSource implements InputSource {
@@ -9,6 +15,7 @@ export class KeyboardSource implements InputSource {
   private pressed = new Set<string>();
   private anyKey = false;
   private readonly onDown = (e: KeyboardEvent): void => {
+    if (isTextField(e.target)) return; // 輸入框 (暱稱) 的按鍵不當成遊戲操作
     if (BLOCK.has(e.code)) e.preventDefault();
     if (!e.repeat) this.pressed.add(e.code);
     this.down.add(e.code);

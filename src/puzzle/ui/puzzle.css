@@ -56,3 +56,40 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   background: var(--inkblue); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 3px 3px 0 rgba(58,38,24,.3);
 }
 #pz-replay:hover { background: var(--inkpurple); }
+/* 選單 / 暱稱畫面：同一套奶油紙卡片風格 */
+.pz-screen {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  color: var(--ink); background: radial-gradient(ellipse at 50% 45%, #fdf4e1 0%, #f3d9b6 75%, #e8c49a 100%); overflow: auto; padding: 24px; box-sizing: border-box;
+}
+.pz-screen h1 { margin: 0; font: 400 34px "Songti TC", "Noto Serif TC", serif; letter-spacing: .3em; }
+.pz-screen h2 { margin: 0 0 10px; font: 400 20px "Songti TC", "Noto Serif TC", serif; letter-spacing: .2em; color: #6a4a30; }
+.pz-card {
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 10px 4px 10px 4px; box-shadow: 3px 3px 0 rgba(58,38,24,.28);
+  padding: 14px 20px; color: var(--ink); font: inherit;
+}
+.pz-form { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 260px; }
+.pz-hint { margin: 0; font-size: 15px; letter-spacing: .1em; color: #6a4a30; }
+.pz-input {
+  font: 18px "PingFang TC", "Noto Sans TC", sans-serif; padding: 6px 12px; width: 220px; text-align: center; color: var(--ink);
+  background: var(--paper2); border: 2px solid var(--ink); border-radius: 6px; outline: none; user-select: text;
+}
+.pz-input:focus { border-color: var(--inkblue); }
+.pz-btn, #pz-tomenu {
+  pointer-events: auto; padding: 8px 30px; font-size: 16px; cursor: pointer; color: var(--paper);
+  background: var(--inkblue); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 3px 3px 0 rgba(58,38,24,.3);
+}
+.pz-btn:hover:not(:disabled), #pz-tomenu:hover { background: var(--inkpurple); }
+.pz-btn:disabled { opacity: .45; cursor: default; }
+#pz-tomenu { background: var(--paper); color: var(--ink); }
+#pz-tomenu:hover { color: var(--paper); }
+.pz-menu-head { display: flex; gap: 14px; align-items: center; font-size: 15px; letter-spacing: .1em; color: #6a4a30; }
+.pz-link { background: none; border: none; border-bottom: 1.5px dashed #6a4a30; color: #6a4a30; font: inherit; cursor: pointer; padding: 0; }
+.pz-chapter { display: flex; flex-direction: column; align-items: center; }
+.pz-levels { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.pz-level { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 170px; cursor: pointer; text-align: left; transition: transform .12s; }
+.pz-level:hover:not(:disabled) { transform: translateY(-2px) rotate(-.5deg); }
+.pz-level:disabled { opacity: .5; cursor: default; }
+.pz-level-id { font-size: 13px; letter-spacing: .15em; color: #a8640f; }
+.pz-level-title { font: 22px "Songti TC", "Noto Serif TC", serif; letter-spacing: .2em; }
+.pz-tag { font-size: 12px; padding: 1px 8px; border: 1.5px solid var(--ink); border-radius: 999px; background: var(--paper2); }
+.pz-level.cleared .pz-tag { background: var(--accent); }

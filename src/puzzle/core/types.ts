@@ -8,6 +8,8 @@ export type ObjId = string;
 /** 文字 key (解析於 content/text；核心只存 key) */
 export type TextKey = string;
 export type TextParams = Readonly<Record<string, string | number>>;
+/** 能力 (規格 8 save.abilities；關卡以白名單限制可用能力) */
+export type AbilityId = 'nib' | 'pin' | 'section' | 'mark';
 /** 物品 id ('nib' …；N9) */
 export type ItemId = string;
 /** 鎖的需求：字串 = 需持有、不消耗；consume = 使用時消耗一個 */
@@ -86,6 +88,8 @@ export interface World {
   checkpoint: number;
   /** 持有物品數量 (取代 hasKey；N9) */
   inv: Record<ItemId, number>;
+  /** 本關開場可用能力 (關卡白名單 ∩ 存檔已得能力；目前尚無依能力限制的動作) */
+  abilities: AbilityId[];
   cleared: boolean;
   /** 最後一則訊息：msg = 已解析字串 (相容既有測試)，msgKey = 其文字 key */
   msg: string;

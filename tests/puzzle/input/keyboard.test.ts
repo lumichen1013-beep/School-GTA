@@ -10,9 +10,9 @@ function fakeWindow() {
     addEventListener: (t: string, f: Handler) => { (h[t] ??= []).push(f); },
     removeEventListener: (t: string, f: Handler) => { h[t] = (h[t] ?? []).filter(x => x !== f); }
   };
-  const fire = (t: string, code = '', repeat = false) => {
+  const fire = (t: string, code = '', repeat = false, tagName = 'BODY') => {
     let prevented = false;
-    for (const f of h[t] ?? []) f({ code, repeat, preventDefault: () => { prevented = true; } });
+    for (const f of h[t] ?? []) f({ code, repeat, target: { tagName }, preventDefault: () => { prevented = true; } });
     return prevented;
   };
   return { target: target as unknown as Window, fire, count: () => Object.values(h).flat().length };
@@ -65,5 +65,14 @@ describe('KeyboardSource', () => {
     expect(k.poll().pressed).toEqual(['interact']);
     k.dispose();
     expect(fw.count()).toBe(0);
+  });
+
+  it('輸入框中的按鍵 (暱稱) 不當成遊戲操作、也不阻擋空白鍵', () => {
+    const fw = fakeWindow();
+    const k = new KeyboardSource(DEFAULT_BINDINGS, fw.target);
+    expect(fw.fire('keydown', 'Space', false, 'INPUT')).toBe(false);
+    fw.fire('keydown', 'KeyR', false, 'INPUT');
+    const f = k.poll();
+    expect([f.pressed, f.jump, f.anyKey]).toEqual([[], false, false]);
   });
 });
