@@ -7,7 +7,8 @@ const CENTER_Y_2D = 2.5;
 
 /** 3D 斜後上方跟隨 (房間沒有前牆，鏡頭在前方不會被牆擋；隔牆由場景淡出) / 2D 正交側視水平跟隨 */
 export class PuzzleCameras {
-  readonly persp = new THREE.PerspectiveCamera(46, 1, 0.1, 120);
+  /** near / far 收緊 (原 0.1 / 120)：鏡頭離最近物件 > 3、最遠約 45，提高深度精度，避免遠處貼面 (地板紋理面、掛畫) 深度打架 */
+  readonly persp = new THREE.PerspectiveCamera(46, 1, 0.5, 80);
   readonly ortho = new THREE.OrthographicCamera(-8, 8, 4.5, -4.5, 0.1, 100);
   private target = new THREE.Vector3();
   private orthoX = 0;

@@ -8,6 +8,8 @@ import type { PropModel } from './types';
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const WALL_H = 6;
+/** 牆面飾條兩端凸出量 (避免與護牆板端面共面而深度打架) */
+const TRIM_OVERHANG = 0.01;
 /** 圖紙裡的房間背景：同色系但更淡，讓前景物件跳出來 */
 const BG2D = { paper: 0xfff9ef, wainscot: 0xead0ae, trim: 0xd9b48c } as const;
 
@@ -19,8 +21,9 @@ export function floorModel(p: Painter, d: ObjDef): PropModel {
   const top = p.mesh(new THREE.PlaneGeometry(d.w, d.d), 0xffffff, { map: floorPlanks(d.w / 2.6, d.d / 2.6), outline: false });
   top.rotation.x = -Math.PI / 2;
   top.position.y = d.h + 0.002;
-  const lip = p.mesh(box(d.w, 0.12, 0.04), PAL.floorA, { outline: false });
-  lip.position.set(0, d.h - 0.06, d.d / 2 + 0.01);
+  // 前緣飾條兩端各凸出 5mm、頂面低 5mm：不與地板本體端面 / 頂面共面
+  const lip = p.mesh(box(d.w + 0.01, 0.12, 0.04), PAL.floorA, { outline: false });
+  lip.position.set(0, d.h - 0.065, d.d / 2 + 0.01);
   g.add(body, top, lip);
   return { root: g };
 }
@@ -103,12 +106,15 @@ export function buildDecor(p: Painter, level: LevelDef): Decor {
     paper.position.y = WALL_H / 2;
     const wains = p.mesh(box(len, 1.1, 0.06), PAL.wainscot, { flat: BG2D.wainscot, outline: false });
     wains.position.set(0, 0.55, 0.03);
-    const rail = p.mesh(box(len, 0.07, 0.1), PAL.trim, { flat: BG2D.trim, outline: false });
+    // 腰線 / 踢腳線 / 頂線兩端各多出 TRIM_OVERHANG，端面不與護牆板端面共面 (側牆前端看得到)
+    const trimLen = len + TRIM_OVERHANG * 2;
+    const rail = p.mesh(box(trimLen, 0.07, 0.1), PAL.trim, { flat: BG2D.trim, outline: false });
     rail.position.set(0, 1.12, 0.05);
-    const base = p.mesh(box(len, 0.16, 0.1), PAL.baseboard, { flat: BG2D.trim, outline: false });
+    const base = p.mesh(box(trimLen, 0.16, 0.1), PAL.baseboard, { flat: BG2D.trim, outline: false });
     base.position.set(0, 0.08, 0.05);
-    const crown = p.mesh(box(len, 0.12, 0.12), PAL.trim, { flat: BG2D.trim, outline: false });
-    crown.position.set(0, WALL_H - 0.06, 0.06);
+    const crown = p.mesh(box(trimLen, 0.12, 0.12), PAL.trim, { flat: BG2D.trim, outline: false });
+    // 頂面比牆頂低 5mm：不與貼牆的隔牆壁紙頂面 (y = 牆高) 共面
+    crown.position.set(0, WALL_H - 0.065, 0.06);
     g.add(paper, wains, rail, base, crown);
     // 護牆板分格
     for (let a = -len / 2 + 0.9; a < len / 2 - 0.4; a += 1.6) {

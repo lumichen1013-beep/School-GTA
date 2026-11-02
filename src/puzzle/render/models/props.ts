@@ -68,7 +68,8 @@ function bookRow(p: Painter, parent: THREE.Object3D, x0: number, x1: number, y: 
     const bh = maxH * (0.72 + r() * 0.26);
     const color = PAL.books[(seed + i * 3 + Math.floor(r() * 3)) % PAL.books.length];
     const lean = r() < 0.08 ? 0.18 : 0;
-    const b = p.mesh(box(bw, bh, depth), color, { outline: false, roughness: 0.9 });
+    // 斜靠的書會插進下一本的範圍：書背內縮 5mm，正面不與鄰書共面
+    const b = p.mesh(box(bw, bh, lean ? depth - 0.01 : depth), color, { outline: false, roughness: 0.9 });
     b.position.set(x + bw / 2, y + bh / 2, z);
     b.rotation.z = -lean;
     parent.add(b);
@@ -116,8 +117,9 @@ export function shelfModel(p: Painter, d: ObjDef): PropModel {
     }
   }
   // 頂面前緣的飾條
-  const lip = p.mesh(box(w, 0.06, 0.06), PAL.shelfDark, { outline: false });
-  lip.position.set(0, h - 0.02, dd / 2 - 0.03);
+  // 前面與兩端各凸出 5mm：不與頂板前面 / 端面共面
+  const lip = p.mesh(box(w + 0.01, 0.06, 0.06), PAL.shelfDark, { outline: false });
+  lip.position.set(0, h - 0.02, dd / 2 - 0.025);
   g.add(lip);
   return { root: g };
 }
@@ -163,8 +165,10 @@ export function railModel(p: Painter, d: ObjDef): PropModel {
     const knob = p.mesh(new THREE.SphereGeometry(0.1, 10, 8), PAL.railDark, { outline: false });
     place(knob, -len / 2 + 0.075 + (i * (len - 0.15)) / n, h + 0.06);
   }
+  // 橫桿兩端縮進端柱 1cm：端面藏在柱內，不與端柱外側面共面
+  const railLen = len - 0.02;
   for (const y of [0.3, h * 0.55, h - 0.18]) {
-    const rail = p.mesh(alongX ? box(len, 0.09, 0.08) : box(0.08, 0.09, len), PAL.rail);
+    const rail = p.mesh(alongX ? box(railLen, 0.09, 0.08) : box(0.08, 0.09, railLen), PAL.rail);
     place(rail, 0, y);
   }
   for (let a = -len / 2 + 0.25; a < len / 2 - 0.15; a += 0.24) {
@@ -228,7 +232,8 @@ export function tableModel(p: Painter, d: ObjDef): PropModel {
 export function noteModel(p: Painter, d: ObjDef): PropModel {
   const g = new THREE.Group();
   const paper = p.mesh(box(d.w * 0.82, d.h * 0.82, 0.02), 0xffffff, { map: notePaper(), flatMap: true });
-  paper.position.y = d.h / 2;
+  // 紙條正面離牆 5mm：貼在後牆時不與護牆板正面 (z = 牆 + 0.06) 共面
+  paper.position.set(0, d.h / 2, 0.005);
   paper.rotation.z = 0.06;
   const pin = p.mesh(new THREE.SphereGeometry(0.05, 10, 8), PAL.pin, { outline: false });
   pin.position.set(0, d.h * 0.86, 0.04);

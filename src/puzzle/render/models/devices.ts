@@ -20,11 +20,12 @@ export function wallModel(p: Painter, d: ObjDef): PropModel {
   g.add(paper);
   const occluders = [paper];
   if (d.y < 0.5) { // 落地的牆段才有護牆板與踢腳線
-    const wains = p.mesh(box(w + 0.04, 1.1, dd), PAL.wainscot, { unique: true, outline: false });
+    // 護牆板 / 腰線 / 踢腳線在牆的兩端也要包住 (深度同寬度一樣加厚)，否則端面與壁紙端面共面而深度打架
+    const wains = p.mesh(box(w + 0.04, 1.1, dd + 0.04), PAL.wainscot, { unique: true, outline: false });
     wains.position.y = 0.55;
-    const rail = p.mesh(box(w + 0.08, 0.07, dd), PAL.trim, { unique: true, outline: false });
+    const rail = p.mesh(box(w + 0.08, 0.07, dd + 0.08), PAL.trim, { unique: true, outline: false });
     rail.position.y = 1.12;
-    const base = p.mesh(box(w + 0.08, 0.16, dd), PAL.baseboard, { unique: true, outline: false });
+    const base = p.mesh(box(w + 0.08, 0.16, dd + 0.08), PAL.baseboard, { unique: true, outline: false });
     base.position.y = 0.08;
     g.add(wains, rail, base);
     occluders.push(wains, rail, base);
@@ -36,6 +37,9 @@ export function wallModel(p: Painter, d: ObjDef): PropModel {
   return { root: g, occluders };
 }
 
+/** 閘門門柱朝門洞凸出隔牆端面的距離 (避免共面深度打架) */
+const POST_PROUD = 0.01;
+
 /** 閘門 (僅現實)：門框 + 木條閘板 + 鐵箍 + 鉚釘 + 墨痕；壓板壓下後閘板升進楣牆 */
 export function gateModel(p: Painter, d: ObjDef): PropModel {
   const g = new THREE.Group();
@@ -43,8 +47,9 @@ export function gateModel(p: Painter, d: ObjDef): PropModel {
   const { w, h } = d;
   const dd = d.d;
   for (const s of [-1, 1]) {
+    // 門柱朝門洞的面凸出牆端 1cm (POST_PROUD)，不與隔牆端面共面
     const post = p.mesh(box(w + 0.16, h + 0.1, 0.14), PAL.trim);
-    post.position.set(0, (h + 0.1) / 2, s * (dd / 2 + 0.07));
+    post.position.set(0, (h + 0.1) / 2, s * (dd / 2 + 0.07 - POST_PROUD));
     g.add(post);
   }
   const n = 6;
@@ -132,7 +137,8 @@ export function doorModel(p: Painter, d: ObjDef): PropModel {
     hinge.add(panel);
   }
   const plate = p.mesh(box(0.08, 0.26, 0.02), PAL.brass, { metalness: 0.7, roughness: 0.35, outline: false });
-  plate.position.set(w - 0.16, 1.1, 0.055);
+  // 門把座板與右下嵌板邊緣重疊：正面要比嵌板 (0.065) 凸出，不可共面
+  plate.position.set(w - 0.16, 1.1, 0.06);
   const knob = p.mesh(new THREE.SphereGeometry(0.06, 12, 10), PAL.brass, { metalness: 0.7, roughness: 0.3 });
   knob.position.set(w - 0.16, 1.1, 0.11);
   hinge.add(plate, knob);
