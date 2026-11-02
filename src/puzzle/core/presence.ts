@@ -19,7 +19,12 @@ export function isActiveIn(w: World, o: ObjState, mode: Mode): boolean {
 /** 世界中所有物件 (日後含推導物件) */
 export const allObjs = (w: World): readonly ObjState[] => w.objs;
 
-/** 目前模式下生效的實體 (存在、solid、閘門未開) */
+/** 存在但不擋路 (機制 passable 掛點 OR 合成) */
+export function isPassable(w: World, o: ObjState): boolean {
+  return isOpenGate(o) || w.rt.mechanics.passable.some(m => m.passable!(w, o));
+}
+
+/** 目前模式下生效的實體 (存在、solid、未被機制放行) */
 export function solidsFor(w: World, mode: Mode): ObjState[] {
-  return w.objs.filter(o => isActiveIn(w, o, mode) && o.def.solid && !isOpenGate(o));
+  return w.objs.filter(o => isActiveIn(w, o, mode) && o.def.solid && !isPassable(w, o));
 }

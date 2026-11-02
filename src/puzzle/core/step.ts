@@ -1,10 +1,14 @@
 import type { InputState, World } from './types';
+import type { ActionFrame, WorldAction } from './actions';
+import { ACTION_ORDER } from './actions';
 import { GRAVITY, SPEED, PLAYER_HW } from './constants';
 import { clamp, playerBox, sweepAxis } from './geometry';
 import { MODES } from './modes';
 import { solidsFor } from './presence';
 import { pushCrate } from './push';
-import { updatePlates } from './mechanisms';
+import { resetCrates, updatePlates } from './mechanisms';
+import { trySwitchMode } from './switchMode';
+import { interact } from './interact';
 import { respawn, updateCheckpoint } from './world';
 
 export const MSG_FELL = '你掉進了縫隙裡……醒來時，又回到了熟悉的地方。';
@@ -26,12 +30,30 @@ function moveAxis(w: World, axis: 0 | 2, delta: number): void {
   }
 }
 
-/** 推進一個固定時間步；input 為已解析的移動意圖 (moveX/moveZ ∈ [-1,1]，moveZ 向 +z 為正) */
+/** 核心動作 (F/Q 切換、T 歸位、E 互動) */
+const CORE_ACTIONS: Readonly<Record<WorldAction, (w: World) => void>> = {
+  flip: w => {
+    const ok = trySwitchMode(w).ok;
+    w.events.push(ok ? { t: 'switch', to: w.player.mode } : { t: 'switchDenied' });
+  },
+  reset: resetCrates,
+  interact
+};
+
+/** 推進一個固定時間步：先依 ACTION_ORDER 處理本幀動作，再跑物理 */
+export function step(w: World, f: ActionFrame, dt: number): void {
+  if (w.cleared) return;
+  for (const a of ACTION_ORDER) if (f.pressed.includes(a)) CORE_ACTIONS[a](w);
+  stepWorld(w, f, dt);
+}
+
+/** 物理步進 (相容包裝：不含動作)；input 為已解析的移動意圖 (moveX/moveZ ∈ [-1,1]，moveZ 向 +z 為正) */
 export function stepWorld(w: World, input: InputState, dt: number): void {
   if (w.cleared) return;
   const p = w.player;
   const spec = MODES[p.mode];
   w.time += dt;
+  for (const m of w.rt.mechanics.beforePhysics) m.beforePhysics!(w, dt);
   let mx = input.moveX;
   let mz = spec.moveZ ? input.moveZ : 0;
   const len = Math.hypot(mx, mz);
@@ -56,6 +78,7 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
   if (spec.boundsZ) p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
 
   updatePlates(w);
+  for (const m of w.rt.mechanics.afterPhysics) m.afterPhysics!(w, dt);
   updateCheckpoint(w);
   if (p.y < w.level.voidY) respawn(w, MSG_FELL);
 }

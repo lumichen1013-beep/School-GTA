@@ -1,14 +1,21 @@
 import type { LevelDef, ObjState, World } from './types';
+import { compileMechanics, type Mechanic } from './registry';
 
-export function createWorld(level: LevelDef): World {
+export interface WorldOptions { mechanics: readonly Mechanic[] }
+
+export function createWorld(level: LevelDef, opts: WorldOptions): World {
   const objs: ObjState[] = level.objects.map(def => ({ def, x: def.x, y: def.y, z: def.z, gone: false, used: false, touched: false }));
-  return {
+  const w: World = {
     level, objs,
     byId: new Map(objs.map(o => [o.def.id, o])),
     player: { x: level.start.x, y: level.start.y, z: level.start.z, vy: 0, onGround: false, mode: '3d', z3d: level.start.z, facing: 0 },
     checkpoint: -1,
-    hasKey: false, sealed: true, cleared: false, msg: '', msgSeq: 0, time: 0
+    hasKey: false, sealed: true, cleared: false, msg: '', msgSeq: 0, time: 0,
+    events: [],
+    rt: { mechanics: compileMechanics(opts.mechanics) }
   };
+  for (const m of w.rt.mechanics.init) m.init!(w);
+  return w;
 }
 
 export function say(w: World, text: string): void {

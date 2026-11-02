@@ -1,4 +1,6 @@
 // 《圖紙之間》共用型別 (純邏輯，不依賴 three)
+import type { CompiledMechanics } from './registry';
+
 export type Mode = '3d' | '2d';
 export type Visibility = 'both' | '2d' | '3d';
 export type ObjType =
@@ -70,7 +72,15 @@ export interface World {
   msg: string;
   msgSeq: number;
   time: number;
+  /** 本步事件外送匣，外殼每幀取走清空 */
+  events: GameEvent[];
+  /** 不序列化：編譯後的機制表 */
+  readonly rt: Runtime;
 }
+
+export interface Runtime { mechanics: CompiledMechanics }
+
+export type GameEvent = { t: 'switch'; to: Mode } | { t: 'switchDenied' };
 
 export interface Box { min: V3; max: V3 }
 export interface InputState { moveX: number; moveZ: number; jump: boolean }

@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import './ui/puzzle.css';
 import { foyer } from './content/levels/ch1/1-2-foyer';
 import { createWorld } from './core/world';
-import { stepWorld } from './core/step';
-import { trySwitchMode } from './core/switchMode';
-import { findTarget, interact } from './core/interact';
-import { resetCrates } from './core/mechanisms';
+import { step } from './core/step';
+import { findTarget } from './core/interact';
+import type { WorldAction } from './core/actions';
 import type { Mode, World } from './core/types';
+import { DEFAULT_MECHANICS } from './mechanics';
 import { PuzzleInput } from './input/keyboard';
 import { PuzzleHud } from './ui/hud';
 import { PuzzleScene } from './render/scene';
@@ -20,7 +20,7 @@ const FADE_TO_2D = 'radial-gradient(circle at 50% 55%, rgba(61,99,255,.96) 0%, r
 const FADE_TO_3D = 'radial-gradient(circle at 50% 55%, rgba(253,244,225,.98) 0%, rgba(243,217,182,.95) 45%, rgba(231,168,61,.6) 62%, rgba(231,168,61,0) 72%)';
 
 export class PuzzleGame {
-  world: World = createWorld(foyer);
+  world: World = createWorld(foyer, { mechanics: DEFAULT_MECHANICS });
   private input = new PuzzleInput();
   private hud = new PuzzleHud();
   private renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -72,13 +72,12 @@ export class PuzzleGame {
 
   restart(): void {
     this.view.dispose();
-    this.world = createWorld(foyer);
+    this.world = createWorld(foyer, { mechanics: DEFAULT_MECHANICS });
     this.build();
     this.input.clearPressed();
   }
 
   private beginSwitch(): void {
-    if (!trySwitchMode(this.world).ok) return;
     this.lock = TRANSITION;
     this.fade.style.background = this.world.player.mode === '2d' ? FADE_TO_2D : FADE_TO_3D;
   }
@@ -100,10 +99,12 @@ export class PuzzleGame {
       if (this.lock <= 0) this.fade.style.opacity = '0';
       return;
     }
-    if (this.input.take('KeyF', 'KeyQ')) this.beginSwitch();
-    if (this.input.take('KeyT')) resetCrates(w);
-    if (this.input.take('KeyE')) interact(w);
-    stepWorld(w, { moveX: this.input.moveX, moveZ: this.input.moveZ, jump: this.input.jump }, dt);
+    const pressed: WorldAction[] = [];
+    if (this.input.take('KeyF', 'KeyQ')) pressed.push('flip');
+    if (this.input.take('KeyT')) pressed.push('reset');
+    if (this.input.take('KeyE')) pressed.push('interact');
+    step(w, { moveX: this.input.moveX, moveZ: this.input.moveZ, jump: this.input.jump, pressed }, dt);
+    for (const e of w.events.splice(0)) if (e.t === 'switch') this.beginSwitch();
     if (w.cleared) { this.hud.showClear(w.level.nextRoom); localStorage.setItem('puzzle:foyer:cleared', '1'); }
   }
 
