@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Mode } from '../../logic/types';
+import type { Mode } from '../../core/types';
 import type { Painter } from '../materials';
 import { PAL } from '../palette';
 

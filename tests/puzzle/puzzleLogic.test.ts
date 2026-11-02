@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, run, walkTo, place, DT } from './helpers';
-import { stepWorld, MSG_FELL } from '../../src/puzzle/logic/step';
-import { trySwitchMode } from '../../src/puzzle/logic/switchMode';
-import { findTarget, interact, MSG_GATE } from '../../src/puzzle/logic/interact';
-import { pushCrate } from '../../src/puzzle/logic/push';
-import { resetCrates, MSG_CRATE_RESET } from '../../src/puzzle/logic/mechanisms';
-import { objBox, overlapsXZ, playerBox, solidsFor, supportsOf } from '../../src/puzzle/logic/geometry';
-import { foyer } from '../../src/puzzle/levels/foyer';
-import type { LevelDef, ObjDef, World } from '../../src/puzzle/logic/types';
+import { stepWorld, MSG_FELL } from '../../src/puzzle/core/step';
+import { trySwitchMode } from '../../src/puzzle/core/switchMode';
+import { findTarget, interact, MSG_GATE } from '../../src/puzzle/core/interact';
+import { pushCrate } from '../../src/puzzle/core/push';
+import { resetCrates, MSG_CRATE_RESET } from '../../src/puzzle/core/mechanisms';
+import { objBox, overlapsXZ, playerBox, solidsFor, supportsOf } from '../../src/puzzle/core/geometry';
+import { foyer } from '../../src/puzzle/content/levels/ch1/1-2-foyer';
+import type { LevelDef, ObjDef, World } from '../../src/puzzle/core/types';
 
 const crateOf = (w: World) => w.byId.get('crate')!;
 

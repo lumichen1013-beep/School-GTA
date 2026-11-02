@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { Mode, ObjDef, ObjType, World } from '../logic/types';
-import { activeIn } from '../logic/geometry';
+import type { Mode, ObjDef, ObjType, World } from '../core/types';
+import { activeIn } from '../core/geometry';
 import { Painter } from './materials';
 import { PAL } from './palette';
 import { paperBackground } from './textures';

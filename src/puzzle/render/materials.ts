@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Mode } from '../logic/types';
+import type { Mode } from '../core/types';
 import { PAL } from './palette';
 
 /** 2D 描邊粗細 (世界單位) */

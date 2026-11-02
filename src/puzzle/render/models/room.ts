@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { LevelDef, ObjDef } from '../../logic/types';
+import type { LevelDef, ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import { PAL } from '../palette';

@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import './puzzle.css';
-import { foyer } from './levels/foyer';
-import { createWorld } from './logic/world';
-import { stepWorld } from './logic/step';
-import { trySwitchMode } from './logic/switchMode';
-import { findTarget, interact } from './logic/interact';
-import { resetCrates } from './logic/mechanisms';
-import type { Mode, World } from './logic/types';
-import { PuzzleInput } from './input';
-import { PuzzleHud } from './hud';
+import './ui/puzzle.css';
+import { foyer } from './content/levels/ch1/1-2-foyer';
+import { createWorld } from './core/world';
+import { stepWorld } from './core/step';
+import { trySwitchMode } from './core/switchMode';
+import { findTarget, interact } from './core/interact';
+import { resetCrates } from './core/mechanisms';
+import type { Mode, World } from './core/types';
+import { PuzzleInput } from './input/keyboard';
+import { PuzzleHud } from './ui/hud';
 import { PuzzleScene } from './render/scene';
 import { PuzzleCameras } from './render/cameras';
 

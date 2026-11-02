@@ -1,4 +1,4 @@
-import type { LevelDef, ObjDef } from '../logic/types';
+import type { LevelDef, ObjDef } from '../../../core/types';
 
 // 玄關 (擴建)：入口區 x∈[-20,-10] ／ 缺口 x∈[-10,-6] ／ 中庭 x∈[-6,10] ／ 隔牆 x∈[10,10.4] ／ 出口區 x∈[10.4,20]
 // 謎題鏈：① 書架過缺口 (2D) → ② 推箱 + 高台取筆尖 (3D 推、2D 跳) → ③ 長桌後的圖紙壓板 (3D 繞路推箱、2D 壓下、3D 過閘門)

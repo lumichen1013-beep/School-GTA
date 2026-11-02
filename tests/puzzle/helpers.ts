@@ -1,7 +1,7 @@
-import { foyer } from '../../src/puzzle/levels/foyer';
-import { createWorld } from '../../src/puzzle/logic/world';
-import { stepWorld } from '../../src/puzzle/logic/step';
-import type { InputState, LevelDef, Mode, World } from '../../src/puzzle/logic/types';
+import { foyer } from '../../src/puzzle/content/levels/ch1/1-2-foyer';
+import { createWorld } from '../../src/puzzle/core/world';
+import { stepWorld } from '../../src/puzzle/core/step';
+import type { InputState, LevelDef, Mode, World } from '../../src/puzzle/core/types';
 
 export const DT = 1 / 60;
 export const newWorld = (level: LevelDef = foyer): World => createWorld(level);

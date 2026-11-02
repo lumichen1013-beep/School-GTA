@@ -1,4 +1,4 @@
-import type { Mode } from './logic/types';
+import type { Mode } from '../core/types';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 

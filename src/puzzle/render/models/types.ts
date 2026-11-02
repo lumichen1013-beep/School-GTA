@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import type { Mode, ObjState, World } from '../../logic/types';
+import type { Mode, ObjState, World } from '../../core/types';
 
 export interface ModelCtx { obj: ObjState; world: World; mode: Mode; t: number; dt: number }
 

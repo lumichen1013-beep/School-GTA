@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { newWorld, run, walkTo, hopUntil, place } from './helpers';
-import { trySwitchMode } from '../../src/puzzle/logic/switchMode';
-import { findTarget, interact } from '../../src/puzzle/logic/interact';
-import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from '../../src/puzzle/logic/mechanisms';
-import type { World } from '../../src/puzzle/logic/types';
+import { trySwitchMode } from '../../src/puzzle/core/switchMode';
+import { findTarget, interact } from '../../src/puzzle/core/interact';
+import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from '../../src/puzzle/core/mechanisms';
+import type { World } from '../../src/puzzle/core/types';
 
 const get = (w: World, id: string) => w.byId.get(id)!;
 

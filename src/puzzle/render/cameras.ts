@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Mode, World } from '../logic/types';
+import type { Mode, World } from '../core/types';
 
 const OFFSET_3D = new THREE.Vector3(0, 5.4, 8.2);
 const VIEW_H_2D = 8.2;
