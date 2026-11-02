@@ -5,7 +5,8 @@ import { trySwitchMode } from '../../src/puzzle/core/switchMode';
 import { findTarget, interact, MSG_GATE } from '../../src/puzzle/core/interact';
 import { pushCrate } from '../../src/puzzle/core/push';
 import { resetCrates, MSG_CRATE_RESET } from '../../src/puzzle/core/mechanisms';
-import { objBox, overlapsXZ, playerBox, solidsFor, supportsOf } from '../../src/puzzle/core/geometry';
+import { objBox, overlapsXZ, playerBox, supportsOf } from '../../src/puzzle/core/geometry';
+import { solidsFor } from '../../src/puzzle/core/presence';
 import { foyer } from '../../src/puzzle/content/levels/ch1/1-2-foyer';
 import type { LevelDef, ObjDef, World } from '../../src/puzzle/core/types';
 

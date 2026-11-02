@@ -1,5 +1,6 @@
 import type { ObjState, World } from './types';
-import { objBox, solidsFor, sweepAxis } from './geometry';
+import { objBox, sweepAxis } from './geometry';
+import { solidsFor } from './presence';
 
 /** 木箱底下是否仍有支撐 (中心點落在某個頂面等高的實體上) */
 function supported(w: World, crate: ObjState, x: number, z: number): boolean {

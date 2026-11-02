@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Mode, ObjDef, ObjType, World } from '../core/types';
-import { activeIn } from '../core/geometry';
+import { isActiveIn } from '../core/presence';
 import { Painter } from './materials';
 import { PAL } from './palette';
 import { paperBackground } from './textures';
@@ -139,7 +139,7 @@ export class PuzzleScene {
     for (const e of this.entries) {
       const o = w.byId.get(e.id)!;
       const root = e.model.root;
-      root.visible = !o.gone && activeIn(o.def.visible, renderMode);
+      root.visible = isActiveIn(w, o, renderMode);
       const z = is2d && o.def.visible === '2d' ? FRONT_2D : o.z;
       root.position.set(o.x, o.y, z);
       if (!root.visible) continue;

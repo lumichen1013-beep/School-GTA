@@ -1,14 +1,16 @@
 import type { Mode, ObjState, World } from './types';
 import { INTERACT_RANGE } from './constants';
-import { activeIn, objBox } from './geometry';
+import { objBox } from './geometry';
+import { MODES } from './modes';
+import { activeIn, effectiveVisibility, isActiveIn } from './presence';
 import { say } from './world';
 
 export const MSG_KEY = '拿到了「筆尖」。它還帶著一點未乾的墨。';
 export const MSG_GATE = '閘門紋絲不動。門軸上沾著墨，像在等紙上的什麼。';
 
-function canUse(o: ObjState, mode: Mode): boolean {
+function canUse(w: World, o: ObjState, mode: Mode): boolean {
   const d = o.def;
-  return !o.gone && !o.used && !!d.interactable && activeIn(d.visible, mode) && activeIn(d.interactIn ?? d.visible, mode);
+  return isActiveIn(w, o, mode) && !o.used && !!d.interactable && activeIn(d.interactIn ?? effectiveVisibility(w, o), mode);
 }
 
 /** 玩家身體中心到物件盒的最近距離；2D 忽略 z */
@@ -17,7 +19,7 @@ function distanceTo(w: World, o: ObjState): number {
   const b = objBox(o);
   const c = [p.x, p.y + 0.45, p.z];
   let sum = 0;
-  const axes = p.mode === '2d' ? 2 : 3;
+  const axes = MODES[p.mode].axes;
   for (let i = 0; i < axes; i++) {
     const d = Math.max(b.min[i] - c[i], 0, c[i] - b.max[i]);
     sum += d * d;
@@ -31,7 +33,7 @@ export function findTarget(w: World): ObjState | null {
   let best: ObjState | null = null;
   let bd = INTERACT_RANGE;
   for (const o of w.objs) {
-    if (!canUse(o, w.player.mode)) continue;
+    if (!canUse(w, o, w.player.mode)) continue;
     const d = distanceTo(w, o);
     if (d <= bd) { bd = d; best = o; }
   }
@@ -42,8 +44,8 @@ export function findTarget(w: World): ObjState | null {
 export function interact(w: World): void {
   const t = findTarget(w);
   if (!t) {
-    const unreachable = w.player.onGround && w.objs.some(o => !o.gone && !o.used && o.def.interactable && activeIn(o.def.visible, w.player.mode)
-      && !canUse(o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
+    const unreachable = w.player.onGround && w.objs.some(o => isActiveIn(w, o, w.player.mode) && !o.used && o.def.interactable
+      && !canUse(w, o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
     if (unreachable) say(w, '看得見，卻碰不到。換個角度試試。');
     return;
   }

@@ -1,7 +1,7 @@
-import type { Box, Mode, ObjState, Player, V3, Visibility, World } from './types';
+import type { Box, Mode, ObjState, Player, V3, World } from './types';
 import { EPS, PLAYER_H, PLAYER_HW } from './constants';
-
-export const activeIn = (v: Visibility, m: Mode): boolean => v === 'both' || v === m;
+import { MODES } from './modes';
+import { solidsFor } from './presence';
 
 export function objBox(o: ObjState): Box {
   const { w, h, d } = o.def;
@@ -15,7 +15,7 @@ export const playerBox = (p: Player): Box => boxAt(p.x, p.y, p.z);
 
 /** 嚴格相交；2D 壓平模式完全忽略 z (所有物體視為同一平面) */
 export function overlaps(a: Box, b: Box, mode: Mode): boolean {
-  const axes = mode === '2d' ? 2 : 3;
+  const axes = MODES[mode].axes;
   for (let i = 0; i < axes; i++) {
     if (!(a.min[i] < b.max[i] - EPS && a.max[i] > b.min[i] + EPS)) return false;
   }
@@ -27,19 +27,11 @@ export function overlapsXZ(a: Box, b: Box): boolean {
   return a.min[0] < b.max[0] - EPS && a.max[0] > b.min[0] + EPS && a.min[2] < b.max[2] - EPS && a.max[2] > b.min[2] + EPS;
 }
 
-/** 已開啟的閘門不再擋路 */
-export const isOpenGate = (o: ObjState): boolean => o.def.type === 'gate' && o.used;
-
-/** 目前模式下生效的實體 (可見模式吻合、未被拾取、solid、閘門未開) */
-export function solidsFor(w: World, mode: Mode): ObjState[] {
-  return w.objs.filter(o => !o.gone && o.def.solid && !isOpenGate(o) && activeIn(o.def.visible, mode));
-}
-
 /** 沿單軸掃掠：回傳可移動距離 (含正負號) 與擋住的物件 */
 export function sweepAxis(box: Box, axis: 0 | 1 | 2, delta: number, solids: ObjState[], mode: Mode): { allowed: number; hit: ObjState | null } {
   let allowed = delta;
   let hit: ObjState | null = null;
-  const axes = mode === '2d' ? 2 : 3;
+  const axes = MODES[mode].axes;
   for (const s of solids) {
     const sb = objBox(s);
     let cross = true;

@@ -1,5 +1,6 @@
 import type { World } from './types';
-import { activeIn, objBox, playerBox } from './geometry';
+import { objBox, playerBox } from './geometry';
+import { isActiveIn } from './presence';
 import { resolvePlayerOverlap } from './place';
 import { say } from './world';
 
@@ -14,7 +15,7 @@ export const MSG_CRATE_RESET = '木箱回到了原來的地方。';
 export function updatePlates(w: World): void {
   const p = w.player;
   for (const plate of w.objs) {
-    if (plate.def.type !== 'plate' || plate.used || !activeIn(plate.def.visible, p.mode)) continue;
+    if (plate.def.type !== 'plate' || plate.used || !isActiveIn(w, plate, p.mode)) continue;
     const b = objBox(plate);
     const heavy = w.objs.some(c => c.def.pushable && !c.gone && c.x >= b.min[0] && c.x <= b.max[0] && Math.abs(c.y - plate.y) < 0.05);
     if (heavy) {

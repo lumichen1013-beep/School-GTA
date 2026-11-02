@@ -1,6 +1,8 @@
 import type { InputState, World } from './types';
-import { GRAVITY, JUMP_V_2D, JUMP_V_3D, SPEED, PLAYER_HW } from './constants';
-import { clamp, playerBox, solidsFor, sweepAxis } from './geometry';
+import { GRAVITY, SPEED, PLAYER_HW } from './constants';
+import { clamp, playerBox, sweepAxis } from './geometry';
+import { MODES } from './modes';
+import { solidsFor } from './presence';
 import { pushCrate } from './push';
 import { updatePlates } from './mechanisms';
 import { respawn, updateCheckpoint } from './world';
@@ -28,18 +30,19 @@ function moveAxis(w: World, axis: 0 | 2, delta: number): void {
 export function stepWorld(w: World, input: InputState, dt: number): void {
   if (w.cleared) return;
   const p = w.player;
+  const spec = MODES[p.mode];
   w.time += dt;
   let mx = input.moveX;
-  let mz = p.mode === '3d' ? input.moveZ : 0;
+  let mz = spec.moveZ ? input.moveZ : 0;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
   if (len > 0.01) p.facing = Math.atan2(mx, mz);
 
   moveAxis(w, 0, mx * SPEED * dt);
-  if (p.mode === '3d') moveAxis(w, 2, mz * SPEED * dt);
+  if (spec.moveZ) moveAxis(w, 2, mz * SPEED * dt);
 
   if (input.jump && p.onGround) {
-    p.vy = p.mode === '2d' ? JUMP_V_2D : JUMP_V_3D;
+    p.vy = spec.jumpV;
     p.onGround = false;
   }
   p.vy = Math.max(p.vy - GRAVITY * dt, -40);
@@ -50,7 +53,7 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
 
   const b = w.level.bounds;
   p.x = clamp(p.x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW);
-  if (p.mode === '3d') p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
+  if (spec.boundsZ) p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
 
   updatePlates(w);
   updateCheckpoint(w);
