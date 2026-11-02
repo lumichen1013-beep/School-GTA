@@ -66,8 +66,18 @@ export interface LevelDef {
   nextKey: TextKey;
   /** 呈現主題 id (render/themes)；未給 = 章節主題 */
   theme?: string;
+  /** 房間裝飾 (純呈現：不進碰撞、不可互動，核心與機制不讀)；依序由 render/decor 登錄表建出 */
+  decor?: DecorItem[];
   objects: ObjDef[];
 }
+
+/** 裝飾欄位值 (純資料，可 JSON 序列化) */
+export type DecorValue = number | string | boolean;
+/**
+ * 一件裝飾 (architecture 4.3)：kind 決定由哪個 render/decor 工廠解讀，其餘欄位依 kind 而定
+ * (例：painting 需 x / y / w / h / variant)；座標同物件 (x 向右、y 向上、z 向觀眾)
+ */
+export interface DecorItem { kind: string; [field: string]: DecorValue }
 
 /** used：「已觸發」狀態 (閥已轉、壓力板已壓下、閘門已開、出口門已解封)；touched：壓力板提示已顯示 */
 export interface ObjState { def: ObjDef; x: number; y: number; z: number; gone: boolean; used: boolean; touched: boolean }

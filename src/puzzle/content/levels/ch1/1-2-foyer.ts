@@ -1,4 +1,4 @@
-import type { LevelDef, ObjDef } from '../../../core/types';
+import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 
 // 玄關 (擴建)：入口區 x∈[-20,-10] ／ 缺口 x∈[-10,-6] ／ 中庭 x∈[-6,10] ／ 隔牆 x∈[10,10.4] ／ 出口區 x∈[10.4,20]
 // 謎題鏈：① 書架過缺口 (2D) → ② 推箱 + 高台取筆尖 (3D 推、2D 跳) → ③ 長桌後的圖紙壓板 (3D 繞路推箱、2D 壓下、3D 過閘門)
@@ -47,6 +47,25 @@ const objects: ObjDef[] = [
     lockedText: 'lvl.1-2.door.locked', useText: 'lvl.1-2.door.use' }
 ];
 
+// 房間裝飾 (純呈現：不進碰撞、不可互動；由 render/decor 依序建出，順序即建立順序)
+// 掛畫 / 牆上書架掛在後牆 (z 由後牆決定)；吊燈從牆頂垂下；地毯貼地；坑洞自動鋪在相鄰地板的缺口下
+const decor: DecorItem[] = [
+  { kind: 'walls' },
+  { kind: 'painting', x: -14, y: 3.1, w: 1.6, h: 1.2, variant: 0 },
+  { kind: 'painting', x: -1, y: 3.2, w: 2.0, h: 1.4, variant: 1 },
+  { kind: 'painting', x: 14.2, y: 3.1, w: 1.5, h: 1.1, variant: 2 },
+  { kind: 'wallShelf', x: -12.6, y: 2.75, w: 2.2, seed: 1 },
+  { kind: 'wallShelf', x: 4.3, y: 2.8, w: 2.0, seed: 4 },
+  { kind: 'wallShelf', x: 16.4, y: 2.75, w: 1.8, seed: 6 },
+  { kind: 'rug', x: -15, z: 1.5, w: 5, d: 3.4 },
+  { kind: 'rug', x: 15, z: 1.2, w: 5.2, d: 3.6 },
+  { kind: 'pendant', x: -15, z: 0.5 },
+  { kind: 'pendant', x: -1, z: 0.5 },
+  { kind: 'pendant', x: 5.5, z: 0.5 },
+  { kind: 'pendant', x: 15, z: 0.5 },
+  { kind: 'pits' }
+];
+
 export const foyer: LevelDef = {
   id: '1-2',
   titleKey: 'lvl.1-2.title',
@@ -56,5 +75,6 @@ export const foyer: LevelDef = {
   checkpoints: [{ minX: -5.7, x: -4, y: 0, z: 2 }],
   narrationKey: 'lvl.1-2.narration',
   nextKey: 'lvl.1-2.next',
+  decor,
   objects
 };

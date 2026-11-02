@@ -4,7 +4,7 @@ import { allObjs, isActiveIn } from '../core/presence';
 import { Painter } from './materials';
 import { paperBackground } from './textures';
 import { DraftsmanModel } from './models/player';
-import { buildDecor, type Decor } from './models/room';
+import { buildDecor, type Decor } from './decor';
 import { modelFor } from './models';
 import type { PropModel } from './models/types';
 import { DEFAULT_THEME, type Theme } from './themes';
