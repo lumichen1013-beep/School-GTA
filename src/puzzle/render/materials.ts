@@ -24,7 +24,7 @@ export interface PaintOpts {
   side?: THREE.Side;
 }
 
-interface Item { mesh: THREE.Mesh; m3: THREE.Material; m2: THREE.Material; outline: THREE.Mesh | null }
+interface Item { mesh: THREE.Mesh; m3: THREE.Material; m2: THREE.Material; outline: THREE.Mesh | null; unique: boolean }
 
 /**
  * 同一個網格兩套外觀：
@@ -56,8 +56,19 @@ export class Painter {
       outline.visible = this.mode === '2d';
       mesh.add(outline);
     }
-    this.items.push({ mesh, m3, m2, outline });
+    this.items.push({ mesh, m3, m2, outline, unique: !!opts.unique });
     return mesh;
+  }
+
+  /** 模型被拆掉 (場景對帳)：不再切換這些網格的材質，釋放其幾何與專屬材質 (共用材質保留) */
+  release(objects: ReadonlySet<THREE.Object3D>): void {
+    const keep: Item[] = [];
+    for (const it of this.items) {
+      if (!objects.has(it.mesh)) { keep.push(it); continue; }
+      it.mesh.geometry.dispose();
+      if (it.unique) { it.m3.dispose(); it.m2.dispose(); }
+    }
+    this.items = keep;
   }
 
   /** 兩種模式的所有材質 (釋放資源用) */

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { Mode, ObjDef, World } from '../core/types';
-import { isActiveIn } from '../core/presence';
+import type { Mode, ObjDef, ObjState, World } from '../core/types';
+import { allObjs, isActiveIn } from '../core/presence';
 import { Painter } from './materials';
 import { paperBackground } from './textures';
 import { DraftsmanModel } from './models/player';
@@ -15,11 +15,18 @@ const PLAYER_2D = 7;
 
 interface Entry { id: string; model: PropModel }
 
-/** 場景：依世界狀態建立 / 更新模型，並依模式切換「現實」(光影材質) 或「圖紙」(扁平描邊色塊) 外觀 */
+/**
+ * 場景：依世界狀態建立 / 更新模型，並依模式切換「現實」(光影材質) 或「圖紙」(扁平描邊色塊) 外觀。
+ *
+ * 只讀世界、不改世界：每幀對 allObjs(world) 以 id 對帳 (新增 → 建模型、消失 → 拆模型)，再同步位置 / 可見性 / 動畫；
+ * 模型 update 也只讀 ctx.obj / ctx.world。注意外殼 (app/levelSession.ts) 繪製時會把玩家位置暫改為內插值、畫完還原，
+ * 所以這裡讀到的玩家位置是暫時值，不可寫回或快取成邏輯狀態。
+ */
 export class PuzzleScene {
   readonly scene = new THREE.Scene();
   private paint: Painter;
-  private entries: Entry[] = [];
+  /** 物件 id → 模型 (插入順序 = 建立順序) */
+  private entries = new Map<string, Entry>();
   private decor: Decor;
   private player: DraftsmanModel;
   private sun: THREE.DirectionalLight;
@@ -57,12 +64,36 @@ export class PuzzleScene {
     this.scene.add(this.decor.root);
     this.occluders.push(...this.decor.occluders);
     this.nearFaders = new Set(this.decor.occluders);
-    for (const o of world.objs) this.entries.push(this.build(o.def));
+    this.reconcile(allObjs(world));
     this.player = new DraftsmanModel(this.paint, theme.pal);
     this.scene.add(this.player.root);
     const p = world.player;
     this.lastX = p.x; this.lastY = p.y; this.lastZ = p.z;
   }
+
+  /** 對帳：allObjs 有、場景沒有 → 建模型；場景有、allObjs 沒有 → 拆模型 (推導 / 生成物件的出現與消失) */
+  private reconcile(objs: readonly ObjState[]): void {
+    for (const o of objs) if (!this.entries.has(o.def.id)) this.entries.set(o.def.id, this.build(o.def));
+    if (this.entries.size === objs.length) return;
+    const ids = new Set(objs.map(o => o.def.id));
+    for (const [id, e] of this.entries) {
+      if (ids.has(id)) continue;
+      this.entries.delete(id);
+      this.unbuild(e);
+    }
+  }
+
+  private unbuild(e: Entry): void {
+    const root = e.model.root;
+    this.scene.remove(root);
+    const parts = new Set<THREE.Object3D>();
+    root.traverse(o => parts.add(o));
+    this.occluders = this.occluders.filter(m => !parts.has(m));
+    this.paint.release(parts);
+  }
+
+  /** 目前某物件的模型根節點 (對帳結果；測試 / 除錯用) */
+  modelRoot(id: string): THREE.Object3D | undefined { return this.entries.get(id)?.model.root; }
 
   /** 依登錄表 (models/index.ts) 建模型；未登錄類型用後備盒模型 */
   private build(def: ObjDef): Entry {
@@ -128,8 +159,10 @@ export class PuzzleScene {
     const w = this.world;
     const is2d = renderMode === '2d';
     if (this.mode !== renderMode) this.applyMode(renderMode);
-    for (const e of this.entries) {
-      const o = w.byId.get(e.id)!;
+    const objs = allObjs(w);
+    this.reconcile(objs);
+    for (const o of objs) {
+      const e = this.entries.get(o.def.id)!;
       const root = e.model.root;
       root.visible = isActiveIn(w, o, renderMode);
       const z = is2d && o.def.visible === '2d' ? FRONT_2D : o.z;
