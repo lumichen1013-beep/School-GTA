@@ -39,6 +39,6 @@ export function deriveHelp(b: Bindings): HelpRow[] {
     { keys: all(b.flip), labelKey: 'ui.help.flip' },
     { keys: all(b.interact), labelKey: 'ui.help.interact' },
     { keys: all(b.reset), labelKey: 'ui.help.reset' },
-    { keys: all(b.restart), labelKey: 'ui.help.restart' }
+    { keys: all(b.restart), labelKey: 'ui.help.restart', noteKey: 'ui.help.restart.note' }
   ];
 }

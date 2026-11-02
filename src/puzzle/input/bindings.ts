@@ -12,11 +12,14 @@ export const DEFAULT_BINDINGS: Bindings = {
   flip: ['KeyF', 'KeyQ'],
   reset: ['KeyT'],
   interact: ['KeyE'],
-  restart: ['KeyR']
+  restart: ['KeyR'],
+  /** 確認窗：Enter 確認、Esc 取消 */
+  confirm: ['Enter', 'NumpadEnter'],
+  cancel: ['Escape']
 };
 
 /** 動作在 poll 結果中的順序 (固定，便於測試) */
-export const INPUT_ACTIONS: readonly InputAction[] = ['flip', 'reset', 'interact', 'restart'];
+export const INPUT_ACTIONS: readonly InputAction[] = ['flip', 'reset', 'interact', 'restart', 'confirm', 'cancel'];
 
 /** 以設定中的覆寫 (settings.keys) 合併預設按鍵；不認得的名稱與非字串清單忽略 */
 export function mergeBindings(base: Bindings, override: Readonly<Record<string, unknown>> | undefined): Bindings {

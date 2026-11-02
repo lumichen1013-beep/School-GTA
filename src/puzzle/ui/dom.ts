@@ -1,7 +1,7 @@
 import type { Text } from '../text/text';
 
 /** 操作說明的一列：按鍵標籤 (每個一個 <kbd>) + 說明文字 key */
-export interface HelpRow { keys: readonly string[]; labelKey: string }
+export interface HelpRow { keys: readonly string[]; labelKey: string; noteKey?: string }
 
 const el = (tag: string, id?: string, text?: string): HTMLElement => {
   const e = document.createElement(tag);
@@ -35,6 +35,7 @@ export function fillHelp(helpEl: HTMLElement, text: Text, help: readonly HelpRow
     const d = el('div');
     for (const k of row.keys) d.append(el('kbd', undefined, k));
     d.append(text(row.labelKey));
+    if (row.noteKey) d.append(el('small', undefined, text(row.noteKey)));
     helpEl.append(d);
   }
 }

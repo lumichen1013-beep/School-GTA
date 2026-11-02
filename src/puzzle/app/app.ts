@@ -17,7 +17,9 @@ import { buildPuzzleDom } from '../ui/dom';
 import { PuzzleHud } from '../ui/hud';
 import { showMenu } from '../ui/screens/menu';
 import { showNickname } from '../ui/screens/nickname';
+import { showRestartConfirm } from '../ui/confirm';
 import { deriveHelp } from './hudModel';
+import { RestartConfirm, routeFrame } from './restartConfirm';
 import { LevelSession } from './levelSession';
 import { browserStorage } from './services';
 
@@ -40,6 +42,8 @@ export class PuzzleApp {
   private session: LevelSession | null = null;
   private screen: Screen = { id: 'boot' };
   private closeScreen: (() => void) | null = null;
+  private confirm = new RestartConfirm();
+  private closeConfirmUi: (() => void) | null = null;
   private narrationUntil = 0;
   private last = performance.now();
 
@@ -65,6 +69,7 @@ export class PuzzleApp {
 
   go(next: Screen): void {
     const prev = this.screen;
+    this.closeConfirm();
     this.exit(prev, next);
     this.screen = next;
     this.enter(next, prev);
@@ -156,6 +161,23 @@ export class PuzzleApp {
     else if (s.id === 'level') this.startSession(this.entry(s.levelId));
   }
 
+  /** 開啟「重新開始本關」確認窗：遊戲暫停，按著的鍵一律視為放開 */
+  private openConfirm(nowMs: number): void {
+    this.input.releaseAll();
+    this.closeConfirmUi = showRestartConfirm(this.text, {
+      onConfirm: () => { this.closeConfirm(); this.restart(); },
+      onCancel: () => this.closeConfirm()
+    });
+  }
+
+  private closeConfirm(): void {
+    if (!this.confirm.isOpen && !this.closeConfirmUi) return;
+    this.confirm.close();
+    this.closeConfirmUi?.();
+    this.closeConfirmUi = null;
+    this.input.releaseAll();
+  }
+
   private showNarration(e: LevelEntry): void {
     this.narrationUntil = performance.now() + NARRATION_MS;
     this.hud.showNarration(this.text(e.load().narrationKey));
@@ -177,8 +199,14 @@ export class PuzzleApp {
     const input = this.input.poll();
     if (input.anyKey) this.skipNarration();
     if (this.narrationUntil && now > this.narrationUntil) this.skipNarration();
-    if (input.pressed.includes('restart')) this.restart();
-    else this.session?.update(elapsed, input);
+    switch (routeFrame(this.confirm, this.screen.id, input.pressed, now)) {
+      case 'update': this.session?.update(elapsed, input); break;
+      case 'open': this.openConfirm(now); break;
+      case 'confirm': this.closeConfirm(); this.restart(); break;
+      case 'cancel': this.closeConfirm(); break;
+      case 'restart': this.restart(); break;
+      default: break;
+    }
     this.session?.render(now, Math.min(elapsed, 1 / 20));
     requestAnimationFrame(t => this.frame(t));
   }

@@ -48,6 +48,8 @@ export class KeyboardSource implements InputSource {
 
   clear(): void { this.pressed.clear(); this.anyKey = false; }
 
+  releaseAll(): void { this.down.clear(); this.clear(); }
+
   dispose(): void {
     this.target.removeEventListener('keydown', this.onDown);
     this.target.removeEventListener('keyup', this.onUp);

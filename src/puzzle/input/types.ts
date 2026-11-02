@@ -1,7 +1,7 @@
 import type { WorldAction } from '../core/actions';
 
 /** 外殼動作 (不進世界模擬)；notes / menu 等於對應畫面實作時加入 */
-export type ShellAction = 'restart';
+export type ShellAction = 'restart' | 'confirm' | 'cancel';
 export type InputAction = WorldAction | ShellAction;
 /** 持續軸 */
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';
@@ -16,5 +16,7 @@ export interface InputSource {
   poll(): InputFrame;
   /** 丟棄尚未取走的按鍵 */
   clear(): void;
+  /** 丟棄未取走的按鍵，並視為所有按著的鍵都已放開 (確認窗開啟 / 取消時避免卡鍵) */
+  releaseAll(): void;
   dispose(): void;
 }
