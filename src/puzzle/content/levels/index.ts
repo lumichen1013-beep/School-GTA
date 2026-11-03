@@ -2,6 +2,7 @@ import type { AbilityId, LevelDef } from '../../core/types';
 import { porch } from './ch1/1-1-porch';
 import { foyer } from './ch1/1-2-foyer';
 import { closet } from './ch1/closet';
+import { protoA } from './proto/dial';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -31,3 +32,12 @@ export const LEVELS: readonly LevelEntry[] = [
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);
+
+/**
+ * 【原型占位，不計入正式 22 關】開發入口的關卡 (選單只在網址帶 ?dev=1 時列出「開發：控制盤原型」)：
+ * M-Dial 控制盤原型 (2×3 測試魔方，從甲室進；chapter 90 = 不屬於任何正式章節)
+ */
+export const PROTO_LEVELS: readonly LevelEntry[] = [
+  { id: 'dev-dial', chapter: 90, titleKey: 'lvl.proto.title', abilities: [], unlock: { after: [] }, load: () => protoA }
+];
+export const protoLevelById = (id: string): LevelEntry | undefined => PROTO_LEVELS.find(e => e.id === id);

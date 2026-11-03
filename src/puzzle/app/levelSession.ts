@@ -146,7 +146,7 @@ export class LevelSession {
       if (e.t === 'labelOpen') { this.openTray(e.label); continue; }
       if (e.t === 'card') { if (!e.ok) this.traySeq++; continue; }
       const r = applyChapterEvent(this.cs, e, this.opts);
-      if (r.kind === 'state') { this.cs = r.cs; this.saveChapter(); continue; }
+      if (r.kind === 'state' || r.kind === 'dial') { this.cs = r.cs; this.saveChapter(); continue; }
       if (r.kind === 'enter') {
         const next = r.next;
         this.mapOpen = false;

@@ -9,5 +9,6 @@ import { lvl13 } from './lvl-1-3';
 import { lvlCh1 } from './lvl-ch1';
 import { ch } from './ch';
 import { csPrologue } from './cs-prologue';
+import { lvlProto } from './lvl-proto';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...lvlProto };

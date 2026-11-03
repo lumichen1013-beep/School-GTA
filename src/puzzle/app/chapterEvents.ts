@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { enterRoom, noteFlag, transferObject, turn, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, transferObject, turn, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 
@@ -15,12 +15,15 @@ export type ChapterStep =
   | { kind: 'turn'; cs: ChapterSession; dir: Side }
   /** 換房：next = 目標房間已建好的 session (外殼在過場換畫面點切過去) */
   | { kind: 'enter'; next: ChapterSession }
-  /** 章節狀態更新但 World 照舊 (可推物推過拱門、記下旗標)；外殼寫存檔 */
-  | { kind: 'state'; cs: ChapterSession };
+  /** 章節狀態更新但 World 照舊 (可推物推過拱門、記下旗標、謎題完成 → 解開鎖扣)；外殼寫存檔 */
+  | { kind: 'state'; cs: ChapterSession }
+  /** 魔方儀剛啟動 (v0.4)：外殼寫存檔，並在下一次能進轉動模式時自動打開展開圖的轉動模式 (規格 5.4.2) */
+  | { kind: 'dial'; cs: ChapterSession };
 
 /**
  * 處理一個事件：door → enterRoom；turnRequest → 拉桿此刻的方向字 (標籤上的詞卡優先) → turn (轉不動 → say 原因)；
- * objCross → transferObject (推不過去 → say 原因)；flag → 記下章節旗標
+ * objCross → transferObject (推不過去 → say 原因)；flag → 記下章節旗標；
+ * v0.4：dialActivate → activateDial (本章是控制盤章、還沒啟動時)；done → 回退堆疊清空、解開條件成立的鎖扣寫回
  */
 export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldOptions): ChapterStep {
   const w = cs.world;
@@ -45,5 +48,11 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     return { kind: 'state', cs: r };
   }
   if (e.t === 'flag') return { kind: 'state', cs: noteFlag(cs, e.flag) };
+  if (e.t === 'dialActivate') {
+    if (!isDialChapter(cs.spec) || cs.state.dial || e.chapter !== cs.spec.chapter) return { kind: 'none' };
+    say(w, 'msg.dial.activated');
+    return { kind: 'dial', cs: activateDial(cs) };
+  }
+  if (e.t === 'done') return { kind: 'state', cs: refreshUnlocks(clearUndo(cs, [e])).cs };
   return { kind: 'none' };
 }
