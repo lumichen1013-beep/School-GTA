@@ -14,6 +14,9 @@ import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
 import { hasItem } from '../../../src/puzzle/mechanics/items';
 import type { LevelDef } from '../../../src/puzzle/core/types';
 import { TEXT } from '../msgs';
+import { activateDial, dialTurn, restartRoom } from '../../../src/puzzle/core/chapter';
+import { TEST_DIAL_CHAPTER, TEST_DIAL_CUBE } from '../../../src/puzzle/content/cubes/test-dial';
+import { PROTO_DIAL_ROOMS } from '../../../src/puzzle/content/levels/proto/dial';
 
 const OPTS = { mechanics: DEFAULT_MECHANICS, text: TEXT };
 const stub = (id: string): LevelDef => ({ ...foyer, id, objects: foyer.objects.filter(o => o.type === 'floor') });
@@ -110,5 +113,65 @@ describe('進關旁白 (選單選 1-3、沒有章節存檔的舊存檔)', () => 
     expect(entryNarrationKey(spec, chapterStart(save, spec, ch1.start, ch1.legacy))).toBe('lvl.1-3.narration');
     const single = singleRoomSpec(porch);
     expect(entryNarrationKey(single, newChapterState(single, porch.id, null))).toBe('lvl.1-1.narration');
+  });
+});
+
+// D6：控制盤章節的存檔增補 (dial / unlocked / turns；不升版號、缺欄 = 預設、不合法只丟 turns；規格 8 v0.4、architecture 4.16.1)
+
+describe('SaveV3 控制盤欄位 (D6)', () => {
+  const DSPEC: ChapterSpec = { chapter: TEST_DIAL_CHAPTER, cube: TEST_DIAL_CUBE, rooms: PROTO_DIAL_ROOMS, doors: chapterDoors(PROTO_DIAL_ROOMS) };
+  const DSTART = { room: 'protoA', door: null };
+  const ok = (r: ChapterSession | { blocked: string }): ChapterSession => { if ('blocked' in r) throw new Error(r.blocked); return r; };
+  /** 啟動、轉兩次 (墨 4、堆疊 2) */
+  const played = () => ok(dialTurn(ok(dialTurn(activateDial(openChapter(DSPEC, chapterStart(defaultSave(), DSPEC, DSTART), OPTS)), { group: 'row0', dir: 1 })), { group: 'row0', dir: 1 }));
+  const roundTrip = (save: Save): Save => { const s = memoryStorage(); writeSave(s, save); return loadSave(s); };
+
+  it('寫入 → 讀回 JSON 相同 (dial / turns 一起存)；房內讀檔不補墨 (墨 4、堆疊照舊)，R 回到讀檔時的進房快照', () => {
+    const save = withChapter(defaultSave(), captureState(played()));
+    expect(save.chapters!['90']).toMatchObject({ dial: true, turns: { left: 4, undo: [{ group: 'row0', dir: 1 }, { group: 'row0', dir: 1 }] } });
+    const back = roundTrip(save);
+    expect(JSON.stringify(back)).toBe(JSON.stringify(save));
+    const cs = openChapter(DSPEC, chapterStart(back, DSPEC, DSTART), OPTS);
+    expect([cs.state.dial, cs.state.turns]).toEqual([true, { left: 4, undo: [{ group: 'row0', dir: 1 }, { group: 'row0', dir: 1 }] }]);
+    expect(restartRoom(cs, OPTS).state.turns!.left).toBe(4);
+  });
+
+  it('缺欄 = 預設：控制盤章節缺 dial / unlocked / turns → 未啟動、沒有解開、進房補滿 (6)；第一章 v3 存檔原樣可讀、開章狀態不多欄位', () => {
+    const ch = chapterSave(captureState(played()));
+    const { dial: _d, unlocked: _u, turns: _t, ...bare } = ch;
+    const back = roundTrip({ ...defaultSave(), chapters: { '90': bare } });
+    expect(back.chapters!['90']).toEqual(bare);
+    const cs = openChapter(DSPEC, chapterStart(back, DSPEC, DSTART), OPTS);
+    expect([cs.state.dial, cs.state.unlocked, cs.state.turns]).toEqual([undefined, undefined, { left: 6, undo: [] }]);
+    const ch1 = openChapter(SPEC, chapterStart(defaultSave(), SPEC, START), OPTS);
+    const v3 = withChapter(defaultSave(), captureState(ch1));
+    expect(roundTrip(v3)).toEqual(v3);
+    expect(Object.keys(chapterStart(v3, SPEC, START)).sort()).toEqual(['chapter', 'cube', 'door', 'flags', 'items', 'labels', 'moved', 'room', 'rooms']);
+  });
+
+  it('不合法只丟 turns (其餘進度保留)：墨量越界 / 負數、堆疊比預算長、組 id 不存在、結構壞掉；鎖扣只留本章有的組', () => {
+    const ch = chapterSave(captureState(played()));
+    const load = (patch: Record<string, unknown>) => {
+      const s = memoryStorage({ [SAVE_KEY]: JSON.stringify({ ...defaultSave(), chapters: { '90': { ...ch, ...patch } } }) });
+      return openChapter(DSPEC, chapterStart(loadSave(s), DSPEC, DSTART), OPTS).state;
+    };
+    const bads = [
+      { turns: { left: 7, undo: [] } }, { turns: { left: -1, undo: [] } }, { turns: { left: 1.5, undo: [] } },
+      { turns: { left: 2, undo: Array.from({ length: 7 }, () => ({ group: 'row0', dir: 1 })) } },
+      { turns: { left: 2, undo: [{ group: 'row9', dir: 1 }] } }, { turns: { left: 2, undo: [{ group: 'row0', dir: 2 }] } }, { turns: 'x' }
+    ];
+    for (const b of bads) {
+      const st = load(b);
+      expect([JSON.stringify(b), st.turns, st.dial, st.cube]).toEqual([JSON.stringify(b), { left: 6, undo: [] }, true, ch.cube]);
+    }
+    expect(load({ unlocked: ['row1', 'nope', 3] }).unlocked).toEqual(['row1']);
+    expect(load({ turns: { left: 0, undo: [{ group: 'col1', dir: 1 }] } }).turns).toEqual({ left: 0, undo: [{ group: 'col1', dir: 1 }] });
+  });
+
+  it('存檔的房間不在本章 (改從入口進) → 不沿用墨量', () => {
+    const ch = chapterSave(captureState(played()));
+    const s = memoryStorage({ [SAVE_KEY]: JSON.stringify({ ...defaultSave(), chapters: { '90': { ...ch, at: { room: 'gone', door: null } } } }) });
+    const st = openChapter(DSPEC, chapterStart(loadSave(s), DSPEC, DSTART), OPTS).state;
+    expect([st.room, st.turns]).toEqual(['protoA', { left: 6, undo: [] }]);
   });
 });

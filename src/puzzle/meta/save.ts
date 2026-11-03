@@ -1,6 +1,6 @@
 import type { AbilityId } from '../core/types';
 import type { Cell, CubeState } from '../core/cube';
-import type { ObjSnapshot, RoomSnapshot } from '../core/chapter';
+import type { ObjSnapshot, RoomSnapshot, TurnRec } from '../core/chapter';
 import { isRecord, type KeyValueStorage } from './storage';
 
 export const SAVE_KEY = 'puzzle:save';
@@ -15,7 +15,9 @@ export const SAVE_VERSION = 3;
 
 /**
  * 一章的存檔 (規格 8 ChapterSave：魔方排列 + 已離開房間的快照 + 下次從哪扇門進 + 章節道具 + 旗標；
- * v0.3 M1b 加：標籤上貼著的字卡 labels、跨房物件 moved)。labels / moved 缺欄 (M1b 之前的存檔) = 空
+ * v0.3 M1b 加：標籤上貼著的字卡 labels、跨房物件 moved)。labels / moved 缺欄 (M1b 之前的存檔) = 空。
+ * v0.4 控制盤章節增補 (不升版號，決策 Q12)：dial 魔方儀已啟動、unlocked 已解開的鎖扣、turns 剩餘墨與回退堆疊；
+ * 缺欄 = 預設 (未啟動、沒有解開、進房補滿)；與章節定義不合 (墨量越界、堆疊過長、組 id 不存在) 由 meta/chapters 開章時丟棄 turns
  */
 export interface ChapterSave {
   cube: CubeState;
@@ -25,6 +27,9 @@ export interface ChapterSave {
   flags: string[];
   labels?: Record<string, string[]>;
   moved?: Record<string, { room: string; x: number; y: number; z: number }>;
+  dial?: boolean;
+  unlocked?: string[];
+  turns?: { left: number; undo: TurnRec[] };
 }
 
 /** 存檔 v3 (規格 8)；v2 欄位不變，另加 chapters */
@@ -73,6 +78,18 @@ const ints = (v: unknown, lo: number, hi: number): number[] =>
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isCell = (v: unknown): v is Cell => Array.isArray(v) && v.length === 3 && v.every(n => Number.isInteger(n));
+const SIDE_IDS: readonly unknown[] = ['N', 'S', 'E', 'W', 'U', 'D'];
+
+/** 控制盤的墨量與回退堆疊 (結構校正；不合 → null = 丟棄 turns，開章時補滿) */
+function sanitizeTurns(v: unknown): { left: number; undo: TurnRec[] } | null {
+  if (!isRecord(v) || !Number.isInteger(v.left) || (v.left as number) < 0 || !Array.isArray(v.undo)) return null;
+  const undo: TurnRec[] = [];
+  for (const r of v.undo) {
+    if (!isRecord(r) || typeof r.group !== 'string' || !(r.dir === 1 || r.dir === -1 || SIDE_IDS.includes(r.dir))) return null;
+    undo.push({ group: r.group, dir: r.dir as TurnRec['dir'] });
+  }
+  return { left: v.left as number, undo };
+}
 
 function sanitizeObj(v: unknown): ObjSnapshot | null {
   if (!isRecord(v) || typeof v.id !== 'string' || ![v.x, v.y, v.z].every(finite)) return null;
@@ -105,9 +122,11 @@ export function sanitizeChapter(v: unknown): ChapterSave | null {
   if (isRecord(v.moved)) {
     for (const [k, m] of Object.entries(v.moved)) if (isRecord(m) && typeof m.room === 'string' && [m.x, m.y, m.z].every(finite)) moved[k] = { room: m.room, x: m.x as number, y: m.y as number, z: m.z as number };
   }
+  const turns = 'turns' in v ? sanitizeTurns(v.turns) : null;
   return {
     cube: { pos, rot }, rooms, at: { room: v.at.room, door: v.at.door as string | null }, items, flags: strs(v.flags),
-    ...('labels' in v ? { labels } : {}), ...('moved' in v ? { moved } : {})
+    ...('labels' in v ? { labels } : {}), ...('moved' in v ? { moved } : {}),
+    ...(typeof v.dial === 'boolean' ? { dial: v.dial } : {}), ...('unlocked' in v ? { unlocked: strs(v.unlocked) } : {}), ...(turns ? { turns } : {})
   };
 }
 
