@@ -28,10 +28,13 @@ export const TEST_DIAL_CUBE: CubeDef = {
 };
 
 /**
- * 原型的謎題 (validateDial 的輸入；都是「走到那間房、拉下開關」)：test.a 教列轉、test.b 教下列、test.goal 要行轉 (非教學：步數上限內要有兩種以上本質不同的走法)
+ * 原型的謎題 (devtools/validateDial 的輸入；都是「走到那間房、拉下開關」)：needs = 設計上的先後 (開關本身不檢查前置，
+ * 驗證器另查「能不能在前置之前完成」)。test.a 教列轉、test.b 教下列、test.goal 要行轉 (非教學：步數上限內要有兩種以上本質不同的走法)
  */
-export const TEST_DIAL_PUZZLES = [
-  { id: 'test.a', room: 'protoC', needs: [] as string[], teaching: true },
-  { id: 'test.b', room: 'protoF', needs: [] as string[], teaching: true },
-  { id: 'test.goal', room: 'protoE', needs: [] as string[] }
-] as const;
+export const TEST_DIAL_PUZZLES: ReadonlyArray<{ id: string; room: string; needs: readonly string[]; teaching?: boolean }> = [
+  { id: 'test.a', room: 'protoC', needs: [], teaching: true },
+  { id: 'test.b', room: 'protoF', needs: ['test.a'], teaching: true },
+  { id: 'test.goal', room: 'protoE', needs: ['test.b'] }
+];
+export const TEST_DIAL_START = 'protoA';
+export const TEST_DIAL_FINISH = 'test.goal';
