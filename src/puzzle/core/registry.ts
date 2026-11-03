@@ -30,6 +30,8 @@ export interface Mechanic {
   interactFallback?(w: World): boolean;
   /** 帶參數的指令 (WorldCommand)；回傳 true = 已處理 (後面的機制不再收到) */
   command?(w: World, cmd: WorldCommand): boolean;
+  /** v0.4 卡榫 (P3)：此刻房內有東西伸進魔方軌道 → 牽涉這間房的控制盤轉動一律轉不動 (OR 合成；第三章 scale 實作) */
+  blocksTrack?(w: World): boolean;
 }
 
 export interface CompiledMechanics {
@@ -41,6 +43,7 @@ export interface CompiledMechanics {
   readonly afterPhysics: readonly Mechanic[];
   readonly interactFallback: readonly Mechanic[];
   readonly command: readonly Mechanic[];
+  readonly blocksTrack: readonly Mechanic[];
 }
 
 /** 編譯機制表：重複的機制 id / 物件類型 → 拋錯 */
@@ -63,6 +66,7 @@ export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics {
     beforePhysics: list.filter(m => m.beforePhysics),
     afterPhysics: list.filter(m => m.afterPhysics),
     interactFallback: list.filter(m => m.interactFallback),
-    command: list.filter(m => m.command)
+    command: list.filter(m => m.command),
+    blocksTrack: list.filter(m => m.blocksTrack)
   };
 }

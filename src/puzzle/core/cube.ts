@@ -104,7 +104,7 @@ export function applyOp(def: CubeDef, s: CubeState, op: CubeOp): CubeState | { b
   return { pos: { ...s.pos, [op.room]: to }, rot: { ...s.rot } };
 }
 
-export const isBlocked = (r: CubeState | { blocked: CubeBlock }): r is { blocked: CubeBlock } => 'blocked' in r;
+export const isBlocked = <B extends string>(r: CubeState | { blocked: B }): r is { blocked: B } => 'blocked' in r;
 
 /**
  * 連接表 (規格 5.4.1 接通規則)：依格位與朝向算出每扇門此刻接到哪 (依 doors 順序；接不通的門不列出 = 門後是牆)。
