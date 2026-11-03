@@ -32,7 +32,10 @@ import { CutscenePlayer, planCutscene, type CutsceneEvent, type CutsceneView } f
 import { deriveHelp } from './hudModel';
 import { RestartConfirm, routeFrame } from './restartConfirm';
 import { LevelSession } from './levelSession';
-import { newChapterState, singleRoomSpec } from '../core/chapter';
+import { newChapterState, singleRoomSpec, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { cubeChapterOf } from '../content/cubes';
+import { chapterDoors } from '../mechanics/cube';
+import { chapterStart, withChapter } from '../meta/chapters';
 import { browserStorage } from './services';
 
 /**
@@ -99,6 +102,8 @@ export class PuzzleApp {
   /** 目前關卡的世界 (開發期自動化驗證用) */
   get world(): World | null { return this.session?.world ?? null; }
   get current(): Screen { return this.screen; }
+  /** 目前的關卡遊玩 (章節 session、展開圖、過場狀態；開發期自動化驗證用) */
+  get level(): LevelSession | null { return this.session; }
   /** 目前過場的播放器 (開發期自動化驗證用) */
   get cutscene(): CutscenePlayer | null { return this.cs?.player ?? null; }
 
@@ -194,20 +199,35 @@ export class PuzzleApp {
     writeSave(this.storage, save);
   }
 
+  /** 關卡 → 章節 spec 與起始狀態：在魔方上 → 整章 (接著存檔玩)；否則單房 */
+  private chapterFor(e: LevelEntry): { spec: ChapterSpec; state: ChapterState } {
+    const cc = cubeChapterOf(e.id);
+    if (!cc) {
+      const spec = singleRoomSpec(e.load());
+      return { spec, state: newChapterState(spec, e.id, null) };
+    }
+    const spec: ChapterSpec = { chapter: cc.chapter, cube: cc.cube, rooms: cc.rooms, doors: chapterDoors(cc.rooms) };
+    return { spec, state: chapterStart(this.save, spec, cc.start, cc.legacy) };
+  }
+
   private startSession(e: LevelEntry): void {
     this.endSession();
     const levelId = e.id;
-    const level = e.load();
+    const { spec, state } = this.chapterFor(e);
+    const level = spec.rooms[state.room];
     const theme = resolveTheme(level.theme ?? CHAPTERS.find(ch => ch.id === e.chapter)?.theme);
-    const spec = singleRoomSpec(level);
     this.session = new LevelSession(
       {
         renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme,
         fx: dir => cssCubeFx(document.getElementById('pz-canvas')!, document.getElementById('pz-veil')!, dir, this.reduceMotion()),
         map: this.cubeMap
       },
-      spec, newChapterState(spec, level.id, null),
-      { abilities: startAbilities(e, this.save), onCleared: () => this.go({ id: 'clear', levelId }) }
+      spec, state,
+      {
+        abilities: startAbilities(e, this.save),
+        onCleared: () => this.go({ id: 'clear', levelId }),
+        onChapterSave: st => this.commit(withChapter(this.save, st))
+      }
     );
     this.resize();
     this.input.clear();

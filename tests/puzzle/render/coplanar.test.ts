@@ -2,7 +2,7 @@
 // 曾發生：閘門門柱 vs 隔牆端面 (壁紙 / 護牆板 / 腰線 / 踢腳線同深度)、出口門門把座板 vs 嵌板、書架飾條 vs 頂板、側牆飾條端面、紙條 vs 護牆板
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { newWorld } from '../helpers';
+import { FOYER_V02, newWorld } from '../helpers';
 import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
@@ -130,6 +130,20 @@ describe('渲染：深度打架 (共面)', () => {
     view.dispose();
   });
 
+  it('魔方 (M-Cube)：東門接通後 (門扇微開、門縫透光) 與拉桿擺動中也沒有共面；兩模式都畫得出來', () => {
+    const w = newWorld();
+    w.ext = { cube: { links: { doorE: { to: 'room', room: 'stair', door: 'doorW', kind: 'door' }, archS: { to: 'wall' } } } };
+    w.msgKey = 'msg.cube.turned';
+    const view = new PuzzleScene(w);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 300; i++) { if (i === 10) w.msgSeq++; view.update('3d', 1 / 60, i / 60, cams.active('3d')); }
+    expect(zFightPairs(view.scene)).toEqual([]);
+    view.update('2d', 1 / 60, 5, cams.active('2d'));
+    expect(view.modelRoot('lever')!.visible && view.modelRoot('doorE')!.visible).toBe(true);
+    expect(view.modelRoot('archS')!.visible).toBe(false); // 前緣的拱門只在實景
+    view.dispose();
+  });
+
   it('3D 鏡頭 near / far 比值不超過 200 (深度精度)', () => {
     const cams = new PuzzleCameras(newWorld());
     expect(cams.persp.far / cams.persp.near).toBeLessThanOrEqual(200);
@@ -162,11 +176,11 @@ describe('渲染：深度打架 (共面)：1-1 門廊', () => {
   });
 });
 
-describe('渲染：深度打架 (共面)：1-2 玄關改版 (1-2d)', () => {
+describe('渲染：深度打架 (共面)：1-2 玄關改版 (1-2d；v0.2 玄關固定場景)', () => {
   beforeAll(stubCanvas);
 
   it('1-2d 完成時的配置 (閘門開、木箱推到出口區閥下、閥轉開、門解封) 3D 鏡頭看得到的面沒有共面', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     for (const id of ['plate', 'gate', 'valve', 'door']) w.byId.get(id)!.used = true;
     const c = w.byId.get('crate')!;
     c.x = 15; c.z = 0;
@@ -178,7 +192,7 @@ describe('渲染：深度打架 (共面)：1-2 玄關改版 (1-2d)', () => {
   });
 
   it('藏寶圖 (正交鏡頭從 +z 看)：高處墨水閥的網格 (含新增墨點) 彼此、與其他物件的朝前面都不共面', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     const c = w.byId.get('crate')!;
     c.x = 15; c.z = 0;
     w.player.mode = '2d';

@@ -11,6 +11,8 @@ import { step } from '../core/step';
 import type { LevelEntry } from '../content/levels';
 import type { ChapterDef } from '../content/chapters';
 import { ABILITY_IDS } from '../meta/save';
+import { SIDES } from '../core/cube';
+import { LEVER_WORDS } from '../mechanics/cube';
 
 /** 問題代碼 (測試以代碼斷言，訊息僅供人讀) */
 export type IssueCode =
@@ -18,7 +20,7 @@ export type IssueCode =
   | 'level.bounds'        // bounds 不合法 (min ≥ max 或非有限數)
   | 'level.start'         // 起點出界或兩模式站不住
   | 'level.checkpoint'    // 檢查點出界、站不住或 minX 未遞增
-  | 'level.noExit'        // 沒有出口門 (door)
+  | 'level.noExit'        // 沒有出口門 (door)，也沒有魔方門 (cubeDoor)
   | 'object.field'           // 物件欄位缺漏 / 型別錯
   | 'object.size'            // w/h/d 非正數
   | 'object.visible'         // visible / interactIn 不是 both|2d|3d，或 interactIn 不在 visible 涵蓋的模式內
@@ -28,6 +30,7 @@ export type IssueCode =
   | 'ref.opens'           // opens 指向不存在的物件或自己
   | 'ref.requires'        // requires 的物品在本關取不到、也不在開場能力白名單
   | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它、也不是 unsealed (永遠解不開)
+  | 'cube.field'          // 魔方門的 side / kind、拉桿的方向字不合法
   | 'text.missing'        // 文字 key 不存在於文字表
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
@@ -133,9 +136,17 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     if (item !== undefined && !granted.has(item) && !start.has(item)) add('ref.requires', `requires "${item}" but nothing in the level grants it and it is not a starting ability`, o.id);
   }
 
-  // 出口
+  // 魔方門 / 拉桿 (v0.3)
+  for (const o of def.objects) {
+    if (o.type === 'cubeDoor') {
+      if (!SIDES.includes(o.side)) add('cube.field', `cubeDoor side "${String(o.side)}" is not N|S|E|W|U|D`, o.id);
+      if (!['door', 'arch', 'chapter'].includes(o.kind)) add('cube.field', `cubeDoor kind "${String(o.kind)}" is not door|arch|chapter`, o.id);
+    } else if (o.type === 'lever' && !LEVER_WORDS.includes(o.word)) add('cube.field', `lever word "${String(o.word)}" is not ${LEVER_WORDS.join('|')}`, o.id);
+  }
+
+  // 出口 (魔方上的房間以魔方門進出，不需要出口門)
   const doors = def.objects.filter(o => o.type === 'door');
-  if (doors.length === 0) add('level.noExit', 'level has no exit door');
+  if (doors.length === 0 && !def.objects.some(o => o.type === 'cubeDoor')) add('level.noExit', 'level has no exit door');
   for (const d of doors) {
     // 沒有封印的門 (unsealed) 開場即可開，不需要打開它的物件
     if (d.type === 'door' && d.unsealed) continue;

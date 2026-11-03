@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld } from '../helpers';
+import { FOYER_V02, newWorld } from '../helpers';
 import { runScript, playFrames, ScriptError, type Cmd } from '../../../src/puzzle/devtools/runScript';
 import type { ActionFrame } from '../../../src/puzzle/core/actions';
 import { hasItem } from '../../../src/puzzle/mechanics/items';
@@ -10,7 +10,7 @@ import type { World } from '../../../src/puzzle/core/types';
 const get = (w: World, id: string) => w.byId.get(id)!;
 const target = (id: string): Cmd => ({ expect: w => expect(findTarget(w)?.def.id).toBe(id), label: `target ${id}` });
 
-/** 玄關完整通關 (foyerSolution.test 的同一路徑；切換 / 互動改走 step 的動作幀，與遊戲主迴圈相同) */
+/** 玄關完整通關 (foyerSolution.test 的同一路徑；切換 / 互動改走 step 的動作幀，與遊戲主迴圈相同)；場景 = v0.2 玄關 (含墨水閥 / 出口門) */
 const FOYER: readonly Cmd[] = [
   { wait: 0.2 },
   // ① 書架過缺口
@@ -55,7 +55,7 @@ const FOYER: readonly Cmd[] = [
 
 describe('runScript：玄關完整通關 (腳本版，舊 foyerSolution 保留)', () => {
   it('從 createWorld 一路走到 cleared；切換經 step 送出 switch 事件', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     const frames = runScript(w, FOYER);
     expect(w.cleared).toBe(true);
     expect(frames).toBeGreaterThan(600);
@@ -65,10 +65,10 @@ describe('runScript：玄關完整通關 (腳本版，舊 foyerSolution 保留)'
 
   it('錄下的 ActionFrame 序列在新世界回放得到同一結果 (確定性)', () => {
     const rec: ActionFrame[] = [];
-    const a = newWorld();
+    const a = newWorld(FOYER_V02);
     runScript(a, FOYER, { record: rec });
     expect(rec.some(f => f.pressed.includes('interact'))).toBe(true);
-    const b = newWorld();
+    const b = newWorld(FOYER_V02);
     playFrames(b, rec);
     expect(b.cleared).toBe(true);
     expect([b.player.x, b.player.y, b.player.z, b.time]).toEqual([a.player.x, a.player.y, a.player.z, a.time]);
@@ -78,7 +78,7 @@ describe('runScript：玄關完整通關 (腳本版，舊 foyerSolution 保留)'
   it('少了一步 (沒拿筆尖) 就到不了 cleared；斷言點失敗回報指令索引與 label', () => {
     const skipKey = FOYER.filter(c => !('label' in c && c.label === '② 筆尖'));
     const i = skipKey.findIndex(c => 'act' in c && c.act === 'interact');
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     expect(() => runScript(w, skipKey.filter((_, k) => k !== i))).toThrow(ScriptError);
     expect(w.cleared).toBe(false);
     expect(() => runScript(newWorld(), [{ wait: 0.1 }, { expect: () => { throw new Error('boom'); }, label: 'here' }])).toThrow('script step #1 (here): boom');

@@ -1,16 +1,15 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 
-// 玄關 (擴建)：入口區 x∈[-20,-10] ／ 缺口 x∈[-10,-6] ／ 中庭 x∈[-6,10] ／ 隔牆 x∈[10,10.4] ／ 出口區 x∈[10.4,20]
-// 謎題鏈 (規格 6「1-2 玄關」；顯示編號 1-2a～1-2d，內部物件 id 沿用)：
+// 玄關 (擴建；第一章魔方的 D 格，規格 6「1-2 玄關」)：入口區 x∈[-20,-10] ／ 缺口 x∈[-10,-6] ／ 中庭 x∈[-6,10] ／ 隔牆 x∈[10,10.4] ／ 出口區 x∈[10.4,20]
+// 謎題鏈 (內部物件 id 沿用；puzzles 的編號與名稱照舊，規格 v0.3 的改號 (原 1-2b → 1-2a…) 在 M1a 重做 1-2 時一起改)：
 //   1-2a 書架過缺口：3D 被木欄圍住的書架，2D 壓平後就是腳下的路 (noLand3d 讓回 3D 時落在地板)
 //   1-2b 推箱取筆尖：3D 把木箱推到高台旁 (z 不必對齊) → 2D 地板→箱 (1.1)→高台 (2.5) → 2D 拾取筆尖
 //   1-2c 長桌下的機關踏板：木箱沿 -z 推進長桌後方窄道、沿窄道推到踏板 x → 2D 壓下 (鎖定) → 鐵柵門升起
-//   1-2d 高處的墨水閥：墨水閥在 y=2.3 (只在 2D)；踏板鎖定後木箱又自由了 → 物歸原處 (T) 讓木箱回到起點 (踏板 / 鐵柵門維持)
-//        → 3D 推到 z∈[-0.4,0.4] (門洞 z∈[-1,1]、箱深 1.2) → 推過門洞到 x≈15 → 2D 跳上箱頂 → 轉閥 → 出口門
-//   互動範圍 1.5 (身體中心 = 腳底 + 0.45)：站地板 0.45 → 閥底 2.3 差 1.85 > 1.5；站箱頂 1.55 → 差 0.75 ≤ 1.5
-//   (箱頂水平容許：|Δx| ≤ √(1.5²−0.75²) ≈ 1.3，即玩家中心 x∈[13.45,16.55])；跳高實測 3D ≈1.18 / 2D ≈1.52，2D 跳上箱頂 (1.1) 餘裕 0.42
-// 與規格的差異：規格寫「從踏板沿窄道推回、推到 z≈0」，但木箱在窄道裡緊貼後牆 (z=-5.4，背面 = 後牆)，玩家站不到它後方、
-//   無法再往 +z 推；唯一的回收方式是物歸原處 (C12：只歸位木箱，踏板 / 鐵柵門已鎖定不受影響)。只改墨水閥高度，不動其他座標
+//   門後是牆 (規格 v0.3 的新 1-2c；P1 首次)：出口區東端的東門 (cubeDoor) 起初面對空的魔方格 →「門後是牆。」；
+//        2D 展開圖站在拉桿旁看預覽 → 3D 拉出口區的拉桿「上」→ 玄關 (連同玩家) 滑到 A 格 → 東門接上樓梯間的西門
+//   入口：南拱門 (S，西區前緣 x=-17) 接大門 (1-1 門廊)；玄關滑走後南拱門面對空格
+// M-Cube (C6) 的改動：墨水閥、出口門 (墨線封印) 與 1-2d 高處墨水閥題依規格 6「保留 / 改 / 廢」表廢除；
+//   新增南拱門 archS、東門 doorE、拉桿 lever (方向字「上」)；其餘地形 / 座標不動
 // 文字一律為 content/text/zh-Hant/lvl-1-2.ts 的 key
 // 座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -6
 const WALL_Z = -5.95;
@@ -48,11 +47,10 @@ const objects: ObjDef[] = [
   { ...partBase, id: 'lintel', y: 3, h: 3, z: 0, d: 2 },
   { id: 'gate', type: 'gate', x: 10.2, y: 0, z: 0, w: 0.3, h: 3, d: 2, visible: '3d', solid: true, interactable: true, labelKey: 'lvl.1-2.gate' },
 
-  // 1-2d 出口區：墨水閥只畫在圖紙上、掛在高處 (y=2.3；需筆尖，解封出口門)；出口門在後牆 (被墨水閥 opens 解封 = used)
-  { id: 'valve', type: 'valve', x: 15, y: 2.3, z: -5.7, w: 0.5, h: 0.5, d: 0.5, visible: '2d', solid: false, interactable: true, labelKey: 'lvl.1-2.valve',
-    requires: 'nib', opens: 'door', lockedText: 'lvl.1-2.valve.locked', useText: 'lvl.1-2.valve.use' },
-  { id: 'door', type: 'door', x: 18, y: 0, z: -5.85, w: 1.6, h: 2.4, d: 0.3, visible: 'both', solid: false, interactable: true, labelKey: 'lvl.1-2.door',
-    lockedText: 'lvl.1-2.door.locked', useText: 'lvl.1-2.door.use' }
+  // 魔方 (N21)：出口區的拉桿「上」(貼後牆；只在 3D 拉得動，2D 站在旁邊看展開圖預覽)、東端的東門、西區前緣的南拱門 (只在實景：前緣在藏寶圖裡壓不出形狀)
+  { id: 'lever', type: 'lever', word: 'up', x: 15, y: 0.2, z: -5.7, w: 0.6, h: 1.4, d: 0.4, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.1-2.lever' },
+  { id: 'doorE', type: 'cubeDoor', side: 'E', kind: 'door', x: 19.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.1-2.doorE' },
+  { id: 'archS', type: 'cubeDoor', side: 'S', kind: 'arch', x: -17, y: 0, z: 5.8, w: 1.8, h: 2.6, d: 0.4, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.1-2.archS' }
 ];
 
 // 房間裝飾 (純呈現：不進碰撞、不可互動；由 render/decor 依序建出，順序即建立順序)
@@ -61,7 +59,7 @@ const decor: DecorItem[] = [
   { kind: 'walls' },
   { kind: 'painting', x: -14, y: 3.1, w: 1.6, h: 1.2, variant: 0 },
   { kind: 'painting', x: -1, y: 3.2, w: 2.0, h: 1.4, variant: 1 },
-  { kind: 'painting', x: 12.7, y: 3.1, w: 1.5, h: 1.1, variant: 2 }, // 讓出高處墨水閥 (x≈15、y 2.3～2.8) 的後方，藏寶圖裡不重疊
+  { kind: 'painting', x: 12.7, y: 3.1, w: 1.5, h: 1.1, variant: 2 }, // 讓出拉桿 (x≈15) 的上方，藏寶圖裡不重疊
   { kind: 'wallShelf', x: -12.6, y: 2.75, w: 2.2, seed: 1 },
   { kind: 'wallShelf', x: 4.3, y: 2.8, w: 2.0, seed: 4 },
   { kind: 'wallShelf', x: 16.4, y: 2.75, w: 1.8, seed: 6 },
@@ -85,8 +83,7 @@ export const foyer: LevelDef = {
   puzzles: [
     { id: '1-2a', titleKey: 'lvl.1-2.puzzle.a' },
     { id: '1-2b', titleKey: 'lvl.1-2.puzzle.b' },
-    { id: '1-2c', titleKey: 'lvl.1-2.puzzle.c' },
-    { id: '1-2d', titleKey: 'lvl.1-2.puzzle.d' }
+    { id: '1-2c', titleKey: 'lvl.1-2.puzzle.c' }
   ],
   nextKey: 'lvl.1-2.next',
   decor,

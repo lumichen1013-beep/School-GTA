@@ -6,6 +6,7 @@ import { resolveFlag, scanShortcuts, type ScanSpec } from '../../../src/puzzle/d
 import type { Cmd } from '../../../src/puzzle/devtools/runScript';
 import type { LevelDef, World } from '../../../src/puzzle/core/types';
 import { TEXT } from '../msgs';
+import { FOYER_V02 } from '../fixtures/foyerV02';
 
 // 捷徑「取樣」掃描 (規格 M1 / D4；架構 4.12、T12)：只證明取樣到的配置 × 探針沒有捷徑，不是證明無解
 // 與 foyerSolution.test 的 for z of [...] 反例並存 (舊測試保留)
@@ -77,9 +78,10 @@ const PARTITION: ScanSpec = {
   forbidden: [PASSED]
 };
 
-/** 終章：沒有筆尖時兩模式都解不開出口門、也不能通關 */
+/** 終章 (v0.2 玄關)：沒有筆尖時兩模式都解不開出口門、也不能通關 */
 const EXIT: ScanSpec = {
   ...base,
+  level: FOYER_V02, // 墨水閥 / 出口門只在 v0.2 玄關 (正式玄關於 M-Cube 改版)
   movable: [],
   playerAt: [...range(14, 18, 1).map(x => ({ x, y: 0, z: -4.6 })), { x: 15, y: 0, z: 0 }],
   probes: [[use], [{ walkTo: [15, null] }, use, flip, { walkTo: [18, -4.6] }, use]],

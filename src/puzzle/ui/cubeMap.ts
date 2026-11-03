@@ -5,7 +5,8 @@ import type { Text } from '../text/text';
 
 export type MapLink = 'room' | 'wall' | 'frame';
 export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid'; room: string | null; name: string; current: boolean }
-export interface MapDoor { room: string; door: string; x: number; y: number; side: Side; kind: DoorKind; link: MapLink }
+/** via = 接通時通道的型別 (兩側較窄者；拱門對拱門才是 arch) */
+export interface MapDoor { room: string; door: string; x: number; y: number; side: Side; kind: DoorKind; link: MapLink; via?: 'door' | 'arch' }
 export interface MapFrame { x: number; y: number; side: Side; kind: FrameKind; name: string }
 export interface MapPreview {
   /** 說明列 (例：預覽：拉「上」之後) */
@@ -98,19 +99,25 @@ export class CubeMapOverlay {
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
-    // 留邊給屋框標籤
-    const margin = Math.max(30, Math.min(W, H) * 0.12);
-    const size = Math.min((W - margin * 2) / m.cols, (H - margin * 2) / m.rows);
+    const font = (px: number, bold = false) => `${bold ? '700 ' : ''}${Math.round(px)}px "PingFang TC", "Noto Sans TC", sans-serif`;
+    // 留邊給屋框標籤 (左右依標籤實際寬度，標籤不被裁掉)
+    const labelPx = 14;
+    g.font = font(labelPx);
+    const side = (ds: Side[]) => Math.max(0, ...m.frames.filter(f => ds.includes(f.side)).map(f => g.measureText(f.name).width + 18));
+    const mx = Math.max(24, side(['E', 'W']));
+    const my = Math.max(24, m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0);
+    const size = Math.min((W - mx * 2) / m.cols, (H - my * 2) / m.rows);
     const ox = (W - size * m.cols) / 2;
     const oy = (H - size * m.rows) / 2;
     const cx = (x: number) => ox + (x + 0.5) * size;
     const cy = (y: number) => oy + (y + 0.5) * size;
-    const font = (px: number, bold = false) => `${bold ? '700 ' : ''}${Math.round(px)}px "PingFang TC", "Noto Sans TC", sans-serif`;
     const nameSize = Math.max(14, Math.min(22, size * 0.15));
 
     for (const c of m.cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you);
-    for (const f of m.frames) this.frame(g, f, cx(f.x), cy(f.y), size, font(Math.max(12, nameSize * 0.75)));
-    for (const d of m.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
+    for (const f of m.frames) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
+    // 預覽中會改變的門 (同一格) 只畫轉後的樣子，不與現況疊在一起
+    const replaced = (d: MapDoor) => !!m.preview?.doors.some(p => p.door === d.door && p.room === d.room && p.x === d.x && p.y === d.y);
+    for (const d of m.doors) if (!replaced(d)) this.door(g, d, cx(d.x), cy(d.y), size, 1);
 
     const pv = m.preview;
     if (pv?.moved) {
@@ -181,44 +188,49 @@ export class CubeMapOverlay {
     g.restore();
   }
 
-  /** 門位：接通 = 實線 + 墨點；門後是牆 = 斷線 + ×；拱門 = 雙線；屋框接通 = 實線指向外 (style 2 = 預覽的轉後門，藍色) */
+  /**
+   * 門位：接通 = 畫在兩格交界上 (兩側重合成一條；拱門對拱門 = 雙線) + 墨點；門後是牆 = 房內側斷線 + ×；
+   * 章門加小方框；style 2 = 預覽的轉後門 (藍色)
+   */
   private door(g: CanvasRenderingContext2D, d: MapDoor, cx: number, cy: number, s: number, style: 1 | 2): void {
     const [dx, dy] = DIR[d.side];
     if (dx === 0 && dy === 0) return;
-    const ex = cx + dx * (s / 2 - 4);
-    const ey = cy + dy * (s / 2 - 4);
+    const open = d.link !== 'wall';
+    const edge = open ? s / 2 : s / 2 - 5;
+    const ex = cx + dx * edge;
+    const ey = cy + dy * edge;
     const half = s * 0.17;
     const tx = -dy; const ty = dx; // 沿邊方向
     const color = style === 2 ? BLUE : INK;
     g.save();
-    g.strokeStyle = color;
-    g.fillStyle = color;
     g.lineCap = 'round';
     const seg = (off: number) => { g.beginPath(); g.moveTo(ex - tx * half + dx * off, ey - ty * half + dy * off); g.lineTo(ex + tx * half + dx * off, ey + ty * half + dy * off); g.stroke(); };
     // 門洞底色 (蓋掉房框線)
     g.strokeStyle = style === 2 ? '#e3e8ff' : PAPER;
-    g.lineWidth = 6;
+    g.lineWidth = open ? 12 : 6;
     seg(0);
     g.strokeStyle = color;
-    if (d.link === 'wall') {
+    g.fillStyle = color;
+    if (!open) {
       g.lineWidth = 3;
       g.setLineDash([5, 5]);
       seg(0);
       g.setLineDash([]);
-      const k = s * 0.06;
-      const mx = ex - dx * k * 1.6; const my = ey - dy * k * 1.6;
+      const k = s * 0.055;
+      const mx = ex - dx * k * 1.8; const my = ey - dy * k * 1.8;
       g.lineWidth = 2.5;
       g.beginPath(); g.moveTo(mx - k, my - k); g.lineTo(mx + k, my + k); g.moveTo(mx + k, my - k); g.lineTo(mx - k, my + k); g.stroke();
     } else {
-      g.lineWidth = 4;
-      if (d.kind === 'arch') { seg(-3); seg(3); } else seg(0);
+      const wide = d.link === 'room' ? d.via === 'arch' : d.kind === 'arch';
+      g.lineWidth = wide ? 2.5 : 4;
+      if (wide) { seg(-3.5); seg(3.5); } else seg(0);
       g.beginPath();
-      g.arc(ex + dx * 7, ey + dy * 7, 4.5, 0, Math.PI * 2);
+      g.arc(ex, ey, 4.5, 0, Math.PI * 2);
       g.fill();
     }
     if (d.kind === 'chapter') {
       g.lineWidth = 2;
-      g.strokeRect(ex - dx * 12 - 4, ey - dy * 12 - 4, 8, 8);
+      g.strokeRect(ex - dx * 14 - 4, ey - dy * 14 - 4, 8, 8);
     }
     g.restore();
   }
@@ -230,8 +242,8 @@ export class CubeMapOverlay {
     g.font = font;
     g.textBaseline = 'middle';
     g.textAlign = dx > 0 ? 'left' : dx < 0 ? 'right' : 'center';
-    const x = cx + dx * (s / 2 + 10);
-    const y = cy + dy * (s / 2 + 14);
+    const x = cx + dx * (s / 2 + 12);
+    const y = cy + dy * (s / 2 + 18);
     g.fillText(f.name, x, y);
     g.restore();
   }

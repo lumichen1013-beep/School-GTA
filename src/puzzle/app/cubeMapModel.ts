@@ -56,7 +56,9 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
     .filter(d => pos[d.room]?.[2] === layer)
     .map(d => {
       const l = ls.find(k => k.from.door === d.door && k.from.room === d.room);
-      return { room: d.room, door: d.door, x: pos[d.room][0], y: pos[d.room][1], side: d.side, kind: d.kind, link: l ? ('frame' in l.to ? 'frame' : 'room') : 'wall' };
+      const base = { room: d.room, door: d.door, x: pos[d.room][0], y: pos[d.room][1], side: d.side, kind: d.kind };
+      if (!l) return { ...base, link: 'wall' as const };
+      return 'frame' in l.to ? { ...base, link: 'frame' as const } : { ...base, link: 'room' as const, via: l.kind };
     });
   const doors = doorsAt(cube.pos, links(def, cube, spec.doors));
   let pv: MapPreview | null = null;
@@ -69,7 +71,7 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
       const from = cube.pos[preview.op.room];
       const to = r.pos[preview.op.room];
       const after = doorsAt(r.pos, links(def, r, spec.doors));
-      const changed = after.filter(a => { const b = doors.find(d => d.door === a.door && d.room === a.room); return !b || b.link !== a.link || b.x !== a.x || b.y !== a.y; });
+      const changed = after.filter(a => { const b = doors.find(d => d.door === a.door && d.room === a.room); return !b || b.link !== a.link || b.via !== a.via || b.x !== a.x || b.y !== a.y; });
       pv = { caption: text('ui.map.preview', { word }), blocked: null, moved: { room: preview.op.room, name: name(preview.op.room), from: [from[0], from[1]], to: [to[0], to[1]] }, doors: changed };
     }
   }

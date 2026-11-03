@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, place, run } from '../helpers';
+import { FOYER_V02, newWorld as newRoom, place, run } from '../helpers';
+
+/** S4 行為鎖定的固定場景 = v0.2 玄關 (墨水閥 / 出口門；正式玄關於 M-Cube 改版) */
+const newWorld = () => newRoom(FOYER_V02);
 import { onCrateAtValve } from '../helpers';
 import { findTarget, interact } from '../../../src/puzzle/core/interact';
 import { resetCrates } from '../../../src/puzzle/core/push';

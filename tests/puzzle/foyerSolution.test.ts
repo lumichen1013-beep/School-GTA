@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, run, walkTo, hopUntil, place } from './helpers';
+import { FOYER_V02, newWorld, run, walkTo, hopUntil, place } from './helpers';
 import { trySwitchMode } from '../../src/puzzle/core/switchMode';
 import { findTarget, interact } from '../../src/puzzle/core/interact';
 import { MSG_PLATE_LIGHT, MSG_PLATE_ON } from './msgs';
@@ -94,7 +94,7 @@ function solveExit(w: World): void {
 
 describe('完整解謎路徑', () => {
   it('合成輸入從起點一路通關 (三個謎題 + 墨水閥)', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     run(w, {}, 0.2);
     solveShelf(w);
     solveKey(w);
@@ -235,7 +235,7 @@ describe('謎題 ③ 反例：壓板與閘門', () => {
 
 describe('終章反例', () => {
   it('沒有筆尖轉不動墨水閥；封印未解門不開', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     place(w, 15, 0, 0, '2d');
     interact(w);
     expect(get(w, 'door').used).toBe(false);

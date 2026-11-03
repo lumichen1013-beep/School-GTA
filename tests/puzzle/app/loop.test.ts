@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, place, DT } from '../helpers';
+import { FOYER_V02, newWorld, place, DT } from '../helpers';
 import { onCrateAtValve } from '../helpers';
 import { FIXED_DT, LevelLoop } from '../../../src/puzzle/app/loop';
 import { step } from '../../../src/puzzle/core/step';
@@ -93,7 +93,7 @@ describe('LevelLoop：固定步長 1/60', () => {
   });
 
   it('通關只通知一次，之後不再推進', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     place(w, 8.5, 2.5, -4.5, '2d'); interact(w);
     onCrateAtValve(w); interact(w);
     place(w, 18, 0, -4.6);

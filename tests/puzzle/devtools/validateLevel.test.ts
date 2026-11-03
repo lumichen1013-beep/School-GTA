@@ -8,14 +8,15 @@ import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
 import { validateEntry, validateLevel, type LevelIssue } from '../../../src/puzzle/devtools/validateLevel';
 import type { AbilityId, LevelDef, ObjDef } from '../../../src/puzzle/core/types';
 import type { LevelEntry } from '../../../src/puzzle/content/levels';
+import { FOYER_V02 } from '../fixtures/foyerV02';
 
 const ctx = { mechanics: DEFAULT_MECHANICS, bundle: zhHant };
 const reg = { ...ctx, levels: LEVELS, chapters: CHAPTERS };
 const codes = (issues: LevelIssue[]) => issues.map(i => [i.code, i.obj ?? null]);
-/** 複製玄關並改動物件 (id 對應的物件以 patch 覆寫；patch 為 null 則移除) */
+/** 複製 v0.2 玄關 (含墨水閥 / 出口門的固定場景) 並改動物件 (id 對應的物件以 patch 覆寫；patch 為 null 則移除) */
 function foyerWith(patch: Record<string, Partial<ObjDef> | null>, extra: ObjDef[] = []): LevelDef {
-  const objects = foyer.objects.flatMap(o => (o.id in patch ? (patch[o.id] === null ? [] : [{ ...o, ...patch[o.id] } as ObjDef]) : [o]));
-  return { ...foyer, objects: [...objects, ...extra] };
+  const objects = FOYER_V02.objects.flatMap(o => (o.id in patch ? (patch[o.id] === null ? [] : [{ ...o, ...patch[o.id] } as ObjDef]) : [o]));
+  return { ...FOYER_V02, objects: [...objects, ...extra] };
 }
 
 describe('validateLevel：玄關', () => {
@@ -47,7 +48,7 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
   it('缺文字 key → text.missing (附物件 id)', () => {
     const bad = foyerWith({ crate: { labelKey: 'lvl.1-2.nope' } });
     expect(codes(validateLevel(bad, ctx))).toEqual([['text.missing', 'crate']]);
-    expect(codes(validateLevel({ ...foyer, narrationKey: 'lvl.x.nope' }, ctx))).toEqual([['text.missing', null]]);
+    expect(codes(validateLevel({ ...FOYER_V02, narrationKey: 'lvl.x.nope' }, ctx))).toEqual([['text.missing', null]]);
   });
 
   it('opens 指向不存在的 id / 自己 → ref.opens', () => {
@@ -62,7 +63,7 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
   });
 
   it('重複 id → obj.dupId', () => {
-    const dup = foyerWith({}, [{ ...foyer.objects.find(o => o.id === 'note')!, x: -16 }]);
+    const dup = foyerWith({}, [{ ...FOYER_V02.objects.find(o => o.id === 'note')!, x: -16 }]);
     expect(codes(validateLevel(dup, ctx))).toEqual([['object.dupId', 'note']]);
   });
 
@@ -70,7 +71,7 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
     const unk = foyerWith({}, [{ id: 'lamp1', type: 'lamp', x: 0, y: 0, z: 0, w: 1, h: 1, d: 1, visible: 'both', solid: false } as unknown as ObjDef]);
     expect(codes(validateLevel(unk, ctx))).toEqual([['object.unknownType', 'lamp1']]);
     const noExit = DEFAULT_MECHANICS.filter(m => m.id !== 'exit');
-    expect(codes(validateLevel(foyer, { ...ctx, mechanics: noExit }))).toEqual([['object.unknownType', 'door']]);
+    expect(codes(validateLevel(FOYER_V02, { ...ctx, mechanics: noExit }))).toEqual([['object.unknownType', 'door']]);
   });
 
   it('schema：尺寸、欄位型別、可見模式、出界', () => {
@@ -79,8 +80,8 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
     expect(codes(validateLevel(foyerWith({ crate: { visible: 'paper' as never } }), ctx))).toEqual([['object.visible', 'crate']]);
     expect(codes(validateLevel(foyerWith({ valve: { interactIn: '3d' } }), ctx))).toEqual([['object.visible', 'valve']]);
     expect(codes(validateLevel(foyerWith({ note: { x: -25 } }), ctx))).toEqual([['object.outOfBounds', 'note']]);
-    expect(codes(validateLevel({ ...foyer, bounds: { ...foyer.bounds, minX: 30 } }, ctx))).toEqual([['level.bounds', null]]);
-    expect(codes(validateLevel({ ...foyer, titleKey: '' }, ctx))).toEqual([['level.field', null], ['text.missing', null]]);
+    expect(codes(validateLevel({ ...FOYER_V02, bounds: { ...FOYER_V02.bounds, minX: 30 } }, ctx))).toEqual([['level.bounds', null]]);
+    expect(codes(validateLevel({ ...FOYER_V02, titleKey: '' }, ctx))).toEqual([['level.field', null], ['text.missing', null]]);
   });
 
   it('出口：沒有門 → level.noExit；門沒人開 → ref.exitLocked', () => {
@@ -89,11 +90,11 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
   });
 
   it('起點 / 檢查點：懸空或卡在實體裡 → level.start / level.checkpoint', () => {
-    expect(codes(validateLevel({ ...foyer, start: { x: -8, y: 0, z: 2 } }, ctx))).toEqual([['level.start', null]]);   // 缺口上方
-    expect(codes(validateLevel({ ...foyer, start: { x: 8.5, y: 0, z: -4.5 } }, ctx))).toEqual([['level.start', null]]); // 高台裡
-    expect(codes(validateLevel({ ...foyer, checkpoints: [{ minX: -5.7, x: -4, y: 0.5, z: 2 }] }, ctx))).toEqual([['level.checkpoint', null]]);
+    expect(codes(validateLevel({ ...FOYER_V02, start: { x: -8, y: 0, z: 2 } }, ctx))).toEqual([['level.start', null]]);   // 缺口上方
+    expect(codes(validateLevel({ ...FOYER_V02, start: { x: 8.5, y: 0, z: -4.5 } }, ctx))).toEqual([['level.start', null]]); // 高台裡
+    expect(codes(validateLevel({ ...FOYER_V02, checkpoints: [{ minX: -5.7, x: -4, y: 0.5, z: 2 }] }, ctx))).toEqual([['level.checkpoint', null]]);
     const twice = [{ minX: -5.7, x: -4, y: 0, z: 2 }, { minX: -5.7, x: -3, y: 0, z: 2 }];
-    expect(codes(validateLevel({ ...foyer, checkpoints: twice }, ctx))).toEqual([['level.checkpoint', null]]);
+    expect(codes(validateLevel({ ...FOYER_V02, checkpoints: twice }, ctx))).toEqual([['level.checkpoint', null]]);
   });
 
   it('登錄表：id / titleKey 不一致、未知能力、解鎖前置不存在、章節未列入', () => {

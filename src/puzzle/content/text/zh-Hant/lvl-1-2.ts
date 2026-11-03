@@ -27,5 +27,9 @@ export const lvl12 = {
   'lvl.1-2.valve.locked': '墨水閥乾涸了。需要一支能引墨的東西。',
   'lvl.1-2.valve.use': '[[term.nib]]點下，墨線像退潮一樣散開了。',
   'lvl.1-2.door.locked': '門被墨線封印著。[[term.mode2d]]裡似乎有它的機關。',
-  'lvl.1-2.door.use': '門開了。'
+  'lvl.1-2.door.use': '門開了。',
+  // 魔方 (M-Cube)：拉桿、東門、南拱門 (墨水閥 / 出口門的文字保留給測試的 v0.2 固定場景，M1a 重做 1-2 時清理)
+  'lvl.1-2.lever': '拉桿「[[term.word.up]]」',
+  'lvl.1-2.doorE': '東門',
+  'lvl.1-2.archS': '南拱門'
 } as const;

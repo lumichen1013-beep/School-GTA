@@ -1,7 +1,7 @@
 // S7 scene 對帳：依 allObjs(world) 以 id 新增 / 拆除模型；只讀世界、不改世界 (architecture 4.5)
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { newWorld, place } from '../helpers';
+import { FOYER_V02, newWorld, place } from '../helpers';
 import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
 import type { ObjState, World } from '../../../src/puzzle/core/types';
@@ -20,7 +20,7 @@ describe('渲染：scene 對帳', () => {
   beforeAll(stubCanvas);
 
   it('只讀世界：兩種模式各畫多幀 (含閘門升起、門解封、通關動畫)，世界狀態逐欄不變', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     place(w, 15, 0, -4.6);
     for (const id of ['gate', 'valve', 'door']) w.byId.get(id)!.used = true;
     w.byId.get('key')!.gone = true;

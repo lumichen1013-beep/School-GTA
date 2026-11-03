@@ -32,7 +32,8 @@ export function cubeDoorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel 
   post(-across / 2 - fw / 2);
   post(across / 2 + fw / 2);
   // 門洞後的暗面 (門後是牆時看到的也是它)；門扇 / 拱門開口都在它前面
-  const back = p.mesh(box(across, h, 0.04), pal.outline, { outline: false, shadow: false });
+  // 厚 0.02、中心退後 0.12：前後面 (房內 0.11 / 0.13) 不與牆的踢腳線 (0.10)、護牆板 (0.06) 共面
+  const back = p.mesh(box(across, h, 0.02), pal.outline, { outline: false, shadow: false });
   back.position.set(0, h / 2, -0.12);
   face.add(back);
   const light = glowSprite(glow(), pal.lampLight, 1.6, 0);

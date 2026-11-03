@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, run, walkTo, place, DT } from './helpers';
+import { FOYER_V02, newWorld, run, walkTo, place, DT } from './helpers';
 import { onCrateAtValve } from './helpers';
 import { stepWorld } from '../../src/puzzle/core/step';
 import { MSG_FELL, MSG_GATE, MSG_CRATE_RESET } from './msgs';
@@ -210,7 +210,7 @@ describe('狀態機、檢查點與掉落', () => {
   });
 
   it('墨水閥 3D 不可見也不可互動；缺筆尖無效', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     place(w, 15, 0, -5.2);
     expect(findTarget(w)).toBeNull();
     onCrateAtValve(w);

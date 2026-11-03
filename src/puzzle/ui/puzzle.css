@@ -157,10 +157,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 /* v0.3 魔方：章節過場遮罩、展開圖疊層 (橫屏蓋上方 60%、直屏 50%)、「圖」鍵 */
 #pz-veil { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 50%, #fdf4e1 0%, #f6e2c0 70%, #e9cfa5 100%); }
 #pz-canvas { will-change: transform; }
+/* 轉動過場位移時露出的底色 = 紙色 (不露出深棕頁面背景) */
+#pz-root { background: #f6e2c0; }
 .pz-map {
   position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: min(94vw, 620px); height: 60vh; box-sizing: border-box;
   display: none; flex-direction: column; padding: 8px 12px 10px; pointer-events: none; z-index: 5;
-  background: rgba(253,244,225,.9); border: 2px solid var(--ink); border-radius: 12px 4px 12px 4px; box-shadow: 4px 4px 0 rgba(58,38,24,.28);
+  background: rgba(253,244,225,.97); border: 2px solid var(--ink); border-radius: 12px 4px 12px 4px; box-shadow: 4px 4px 0 rgba(58,38,24,.28);
 }
 .pz-map.show { display: flex; }
 .pz-map-head { font-weight: 700; letter-spacing: .3em; font-size: 16px; text-align: center; }

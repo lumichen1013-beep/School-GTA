@@ -5,6 +5,10 @@ import { DEFAULT_MECHANICS } from '../../src/puzzle/mechanics';
 import type { InputState, LevelDef, Mode, World } from '../../src/puzzle/core/types';
 import { SCRIPT_DT, driver, hold, hop, placePlayer, walk } from '../../src/puzzle/devtools/runScript';
 import { TEXT } from './msgs';
+import { FOYER_V02 } from './fixtures/foyerV02';
+
+/** v0.2 玄關 (墨水閥 / 出口門) 的固定場景：給機制 / 引擎行為的回歸測試用 (M-Cube C6 起正式玄關已改版) */
+export { FOYER_V02 };
 
 export const DT = SCRIPT_DT;
 export const newWorld = (level: LevelDef = foyer): World => createWorld(level, { mechanics: DEFAULT_MECHANICS, text: TEXT });
@@ -28,7 +32,7 @@ export function hopUntil(w: World, moveX: number, done: () => boolean, seconds =
   return hop(driver(w), moveX, done, seconds);
 }
 
-/** 1-2d：把木箱擺到出口區墨水閥正下方 (x=15、z=0)，玩家站上箱頂 (墨水閥在 y=2.3，站地板搆不到) */
+/** v0.2 玄關 (FOYER_V02) 的 1-2d：把木箱擺到出口區墨水閥正下方 (x=15、z=0)，玩家站上箱頂 (墨水閥在 y=2.3，站地板搆不到) */
 export function onCrateAtValve(w: World, mode: Mode = '2d'): void {
   const c = w.byId.get('crate')!;
   c.x = 15; c.z = 0;

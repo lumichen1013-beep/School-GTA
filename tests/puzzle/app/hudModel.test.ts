@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, place } from '../helpers';
+import { FOYER_V02, newWorld, place } from '../helpers';
 import { onCrateAtValve } from '../helpers';
 import { TEXT } from '../msgs';
 import { deriveHelp, deriveHud } from '../../../src/puzzle/app/hudModel';
@@ -21,7 +21,7 @@ describe('deriveHud (純函式)', () => {
   });
 
   it('各物件動詞與名稱 (筆尖 / 墨水閥 / 出口門 / 閘門)', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02);
     place(w, 8.5, 2.5, -4.5, '2d');
     expect(deriveHud(w, TEXT, view).prompt).toBe('[E] 拾取　鋼筆筆尖');
     interact(w);

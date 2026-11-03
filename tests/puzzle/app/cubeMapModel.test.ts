@@ -47,9 +47,9 @@ describe('deriveCubeMap', () => {
       caption: '預覽：拉「上」之後（還沒拉）', blocked: null,
       moved: { room: 'a', name: '玄關', from: [0, 1], to: [0, 0] },
       doors: [
-        { room: 'a', door: 'aE', x: 0, y: 0, side: 'E', kind: 'door', link: 'room' },
+        { room: 'a', door: 'aE', x: 0, y: 0, side: 'E', kind: 'door', link: 'room', via: 'door' },
         { room: 'a', door: 'aS', x: 0, y: 0, side: 'S', kind: 'arch', link: 'wall' },
-        { room: 'b', door: 'bW', x: 1, y: 0, side: 'W', kind: 'door', link: 'room' }
+        { room: 'b', door: 'bW', x: 1, y: 0, side: 'W', kind: 'door', link: 'room', via: 'door' }
       ]
     });
     expect(JSON.stringify(captureState(cs))).toBe(before);
