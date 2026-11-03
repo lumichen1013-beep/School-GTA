@@ -288,7 +288,7 @@ describe('架構：依賴規則 (2.2 / 2.3)', () => {
     expect(puzzleFiles.length).toBeGreaterThan(50);
     expect(deps.length).toBeGreaterThan(150);
     expect(new Set(puzzleFiles.map(f => layerOf(relative(SRC, f).split(sep).join('/'))))).toEqual(
-      new Set(['app', 'content', 'core', 'devtools', 'input', 'mechanics', 'meta', 'render', 'text', 'ui']));
+      new Set(['app', 'audio', 'content', 'core', 'devtools', 'input', 'mechanics', 'meta', 'render', 'text', 'ui']));
   });
 
   it('依賴矩陣：無違規 (除已知例外)', () => {

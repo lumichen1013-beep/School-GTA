@@ -22,15 +22,23 @@ export interface Settings {
   helpOpen: boolean;
   /** 已顯示過的一次性操作小提示 (app/helpModel 的 TipId；第一次遇到新操作時說一次) */
   tipsSeen: string[];
+  /** 音量 0～1 (總 / 音樂 / 音效；audio-design 4) 與靜音 */
+  masterVolume: number;
+  musicVolume: number;
+  sfxVolume: number;
+  mute: boolean;
 }
 
 export const defaultSettings = (): Settings => ({
   hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false,
-  autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}, helpOpen: false, tipsSeen: []
+  autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}, helpOpen: false, tipsSeen: [],
+  masterVolume: 0.8, musicVolume: 0.6, sfxVolume: 0.8, mute: false
 });
 
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts as readonly unknown[]).includes(v) ? v as T : d;
 const bool = (v: unknown, d: boolean): boolean => typeof v === 'boolean' ? v : d;
+/** 0～1 的音量：不是有限數字 → 預設；越界 → 夾住 */
+const unit = (v: unknown, d: number): number => typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
 
 /** 校正：不認得 / 型別不符的欄位回預設值 */
 export function sanitizeSettings(v: unknown): Settings {
@@ -54,7 +62,11 @@ export function sanitizeSettings(v: unknown): Settings {
     skipConfirm: bool(v.skipConfirm, d.skipConfirm),
     keys,
     helpOpen: bool(v.helpOpen, d.helpOpen),
-    tipsSeen: Array.isArray(v.tipsSeen) ? [...new Set(v.tipsSeen.filter((t): t is string => typeof t === 'string'))] : d.tipsSeen
+    tipsSeen: Array.isArray(v.tipsSeen) ? [...new Set(v.tipsSeen.filter((t): t is string => typeof t === 'string'))] : d.tipsSeen,
+    masterVolume: unit(v.masterVolume, d.masterVolume),
+    musicVolume: unit(v.musicVolume, d.musicVolume),
+    sfxVolume: unit(v.sfxVolume, d.sfxVolume),
+    mute: bool(v.mute, d.mute)
   };
 }
 

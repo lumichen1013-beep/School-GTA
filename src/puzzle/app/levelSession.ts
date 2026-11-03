@@ -43,6 +43,8 @@ export interface SessionContext {
   onTrayOpen?(): void;
   /** 進入轉動模式時：按著的鍵一律視為放開 (v0.4；mobile-controls 2.5) */
   releaseInput?(): void;
+  /** 世界事件的旁聽 (音訊；只讀，switch 不經過這裡) */
+  onWorldEvent?(e: GameEvent): void;
 }
 
 export interface SessionHooks {
@@ -121,7 +123,7 @@ export class LevelSession {
         this.cams.follow(1, this.renderMode);
       },
       onCleared: this.hooks.onCleared,
-      onEvent: e => { this.events.push(e); this.loop.halt(); },
+      onEvent: e => { this.ctx.onWorldEvent?.(e); this.events.push(e); this.loop.halt(); },
       onChapterCommand: c => this.runChapterCommand(c)
     });
     this.turnMode = false;

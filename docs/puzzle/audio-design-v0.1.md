@@ -170,7 +170,7 @@ sfx(ui)     → sfxGain ──────────────────�
 |------|------|
 | 自動播放政策 | `AudioContext` 在**第一次使用者手勢**（`pointerdown` / `keydown` / `touchend`，capture）時才建立並 `resume()`；之前的 `setChapter / setContext` 只記狀態，建立後套用；建立失敗（沒有 Web Audio）→ 整個管理器變成無聲空殼，不拋錯 |
 | 排程 | 「兩個時鐘」：`setInterval(50 ms)` 叫 `pump(currentTime + 0.25)`，把這段時間內的音符（純函式算出）排到 Web Audio 時間軸；離線渲染時直接 `pump(終點)` |
-| 節點上限 | 同時發聲 ≤ 48 個聲部（每聲部 2～6 個節點）；超過 → 丟棄新的低優先級聲音（腳步、UI）並計數；每個聲部在 `onended` 時 `disconnect()` 並移出清單；`stats()` 回報 active / dropped |
+| 節點上限 | 同時發聲 ≤ 64 個聲部（每聲部 2～8 個節點）；音樂的音、腳步、UI 是低優先，只能用到上限的 3/4（剩下留給音效），超過 → 丟棄新的聲音並計數；每個聲部在 `onended` 時 `disconnect()` 並移出清單；`stats()` 回報 active / dropped |
 | 不洩漏 | 不保留已結束的節點；`dispose()` 停排程、移除監聽、`close()` context |
 | 頁面隱藏 | `visibilitychange`（hidden）與 `blur` → 淡出 + `suspend()`；回來 → `resume()` + 淡入 |
 
@@ -201,6 +201,8 @@ sfx(ui)     → sfxGain ──────────────────�
 | `app/audioBridge.ts` | app | 畫面 → 章節 / 情境；每幀把 `LevelSession` 的狀態交給 `LevelObserver`；世界事件、過場事件、按鈕點擊 → 管理器；設定頁開關 | DOM |
 | `ui/screens/sound.ts` | ui | 聲音設定面板（三條滑桿、靜音、減弱緊張效果） | DOM |
 
+> 與架構 4.13 的差異：架構草案的 `audio/synth.ts`（`PuzzleAudio`：setBed / setLayers / setPulseBpm / chime / sting / thump / setViewFilter）拆成 `engine / music / manager` 三檔；對應關係：setBed / setLayers → `setChapter` + `setContext` + `setIntensity`（層由 `layerMix` 算）、setPulseBpm → `MusicDirector.setPulseBpm`、sting → 驚嚇動作（`ScareGate`）、thump → 回饋類音效、setViewFilter → `setView`；`content/moodTypes.ts` 尚未建立，強度暫由 `score.levelIntensity`（規格 9.1 表）提供。
+
 既有檔案只加掛點：`app/app.ts`（建立 bridge、`go` / 每幀 / 過場事件 / 選單「聲音」）、`app/levelSession.ts`（`SessionContext.onWorldEvent` 一行轉發）、`meta/settings.ts`（4 個欄位與校正）、`ui/screens/menu.ts`（選單一個連結）、文字表（新增 `ui-sound.ts` 分檔與 index 一行）、`tests/puzzle/architecture.test.ts`（層集合加入 `audio`）。
 
 ---
@@ -215,6 +217,26 @@ sfx(ui)     → sfxGain ──────────────────�
 | 瀏覽器（playwright-core，headless Chrome，不進專案） | 手勢後 `AudioContext.state === 'running'`；每個音樂層 / 情境 / 音效播放不拋錯、console error 0；換章交叉淡化無 pop（錄下輸出，檢查換章前後的一階差分沒有尖峰）；頁面隱藏 → `suspended`、回來 → `running`；節點數播完後回到 0 |
 | 離線渲染（`OfflineAudioContext`） | 各章主題 30 秒、序章全程、每個音效、驚嚇（一般 / 平靜）→ 峰值（≤ −6 dBFS）、RMS、非靜音、無 NaN、無削波（|x| ≥ 0.999 的樣本數 = 0）、頻譜重心；輸出 WAV 供人工試聽 |
 | 人工 | 音色、音量平衡、動機辨識度、驚嚇是否過度：需真人試聽（〔推論〕的數值都在這一步調整） |
+
+### 8.1 實測（2026-11-03，headless Chrome 離線渲染 44.1 kHz；音量 master / music / sfx = 1，最壞情況）
+
+| 項目 | 峰值 dBFS | RMS dBFS | 400 ms 短時 RMS 最大 | 削波 / NaN | 頻譜重心 Hz |
+|------|----------|---------|-------------------|-----------|------------|
+| 第一章 30 秒（強度 1） | −19.9 | −32.6 | −30.7 | 0 / 0 | 318 |
+| 第二章（強度 2） | −22.4 | −35.9 | −31.8 | 0 / 0 | 407 |
+| 第三章（強度 2） | −17.6 | −32.1 | −30.2 | 0 / 0 | 332 |
+| 第四章（強度 3，只有低頻） | −18.7 | −36.2 | −31.3 | 0 / 0 | 64 |
+| 第五章（強度 3） | −18.1 | −36.6 | −32.4 | 0 / 0 | 323 |
+| 終章 / 結局 A / 結局 B | −21.3 / −23.0 / −19.3 | −33.5 / −38.5 / −32.7 | — | 0 / 0 | 338 / 579 / 295 |
+| 序章全程（108.4 秒，播放器實際時間軸、22 個提示事件） | −20.0 | −34.9 | −29.9 | 0 / 0 | 311 |
+| 序章（預設音量 0.8 / 0.6 / 0.8） | −31.1 | −47.2 | −40.4 | 0 / 0 | 454 |
+| 驚嚇（一般 / 平靜版） | −12.1 / −31.6 | −30.1 / −51.1 | — | 0 / 0 | 82 / 608 |
+| 驚嚇疊在第一章音樂上 | −9.8 | — | −21.4 | 0 / 0 | — |
+| 200 個音效同時（節點上限） | −7.6 | — | — | 0 / 0 | 100 播 / 95 丟棄 |
+
+- 限幅器校正：−20 dBFS 正弦進 → −20.0 出（補償增益抵消正確）；+3.5 dBFS 過載進 → −6.5 出（削波器上限 0.49）。
+- 換章交叉淡化（第一 → 第二、第三 → 第四）：切換後 3.5 秒內的一階差分最大值 0.0085 / 0.0046，低於其餘時段 0.0091 / 0.0083 → 沒有 pop；即時錄音（ScriptProcessor）同樣 0.0009 vs 0.0008。
+- 67 個音效逐一量測：環境類全部 ≤ −24 dBFS、回饋類 ≤ −18 dBFS、過場撕紙 −22.6 dBFS。
 
 ---
 

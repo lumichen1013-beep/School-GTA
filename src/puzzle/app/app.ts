@@ -29,7 +29,7 @@ import { showMemories, type CutsceneSettingsModel } from '../ui/screens/memories
 import { showCutsceneUi, type CutsceneUi } from '../ui/cutscene';
 import { CutsceneCanvas } from '../render/cutscene/canvas';
 import type { ShotFrame } from '../render/cutscene/types';
-import { CutscenePlayer, planCutscene, type CutsceneEvent, type CutsceneView } from './cutscene';
+import { CutscenePlayer, planCutscene, type CutsceneView } from './cutscene';
 import { deriveHelp } from './hudModel';
 import { deriveHelpView, pendingTip, tipText, TIP_MS, type HelpContext } from './helpModel';
 import { RestartConfirm, routeFrame } from './restartConfirm';
@@ -39,6 +39,7 @@ import { cubeChapterOf } from '../content/cubes';
 import { chapterDoors } from '../mechanics/cube';
 import { chapterStart, entryNarrationKey, withChapter } from '../meta/chapters';
 import { browserStorage } from './services';
+import { AudioBridge } from './audioBridge';
 
 /**
  * 畫面狀態機：boot →(無暱稱) nickname →(未看序章且無進度) cutscene(prologue) → menu → level → clear → (level | menu)；
@@ -78,8 +79,8 @@ export class PuzzleApp {
   private closeSkipUi: (() => void) | null = null;
   /** 開發入口 (網址帶 ?dev=1)：選單多一區「開發：控制盤原型」(原型占位，不計入正式關卡) */
   private readonly dev = new URLSearchParams(window.location.search).get('dev') === '1';
-  /** 音訊掛點：音訊模組 (規格 9.1) 實作前不做事 */
-  private onAudioCue: (e: Extract<CutsceneEvent, { type: 'audio' }>) => void = () => { /* 音訊模組尚未實作 */ };
+  /** 配樂與音效 (audio-design；第一次手勢後才發聲) */
+  private audioBridge = new AudioBridge(this.text, () => this.settings, patch => { this.settings = { ...this.settings, ...patch }; writeSettings(this.storage, this.settings); });
 
   constructor(root: HTMLElement) {
     buildPuzzleDom(root, this.text, [
@@ -127,12 +128,15 @@ export class PuzzleApp {
   get level(): LevelSession | null { return this.session; }
   /** 目前過場的播放器 (開發期自動化驗證用) */
   get cutscene(): CutscenePlayer | null { return this.cs?.player ?? null; }
+  /** 音訊管理器 (開發期自動化驗證用) */
+  get audio(): AudioBridge { return this.audioBridge; }
 
   go(next: Screen): void {
     const prev = this.screen;
     this.closeConfirm();
     this.exit(prev, next);
     this.screen = next;
+    this.audioBridge.enter(next.id === 'level' || next.id === 'clear' || next.id === 'menu' || next.id === 'cutscene' ? next.id : 'other', next.id === 'level' ? next.levelId : next.id === 'cutscene' ? next.cutsceneId : undefined);
     this.enter(next, prev);
   }
 
@@ -175,7 +179,8 @@ export class PuzzleApp {
             ? { id: 'cutscene', cutsceneId: PROLOGUE_ID, next: { id: 'level', levelId: id }, replay: false }
             : { id: 'level', levelId: id }),
           rename: () => this.go({ id: 'nickname' }),
-          memories: () => this.go({ id: 'memories' })
+          memories: () => this.go({ id: 'memories' }),
+          sound: () => this.audioBridge.openSettings()
         });
         break;
       case 'memories':
@@ -255,7 +260,8 @@ export class PuzzleApp {
         tray: this.tray,
         calm: this.settings.calmTension,
         onTrayOpen: () => this.input.releaseAll(),
-        releaseInput: () => this.input.releaseAll()
+        releaseInput: () => this.input.releaseAll(),
+        onWorldEvent: e => this.audioBridge.worldEvent(e)
       },
       spec, state,
       {
@@ -381,14 +387,14 @@ export class PuzzleApp {
     p.press(input.pressed, input.jumpPressed === true);
     p.tick(Math.min(elapsed, 0.1));
     for (const e of p.drain()) {
+      this.audioBridge.cutsceneEvent(cs.id, e);
       if (e.type === 'confirmOpen') {
         this.input.releaseAll();
         this.closeSkipUi = showSkipConfirm(this.text, { onConfirm: () => p.confirmSkip(), onCancel: () => p.cancelSkip() });
       } else if (e.type === 'confirmClose') {
         this.closeSkipUi?.();
         this.closeSkipUi = null;
-      } else if (e.type === 'audio') this.onAudioCue(e);
-      else if (e.type === 'end') {
+      } else if (e.type === 'end') {
         const s = this.screen;
         this.commit(recordCutscene(this.save, cs.id, e.skipped));
         this.go(s.id === 'cutscene' ? s.next : { id: 'menu' });
@@ -455,6 +461,7 @@ export class PuzzleApp {
       default: break;
     }
     this.session?.render(now, Math.min(elapsed, 1 / 20));
+    this.audioBridge.frame(this.screen.id === 'level' ? this.session : null);
     this.renderHelp(now);
     requestAnimationFrame(t => this.frame(t));
   }
