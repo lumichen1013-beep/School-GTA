@@ -31,6 +31,7 @@ import { CutsceneCanvas } from '../render/cutscene/canvas';
 import type { ShotFrame } from '../render/cutscene/types';
 import { CutscenePlayer, planCutscene, type CutsceneEvent, type CutsceneView } from './cutscene';
 import { deriveHelp } from './hudModel';
+import { deriveHelpView, pendingTip, tipText, TIP_MS, type HelpContext } from './helpModel';
 import { RestartConfirm, routeFrame } from './restartConfirm';
 import { LevelSession } from './levelSession';
 import { newChapterState, singleRoomSpec, type ChapterSpec, type ChapterState } from '../core/chapter';
@@ -84,7 +85,8 @@ export class PuzzleApp {
     buildPuzzleDom(root, this.text, [
       ...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' },
       { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
-      { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' }
+      { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' },
+      { keys: this.bindings.help.map(keyLabel), labelKey: 'ui.help.toggle' }
     ]);
     this.hud = new PuzzleHud(this.text);
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
@@ -106,6 +108,7 @@ export class PuzzleApp {
     this.hud.onReplay(() => this.restart());
     this.hud.onMenu(() => this.go({ id: 'menu' }));
     this.hud.onContinue(() => this.continueAfterClear());
+    this.hud.onHelp(() => this.toggleHelp());
     window.addEventListener('resize', () => this.resize());
     // 失焦 / 切到背景：暫停過場時間軸
     const pause = (): void => { this.cs?.player.pause(); this.input.releaseAll(); };
@@ -397,6 +400,33 @@ export class PuzzleApp {
     cs.ui.update({ lines: v.segment?.lines ?? null, alpha: v.segment?.alpha ?? 0, canAdvance: v.segment?.canAdvance ?? false, holdProgress: v.holdProgress, paused: v.confirmOpen || v.paused });
   }
 
+  /** H / 點小鈕：開合操作說明面板 (偏好存進設定) */
+  private toggleHelp(): void {
+    if (this.screen.id !== 'level') return;
+    this.settings = { ...this.settings, helpOpen: !this.settings.helpOpen };
+    writeSettings(this.storage, this.settings);
+  }
+
+  /** 操作說明面板與一次性小提示 (每幀；app/helpModel) */
+  private renderHelp(now: number): void {
+    const s = this.session;
+    const ctx: HelpContext = {
+      inLevel: this.screen.id === 'level' && !!s,
+      mapOpen: !!s?.isMapOpen, trayOpen: s?.trayOpen != null, turnMode: !!s?.isTurnMode,
+      busy: !s || s.busy || this.narrationUntil > 0 || this.confirm.isOpen
+    };
+    this.hud.renderHelp(deriveHelpView(this.settings.helpOpen, ctx, this.text, this.bindings));
+    if (!ctx.inLevel && this.hud.tipShowing) this.hud.showTip(null, now, 0);
+    this.hud.tickTip(now);
+    if (this.hud.tipShowing) return;
+    // 已經打開過面板的玩家不需要「怎麼打開操作說明」
+    const tip = pendingTip(this.settings.helpOpen ? [...this.settings.tipsSeen, 'help'] : this.settings.tipsSeen, ctx);
+    if (!tip) return;
+    this.hud.showTip(tipText(tip, this.text, this.bindings), now, TIP_MS);
+    this.settings = { ...this.settings, tipsSeen: [...this.settings.tipsSeen, tip] };
+    writeSettings(this.storage, this.settings);
+  }
+
   private resize(): void {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h);
@@ -409,10 +439,12 @@ export class PuzzleApp {
     const input = this.input.poll();
     if (this.cs) {
       this.cutsceneFrame(elapsed, input);
+      this.renderHelp(now);
       requestAnimationFrame(t => this.frame(t));
       return;
     }
     if (input.anyKey) this.skipNarration();
+    if (input.pressed.includes('help')) this.toggleHelp();
     if (this.narrationUntil && now > this.narrationUntil) this.skipNarration();
     switch (routeFrame(this.confirm, this.screen.id, input.pressed, now)) {
       case 'update': this.session?.update(elapsed, input); break;
@@ -423,6 +455,7 @@ export class PuzzleApp {
       default: break;
     }
     this.session?.render(now, Math.min(elapsed, 1 / 20));
+    this.renderHelp(now);
     requestAnimationFrame(t => this.frame(t));
   }
 }

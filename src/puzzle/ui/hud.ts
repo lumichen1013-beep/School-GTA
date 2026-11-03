@@ -42,6 +42,11 @@ export class PuzzleHud {
   private invCount = 0;
   private prompt: string | null = null;
   private toastSeq = 0;
+  private helpBtn = $('pz-help-btn');
+  private helpEl = $('pz-help');
+  private tipEl = $('pz-tip');
+  private helpKey = '';
+  private tipUntil = 0;
 
   constructor(private text: Text) {}
 
@@ -110,6 +115,28 @@ export class PuzzleHud {
     this.clearEl.classList.add('show');
   }
   hideClear(): void { this.clearEl.classList.remove('show'); }
+  /** 操作說明：小鈕 (收合時) / 面板 (展開時；遇到展開圖、字卡匣、轉動模式自動讓位) */
+  renderHelp(v: { button: boolean; expanded: boolean; yielded: boolean; label: string }): void {
+    const key = `${v.button}|${v.expanded}|${v.yielded}|${v.label}`;
+    if (key === this.helpKey) return;
+    this.helpKey = key;
+    this.helpBtn.classList.toggle('show', v.button);
+    this.helpBtn.classList.toggle('open', v.expanded || v.yielded);
+    this.helpBtn.querySelector('span')!.textContent = v.label;
+    this.helpBtn.setAttribute('aria-expanded', String(v.expanded));
+    this.helpEl.classList.toggle('show', v.expanded);
+  }
+  onHelp(fn: () => void): void { this.helpBtn.addEventListener('click', e => { e.preventDefault(); fn(); this.helpBtn.blur(); }); }
+  /** 一次性操作小提示 (畫面上方一行；ms 後自動消失；null = 立刻收起) */
+  showTip(text: string | null, nowMs: number, ms: number): void {
+    this.tipEl.textContent = text ?? '';
+    this.tipEl.classList.toggle('show', !!text);
+    this.tipUntil = text ? nowMs + ms : 0;
+  }
+  tickTip(nowMs: number): void {
+    if (this.tipUntil && nowMs > this.tipUntil) { this.tipEl.classList.remove('show'); this.tipUntil = 0; }
+  }
+  get tipShowing(): boolean { return this.tipUntil > 0; }
   /** 互動提示可點 (觸控：點提示 = 按 E)；只有互動提示可點，展開圖提示不可點 */
   setPromptTap(on: boolean): void { this.promptEl.classList.toggle('tap', on); }
   onPrompt(fn: () => void): void {

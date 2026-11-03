@@ -6,6 +6,13 @@ export const ui = {
   'ui.prompt': '[{key}] {verb}',
   'ui.prompt.withLabel': '[{key}] {verb}　{label}',
   'ui.help.title': '操作',
+  // 操作說明面板 (預設收合成小鈕；H / 點小鈕開合) 與一次性操作小提示 (3 秒內自動消失)
+  'ui.help.toggle': '收起 / 打開這份說明',
+  'ui.help.show': '{key}　操作說明',
+  'ui.help.hide': '{key}　收起說明',
+  'ui.tip.help': '按 {key} 可以打開操作說明。',
+  'ui.tip.cards': '{a}～{b} 貼卡　{x} 取下　{esc} 關閉',
+  'ui.tip.turn': '方向鍵選一排　{ok} 確認　{undo} 回退　{exit} 離開',
   'ui.help.move': '移動',
   'ui.help.jump': '跳',
   'ui.help.flip': '點鋼筆（切換）',

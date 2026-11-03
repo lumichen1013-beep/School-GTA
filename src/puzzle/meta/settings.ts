@@ -18,11 +18,15 @@ export interface Settings {
   skipConfirm: boolean;
   /** 按鍵覆寫：動作 / 軸名稱 → KeyboardEvent.code 清單 (由 input 的 mergeBindings 合併) */
   keys: Record<string, string[]>;
+  /** 操作說明面板展開 (預設收合：只留「H：操作說明」小鈕；H / 點小鈕切換) */
+  helpOpen: boolean;
+  /** 已顯示過的一次性操作小提示 (app/helpModel 的 TipId；第一次遇到新操作時說一次) */
+  tipsSeen: string[];
 }
 
 export const defaultSettings = (): Settings => ({
   hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false,
-  autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}
+  autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}, helpOpen: false, tipsSeen: []
 });
 
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts as readonly unknown[]).includes(v) ? v as T : d;
@@ -48,7 +52,9 @@ export function sanitizeSettings(v: unknown): Settings {
     autoAdvance: bool(v.autoAdvance, d.autoAdvance),
     textSpeed: oneOf(v.textSpeed, ['normal', 'slow'] as const, d.textSpeed),
     skipConfirm: bool(v.skipConfirm, d.skipConfirm),
-    keys
+    keys,
+    helpOpen: bool(v.helpOpen, d.helpOpen),
+    tipsSeen: Array.isArray(v.tipsSeen) ? [...new Set(v.tipsSeen.filter((t): t is string => typeof t === 'string'))] : d.tipsSeen
   };
 }
 

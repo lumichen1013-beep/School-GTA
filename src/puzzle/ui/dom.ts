@@ -18,7 +18,12 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   status.append(el('span', 'pz-mode', text('term.mode3d')), el('span', 'pz-ink'), el('span', 'pz-inv', text('ui.inv.none')));
   const helpEl = el('div', 'pz-help');
   fillHelp(helpEl, text, help);
-  hud.append(status, helpEl, el('div', 'pz-prompt'), el('div', 'pz-toast'));
+  // 操作說明預設收合成右上角的小鈕 (H / 點一下展開)；一次性操作小提示在畫面上方，數秒後自動消失 (app/helpModel)
+  const helpBtn = el('button', 'pz-help-btn') as HTMLButtonElement;
+  helpBtn.type = 'button';
+  helpBtn.tabIndex = -1;
+  helpBtn.append(el('i', undefined, '?'), el('span'));
+  hud.append(status, helpBtn, helpEl, el('div', 'pz-tip'), el('div', 'pz-prompt'), el('div', 'pz-toast'));
   const clear = el('div', 'pz-clear');
   const replay = el('button', 'pz-replay', text('ui.clear.replay')) as HTMLButtonElement;
   replay.type = 'button';

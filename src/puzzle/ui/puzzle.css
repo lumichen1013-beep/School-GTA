@@ -22,7 +22,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 #pz-inv svg { display: block; }
 #pz-inv.got { animation: pz-got .9s ease-out; }
 @keyframes pz-got { 0% { transform: scale(1); } 30% { transform: scale(1.18) rotate(-3deg); box-shadow: 0 0 18px 6px rgba(245,194,66,.8); } 100% { transform: scale(1); } }
-#pz-help { position: absolute; top: 14px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.75; }
+/* 操作說明：預設收合成右上角小鈕 (不遮擋畫面與展開圖)；展開的面板在小鈕下方，遇到展開圖 / 字卡匣 / 轉動模式自動讓位 (app/helpModel) */
+#pz-help { position: absolute; top: 52px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.75; display: none;
+  max-height: calc(100% - 52px - 24%); overflow: auto; box-sizing: border-box; background: rgba(253,244,225,.94); z-index: 4; }
+#pz-help.show { display: block; }
+#pz-help-btn {
+  position: absolute; top: 14px; right: 14px; height: 30px; padding: 0 12px; display: none; align-items: center; gap: 6px; pointer-events: auto; cursor: pointer;
+  font: 13px/1 inherit; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 rgba(58,38,24,.25); opacity: .85;
+}
+#pz-help-btn.show { display: inline-flex; }
+#pz-help-btn.open { opacity: 1; background: var(--paper2); }
+#pz-help-btn i { font-style: normal; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: var(--paper); font-size: 12px; }
+#pz-tip {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 4px 14px; font-size: 13px; line-height: 1.5;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--paper); background: rgba(58,38,24,.86); border-radius: 999px;
+  opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 7;
+}
+#pz-tip.show { opacity: 1; }
 #pz-help b { display: block; margin-bottom: 2px; letter-spacing: .2em; }
 #pz-help kbd {
   display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; font: 12px/1.5 inherit;
@@ -295,5 +311,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   .pz-tray-cards { gap: 8px; }
   .pz-tray-card { min-width: 58px; }
 }
-/* 窄螢幕 (手機直屏)：鍵盤操作說明會蓋住狀態列與展開圖，收起 (觸控不用鍵盤) */
-@media (max-width: 600px) { #pz-help { display: none; } }
+/* 窄螢幕 (手機)：小鈕只剩「？」圖示；展開的面板改成右上角的窄卡 (字小、可捲動)，仍會讓位給展開圖 / 字卡匣 */
+@media (max-width: 600px) {
+  #pz-help-btn { width: 32px; padding: 0; justify-content: center; }
+  #pz-help-btn span { display: none; }
+  #pz-help { left: 14px; right: 14px; font-size: 12px; line-height: 1.6; }
+  #pz-tip { font-size: 12px; padding: 4px 10px; }
+}
+/* 矮螢幕 (手機橫屏)：面板再短一點、可捲動，不壓到下方的互動提示與訊息 */
+@media (max-height: 520px) { #pz-help { max-height: calc(100% - 52px - 32%); font-size: 12px; line-height: 1.55; } }
