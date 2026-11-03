@@ -892,6 +892,7 @@ export function transferObject(cs: ChapterSession, obj: ObjId, via: Link): Chapt
 - **存檔**：`ChapterState` 就是 SaveV3 的 `chapters[n]`（4.9）；寫入時機 = `enterRoom` 與 `turn` 成功後（規格 8）。
 - **確定性**：`applyOp`、`links`、`turn` 不讀時鐘 / 亂數；同一序列同結果（測試鎖定）；2.3 第 4 條的字串規則自動涵蓋 `core/`。
 - **mechanics/cube.ts** 擁有類型 `lever`、`dial`（`interactIn:'3d'`，互動 → emit `turnRequest`）、`cubeDoor`（`kind`；`passable` 掛點讀 `world.ext.cube.links`，接不通時 `say('msg.cube.wall')`）。
+- 實作現況（C8）：`ChapterState` 實際欄位 = `chapter / cube / room / door / rooms / items / flags / labels / moved`（`moved` 為 `Record<obj, {room,x,y,z}>`，取代上方草案的陣列；方向字不另存 `levers`，由 `labels` 上的詞卡推得）；`transferObject(cs, obj, door, opts)` 以門 id 查連接表；另有 `noteFlag(cs, flag)`（演出旗標，R 不還原）。詳見 7.4 C8 註記。
 
 ### 4.17 標籤與字卡（寫；`mechanics/labels.ts`、`content/lexicon.ts`、`ui/cardTray.ts`；規格 N22）
 
@@ -1017,7 +1018,7 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 - 1-2c：玩家在玄關（3D）互動拉桿 → `turnRequest` → `turn({t:'slide', room:'foyer', dir:'N'})` → 玄關到 A → `links` 重算 → 玄關 E 門 `open`。2D 預覽 = `deriveCubeMap(session, op)` 只算不寫。**放得下。**
 - 1-3a：衣帽間拉桿「左」→ 衣帽間到 D → 衣帽間 N 拱門 ↔ 玄關 S 拱門（arch-arch）；木箱越過邊界 → `objCross` → `transferObject` 把木箱移到玄關的 `rooms` 快照 / 當前 World。**需要 4.16 的 `transferObject`；放得下。**
 - 1-3b：2D 對拉桿標籤下 `WorldCommand {t:'card', label:'lever:closet', card:'word:右'}` → `labels` 改 `levers['lever:closet'].word = '右'` → 3D 拉 → 衣帽間回 C → 章門 ↔ 書房走廊。R：`restartRoom` → `state = entry`（本次進房時衣帽間在 D），不會回到 S1。**放得下。**
-- `validateCube` 對此模型：可達排列 3、抽象狀態 69（狀態 = 魔方排列 × 玩家所在房 × 詞卡（沒有 / 在手上 / 貼在拉桿）× 木箱所在房 × 有無鑰匙 × 是否已出章門，只計 BFS 可達者；非終點 65 + 終點 4）、卡死 0、最短轉動 3（規格 5.4.8）。
+- `validateCube` 對此模型：可達排列 3、抽象狀態 **96**（狀態 = 魔方排列 × 玩家所在房 × 詞卡（沒有 / 在手上 / 貼在衣帽間拉桿 / 貼在玄關拉桿）× 木箱所在房 × 有無鑰匙 × 是否已出章門，只計 BFS 可達者；非終點 90 + 終點 6）、卡死 0、最短轉動 3（規格 5.4.8）。C8 起詞卡也可貼在玄關拉桿上（規格 1-3b 列的錯誤嘗試，實作允許），比 C5～C7 只許貼衣帽間的模型（69 = 非終點 65 + 終點 4）多 27 個狀態；停用「玄關寫字」即回到 69，兩者的排列數、卡死、最短解相同。
 
 ## 7. 遷移計畫（行為不變，對應規格 M0）
 
@@ -1071,11 +1072,13 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 | C5 | `devtools/validateCube`（BFS）+ 第一章模型；SaveV3 骨架（只存 cube 與房間快照） | devtools、meta/save.ts | 規格 5.4.8 數字；v2 → v3 遷移測試 | — |
 | C6 | 內容：玄關加 S 拱門入口、E cubeDoor、拉桿「上」；樓梯間 / 衣帽間占位房 | content | 可玩到 1-2c；`validateLevel` 0 issue | **M-Cube 完成，停下等使用者確認** |
 | C7 | M1a：1-2 重做（規格 6 保留 / 改 / 廢表） | content、mechanics/sequence.ts（N27）、mechanics/plates.ts（weight）、render/models/sequence.ts、tests/puzzle/levels/1-2.test.ts | 通關 + 反例 + 捷徑掃描 | **已完成（2026-11-03）**，停下等確認 |
-| C8 | M1b：1-3 衣帽間、拱門跨房、`labels.ts` 最小版 | core/chapter.ts、mechanics/labels.ts、content | 三房通關腳本；不寫字無解 | 停下等確認 |
+| C8 | M1b：1-3 衣帽間、拱門跨房、`labels.ts` 最小版 | core/chapter.ts、mechanics/labels.ts、content | 三房通關腳本；不寫字無解 | **已完成（2026-11-03）**，停下等確認 |
 
 > 實作註記 (2026-11-03，M-Cube C1～C6 完成)：`validateCube` 對第一章模型實算為可達排列 3、卡死 0、最短轉動 3 (路徑與規格 6 的最短解同序)、拿掉寫字 / 推箱 / 任一拉桿皆無解；**抽象狀態數實算 69** (非終點 65 + 終點 4；狀態 = 魔方 × 所在房 × 詞卡 (無 / 手上 / 貼在拉桿) × 木箱所在房 × 鑰匙 × 是否出章門，拱門推箱可雙向、詞卡可取下)；C7 起規格 5.4.8 / 6 與本文件 6.6 已改為 69 並附上述編碼。C6 原型的取捨：魔方門以 E 互動進出 (只在 3D)；南拱門 / 南門只在實景；1-2 的 `puzzles` 只刪 1-2d、改號留給 C7；門廊大門屋框只提示不換關；衣帽間章門一律鎖著 (C8 加鑰匙)。
 >
 > 實作註記 (C7)：`puzzles` = 1-2a 推箱取筆尖、1-2b 長桌下的踏板、1-2c 門後是牆、1-2d 三代的年份 (書架過缺口降為不計題路段，原字條移除)。N27 順序鎖 = `mechanics/sequence.ts` (類型 portrait / cord / drawer；拉對一條停住、拉錯全部彈回、全對 → 抽屜 used + 取得 `reward`)；`validateLevel` 加 `ref.sequence` (order ≥ 3 條、互相指認) 並收集畫像年份 / 抽屜訊息的文字 key。踏板 `weight` (木箱 2、玩家 1，預設 2，行為不變)。筆尖 `grants:'nib'` 不變 (nib = 寫的能力，取得文字說明字卡匣開啟；字卡匣 UI 在 C8)。詞卡 = 章節道具 `card.right` (ChapterState.items → SaveV3 chapters[n].items)。v0.2 才有的文字 key 移到 `tests/puzzle/fixtures/foyerV02.ts` 的 `FOYER_V02_TEXT` (`v02.1-2.*`)；`obj.valve.verb` 保留 (valve 類型仍註冊，供凍結場景)。C8 注意：西區後牆 x∈[-19.5,-15.5] 已被畫像占用，1-3a 掛鉤建議放在 x≈-15 以東 (現有裝飾掛畫 x=-14 可移)。
+>
+> 實作註記 (C8)：**衣帽間** = 關卡 id `1-3`、房間 id `closet` (`content/levels/ch1/closet.ts`；登錄表 1-3 前置 1-2，從選單進 = 接著第一章存檔)：北拱門 x=-1、東章門 (`key:'key.brass'`)、拉桿「左」(x=2.5，標籤 `lever:closet`)、木箱 `closetCrate` (x=-1.6, z=1.2；id 與玄關的 `crate` 不同)、衣架 `coatRack` (標籤「大衣」+ 空尺度卡槽)、三張字條。玄關加掛鉤 `hook` (x=-14.8、y=2.3、2D；`grants:'key.brass'`、`also:['diary.1']`)，裝飾掛畫移到掛鉤上方；玄關拉桿也有標籤 `lever:foyer`。**拱門跨房**：`mechanics/cube` 的 afterPhysics 在可推物「剛壓上」拱門門位時發 `objCross` (拱門對拱門) 或說明 (對面是門 `msg.cube.doorOnly` / 牆)；`core/chapter.transferObject(cs, obj, door, opts)` 把物件放到對面拱門內側 (門內緣 + 1.3 + 半深，沿門橫向保留偏移)、被占住或沒地板 → `blocked:'occupied'`；`ChapterState.moved[obj] = { room, x, y, z }` (回到原房即刪除)，`roomObjects` 依此組房間物件 (跨房物件的定義取自原房、初值 = 到達點，所以 T 物歸原處 = 回到它進房時的拱門內側，規格 5.4.7)。R = entry，跨房也一併還原。**標籤 N22 最小版** (`mechanics/labels.ts`)：`ObjBase.label = { id, kind:'dir'|'noun', textKey?, scale? }`；詞典最小版放在機制檔 (`CARDS`：`card.<方向字>`；方向字標籤 + 詞卡 = 新方向、名詞 + 詞卡 = 無效)，因為 mechanics 不能 import content 的值 (第二章擴充時改為 `WorldOptions` 注入 `content/lexicon`)。核心新增兩個掛點：`Mechanic.interactFallback` (E 沒有一般目標時：2D 範圍內有標籤、且字卡匣有卡或標籤上有卡 → `labelOpen`；否則照舊「看得見，卻碰不到」) 與 `Mechanic.command` (`ActionFrame.commands` 的 `WorldCommand`，`step` 在動作之後處理；`LevelLoop` 與動作一樣只送進下一個固定步)。標籤上的卡存在 `World.ext.labels` (章節層載入 / `captureState` 收回 → `ChapterState.labels` → SaveV3 `chapters[n].labels`)；寫字需持有筆尖 `nib`；每張卡同時只貼一處 (貼上即離開字卡匣、換卡則舊卡回匣)；拉桿方向 = `leverWord(w, o)` (章節事件、展開圖預覽、HUD、3D 牌子箭頭都跟著它)。UI：`app/cardTrayModel.ts` (純) + `ui/cardTray.ts`；鍵位 E 開 / 關、1～3 貼第 n 格、X / Backspace 取下、Esc 關；觸控 = 點互動提示開匣、點卡片貼、點「關閉」或卡匣外關 (卡片 ≥ 56 px)；無效字 = 標籤字顫動 + 墨色變淡 0.6 秒 (不閃爍)。**章門**：`cubeDoor.key` 持有 → `w.cleared` (本章通關；外殼以玩家所在房對應的關卡 1-3 顯示通關畫面，`recordClear(…, also = 本章各關)` 記 1-2、1-3，並把持有的 `diary.<n>` 寫進 `save.diary`)；「第一夜」過場的觸發留待後續。**驚嚇** (規格 9.1)：`mechanics/coats.ts` 的 `coatRack`：持有 `fallWhen` (銅鑰匙) 進衣帽間、安靜 2.5 秒後 used (滑落) 並發 `{t:'flag', flag:'scare:coats'}`；`core/chapter.noteFlag` 同時寫進 state 與 entry (R 不重演；旗標只影響呈現)；之後進房 / R → 1 秒內安靜倒下。呈現：一般 0.45 秒同時落下、`calmTension` = 1.8 秒緩緩滑落；亮度不變；目前沒有音訊模組 (規格 9.1 音訊屬 M1)，所以沒有驚嚇音。**提示 L2**：`note.revealAfter` (秒，房間 `World.time`)：之前讀到「紙上還是空白的。」、模型是白紙，之後浮現字跡 + 邊角微光；設定「提示：計時 / 隨時 / 關閉」與卡關偵測尚未接 (M1 提示系統)。**BFS**：`CH1_MODEL.card.levers = ['foyer','closet']` → 抽象狀態 96 (見 6.6)；`write:closet` 停用 → 無解、`write:foyer` 停用 → 仍有解 (錯誤嘗試不是必要步驟)。南拱門 (前緣) 的模型改為專屬材質並登記為遮擋物 (擋在鏡頭與玩家之間時淡出)。順帶修正：`PuzzleScene` 遮擋物淡出切換 `transparent` 時補 `needsUpdate` (首次編譯為不透明的材質原本淡不掉)；窄螢幕 (≤ 600 px) 收起鍵盤操作說明 (原本蓋住狀態列與展開圖)。
 
 ## 8. 取捨與風險
 

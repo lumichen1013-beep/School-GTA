@@ -108,6 +108,7 @@
 - `TouchControlId` 移除 `pin / section / mark`、新增 `map`；`visibleButtons` 的情境：`map` 只在 2D 且關卡在魔方上；字卡匣開著時只顯示字卡匣 UI。
 - 新文字 key：`ui.touch.btn.map`、`ui.prompt.touch.write`、`ui.prompt.touch.pull`、`ui.cards.*`（分頁名、關閉、取下）。
 - 測試補充（第 8 節）：字卡匣開關時 `releaseAll`；點卡 = 一個 `WorldCommand`（架構 4.17）；預覽點擊不改狀態；直屏時展開圖不遮住互動鍵。
+- 實作現況（C8，最小版；觸控搖桿 / 按鈕屬 M1T 尚未做）：互動提示可點（= 按 E），2D 靠近標籤時提示「寫　拉桿：左」，點了開字卡匣；字卡匣從底部升起，卡片 ≥ 56 px、點卡 = 貼上、「取下「右」」鈕、「關閉」或點卡匣外 = 關；開匣時 `releaseAll`。分頁（詞卡 / 部件卡 / 尺度卡）未做（第一章只有一張詞卡；字卡匣三格、其餘空著）。桌機：E 開 / 關、1～3 貼、X / Backspace 取下、Esc 關。
 
 ---
 
