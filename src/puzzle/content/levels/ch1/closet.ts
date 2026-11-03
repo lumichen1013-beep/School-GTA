@@ -9,6 +9,8 @@ import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 //        完成後回到衣帽間：安靜 2.5 秒後三件大衣同時滑落 (規格 9.1 驚嚇；calmTension = 安靜地落下)
 //   1-3b 回來的路 (P7 首次)：S2 時章門面對空格 → 2D 對拉桿的標籤「左」貼上詞卡「右」(1-2d 取得) → 3D 拉 → 衣帽間滑回 C → 章門接上書房走廊 → 銅鑰匙開門
 //   「量」的鋪陳 (不計題)：衣架的標籤「大衣」旁有一格空著的尺度卡槽 (貼詞卡 = 不成字，卡片退回)
+// 分區 (擺設規則同第二章 2-3 起，規格 6「第二章 2-3～2-5 共用規則」)：後景 = 衣架、北拱門、拉桿 (貼後牆) ｜ 中景 = 木箱與東章門的通道 ｜
+//   前景 = 換鞋的座椅與落地燈 (裝飾)、拉桿與章門之間的字條 B (落地木柱)。x 座標不變 (藏寶圖的畫面不變)
 // 文字一律為 content/text/zh-Hant/lvl-1-3.ts 的 key；座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -5
 const WALL_Z = -4.95;
 const noteBase = { type: 'note', y: 1.0, z: WALL_Z, w: 0.7, h: 0.9, d: 0.1, visible: 'both', solid: false, interactable: true, labelKey: 'lvl.1-3.note' } as const;
@@ -29,7 +31,7 @@ const objects: ObjDef[] = [
     x: -4.6, y: 0, z: -4.5, w: 2.4, h: 2.3, d: 0.8, visible: 'both', solid: false, labelKey: 'lvl.1-3.coats' },
   { ...noteBase, id: 'noteA', x: -6.5, textKey: 'lvl.1-3.note.a' },                    // 1-3a L1 (衣架旁)
   { ...noteBase, id: 'noteA2', x: -2.8, textKey: 'lvl.1-3.note.a2', revealAfter: 240 }, // 1-3a L2 (空白；進房 4 分鐘浮現)
-  { ...noteBase, id: 'noteB', x: 5, textKey: 'lvl.1-3.note.b' }                         // 1-3b L1 (拉桿與章門之間)
+  { ...noteBase, id: 'noteB', mount: 'post', x: 5, z: 2.4, textKey: 'lvl.1-3.note.b' }  // 1-3b L1 (拉桿與章門之間，前景的木柱)
 ];
 
 const decor: DecorItem[] = [
@@ -37,6 +39,9 @@ const decor: DecorItem[] = [
   { kind: 'painting', x: 4.6, y: 3.3, w: 1.6, h: 1.2, variant: 0 },
   { kind: 'wallShelf', x: -4.6, y: 3.4, w: 2.4, seed: 7 },
   { kind: 'rug', x: 0.5, z: 1.4, w: 5, d: 3.2 },
+  // 前景：換鞋的座椅與落地燈 (只在實景)
+  { kind: 'armchair', x: -5.4, z: 2.8, rot: 0.7, tone: 6 },
+  { kind: 'floorLamp', x: -6.3, z: 1.6 },
   { kind: 'pendant', x: -2.5, z: 0.5 },
   { kind: 'pendant', x: 3.5, z: 0.5 }
 ];

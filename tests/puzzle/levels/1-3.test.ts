@@ -28,7 +28,7 @@ import { isUnlocked, levelState, recordClear } from '../../../src/puzzle/meta/pr
 import { DEFAULT_BINDINGS } from '../../../src/puzzle/input/bindings';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
 import { scanShortcuts, type ScanSpec } from '../../../src/puzzle/devtools/shortcutScan';
-import { validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
+import { layoutDepthIssues, validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
 import { chapterOneModel, validateCube } from '../../../src/puzzle/devtools/validateCube';
 import { CH1_CUBE } from '../../../src/puzzle/content/cubes/ch1';
 import { modelFor } from '../../../src/puzzle/render/models';
@@ -91,6 +91,11 @@ function solveB(cs: ChapterSession): ChapterSession {
 }
 
 describe('1-3 衣帽間：資料與驗證器', () => {
+  it('擺設規則：可互動物件同時落在後 / 中 / 前三帶 (layoutDepthIssues)；字條 B 在前景的木柱上', () => {
+    expect(layoutDepthIssues(closet)).toEqual([]);
+    expect([def('noteB').z > 2, def('noteB').type === 'note' && def('noteB').mount]).toEqual([true, 'post']);
+  });
+
   it('validateLevel / validateEntry 0 issue；謎題 1-3a / 1-3b；登錄表 1-3 前置 1-2、屬於第一章魔方的衣帽間', () => {
     expect(validateLevel(closet, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '1-3')!, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
@@ -688,7 +693,7 @@ describe('1-3 字條：量表 H1～H4、H9、H10 與預算', () => {
     expect(notes.length).toBeLessThanOrEqual(3);
     for (const o of notes) for (const mode of ['3d', '2d'] as const) {
       const cs = closetS2();
-      runScript(cs.world, [{ place: [o.x, 0, -4.4], mode }]);
+      runScript(cs.world, [{ place: [o.x, 0, o.z + 0.5], mode }]);
       expect([o.id, mode, findTarget(cs.world)?.def.id]).toEqual([o.id, mode, o.id]);
       interact(cs.world);
       const blank = o.type === 'note' && o.revealAfter !== undefined;
