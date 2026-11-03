@@ -84,6 +84,10 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'smallCabinet') return [o.lockedRead, o.openRead, label];
   if (o.type === 'press') return [o.okText, o.looseText, o.readText, o.side, label];
   if (o.type === 'typeLock') return [...o.glyphs, o.openText, o.doneText, o.needText, label];
+  if (o.type === 'balance') return [o.solvedText, o.wrongText, label];
+  if (o.type === 'pot') return [o.fixedText, label];
+  if (o.type === 'trellis') return [o.lockedRead, label];
+  if (o.type === 'root') return [o.jamText, o.freeText, o.doneText, o.freedText, label];
   if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.stripped, ...Object.values(o.label?.forms ?? {})];
   return [label, o.label?.solvedText, o.label?.stripped];
 }
@@ -164,7 +168,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
   const byId = new Map(def.objects.map(o => [o.id, o]));
   const granted = new Set(def.objects.flatMap(o => [
     o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' || o.type === 'smallPrint' ? o.reward : undefined, o.label?.reward,
-    ...(o.type === 'hook' ? o.also ?? [] : []), ...(o.type === 'cardCatalog' ? o.cards : [])
+    ...(o.type === 'hook' ? o.also ?? [] : []), ...(o.type === 'ruler' ? o.also : []), ...(o.type === 'cardCatalog' ? o.cards : [])
   ]).filter((g): g is string => typeof g === 'string'));
   // 合成的產物 (N28)：配方的兩件都是章節道具 (可能在別的房間)，所以產物視為取得得到 (配料的來源由章節模型 validateDial 驗)
   for (const r of RECIPES) granted.add(r.out);
@@ -190,6 +194,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     if (!l) continue;
     if (typeof l.id !== 'string' || l.id === '' || labelIds.has(l.id)) add('label.field', `label id "${String(l.id)}" must be a unique non-empty string`, o.id);
     labelIds.add(l.id);
+    if (l.after !== undefined && (l.after === o.id || !def.objects.some(d => d.id === l.after))) add('label.field', `label after "${l.after}" does not name another object`, o.id);
     if (l.kind === 'dir' && o.type !== 'lever') add('label.field', 'direction labels belong on levers', o.id);
     else if (l.kind === 'noun' && !l.textKey) add('label.field', 'noun labels need a textKey', o.id);
     else if (l.kind === 'blank' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => c in CARDS))) add('label.field', 'blank labels need a textKey and answers that are word cards', o.id);

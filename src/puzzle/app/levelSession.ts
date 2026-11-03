@@ -199,6 +199,17 @@ export class LevelSession {
   /** 有其他疊層開著 (字卡匣、過場) → 不能進轉動模式 */
   private get overlay(): boolean { return this.trayLabel !== null || this.fx !== null || this.loop.isLocked; }
 
+  /**
+   * 收起展開圖 / 轉動模式 / 字卡匣 (外殼切到通關畫面時：3-1b 這類在轉動模式裡完成的題，通關畫面不能被展開圖蓋住)
+   */
+  closeOverlays(): void {
+    this.mapOpen = false;
+    this.turnMode = false;
+    this.turnSel = null;
+    this.trayLabel = null;
+    this.pendingTray = null;
+  }
+
   /** Tab / 「轉」頁籤：進出轉動模式 (進入條件不成立 → 說明原因；進入 = 打開展開圖、放開按著的鍵) */
   toggleTurnMode(): void {
     if (!isDialChapter(this.cs.spec)) return;

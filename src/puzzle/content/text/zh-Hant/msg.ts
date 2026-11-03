@@ -64,6 +64,11 @@ export const msg = {
   'msg.combine.none': '手上沒有能湊在一起的東西。',
   'msg.print.wheel': '字輪轉到「{glyph}」。',
   'msg.list.sep': '、',
+  // 量 (N23；規格「第三章共用規則」量)：尺度卡貼上 / 取下、放大前卡牆
+  'msg.scale.da': '量過了。它照著刻度，長大了。',
+  'msg.scale.xiao': '量過了。它照著刻度，縮小了。',
+  'msg.scale.removed': '尺度卡取了下來。它回到原來的大小。',
+  'msg.scale.noRoom': '這裡放不下。',
   // 謎題標籤前按 E、匣裡沒有卡：卡貼在別的標籤上 (關卡自己的缺卡指路見 label.noCardText)
   'msg.label.cardElsewhere': '{card}還貼在別的標籤上。先去把它取下來。',
   // 字卡匣關著時按 1～3 / X：說明怎麼打開

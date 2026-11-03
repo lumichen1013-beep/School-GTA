@@ -12,7 +12,7 @@ import type { CardTrayModel } from '../ui/cardTray';
 export type { CardTrayModel } from '../ui/cardTray';
 
 /** 字卡匣裡顯示的標籤訊息 (寫上 / 取下 / 無效 / 沒有筆尖) */
-const LABEL_MSGS: ReadonlySet<string> = new Set(['msg.label.written', 'msg.label.removed', 'msg.label.invalid', 'msg.label.noNib']);
+const LABEL_MSGS: ReadonlySet<string> = new Set(['msg.label.written', 'msg.label.removed', 'msg.label.invalid', 'msg.label.noNib', 'msg.scale.da', 'msg.scale.xiao', 'msg.scale.removed', 'msg.scale.noRoom']);
 
 /** 詞卡的字 (卡面大字) 與名稱 (例：右 / 詞卡「右」) */
 const cardGlyph = (text: Text, card: string): string => { const c = CARDS[card]; return c?.dir ? text(WORD_KEYS[c.dir]) : c?.glyph ? text(c.glyph) : card; };
@@ -30,6 +30,11 @@ export function labelGlyph(w: World, text: Text, o: ObjState): { now: string; ba
     return { now: fill(card ? cardGlyph(text, card) : text('ui.label.blank')), base: fill(text('ui.label.blank')) };
   }
   const t = l.textKey ? text(l.textKey) : '';
+  // 名詞 + 尺度卡 (N23)：卡面的字貼在名詞前 (「大陶盆」)
+  if (l.kind === 'noun' && l.scale) {
+    const card = cardsOn(w, l.id).find(c => CARDS[c]?.slot === 'scale');
+    return { now: card ? cardGlyph(text, card) + t : t, base: t };
+  }
   if (l.kind === 'strip') return { now: text(o.used && l.stripped ? l.stripped : l.textKey ?? ''), base: t };
   if (l.kind === 'plate') {
     // 門牌 (2-3a)：原字「門」；貼了收的部件卡 = forms 裡的字 (「間」)

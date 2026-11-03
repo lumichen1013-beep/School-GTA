@@ -32,5 +32,11 @@ export const obj = {
   'obj.bundle.verb': '抽出',
   'obj.keyBench.verb': '組裝',
   'obj.diaryStand.verb': '拿起',
+  // 3-1 苗圃
+  'obj.ruler.verb': '拿下',
+  'obj.pot.verb': '搬',
+  'obj.trellis.verb': '查看',
+  'obj.root.verb': '查看',
+  'obj.pane.verb': '拿起',
   'obj.default.verb': '互動'
 } as const;

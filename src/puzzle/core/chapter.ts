@@ -22,6 +22,11 @@ export interface ChapterSpec {
   cube: CubeDef | null;
   rooms: Readonly<Record<string, LevelDef>>;
   doors: readonly DoorInfo[];
+  /**
+   * v0.4 第三章 卡榫 (P3)：玩家**不在**的這間房此刻是否有巨物伸進軌道 (依該房關卡資料 + state.labels；玩家所在房改問機制掛點 blocksTrack)。
+   * 由 app 以機制表的純函式注入 (mechanics/index chapterSpecOf)；核心不 import mechanics。沒給 = 不在場的房一律不卡
+   */
+  jammed?(room: string, state: ChapterState): boolean;
 }
 
 /** 章節狀態 (可 JSON 序列化；SaveV3 的 chapters[n] 由此而來) */
@@ -430,7 +435,7 @@ function roomBoxes(spec: ChapterSpec, state: ChapterState, world: World, room: s
   return { pushables: boxes.filter(b => b.d.pushable && !b.gone).map(b => b.box), doors: boxes.filter(b => doorIds.has(b.d.id)).map(b => b.box) };
 }
 
-/** 轉動 / 反向轉動的共同檢查 (不含墨量)：卡榫 (當前房在組內且有機制回報伸進軌道)、門口卡著 (組內各房：可推物或玩家壓在門位上) */
+/** 轉動 / 反向轉動的共同檢查 (不含墨量)：卡榫 (組內的房：當前房問機制掛點、其他房問 spec.jammed)、門口卡著 (組內各房：可推物或玩家壓在門位上) */
 function dialCheck(cs: ChapterSession, t: Turn): DialBlock | null {
   const { spec, state, world } = cs;
   const def = spec.cube!;
@@ -438,7 +443,9 @@ function dialCheck(cs: ChapterSession, t: Turn): DialBlock | null {
   const cells = cellsOf(def, cube, t.group);
   const rooms = Object.keys(cube.pos).filter(r => cells.some(c => sameCell(c, cube.pos[r])));
   const mine = rooms.includes(state.room);
+  // 卡榫：組內每一間房 (玩家所在房 = 即時 World 的機制掛點；其他房 = ChapterSpec.jammed，規格「第三章共用規則」卡榫)
   if (mine && world.rt.mechanics.blocksTrack.some(m => m.blocksTrack!(world))) return 'jammed';
+  if (spec.jammed && rooms.some(r => r !== state.room && spec.rooms[r] && spec.jammed!(r, state))) return 'jammed';
   for (const room of rooms) {
     if (!spec.rooms[room]) continue;
     const { pushables, doors } = roomBoxes(spec, state, world, room);

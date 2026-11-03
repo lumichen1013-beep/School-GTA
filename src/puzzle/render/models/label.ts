@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
-import { labelTag } from '../textures';
+import { labelTag, scaleCornerTag } from '../textures';
 import type { ModelCtx } from './types';
 
 // 標籤的外觀 (N22；規格 5.4.5、7.2)：只在藏寶圖出現的墨框紙籤；貼了詞卡 → 卡片蓋住原字；
@@ -17,6 +17,25 @@ const cardWord = (card: string): string | null => /^card\.(\w+)$/.exec(card)?.[1
 const GLYPH_KEYS: Readonly<Record<string, string>> = {
   wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
 };
+/** 尺度卡 (N23；mechanics/scale SCALE_GLYPHS 同值；render 只能 import type) */
+const SCALE_GLYPH_KEYS: Readonly<Record<string, string>> = { 'card.da': 'term.glyph.da', 'card.xiao': 'term.glyph.xiao' };
+
+/** 物件此刻貼著的尺度卡的卡面字 (沒有方槽 / 沒貼 = '') */
+export function scaleGlyph(c: ModelCtx, d: ObjDef): string {
+  const l = d.label;
+  if (!l?.scale) return '';
+  const card = (c.world.ext.labels?.[l.id] ?? []).find(k => k in SCALE_GLYPH_KEYS);
+  return card ? c.world.rt.text(SCALE_GLYPH_KEYS[card]) : '';
+}
+
+/**
+ * 可量物件的縮放倍率 (有效尺寸 / 關卡資料的原尺寸；mechanics/scale 以底部中心改寫 def.w / h / d)：
+ * 模型的本體依此縮放 (標籤不跟著縮)
+ */
+export function scaleRatio(c: ModelCtx): number {
+  const base = c.world.level.objects.find(o => o.id === c.obj.def.id);
+  return base && base.w > 0 ? c.obj.def.w / base.w : 1;
+}
 
 /** 標籤此刻顯示的字與是否被詞卡蓋住 (方向字 = 拉桿原字或詞卡的字；名詞 = textKey) */
 export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: boolean } {
@@ -56,14 +75,17 @@ export function labelBadge(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Gr
   const meshes = new Map<string, THREE.Mesh>();
   let lastSeq = -1;
   let shake = 0;
+  const after = d.label?.after;
   return c => {
-    holder.visible = c.mode === '2d';
+    // label.after：那個物件 used 之前標籤被蓋住 (不畫)
+    holder.visible = c.mode === '2d' && (after === undefined || !!c.world.byId.get(after)?.used);
     if (!holder.visible) return;
     const { text, covered } = labelText(c, d);
-    const key = `${text}|${covered}`;
+    const slot = scaleGlyph(c, d);
+    const key = `${text}|${covered}|${slot}`;
     if (!meshes.has(key)) {
       const w = size * (256 / 112);
-      const m = p.mesh(new THREE.PlaneGeometry(w, size), 0xffffff, { map: labelTag(pal, text, covered, scale), flatMap: true, outline: false, shadow: false, unique: true });
+      const m = p.mesh(new THREE.PlaneGeometry(w, size), 0xffffff, { map: labelTag(pal, text, covered, scale, slot), flatMap: true, outline: false, shadow: false, unique: true });
       m.name = `label:${key}`;
       holder.add(m);
       meshes.set(key, m);
@@ -78,5 +100,28 @@ export function labelBadge(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Gr
     const cur = meshes.get(key)!.material as THREE.MeshBasicMaterial;
     if (cur.transparent !== k > 0) { cur.transparent = k > 0; cur.needsUpdate = true; }
     cur.opacity = 1 - 0.55 * k;
+  };
+}
+
+/**
+ * 縮放中的物件的「大 / 小」角標 (規格 7.2；只在藏寶圖)：at = 相對物件原點 (每幀可改，跟著有效尺寸走)。
+ * 每個字建一次網格、之後只切可見性
+ */
+export function scaleCorner(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Group, size = 0.3): (c: ModelCtx, at: THREE.Vector3) => void {
+  const holder = new THREE.Group();
+  root.add(holder);
+  const meshes = new Map<string, THREE.Mesh>();
+  return (c, at) => {
+    const glyph = c.mode === '2d' ? scaleGlyph(c, d) : '';
+    holder.visible = glyph !== '';
+    if (!glyph) return;
+    if (!meshes.has(glyph)) {
+      const m = p.mesh(new THREE.PlaneGeometry(size, size), 0xffffff, { map: scaleCornerTag(pal, glyph), flatMap: true, outline: false, shadow: false, unique: true });
+      m.name = `scale:${glyph}`;
+      holder.add(m);
+      meshes.set(glyph, m);
+    }
+    for (const [k, m] of meshes) m.visible = k === glyph;
+    holder.position.copy(at);
   };
 }

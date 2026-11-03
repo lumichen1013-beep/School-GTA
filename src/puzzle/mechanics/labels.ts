@@ -3,30 +3,33 @@
 // 字卡匣選卡 → WorldCommand {t:'card'} → 這裡驗證 (2D、站穩、範圍內、有筆尖、持有卡片、詞典有效) → 貼上 / 回饋
 import type { Mechanic } from '../core/registry';
 import type { WorldCommand } from '../core/actions';
-import type { ItemId, ObjState, TextKey, World } from '../core/types';
+import type { ItemId, ObjId, ObjState, TextKey, World } from '../core/types';
 import { INTERACT_RANGE } from '../core/constants';
 import { distanceTo } from '../core/interact';
 import { isActiveIn } from '../core/presence';
 import { addItem, hasItem, say } from '../core/world';
 import { LEVER_WORDS, type LeverWord } from './cube';
+import { SCALE_CARDS, SCALE_GLYPHS, canResize, rescale } from './scale';
 
 declare module '../core/types' {
   interface ObjBase {
     /**
      * 標籤 (只在 2D 看得到、寫得到)：id = 章節內唯一的標籤 id (存在 ChapterState.labels)；
-     * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有空的尺度卡槽 (只鋪陳)；
+     * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有尺度卡的方槽
+     * (v0.4 第三章：名詞標籤 + scale 收尺度卡「大」「小」→ 物件縮放，mechanics/scale；第一章只鋪陳)；
      * noCardText = 這是謎題要寫的標籤：字卡匣空著時 2D 照樣提示「寫」，按 E 說缺什麼、去哪裡找 (沒有 → 空匣時 E 照舊「看得見，卻碰不到」)；
      * v0.4 'blank' = 字謎的空格 (P18；2-2b 下聯)：textKey 含 {c} (空格處)；answers = 詞典 (收的詞卡，D14 列同義字)；
      * 貼上收的卡 → 物件 used (doneFlag 成立 → done 事件)、opens 指向的物件 used、取得 reward、說 solvedText (只在第一次)；
      * v0.4 'plate' = 門牌 (規格「門牌「間」」)：textKey = 原字「門」；answers = 收的部件卡；forms[卡] = 貼上後的字 (「間」)；
      * 寫成 = 同 blank (第一次 used / done / solvedText)；門接到哪由章節層依標籤上的卡決定 (core/chapter activePlates)；
      * v0.4 'strip' = 拆字 (2-4c)：textKey = 原字「閉」；part = 原本就貼在上面的部件 (「才」，物件 used 前算貼著)；取下 part →
-     * 物件 used、opens / reward / solvedText / done、part 進字卡匣；之後的字 = stripped (「門」)；拆過不收任何卡
+     * 物件 used、opens / reward / solvedText / done、part 進字卡匣；之後的字 = stripped (「門」)；拆過不收任何卡；
+     * v0.4 after = 這個物件 used 之後標籤才看得到 (3-1b：花架門關著時，藏寶圖上的樹根被花架蓋住、標籤不在)
      */
     label?: {
       id: string; kind: 'dir' | 'noun' | 'blank' | 'plate' | 'strip'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
       answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey; forms?: Readonly<Record<ItemId, TextKey>>;
-      part?: ItemId; stripped?: TextKey;
+      part?: ItemId; stripped?: TextKey; after?: ObjId;
     };
   }
 }
@@ -41,7 +44,7 @@ export const canWrite = (w: World): boolean => hasItem(w, WRITE_ABILITY) || w.ab
  * 字卡 (詞典最小版)：物品 id `card.<字>` = 詞卡；dir = 貼在方向字標籤上時的新方向 (第一章)；
  * glyph = 卡面的字 (文字 key；v0.4 第二章的字謎詞卡，例「內」)
  */
-export interface CardDef { slot: 'word' | 'part'; dir?: LeverWord; glyph?: TextKey }
+export interface CardDef { slot: 'word' | 'part' | 'scale'; dir?: LeverWord; glyph?: TextKey }
 /** 第二章字謎的詞卡 (2-2b：外 / 內 / 前；裡 / 邊 = 詞典先列的同義字，本章目前沒有卡) */
 const WORD_CARDS: Readonly<Record<string, TextKey>> = {
   wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
@@ -52,10 +55,12 @@ export const CARDS: Readonly<Record<ItemId, CardDef>> = Object.fromEntries([
   ...LEVER_WORDS.map(w => [`card.${w}`, { slot: 'word', dir: w } as CardDef]),
   ...Object.entries(WORD_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'word', glyph } as CardDef]),
   // v0.4 部件卡 (活字的一個部件；2-3a 日、2-4c 才)
-  ...Object.entries(PART_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'part', glyph } as CardDef])
+  ...Object.entries(PART_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'part', glyph } as CardDef]),
+  // v0.4 第三章 尺度卡 (3-1 建築比例尺：大 / 小；只貼在有方槽的名詞標籤上)
+  ...Object.keys(SCALE_CARDS).map(id => [id, { slot: 'scale', glyph: SCALE_GLYPHS[id] } as CardDef])
 ]);
 export const isCard = (id: string): boolean => id in CARDS;
-/** 字卡匣的格數 (第一章：詞卡一格、第三格空著，鋪陳尺度卡) */
+/** 字卡匣的格數 (第一章：詞卡一格、第三格空著，鋪陳尺度卡；第三章：尺度卡「大」「小」) */
 export const TRAY_SLOTS = 3;
 
 /** 標籤上貼著的字卡 */
@@ -75,6 +80,8 @@ export function accepts(o: ObjState, card: string): boolean {
   const l = o.def.label;
   if (!c || !l) return false;
   if (l.kind === 'blank' || l.kind === 'plate') return (l.answers ?? []).includes(card);
+  // 尺度卡只收在有方槽的名詞標籤上 (其他標籤貼尺度卡 = 無效字；有方槽的標籤貼詞卡 = 無效字)
+  if (c.slot === 'scale') return l.kind === 'noun' && !!l.scale;
   if (c.slot !== 'word') return false;
   return l.kind === 'dir' && c.dir !== undefined;
 }
@@ -101,14 +108,20 @@ export function leverWord(w: World, o: ObjState): LeverWord {
   return base;
 }
 
-/** 2D、站穩時範圍內最近、有標籤的物件 (C9 同規則：空中不能寫；3D 看不到標籤) */
+/** 標籤此刻看不到 (label.after 指向的物件還沒 used) */
+export const labelCovered = (w: World, o: ObjState): boolean => {
+  const after = o.def.label?.after;
+  return after !== undefined && !w.byId.get(after)?.used;
+};
+
+/** 2D、站穩時範圍內最近、有標籤的物件 (C9 同規則：空中不能寫；3D 看不到標籤；被蓋住的標籤不算) */
 export function labelTarget(w: World): ObjState | null {
   const p = w.player;
   if (p.mode !== '2d' || !p.onGround) return null;
   let best: ObjState | null = null;
   let bd = INTERACT_RANGE;
   for (const o of w.objs) {
-    if (!o.def.label || !isActiveIn(w, o, '2d')) continue;
+    if (!o.def.label || !isActiveIn(w, o, '2d') || labelCovered(w, o)) continue;
     const d = distanceTo(w, o);
     if (d <= bd) { bd = d; best = o; }
   }
@@ -141,11 +154,19 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
     w.events.push({ t: 'card', label: cmd.label, ok: false });
     return;
   }
+  const sized = CARDS[cmd.card].slot === 'scale';
+  // 量 (N23)：放大前卡牆檢查——放不下 → 卡片退回 (同無效字的回饋)
+  if (sized && !canResize(w, o, SCALE_CARDS[cmd.card])) {
+    say(w, 'msg.scale.noRoom');
+    w.events.push({ t: 'card', label: cmd.label, ok: false });
+    return;
+  }
   // 每張卡同時只貼一處 (從匣裡拿出來)；同一個字槽已有卡 → 換下來放回匣裡
   for (const old of cardsOn(w, cmd.label)) addItem(w, old, 1);
   addItem(w, cmd.card, -1);
   setCards(w, cmd.label, [cmd.card]);
-  if (!solveBlank(w, o)) say(w, 'msg.label.written');
+  if (sized) { rescale(w); say(w, SCALE_CARDS[cmd.card] > 1 ? 'msg.scale.da' : 'msg.scale.xiao'); }
+  else if (!solveBlank(w, o)) say(w, 'msg.label.written');
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
 
@@ -169,9 +190,17 @@ function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
   if (o.def.label?.kind === 'strip') { strip(w, o, cmd.card); return; }
   const cur = cardsOn(w, cmd.label);
   if (!cur.includes(cmd.card)) return;
+  const sized = CARDS[cmd.card]?.slot === 'scale';
+  // 取下「小」= 長回原尺寸：同樣要放得下 (放不下 → 卡片留在標籤上)
+  if (sized && !canResize(w, o, 1)) {
+    say(w, 'msg.scale.noRoom');
+    w.events.push({ t: 'card', label: cmd.label, ok: false });
+    return;
+  }
   setCards(w, cmd.label, cur.filter(c => c !== cmd.card));
   addItem(w, cmd.card, 1);
-  say(w, 'msg.label.removed');
+  if (sized) rescale(w);
+  say(w, sized ? 'msg.scale.removed' : 'msg.label.removed');
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
 

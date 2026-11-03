@@ -15,9 +15,10 @@ import { TEXT } from '../msgs';
 const OPTS = { mechanics: DEFAULT_MECHANICS, text: TEXT, abilities: ['nib' as const] };
 const CH3 = CUBE_CHAPTERS.find(c => c.chapter === 3)!;
 const SPEC: ChapterSpec = { chapter: 3, cube: CH3.cube, rooms: CH3.rooms, doors: chapterDoors(CH3.rooms) };
-/** 第三章、園丁羅盤已啟動、玩家在苗圃中央 (藏寶圖、站穩) */
+/** 第三章、園丁羅盤已啟動、玩家在苗圃中央 (藏寶圖、站穩)；3-1 細化起苗圃開場被樹根卡住 → 先把樹根貼上「小」(3-1b 的解法) */
 const open = (opts = OPTS): ChapterSession => {
   const cs = activateDial(openChapter(SPEC, chapterStart(defaultSave(), SPEC, CH3.start), opts));
+  cs.world.ext = { ...cs.world.ext, labels: { 'scale:root': ['card.xiao'] } };
   place(cs.world, 0, 0, 1.5, '2d');
   run(cs.world, {}, 0.05);
   return cs;

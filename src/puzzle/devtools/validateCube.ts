@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cubeKey, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Turn } from '../core/cube';
+import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Turn } from '../core/cube';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
 import type { CH1_MODEL } from '../content/cubes/ch1';
@@ -174,6 +174,22 @@ export interface DialModel {
   maxSolutions?: number;
   /** v0.4 門牌「間」：when 這一題完成之後，room.door 讀作「間」(對面沒有門也接到洞位；規格「門牌「間」」) */
   plates?: ReadonlyArray<{ room: string; door: string; when: string }>;
+  /**
+   * v0.4 第三章 卡榫 (P3；規格「第三章共用規則」驗證)：room 卡住時，牽涉這間房的轉動一律轉不動。
+   * until = 這一題完成之前卡住 (之後鬆開)；from = 這一題完成之後卡住；兩者都沒給 = 本區一直卡著 (例：深處的巨根在 3-4b 才縮)
+   */
+  jams?: ReadonlyArray<{ room: string; until?: string; from?: string }>;
+}
+
+/** 這組旗標下卡住的房 */
+function jammedRooms(m: DialModel, flags: ReadonlySet<string>): Set<string> {
+  return new Set((m.jams ?? []).filter(j => (j.until === undefined || !flags.has(j.until)) && (j.from === undefined || flags.has(j.from))).map(j => j.room));
+}
+
+/** 這一個轉動 (組) 在排列 s 下牽涉到的房 (組內格子上的房) */
+function roomsIn(def: CubeDef, s: CubeState, group: string): string[] {
+  const cells = cellsOf(def, s, group);
+  return Object.keys(s.pos).filter(r => cells.some(c => sameCell(c, s.pos[r])));
 }
 
 /** 這組旗標下讀作「間」的門 (`room.door`) */
@@ -304,6 +320,13 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     return ls.length > 0 && !ls.some(l => { const i = pid.get(l.until); return i !== undefined && (f & (1 << i)) !== 0; });
   };
   const flagSet = (f: number): Set<string> => new Set(m.puzzles.filter((_, i) => f & (1 << i)).map(p => p.id));
+  // 卡榫：依旗標決定哪些房卡住 (旗標組合 → 卡住的房；沒有 jams = 永遠空)
+  const jamMemo = new Map<number, Set<string>>();
+  const jamsAt = (f: number): Set<string> => { let j = jamMemo.get(f); if (!j) { j = jammedRooms(m, flagSet(f)); jamMemo.set(f, j); } return j; };
+  const optJammed = (a: number, o: number, f: number): boolean => {
+    const j = jamsAt(f);
+    return j.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => j.has(r));
+  };
   const finish = pid.get(m.finish) ?? -1;
   const dialRoom = rooms.indexOf(def.dial?.entry.room ?? '');
   const start = rooms.indexOf(m.start);
@@ -342,7 +365,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     if (d && k > 0) {
       for (let o = 0; o < arr.opts.length; o++) {
         const a2 = arr.next[a * arr.opts.length + o];
-        if (a2 < 0 || optLocked(o, f)) continue;
+        if (a2 < 0 || optLocked(o, f) || optJammed(a, o, f)) continue;
         add(enc(a2, r, f, d, k - 1));
       }
     }
@@ -376,6 +399,8 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
   const def = m.cube;
   const locks = def.dial?.locks ?? [];
   const usable = arr.opts.map(o => { const ls = locks.filter(l => l.group === o.group); return ls.length === 0 || ls.some(l => flags.has(l.until)); });
+  const jams = jammedRooms(m, flags);
+  const jammed = (a: number, o: number): boolean => jams.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => jams.has(r));
   const plates = platesFor(m, flags);
   const reach = (a: number, from: readonly string[]): string[] => {
     const ls = links(def, arr.states[a], m.doors, plates);
@@ -407,7 +432,7 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
       }
       if (seq.length > 0 && solved(a, rs)) return true; // 較短就解開了：屬於較淺的層
       for (let o = 0; o < arr.opts.length; o++) {
-        if (!usable[o]) continue;
+        if (!usable[o] || jammed(a, o)) continue;
         const a2 = arr.next[a * arr.opts.length + o];
         if (a2 < 0) continue;
         const rs2 = reach(a2, rs);
@@ -545,8 +570,8 @@ export function validateDial(m: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
-  return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish };
+  return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish, ...extra };
 }

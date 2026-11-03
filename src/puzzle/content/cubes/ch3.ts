@@ -3,7 +3,8 @@
 //   南列：■ 水塔 (實心)｜H2 溫床 (bed，隱藏房占位)｜3-4 溫室深處 (depths)
 //   屋框：章門入口 (來時的走廊，接書房深處的章門) 在 [0,1] 西側；天窗在 [0,0]、[1,0] 北側；章門出口 (往地下室) 在 [2,2] 南側
 // 組 = 九格各一個 slideCell (c0～c8，格號 x + 3y)；沒有鎖扣 (本章的限制改由卡榫擔任，3-1b 起)
-import type { CubeDef, Side } from '../../core/cube';
+import type { CubeDef, CubeState, Side } from '../../core/cube';
+import type { ZonePuzzle } from './ch2';
 
 export const CH3_CUBE: CubeDef = {
   id: 'ch3',
@@ -41,4 +42,24 @@ export const CH3_GLASS: Readonly<Record<string, RoomGlass>> = {
   night: { glass: ['N', 'S'] },
   depths: { glass: ['N', 'W'] },
   bed: { glass: ['N', 'E'], prism: [['N', 'E']] }
+};
+
+/** 苗圃此刻不在原格 [0,1] */
+const nurseryAway = (s: CubeState): boolean => !!s.pos.nursery && !(s.pos.nursery[0] === 0 && s.pos.nursery[1] === 1);
+
+/**
+ * 3-1 區的抽象模型 (devtools/validateDial；規格 6「3-1 苗圃（細化）」)：九格滑動、預算各房 8；卡榫 = 苗圃 (樹根，3-1b.shrink 之前)、
+ * 溫室深處 (巨根；3-4b 才縮，本區一直卡著)。題：3-1a = 苗圃 (不需轉動)；3-1b.shrink = 苗圃 (花架門開了才貼得到「小」)；
+ * 3-1b = 人在苗圃、苗圃不在原格 (3-1b 的完成判定，mechanics/nursery)；終點 3-1b。三題都是教學題 (P17 / P3 首次，D16 ③ 可唯一)
+ */
+export const CH3_ZONE31 = {
+  cube: CH3_CUBE,
+  puzzles: [
+    { id: '3-1a', room: 'nursery', needs: [], teaching: true },
+    { id: '3-1b.shrink', room: 'nursery', needs: ['3-1a'], teaching: true, goal: (_s, f) => f.has('3-1a') },
+    { id: '3-1b', room: 'nursery', needs: ['3-1b.shrink'], teaching: true, goal: (s, f) => f.has('3-1b.shrink') && nurseryAway(s) }
+  ] as readonly ZonePuzzle[],
+  jams: [{ room: 'nursery', until: '3-1b.shrink' }, { room: 'depths' }] as ReadonlyArray<{ room: string; until?: string; from?: string }>,
+  start: 'nursery',
+  finish: '3-1b'
 };

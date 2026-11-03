@@ -286,7 +286,7 @@ export const portraitCanvas = (variant: number): THREE.Texture => cached(`portra
  * 標籤 (N22；只畫在藏寶圖)：墨框 + 字；covered = 原字被詞卡蓋住 (卡片底色 + 卡角)；
  * scale = 字旁多一格空著的方槽 (尺度卡槽，規格 7.2：可貼尺度卡的標籤多一格方槽；第一章只鋪陳)
  */
-export const labelTag = (pal: Palette, text: string, covered: boolean, scale: boolean): THREE.Texture => cachedFor(pal, `label|${text}|${covered}|${scale}`, () => canvas(256, 112, g => {
+export const labelTag = (pal: Palette, text: string, covered: boolean, scale: boolean, slot = ''): THREE.Texture => cachedFor(pal, `label|${text}|${covered}|${scale}|${slot}`, () => canvas(256, 112, g => {
   const ink = toCss(pal.inkBlue);
   const w = scale ? 176 : 248;
   g.fillStyle = toCss(pal.paperNote); g.fillRect(4, 4, w - 8, 104);
@@ -300,9 +300,25 @@ export const labelTag = (pal: Palette, text: string, covered: boolean, scale: bo
   // 長的字 (2-2b 下聯五個字) 縮小字級放進框裡；一兩個字照舊
   g.font = `bold ${text.length > 1 ? Math.min(54, Math.floor((w - 28) / text.length)) : 66}px "PingFang TC", "Noto Sans TC", "Songti TC", serif`;
   g.fillText(text, w / 2, 60);
-  if (scale) {
+  if (scale && slot) {
+    // 方槽貼了尺度卡 (N23)：實線方框 + 卡面的字 (大 / 小；形狀與字區分，不只靠顏色)
+    g.fillStyle = '#fff6dc'; g.fillRect(w + 6, 22, 64, 68);
+    g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(w + 6, 22, 64, 68);
+    g.fillStyle = ink; g.font = 'bold 50px "PingFang TC", "Noto Sans TC", "Songti TC", serif';
+    g.fillText(slot, w + 38, 58);
+  } else if (scale) {
     g.setLineDash([10, 8]); g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(w + 6, 22, 64, 68); g.setLineDash([]);
   }
+}));
+
+/** 縮放中的物件的角標 (規格 7.2「縮放中的物件標「大 / 小」角標」；只在藏寶圖)：方框 + 字 */
+export const scaleCornerTag = (pal: Palette, glyph: string): THREE.Texture => cachedFor(pal, `scaleCorner|${glyph}`, () => canvas(64, 64, g => {
+  const ink = toCss(pal.inkBlue);
+  g.fillStyle = '#fff6dc'; g.fillRect(4, 4, 56, 56);
+  g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(5, 5, 54, 54);
+  g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'bold 42px "PingFang TC", "Noto Sans TC", "Songti TC", serif';
+  g.fillText(glyph, 32, 35);
 }));
 
 /** 空白的提示字條 (L2 / L3 浮現前)：只有紙，沒有字跡 */

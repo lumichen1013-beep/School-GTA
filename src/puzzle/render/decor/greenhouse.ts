@@ -240,3 +240,28 @@ export const stakeDecor: DecorFactory = (p, item, { theme: { pal } }) => {
   m.position.set(num(item, 'x'), 0, num(item, 'z'));
   return { root: m, only3d: [m] };
 };
+
+/**
+ * toolBoard：西牆上的工具掛板 (木板 + 一排黃銅鉤 + 掛著的鏟子 / 剪刀 / 一捆麻繩；3-1 建築比例尺掛在它旁邊)；欄位 z (板中心)、w (沿 z 的寬)、y (板中心高，預設 1.45)
+ */
+export const toolBoardDecor: DecorFactory = (p, item, { level, theme: { pal } }) => {
+  const g = new THREE.Group();
+  const w = num(item, 'w', 1.6), y = num(item, 'y', 1.45);
+  g.add(p.mesh(box(0.04, 0.9, w), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark, outline: false }));
+  const pegs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 4; i++) pegs.push(part(box(0.1, 0.03, 0.03), 0.06, 0.32, -w / 2 + 0.2 + (i * (w - 0.4)) / 3));
+  g.add(p.mesh(merge(pegs), pal.brass, { metalness: 0.6, roughness: 0.4, outline: false }));
+  // 鏟子 (把手 + 鏟頭)、剪刀 (兩片)、麻繩 (一圈)：掛在鉤上 (鐵色 / 木色 / 麻色)
+  const tools: THREE.BufferGeometry[] = [
+    part(box(0.03, 0.42, 0.05), 0.07, 0.08, -w / 2 + 0.2 + (w - 0.4) / 3), part(box(0.02, 0.2, 0.14), 0.07, -0.2, -w / 2 + 0.2 + (w - 0.4) / 3),
+    part(box(0.02, 0.3, 0.04), 0.07, 0.12, -w / 2 + 0.2 + (2 * (w - 0.4)) / 3, 0.25, 0, 0), part(box(0.02, 0.3, 0.04), 0.075, 0.12, -w / 2 + 0.2 + (2 * (w - 0.4)) / 3, -0.25, 0, 0)
+  ];
+  g.add(p.mesh(merge(tools), pal.trim, { metalness: 0.4, roughness: 0.6, outline: false }));
+  const twine = p.mesh(new THREE.TorusGeometry(0.11, 0.035, 6, 14), 0xc9b07a, { outline: false, roughness: 0.95 });
+  twine.rotation.y = Math.PI / 2;
+  twine.position.set(0.08, 0.12, w / 2 - 0.2);
+  g.add(twine);
+  // 板背離牆 5.5 cm (不與西門門框的側面共面)
+  g.position.set(level.bounds.minX + 0.075, y, num(item, 'z'));
+  return { root: g, only3d: [g] };
+};

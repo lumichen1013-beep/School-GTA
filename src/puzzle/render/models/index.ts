@@ -14,6 +14,7 @@ import { cardCatalogModel, coupletCabinetModel, coupletModel, inkveilModel, lect
 import { doorPlateModel, pressModel, typeCaseModel, typeLockModel, typeTrayModel, typeWheelModel } from './print';
 import { bundleModel, bundleRackModel, patternCabinetModel, smallCabinetModel } from './manuscripts';
 import { diaryStandModel, keyBenchModel, landingModel } from './deep';
+import { balanceModel, paneModel, potModel, pottingShelfModel, rootModel, rulerModel, trellisModel } from './nursery';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
@@ -45,7 +46,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   coupletCabinet: coupletCabinetModel, couplet: coupletModel, cardCatalog: cardCatalogModel, lens: lensModel,
   typeCase: typeCaseModel, press: pressModel, typeTray: typeTrayModel, doorPlate: doorPlateModel, typeLock: typeLockModel, typeWheel: typeWheelModel,
   patternCabinet: patternCabinetModel, smallCabinet: smallCabinetModel, bundleRack: bundleRackModel, bundle: bundleModel,
-  landing: landingModel, keyBench: keyBenchModel, diaryStand: diaryStandModel
+  landing: landingModel, keyBench: keyBenchModel, diaryStand: diaryStandModel,
+  // 3-1 苗圃
+  balance: balanceModel, pot: potModel, trellis: trellisModel, pottingShelf: pottingShelfModel, root: rootModel, ruler: rulerModel, pane: paneModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

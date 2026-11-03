@@ -119,7 +119,7 @@ describe('外殼流程：2-5 通關 → 前往第三章　溫室 → cs:ch2 → 
     const spec: ChapterSpec = { chapter: 3, cube: CH3.cube, rooms: CH3.rooms, doors: chapterDoors(CH3.rooms) };
     const st = chapterStart(save, spec, CH3.start);
     const cs = openChapter(spec, st, { mechanics: DEFAULT_MECHANICS, text: TEXT, abilities: ['nib'] });
-    expect([cs.state.room, cs.state.door, TEXT(entryNarrationKey(spec, cs.state)), cs.world.ext.cube!.links.doorW]).toEqual(['nursery', 'doorW', '植物朝著一盞燈長。有些影子，比植物先到。', { to: 'frame', frame: 'study' }]);
+    expect([cs.state.room, cs.state.door, TEXT(entryNarrationKey(spec, cs.state)), cs.world.ext.cube!.links.doorW]).toEqual(['nursery', 'doorW', '比例尺掛在門邊。爸爸在旁邊畫了個問號。', { to: 'frame', frame: 'study' }]);
     // 5. 已看過 → 下次 (通關畫面 / 選單) 直接進
     expect(cutsceneBeforeLevel(save, '3-1')).toBeUndefined();
   });

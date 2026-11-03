@@ -9,7 +9,8 @@ export type ObjId = string;
 export type TextKey = string;
 export type TextParams = Readonly<Record<string, string | number>>;
 /** 能力 (規格 8 save.abilities；關卡以白名單限制可用能力) */
-export type AbilityId = 'nib' | 'pin' | 'section' | 'mark';
+/** v0.4 第三章：'scale' = 建築比例尺 (量；3-1 取得，跨章) */
+export type AbilityId = 'nib' | 'pin' | 'section' | 'mark' | 'scale';
 /** 物品 id ('nib' …；N9) */
 export type ItemId = string;
 /** 鎖的需求：字串 = 需持有、不消耗；consume = 使用時消耗一個 */

@@ -49,6 +49,8 @@ function pump(cs: ChapterSession): ChapterSession {
 const play = (cs: ChapterSession, cmds: Cmd[]) => { runScript(cs.world, cmds); return pump(cs); };
 const ACTIVATE: Cmd[] = [{ wait: 0.1 }, { walkTo: [-3.6, -2.8] }, { expect: w => expect(findTarget(w)?.def.id).toBe('dial'), label: '園丁羅盤' }, { act: 'interact' }];
 const activated = (): ChapterSession => play(start(), ACTIVATE);
+/** 3-1 細化起苗圃開場被樹根卡住 (卡榫)：骨架的滑動測試先把樹根貼上「小」(3-1b 的解法；章節標籤寫在當前房的 World) */
+const unjam = (cs: ChapterSession): ChapterSession => { cs.world.ext = { ...cs.world.ext, labels: { ...cs.world.ext.labels, 'scale:root': ['card.xiao'] } }; return cs; };
 /** 切到藏寶圖、站穩 */
 const in2d = (cs: ChapterSession): ChapterSession => { runScript(cs.world, [{ act: 'flip' }, { wait: 0.15 }]); return cs; };
 const T = (group: string, dir: Turn['dir']): Turn => ({ group, dir });
@@ -109,7 +111,7 @@ describe('第三章骨架：五間占位房', () => {
     expect(validateLevel(bed, { mechanics: DEFAULT_MECHANICS, bundle: zhHant }).map(i => i.code)).toEqual(['level.noExit']);
     for (const l of [nursery, gallery, night, depths]) expect([l.id, layoutDepthIssues(l)]).toEqual([l.id, []]);
     expect([TEXT(nursery.narrationKey), TEXT(gallery.titleKey), TEXT(night.titleKey), TEXT(depths.titleKey), TEXT(bed.titleKey)])
-      .toEqual(['植物朝著一盞燈長。有些影子，比植物先到。', '玻璃長廊', '夜溫室', '溫室深處', '溫床']);
+      .toEqual(['比例尺掛在門邊。爸爸在旁邊畫了個問號。', '玻璃長廊', '夜溫室', '溫室深處', '溫床']); // 3-1 細化：苗圃的旁白換成 story-bible 7.3 的 3-1 開場
   });
 });
 
@@ -154,7 +156,7 @@ describe('第三章骨架：園丁羅盤與滑動', () => {
   });
 
   it('滑一次：苗圃往北滑進空格 (連你一起；墨 8 → 7)；門接法跟著變；回退 → 回到原格、墨回 8，章節狀態與沒轉時相同 (回退堆疊除外)', () => {
-    const cs = in2d(activated());
+    const cs = unjam(in2d(activated()));
     const before = captureState(cs);
     const moved = ok(dialTurn(cs, T('c3', 'N')));
     expect([pos(moved, 'nursery'), moved.state.turns]).toEqual(['00', { left: 7, undo: [{ group: 'c3', dir: 'N' }] }]);
@@ -168,11 +170,12 @@ describe('第三章骨架：園丁羅盤與滑動', () => {
     expect([pos(n, 'night'), pos(n, 'nursery'), n.world.ext.cube!.links.archE]).toEqual(['10', '01', { to: 'wall' }]);
   });
 
-  it('轉不動的原因：往屋外 (outOfCube)、往房間 / 實心格 (notEmpty)、空格那一組 (noRoom)、站在門口 (doorway)、墨乾 (noInk)', () => {
-    const cs = in2d(activated());
+  it('轉不動的原因：往屋外 (outOfCube)、往房間 / 實心格 (notEmpty)、空格那一組 (noRoom)、站在門口 (doorway)、墨乾 (noInk)；3-1 細化：樹根沒縮 = 卡住 (jammed)', () => {
+    expect(dialBlocked(in2d(activated()), T('c3', 'N'))).toBe('jammed');
+    const cs = unjam(in2d(activated()));
     expect([dialBlocked(cs, T('c3', 'W')), dialBlocked(cs, T('c3', 'E')), dialBlocked(cs, T('c5', 'N')), dialBlocked(cs, T('c0', 'S')), dialBlocked(cs, T('c3', 'N'))])
       .toEqual(['outOfCube', 'notEmpty', 'notEmpty', 'noRoom', null]);
-    const door = activated();
+    const door = unjam(activated());
     place(door.world, -5.5, 0, 0, '3d');
     expect(dialBlocked(door, T('c3', 'N'))).toBe('doorway');
     const dry = { ...cs, state: { ...cs.state, turns: { left: 0, undo: [] } } };
@@ -204,7 +207,7 @@ describe('第二章存檔接著第三章', () => {
     const st = chapterStart(loaded, SPEC, CH3.start);
     expect([st.room, st.door, st.cube, st.dial]).toEqual(['nursery', 'doorW', initialCube(CH3_CUBE), undefined]);
     const cs3 = play(openChapter(SPEC, st, OPTS), ACTIVATE);
-    const both = withChapter(loaded, captureState(ok(dialTurn(in2d(cs3), T('c3', 'N')))));
+    const both = withChapter(loaded, captureState(ok(dialTurn(unjam(in2d(cs3)), T('c3', 'N')))));
     writeSave(store, both);
     const again = loadSave(store);
     expect([Object.keys(again.chapters).sort(), again.chapters['2'], chapterStart(again, SPEC, CH3.start).cube!.pos.nursery]).toEqual([['2', '3'], loaded.chapters['2'], [0, 0, 0]]);

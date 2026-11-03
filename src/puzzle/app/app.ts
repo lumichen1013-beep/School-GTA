@@ -36,7 +36,7 @@ import { RestartConfirm, routeFrame } from './restartConfirm';
 import { LevelSession } from './levelSession';
 import { newChapterState, singleRoomSpec, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { cubeChapterOf } from '../content/cubes';
-import { chapterDoors } from '../mechanics/cube';
+import { chapterSpecOf } from '../mechanics';
 import { chapterStart, entryNarrationKey, withChapter } from '../meta/chapters';
 import { browserStorage } from './services';
 import { AudioBridge } from './audioBridge';
@@ -216,6 +216,8 @@ export class PuzzleApp {
         const cc = cubeChapterOf(e.id);
         const room = s.kind === 'room';
         if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? Object.keys(cc.levels) : []));
+        // 通關畫面是模態的：收起展開圖 / 轉動模式 / 字卡匣 (在轉動模式裡完成的題，例 3-1b)；底下的世界照常推進但不收玩家輸入 (frame)
+        this.session?.closeOverlays();
         // 繼續：章門打開 → 下一章的第一關 (「前往第二章　書房」)；章內的房間通關 → 回到本章 (「繼續探索」)
         const kind = s.kind ?? 'level';
         const next = nextAfterClear(e.id, kind, CHAPTERS);
@@ -246,7 +248,7 @@ export class PuzzleApp {
       const spec = singleRoomSpec(e.load());
       return { spec, state: newChapterState(spec, e.id, null) };
     }
-    const spec: ChapterSpec = { chapter: cc.chapter, cube: cc.cube, rooms: cc.rooms, doors: chapterDoors(cc.rooms) };
+    const spec: ChapterSpec = chapterSpecOf(cc);
     return { spec, state: chapterStart(this.save, spec, cc.start, cc.legacy) };
   }
 
@@ -464,7 +466,8 @@ export class PuzzleApp {
     if (input.pressed.includes('help')) this.toggleHelp();
     if (this.narrationUntil && now > this.narrationUntil) this.skipNarration();
     switch (routeFrame(this.confirm, this.screen.id, input.pressed, now)) {
-      case 'update': this.session?.update(elapsed, input); break;
+      // 通關畫面開著：世界照常推進 (過場、動畫)，但不收玩家輸入 (按 E 不會撿到通關畫面底下的東西)
+      case 'update': this.session?.update(elapsed, this.screen.id === 'clear' ? { ...input, moveX: 0, moveZ: 0, jump: false, pressed: [] } : input); break;
       case 'open': this.openConfirm(now); break;
       case 'confirm': this.closeConfirm(); this.restart(); break;
       case 'cancel': this.closeConfirm(); break;

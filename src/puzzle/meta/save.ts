@@ -7,7 +7,7 @@ export const SAVE_KEY = 'puzzle:save';
 export const SAVE_CORRUPT_KEY = 'puzzle:save:corrupt';
 /** 舊版玄關通關旗標 (遷移後刪除) */
 export const LEGACY_FOYER_KEY = 'puzzle:foyer:cleared';
-export const ABILITY_IDS: readonly AbilityId[] = ['nib', 'pin', 'section', 'mark'];
+export const ABILITY_IDS: readonly AbilityId[] = ['nib', 'pin', 'section', 'mark', 'scale'];
 export const NAME_MAX = 12;
 
 /** 存檔版本 (v0.3：v3 = 加章節快照) */

@@ -51,5 +51,12 @@ export const term = {
   'term.ms.father': '爸爸的手稿',
   // 2-5 書房深處：房間的銅鑰匙 (第二章章鑰匙)、許問津的手記第二頁
   'term.key.study': '房間的銅鑰匙',
-  'term.diary.2': '手記第二頁'
+  'term.diary.2': '手記第二頁',
+  // 第三章 溫室：建築比例尺 (道具 / 能力 scale)、尺度卡 (物品 id card.da / card.xiao；卡面的字)、花窗玻璃片 (章節道具；3-4a 的花窗)
+  'term.scale': '建築比例尺',
+  'term.card.da': '尺度卡「大」',
+  'term.card.xiao': '尺度卡「小」',
+  'term.glyph.da': '大',
+  'term.glyph.xiao': '小',
+  'term.pane.1': '花窗玻璃片・一'
 } as const;
