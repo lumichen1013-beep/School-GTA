@@ -8,7 +8,7 @@ const isTextField = (t: EventTarget | null): boolean => {
   return tag === 'INPUT' || tag === 'TEXTAREA';
 };
 
-const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
 export class KeyboardSource implements InputSource {
   private down = new Set<string>();

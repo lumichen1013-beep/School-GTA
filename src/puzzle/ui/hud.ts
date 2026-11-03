@@ -21,6 +21,8 @@ export interface HudData {
   items: ReadonlyArray<{ id: string; n: number; name: string }>;
   prompt: string | null;
   toast: { seq: number; text: string };
+  /** v0.4 控制盤章節 2D 的墨量小計 (「墨 ●●●○○○」)；沒有 = 不顯示 */
+  ink?: string;
 }
 
 /** HUD：依 HudData 做 diff 後寫 DOM；旁白、通關畫面 (DOM 由 ui/dom.ts 建立) */
@@ -28,6 +30,8 @@ export class PuzzleHud {
   private root = $('pz-root');
   private modeEl = $('pz-mode');
   private invEl = $('pz-inv');
+  private inkEl = $('pz-ink');
+  private ink = '';
   private promptEl = $('pz-prompt');
   private toastEl = $('pz-toast');
   private narrationEl = $('pz-narration');
@@ -53,6 +57,7 @@ export class PuzzleHud {
     this.setMode(m.mode, m.modeText);
     this.setItems(m.items);
     this.setPrompt(m.prompt);
+    if ((m.ink ?? '') !== this.ink) { this.ink = m.ink ?? ''; this.inkEl.textContent = this.ink; }
   }
 
   private setMode(m: Mode, label: string): void {

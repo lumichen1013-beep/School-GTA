@@ -399,10 +399,14 @@ function afterTurn(cs: ChapterSession, cube: CubeState, turns: { left: number; u
 }
 
 /**
- * 控制盤轉一次 (純函式，只回傳新 session；World 只更新 ext 的門接法)：檢查順序 noDial → noGroup / locked → jammed → doorway → noInk → applyTurn；
- * 成功：墨 −1、這一步推進回退堆疊。玩家所在房在組內就跟著移動 (房間本地座標不變)
+ * 這一次轉動此刻會不會被擋 (只算不寫；預覽用)：檢查順序 noDial → noGroup / locked → jammed → doorway → noInk → 魔方本身 (applyTurn)
  */
-export function dialTurn(cs: ChapterSession, t: Turn): ChapterSession | { blocked: DialBlock } {
+export function dialBlocked(cs: ChapterSession, t: Turn): DialBlock | null {
+  const r = tryTurn(cs, t);
+  return 'blocked' in r ? r.blocked : null;
+}
+
+function tryTurn(cs: ChapterSession, t: Turn): { cube: CubeState; turns: { left: number; undo: TurnRec[] } } | { blocked: DialBlock } {
   const { spec, state, world } = cs;
   const def = spec.cube;
   if (!def || !state.cube || !isDialChapter(spec)) return { blocked: 'noCube' };
@@ -415,7 +419,17 @@ export function dialTurn(cs: ChapterSession, t: Turn): ChapterSession | { blocke
   if (turns.left <= 0) return { blocked: 'noInk' };
   const r = applyTurn(def, state.cube, t);
   if (isBlocked(r)) return r;
-  return afterTurn(cs, r, { left: turns.left - 1, undo: [...turns.undo, { group: t.group, dir: t.dir }] });
+  return { cube: r, turns };
+}
+
+/**
+ * 控制盤轉一次 (純函式，只回傳新 session；World 只更新 ext 的門接法)：阻擋檢查同 dialBlocked；
+ * 成功：墨 −1、這一步推進回退堆疊。玩家所在房在組內就跟著移動 (房間本地座標不變)
+ */
+export function dialTurn(cs: ChapterSession, t: Turn): ChapterSession | { blocked: DialBlock } {
+  const r = tryTurn(cs, t);
+  if ('blocked' in r) return r;
+  return afterTurn(cs, r.cube, { left: r.turns.left - 1, undo: [...r.turns.undo, { group: t.group, dir: t.dir }] });
 }
 
 /** 回退一步 (不耗墨，退回 1 滴)：堆疊空 → nothingToUndo；反向轉動照樣檢查卡榫 / 門口 / 魔方本身 (不查墨量) */

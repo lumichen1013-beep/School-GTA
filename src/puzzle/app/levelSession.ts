@@ -3,7 +3,8 @@ import type { AbilityId, GameEvent, Mode, World } from '../core/types';
 import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
 import type { Side } from '../core/cube';
-import { captureState, openChapter, restartRoom, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { applyChapterCommand, captureState, clearUndo, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
 import type { Bindings, InputFrame } from '../input/types';
@@ -19,7 +20,7 @@ import type { CardTray } from '../ui/cardTray';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
-import { deriveCubeMap, previewFor } from './cubeMapModel';
+import { deriveCubeMap, deriveTurnMode, inkHud, previewFor, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel } from './cubeMapModel';
 import { closedTrayKey, deriveCardTray, slotCommand, uncardCommand } from './cardTrayModel';
 
 export interface SessionContext {
@@ -40,6 +41,8 @@ export interface SessionContext {
   calm?: boolean;
   /** 字卡匣打開時：按著的鍵一律視為放開 (mobile-controls 2.5 releaseAll) */
   onTrayOpen?(): void;
+  /** 進入轉動模式時：按著的鍵一律視為放開 (v0.4；mobile-controls 2.5) */
+  releaseInput?(): void;
 }
 
 export interface SessionHooks {
@@ -76,6 +79,13 @@ export class LevelSession {
   /** 字卡匣關著時按了 1～3 / X (站在標籤前)：等匣打開後補做這一下 (n = 第幾格；0 = 取下)；E 沒打開匣 (缺卡 / 缺筆尖) → 0.25 秒後作廢 */
   private pendingTray: number | null = null;
   private pendingAge = 0;
+  /** v0.4 控制盤：轉動模式 (展開圖的「轉」頁籤)、選取的標頭、方向軸上一幀 (剛按下 = 一步)、待送進下一個固定步的章節指令 */
+  private turnMode = false;
+  private turnSel: TurnModeModel['selected'] = null;
+  private axes: AxisMemo = { x: 0, z: 0 };
+  private chapterQueue: ChapterCommand[] = [];
+  /** 魔方儀剛啟動：下一次能進轉動模式時 (切到藏寶圖、站穩) 自動打開展開圖的轉動模式 (規格 5.4.2) */
+  private autoTurn = false;
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -92,6 +102,9 @@ export class LevelSession {
   get isMapOpen(): boolean { return this.mapOpen && this.renderMode === '2d'; }
   /** 字卡匣開著的標籤 id (開發期自動化驗證用) */
   get trayOpen(): string | null { return this.trayLabel; }
+  /** 轉動模式是否開著、目前選取的標頭 (開發期自動化驗證用) */
+  get isTurnMode(): boolean { return this.turnMode && this.isMapOpen; }
+  get turnSelection(): TurnModeModel['selected'] { return this.turnSel; }
 
   /** 為目前的 World 建迴圈 / 場景 / 鏡頭 (舊場景釋放)；過場與 HUD 訊息重置 */
   private mount(): void {
@@ -104,8 +117,12 @@ export class LevelSession {
         this.cams.follow(1, this.renderMode);
       },
       onCleared: this.hooks.onCleared,
-      onEvent: e => { this.events.push(e); this.loop.halt(); }
+      onEvent: e => { this.events.push(e); this.loop.halt(); },
+      onChapterCommand: c => this.runChapterCommand(c)
     });
+    this.turnMode = false;
+    this.turnSel = null;
+    this.chapterQueue = [];
     this.trayLabel = null;
     this.pendingTray = null;
     this.commands = [];
@@ -141,12 +158,13 @@ export class LevelSession {
   }
 
   /** 換房 / 轉動 / 跨房 / 旗標：交給章節層；轉動 = 連接表立即更新、過場中段說明；換房 = 過場中段換場景。字卡匣事件：開匣 / 無效字回饋 */
-  private handleEvents(): void {
-    for (const e of this.events.splice(0)) {
+  private handleEvents(): GameEvent[] {
+    const all = this.events.splice(0);
+    for (const e of all) {
       if (e.t === 'labelOpen') { this.openTray(e.label); continue; }
       if (e.t === 'card') { if (!e.ok) this.traySeq++; continue; }
       const r = applyChapterEvent(this.cs, e, this.opts);
-      if (r.kind === 'state' || r.kind === 'dial') { this.cs = r.cs; this.saveChapter(); continue; }
+      if (r.kind === 'state' || r.kind === 'dial') { this.cs = r.cs; this.saveChapter(); if (r.kind === 'dial') this.autoTurn = true; continue; }
       if (r.kind === 'enter') {
         const next = r.next;
         this.mapOpen = false;
@@ -155,20 +173,75 @@ export class LevelSession {
           this.mount();
           this.saveChapter();
         });
-        return;
+        return all;
       }
       if (r.kind === 'turn') {
         this.cs = r.cs;
         this.saveChapter();
         this.startFx(r.dir, () => say(this.world, 'msg.cube.turned'));
-        return;
+        return all;
       }
     }
+    return all;
+  }
+
+  // ── v0.4 控制盤 (轉動模式；architecture 4.16.1) ──
+
+  /** 有其他疊層開著 (字卡匣、過場) → 不能進轉動模式 */
+  private get overlay(): boolean { return this.trayLabel !== null || this.fx !== null || this.loop.isLocked; }
+
+  /** Tab / 「轉」頁籤：進出轉動模式 (進入條件不成立 → 說明原因；進入 = 打開展開圖、放開按著的鍵) */
+  toggleTurnMode(): void {
+    if (!isDialChapter(this.cs.spec)) return;
+    if (this.turnMode) { this.turnMode = false; this.turnSel = null; return; }
+    const why = turnModeDenied(this.world, this.overlay);
+    if (why) { say(this.world, TURN_MODE_DENY_MSG[why]); return; }
+    this.enterTurnMode();
+  }
+
+  private enterTurnMode(): void {
+    this.turnMode = true;
+    this.mapOpen = true;
+    this.turnSel = null;
+    this.autoTurn = false;
+    this.axes = { x: 0, z: 0 };
+    this.ctx.releaseInput?.();
+  }
+
+  /** 轉動模式的一個輸入 (點標頭 / 確認 / 回退 / 離開；ui 的按鈕與鍵盤共用)：產生的章節指令排進下一個固定步 */
+  turnInput(i: TurnModeInput): void {
+    if (!this.turnMode || this.fx) return;
+    const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel);
+    const r = reduceTurnMode(this.turnSel, i, m);
+    this.turnSel = r.sel;
+    if (r.command) this.chapterQueue.push(r.command);
+    if (r.exit) { this.turnMode = false; this.turnSel = null; }
+  }
+
+  /** 固定步開始時套用章節指令：轉不動 → 說明原因；轉成功 → 存檔，玩家所在房跟著移動就播轉動過場 (本步停下) */
+  private runChapterCommand(c: ChapterCommand): void {
+    const before = this.cs.state.cube?.pos[this.cs.state.room];
+    const r = applyChapterCommand(this.cs, c);
+    if ('blocked' in r) { say(this.world, DIAL_BLOCK_MSG[r.blocked]); return; }
+    this.cs = r;
+    this.saveChapter();
+    const after = r.state.cube?.pos[r.state.room];
+    const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1]);
+    const done = c.t === 'undo' ? 'msg.dial.undone' : moved ? 'msg.dial.turnedHere' : 'msg.dial.turned';
+    if (!moved) { say(this.world, done); return; }
+    // 過場方向 = 你這間房的移動方向 (列循環繞回時依轉動方向)
+    const dx = after![0] - before![0];
+    const dy = after![1] - before![1];
+    const turnDir = c.t === 'turn' && typeof c.turn.dir === 'number' ? c.turn.dir : 0;
+    const dir: Side = dy !== 0 ? (dy > 0 ? 'S' : 'N') : (Math.abs(dx) > 1 ? turnDir > 0 : dx > 0) ? 'E' : 'W';
+    this.loop.halt();
+    this.startFx(dir, () => say(this.world, done));
   }
 
   private openTray(label: string): void {
     this.trayLabel = label;
     this.mapOpen = false;
+    this.turnMode = false;
     this.ctx.onTrayOpen?.();
     const n = this.pendingTray;
     this.pendingTray = null;
@@ -194,6 +267,7 @@ export class LevelSession {
     if (!this.onCube || this.fx) return;
     if (this.world.player.mode !== '2d') { say(this.world, 'msg.cube.mapOnly2d'); this.mapOpen = false; return; }
     this.mapOpen = !this.mapOpen;
+    if (!this.mapOpen) { this.turnMode = false; this.turnSel = null; }
   }
 
   resize(aspect: number): void {
@@ -207,6 +281,20 @@ export class LevelSession {
       const r = this.fx.fx.tick(Math.min(Math.max(elapsedSec, 0), 1 / 20));
       if (r.swapNow) this.fx.onSwap();
       if (r.done) this.fx = null;
+      return;
+    }
+    const invBefore = JSON.stringify(this.world.inv);
+    if (this.turnMode && (this.world.player.mode !== '2d' || this.trayLabel !== null)) { this.turnMode = false; this.turnSel = null; }
+    if (this.turnMode) {
+      // 轉動模式：移動軸、跳躍、世界動作不送進世界 (世界照常推進，規格 Q-AF)；方向鍵選標頭、Enter 確認、Z 回退、Esc / Tab 離開、M 關圖
+      if (input.pressed.includes('map')) this.toggleMap();
+      const f = turnModeFrame(input, this.axes);
+      this.axes = f.axes;
+      for (const i of f.inputs) this.turnInput(i);
+      this.tapInteract = false;
+      const chapter = this.chapterQueue.splice(0);
+      this.loop.frame(elapsedSec, { ...f.loop, ...(chapter.length ? { chapter } : {}) });
+      this.afterFrame(invBefore);
       return;
     }
     let pressed = input.pressed.filter(isWorldAction);
@@ -225,15 +313,30 @@ export class LevelSession {
       }
     } else {
       if (input.pressed.includes('map')) this.toggleMap();
+      if (input.pressed.includes('turnMode')) this.toggleTurnMode();
       // 字卡匣關著時按 1～3 / X：站在標籤前 = 按 E 打開並補做這一下；否則說明怎麼打開 (cardTrayModel.closedTrayKey)
       const k = pressed.includes('interact') ? null : closedTrayKey(this.world, input.pressed);
       if (k?.open) { this.pendingTray = k.n; this.pendingAge = 0; pressed = [...pressed, 'interact']; }
       else if (k?.howto) say(this.world, 'msg.cards.howto');
     }
     const commands = this.commands.splice(0);
-    this.loop.frame(elapsedSec, { ...move, pressed, ...(commands.length ? { commands } : {}) });
-    this.handleEvents();
+    const chapter = this.chapterQueue.splice(0);
+    this.loop.frame(elapsedSec, { ...move, pressed, ...(commands.length ? { commands } : {}), ...(chapter.length ? { chapter } : {}) });
+    this.afterFrame(invBefore);
     if (this.pendingTray !== null && (this.pendingAge += elapsedSec) > 0.25) this.pendingTray = null;
+    // 魔方儀剛啟動：切到藏寶圖、站穩後自動進一次轉動模式
+    if (this.autoTurn && !this.fx && turnModeDenied(this.world, this.overlay) === null) this.enterTurnMode();
+  }
+
+  /** 一幀之後：章節事件；控制盤章節另做「本段結束」(取得旗標 / 道具 / 字卡、跨房 → 清空回退堆疊) 與鎖扣解開 (道具 / 能力條件) */
+  private afterFrame(invBefore: string): void {
+    const evs = this.handleEvents();
+    if (!isDialChapter(this.cs.spec) || this.fx) return;
+    const gotItem = JSON.stringify(this.world.inv) !== invBefore && Object.entries(this.world.inv).some(([k, n]) => n > (JSON.parse(invBefore)[k] ?? 0));
+    const cleared = clearUndo(this.cs, evs, gotItem);
+    const r = refreshUnlocks(cleared);
+    if (r.cs !== this.cs) { this.cs = r.cs; this.saveChapter(); }
+    if (r.added.length && !evs.some(e => e.t === 'done')) say(this.world, 'msg.dial.unlocked');
   }
 
   /** 畫一幀：HUD 依目前狀態；玩家位置在上一步與目前之間內插 (高更新率螢幕不頓) */
@@ -241,10 +344,10 @@ export class LevelSession {
     const w = this.world;
     const { ctx } = this;
     const locked = this.loop.isLocked || this.fx !== null;
-    const hud = deriveHud(w, ctx.text, { renderMode: this.renderMode, locked, bindings: ctx.bindings });
-    if (this.renderMode === '3d') this.mapOpen = false;
+    const hud = deriveHud(w, ctx.text, { renderMode: this.renderMode, locked, bindings: ctx.bindings, ink: this.onCube ? inkHud(this.cs, ctx.text, this.renderMode) : null });
+    if (this.renderMode === '3d') { this.mapOpen = false; this.turnMode = false; }
     const tray = locked ? null : this.trayModel();
-    if (tray) hud.prompt = null;
+    if (tray || this.isTurnMode) hud.prompt = null;
     // 互動提示可點 (觸控 = 按 E；mobile-controls 2.1)；展開圖的提示不可點 (另有「圖」鍵)
     ctx.hud.setPromptTap(!!hud.prompt);
     // 2D、在魔方上、沒有其他提示：提示可以看展開圖
@@ -253,7 +356,7 @@ export class LevelSession {
     }
     ctx.hud.render(hud, nowMs);
     ctx.map?.setButton(this.onCube && this.renderMode === '2d' && !locked && !tray);
-    ctx.map?.render(this.isMapOpen && !locked && !tray ? deriveCubeMap(this.cs, ctx.text, previewFor(this.cs)) : null);
+    ctx.map?.render(this.isMapOpen && !locked && !tray ? this.mapModel() : null);
     ctx.tray?.render(tray);
     const p = w.player;
     const prev = this.loop.prev;
@@ -272,6 +375,15 @@ export class LevelSession {
     } finally {
       Object.assign(p, saved);
     }
+  }
+
+  /** 展開圖：一般 = 現況 + 拉桿預覽；控制盤章節另有「轉」頁籤，轉動模式中 = 標頭、預覽、墨量、三顆鈕 */
+  private mapModel() {
+    const { text } = this.ctx;
+    const m = deriveCubeMap(this.cs, text, this.turnMode ? null : previewFor(this.cs));
+    if (!m) return null;
+    const tab = turnTab(this.cs, text, this.turnMode, this.overlay);
+    return { ...m, ...(tab ? { tab } : {}), ...(this.turnMode ? { turn: deriveTurnMode(this.cs, text, this.turnSel) } : {}) };
   }
 
   dispose(): void {

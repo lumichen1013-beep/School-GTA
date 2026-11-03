@@ -1,5 +1,6 @@
 import type { GameEvent, Mode, World } from '../core/types';
 import type { WorldAction, WorldCommand } from '../core/actions';
+import type { ChapterCommand } from '../core/chapter';
 import { step } from '../core/step';
 import type { Transition } from '../render/transitions';
 
@@ -8,7 +9,8 @@ export const FIXED_DT = 1 / 60;
 /** 單幀最多計入的時間 (沿用舊主迴圈的 1/20 秒上限，分頁切回時不會一次跑太多步) */
 export const MAX_FRAME_SEC = 1 / 20;
 
-export interface LoopInput { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[]; commands?: readonly WorldCommand[] }
+/** chapter = 章節層指令 (v0.4 控制盤的轉動 / 回退)：同 commands，只送進下一個固定步 (在 step 之前交給 onChapterCommand) */
+export interface LoopInput { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[]; commands?: readonly WorldCommand[]; chapter?: readonly ChapterCommand[] }
 export interface PlayerPose { x: number; y: number; z: number; mode: Mode }
 
 export interface LoopHooks {
@@ -18,6 +20,8 @@ export interface LoopHooks {
   onCleared?(): void;
   /** 切換以外的世界事件 (v0.3：door / turnRequest，交給章節層) */
   onEvent?(e: GameEvent): void;
+  /** 章節層指令 (v0.4)：固定步開始時依序交出；外殼在這裡呼叫 dialTurn / undoTurn (轉成功 → halt，本步不再推進世界) */
+  onChapterCommand?(c: ChapterCommand): void;
 }
 
 /**
@@ -29,6 +33,7 @@ export class LevelLoop {
   private pending: WorldAction[] = [];
   /** 本幀收到、尚未送進世界的指令 (字卡匣)；與動作相同：只送進下一個固定步 */
   private pendingCommands: WorldCommand[] = [];
+  private pendingChapter: ChapterCommand[] = [];
   private locked = false;
   private clearedFired = false;
   private halted = false;
@@ -50,12 +55,14 @@ export class LevelLoop {
     this.acc = 0;
     this.pending = [];
     this.pendingCommands = [];
+    this.pendingChapter = [];
   }
 
   /** 推進一幀；回傳本幀執行的固定步數 */
   frame(elapsedSec: number, input: LoopInput): number {
     for (const a of input.pressed) if (!this.pending.includes(a)) this.pending.push(a);
     this.pendingCommands.push(...(input.commands ?? []));
+    this.pendingChapter.push(...(input.chapter ?? []));
     this.acc += Math.min(Math.max(elapsedSec, 0), MAX_FRAME_SEC);
     this.halted = false;
     let n = 0;
@@ -71,14 +78,21 @@ export class LevelLoop {
     const w = this.world;
     const p = w.player;
     Object.assign(this.prev, { x: p.x, y: p.y, z: p.z, mode: p.mode });
-    if (w.cleared) { this.pending = []; this.pendingCommands = []; return; }
+    if (w.cleared) { this.pending = []; this.pendingCommands = []; this.pendingChapter = []; return; }
     if (this.locked) {
       const r = this.transition!.tick(FIXED_DT);
       if (r.swapNow) this.hooks.onSwap?.();
       if (r.done) this.locked = false;
       this.pending = [];
       this.pendingCommands = [];
+      this.pendingChapter = [];
       return;
+    }
+    const chapter = this.pendingChapter;
+    this.pendingChapter = [];
+    for (const c of chapter) {
+      this.hooks.onChapterCommand?.(c);
+      if (this.halted) return;
     }
     const pressed = this.pending;
     const commands = this.pendingCommands;

@@ -15,7 +15,7 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   root.replaceChildren();
   const hud = el('div', 'pz-hud');
   const status = el('div', 'pz-status');
-  status.append(el('span', 'pz-mode', text('term.mode3d')), el('span', 'pz-inv', text('ui.inv.none')));
+  status.append(el('span', 'pz-mode', text('term.mode3d')), el('span', 'pz-ink'), el('span', 'pz-inv', text('ui.inv.none')));
   const helpEl = el('div', 'pz-help');
   fillHelp(helpEl, text, help);
   hud.append(status, helpEl, el('div', 'pz-prompt'), el('div', 'pz-toast'));

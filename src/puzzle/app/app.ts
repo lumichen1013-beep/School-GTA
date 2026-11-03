@@ -81,7 +81,8 @@ export class PuzzleApp {
   constructor(root: HTMLElement) {
     buildPuzzleDom(root, this.text, [
       ...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' },
-      { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' }
+      { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
+      { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' }
     ]);
     this.hud = new PuzzleHud(this.text);
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap());
@@ -236,7 +237,8 @@ export class PuzzleApp {
         map: this.cubeMap,
         tray: this.tray,
         calm: this.settings.calmTension,
-        onTrayOpen: () => this.input.releaseAll()
+        onTrayOpen: () => this.input.releaseAll(),
+        releaseInput: () => this.input.releaseAll()
       },
       spec, state,
       {

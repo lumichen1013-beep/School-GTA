@@ -30,6 +30,45 @@ export interface CubeMapModel {
   /** 沒有預覽時的提示 (站到拉桿旁看預覽) */
   hint: string;
   legend: { open: string; wall: string; arch: string; you: string };
+  /** v0.4 控制盤章節：「轉」頁籤 (null = 本章不是控制盤章)；turn = 轉動模式中的資料 (deriveTurnMode) */
+  tab?: { label: string; enabled: boolean; reason: string | null; active: boolean } | null;
+  turn?: TurnModeModel | null;
+}
+
+// ── v0.4 轉動模式 (控制盤；規格 5.4.1、mobile-controls 2.5 / 3.3) ──
+
+export type TurnDir = 1 | -1 | Side;
+/** 一顆標頭箭頭 = 一組 + 一個方向 (列的左右端 ◀ ▶、行 ⇅ (兩列 = 對調) 或 ▲ ▼、層 / 切片 ↻ ↺)；at = 畫在展開圖哪一邊的第幾排 */
+export interface TurnHeader {
+  group: string;
+  kind: 'row' | 'col' | 'slideCell' | 'layer' | 'slice';
+  dir: TurnDir;
+  state: 'ok' | 'locked' | 'jammed';
+  at: { side: 'top' | 'bottom' | 'left' | 'right' | 'ring'; i: number };
+  glyph: string;
+  /** 無障礙名稱 (含序號與方向) */
+  label: string;
+  selected: boolean;
+}
+/** 轉動預覽 (只算不寫)：轉後的格與門、哪些房間從哪格移到哪格 */
+export interface TurnPreview {
+  cells: MapCell[];
+  doors: MapDoor[];
+  moves: Array<{ room: string; name: string; from: [number, number]; to: [number, number] }>;
+}
+export interface TurnModeModel {
+  headers: TurnHeader[];
+  selected: { group: string; dir: TurnDir } | null;
+  /** 選了可轉的組時的轉後樣子；轉不動 (blocked) 時為 null */
+  preview: TurnPreview | null;
+  ink: { left: number; max: number };
+  canUndo: boolean;
+  /** 選到的轉動若會被擋：原因代碼 (core DialBlock) 與訊息 (預覽時就顯示) */
+  blocked: string | null;
+  blockedText: string | null;
+  /** 說明列 (沒選 = 怎麼操作；選了 = 預覽：第 1 列往右 (還沒轉) / 被擋的原因) */
+  caption: string;
+  text: { confirm: string; undo: string; exit: string; ink: string; keys: string };
 }
 
 const INK = '#3a2618';

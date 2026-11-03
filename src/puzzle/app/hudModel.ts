@@ -12,7 +12,8 @@ import { labelTitle } from './cardTrayModel';
 /** HUD 要顯示的一切 (純資料；ui/hud.ts 只做 diff 後寫 DOM)：模式、物品、[E] 提示 (過場中 / 通關後為 null)、最後訊息 */
 export type HudModel = HudData;
 
-export interface HudView { renderMode: Mode; locked: boolean; bindings: Bindings }
+/** ink = 控制盤章節 2D 的墨量小計 (app/cubeMapModel inkHud；第一章 / 3D 為 null) */
+export interface HudView { renderMode: Mode; locked: boolean; bindings: Bindings; ink?: string | null }
 
 /** 由世界狀態推導 HUD (純函式，可在 Node 測) */
 export function deriveHud(w: World, text: Text, view: HudView): HudModel {
@@ -35,7 +36,8 @@ export function deriveHud(w: World, text: Text, view: HudView): HudModel {
     modeText: text(view.renderMode === '3d' ? 'term.mode3d' : 'term.mode2d'),
     items: Object.entries(w.inv).map(([id, n]) => ({ id, n, name: text(`term.${id}`) })),
     prompt,
-    toast: { seq: w.msgSeq, text: w.msg }
+    toast: { seq: w.msgSeq, text: w.msg },
+    ...(view.ink ? { ink: view.ink } : {})
   };
 }
 
