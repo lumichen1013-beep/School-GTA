@@ -50,7 +50,7 @@ describe('遷移 v2 → v3', () => {
 describe('chapterStart：開章', () => {
   it('新玩家：魔方 S0、從入口進玄關、沒有快照與道具', () => {
     const st = chapterStart(defaultSave(), SPEC, START);
-    expect(st).toEqual({ chapter: 1, cube: { pos: { stair: [1, 0, 0], closet: [1, 1, 0], foyer: [0, 1, 0] }, rot: { stair: 0, closet: 0, foyer: 0 } }, room: 'foyer', door: null, rooms: {}, items: {}, flags: [] });
+    expect(st).toEqual({ chapter: 1, cube: { pos: { stair: [1, 0, 0], closet: [1, 1, 0], foyer: [0, 1, 0] }, rot: { stair: 0, closet: 0, foyer: 0 } }, room: 'foyer', door: null, rooms: {}, items: {}, flags: [], labels: {}, moved: {} });
   });
 
   it('舊存檔已通關 1-2：玄關預設 1-2a / 1-2b 已完成 (筆尖已拿、踏板已壓、鐵柵門已開) → 不必重做，直接走得進出口區', () => {

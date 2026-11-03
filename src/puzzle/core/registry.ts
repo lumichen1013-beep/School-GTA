@@ -1,4 +1,5 @@
 import type { ObjState, World } from './types';
+import type { WorldCommand } from './actions';
 
 export type MechanicId = string;
 
@@ -25,6 +26,10 @@ export interface Mechanic {
   beforePhysics?(w: World, dt: number): void;
   /** 核心物理之後、檢查點之前 (依註冊順序；plates 必須在 links 之前) */
   afterPhysics?(w: World, dt: number): void;
+  /** E 沒有一般目標時 (findTarget = null) 依序詢問；回傳 true = 已處理 (不再說「看得見，卻碰不到」)。例：2D 對標籤開字卡匣 */
+  interactFallback?(w: World): boolean;
+  /** 帶參數的指令 (WorldCommand)；回傳 true = 已處理 (後面的機制不再收到) */
+  command?(w: World, cmd: WorldCommand): boolean;
 }
 
 export interface CompiledMechanics {
@@ -34,6 +39,8 @@ export interface CompiledMechanics {
   readonly passable: readonly Mechanic[];
   readonly beforePhysics: readonly Mechanic[];
   readonly afterPhysics: readonly Mechanic[];
+  readonly interactFallback: readonly Mechanic[];
+  readonly command: readonly Mechanic[];
 }
 
 /** 編譯機制表：重複的機制 id / 物件類型 → 拋錯 */
@@ -54,6 +61,8 @@ export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics {
     init: list.filter(m => m.init),
     passable: list.filter(m => m.passable),
     beforePhysics: list.filter(m => m.beforePhysics),
-    afterPhysics: list.filter(m => m.afterPhysics)
+    afterPhysics: list.filter(m => m.afterPhysics),
+    interactFallback: list.filter(m => m.interactFallback),
+    command: list.filter(m => m.command)
   };
 }

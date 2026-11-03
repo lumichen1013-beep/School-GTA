@@ -33,13 +33,23 @@ export function levelState(e: LevelEntry, save: Save, levels: readonly LevelEntr
 /** 開場可用能力 = 關卡白名單 ∩ 存檔已得能力 */
 export const startAbilities = (e: LevelEntry, save: Save): AbilityId[] => e.abilities.filter(a => save.abilities.includes(a));
 
-/** 通關後的新存檔：記通關、目前關卡、本關持有的能力 (例：玄關的筆尖) */
-export function recordClear(save: Save, levelId: string, w: World): Save {
+/** 持有物中的許問津手記 (物品 id diary.<頁>) → 頁碼 */
+const diaryPages = (w: World): number[] => Object.keys(w.inv).map(id => /^diary\.([1-5])$/.exec(id)).filter((m): m is RegExpExecArray => m !== null && (w.inv[m[0]] ?? 0) > 0).map(m => Number(m[1]));
+
+/**
+ * 通關後的新存檔：記通關 (also = 一併記為通關的關卡，例：章門打開 = 整章的房間都過了)、目前關卡、本關持有的能力 (例：玄關的筆尖)、
+ * 持有的手記頁 (收集物，例：1-3a 的手記第一頁)
+ */
+export function recordClear(save: Save, levelId: string, w: World, also: readonly string[] = []): Save {
   const got = [...w.abilities, ...ABILITY_IDS.filter(a => (w.inv[a] ?? 0) > 0)];
+  const cleared = [...save.cleared];
+  for (const id of [...also, levelId]) if (!cleared.includes(id)) cleared.push(id);
+  const pages = diaryPages(w);
   return {
     ...save,
-    cleared: save.cleared.includes(levelId) ? save.cleared : [...save.cleared, levelId],
+    cleared,
     current: levelId,
-    abilities: ABILITY_IDS.filter(a => save.abilities.includes(a) || got.includes(a))
+    abilities: ABILITY_IDS.filter(a => save.abilities.includes(a) || got.includes(a)),
+    ...(pages.length ? { diary: [...new Set([...save.diary, ...pages])].sort((a, b) => a - b) } : {})
   };
 }

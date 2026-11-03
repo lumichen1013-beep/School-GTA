@@ -16,8 +16,21 @@ export const msg = {
   'msg.cube.turned': '整個房間滑了過去。',
   'msg.cube.porch': '大門外是來時的門廊。這一趟只能往屋裡走。',
   'msg.cube.chapterLocked': '門鎖著。鑰匙孔是銅的。',
+  'msg.cube.chapterOpen': '門開了。',
+  // 拱門跨房 (規格 5.4.6)：拱門對拱門 → 箱子推得過去；對面是門 / 牆 / 被占住 → 推不過去
+  'msg.cube.crossed': '木箱滑過拱門，到了另一邊。',
+  'msg.cube.doorOnly': '對面是一扇門，只容得下人。箱子過不去。',
+  'msg.cube.archWall': '拱門後面是牆。',
+  'msg.cube.archBlocked': '拱門那一頭被擋住了。',
   'msg.cube.mapOnly2d': '展開圖只畫在[[term.mode2d]]上。',
   // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
   'msg.cord.pulled': '繩子拉下去，停住了。',
-  'msg.cord.reset': '喀一聲，繩子全部彈了回去。'
+  'msg.cord.reset': '喀一聲，繩子全部彈了回去。',
+  // 提示字條 (L2 / L3)：時間到之前是空白的
+  'msg.note.blank': '紙上還是空白的。',
+  // 標籤與字卡 (N22；規格 5.4.5、D15：無效字 → 字顫動、墨色變淡、卡片退回)
+  'msg.label.written': '字蓋上去了，墨還沒乾。',
+  'msg.label.removed': '字卡取了下來，原來的字還在。',
+  'msg.label.invalid': '字抖了一下，墨色淡了。卡片退了回來。',
+  'msg.label.noNib': '少了筆尖，寫不上去。'
 } as const;

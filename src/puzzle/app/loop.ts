@@ -1,5 +1,5 @@
 import type { GameEvent, Mode, World } from '../core/types';
-import type { WorldAction } from '../core/actions';
+import type { WorldAction, WorldCommand } from '../core/actions';
 import { step } from '../core/step';
 import type { Transition } from '../render/transitions';
 
@@ -8,7 +8,7 @@ export const FIXED_DT = 1 / 60;
 /** 單幀最多計入的時間 (沿用舊主迴圈的 1/20 秒上限，分頁切回時不會一次跑太多步) */
 export const MAX_FRAME_SEC = 1 / 20;
 
-export interface LoopInput { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[] }
+export interface LoopInput { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[]; commands?: readonly WorldCommand[] }
 export interface PlayerPose { x: number; y: number; z: number; mode: Mode }
 
 export interface LoopHooks {
@@ -27,6 +27,8 @@ export interface LoopHooks {
 export class LevelLoop {
   private acc = 0;
   private pending: WorldAction[] = [];
+  /** 本幀收到、尚未送進世界的指令 (字卡匣)；與動作相同：只送進下一個固定步 */
+  private pendingCommands: WorldCommand[] = [];
   private locked = false;
   private clearedFired = false;
   private halted = false;
@@ -47,11 +49,13 @@ export class LevelLoop {
     this.halted = true;
     this.acc = 0;
     this.pending = [];
+    this.pendingCommands = [];
   }
 
   /** 推進一幀；回傳本幀執行的固定步數 */
   frame(elapsedSec: number, input: LoopInput): number {
     for (const a of input.pressed) if (!this.pending.includes(a)) this.pending.push(a);
+    this.pendingCommands.push(...(input.commands ?? []));
     this.acc += Math.min(Math.max(elapsedSec, 0), MAX_FRAME_SEC);
     this.halted = false;
     let n = 0;
@@ -67,17 +71,20 @@ export class LevelLoop {
     const w = this.world;
     const p = w.player;
     Object.assign(this.prev, { x: p.x, y: p.y, z: p.z, mode: p.mode });
-    if (w.cleared) { this.pending = []; return; }
+    if (w.cleared) { this.pending = []; this.pendingCommands = []; return; }
     if (this.locked) {
       const r = this.transition!.tick(FIXED_DT);
       if (r.swapNow) this.hooks.onSwap?.();
       if (r.done) this.locked = false;
       this.pending = [];
+      this.pendingCommands = [];
       return;
     }
     const pressed = this.pending;
+    const commands = this.pendingCommands;
     this.pending = [];
-    step(w, { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump, pressed }, FIXED_DT);
+    this.pendingCommands = [];
+    step(w, { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump, pressed, ...(commands.length ? { commands } : {}) }, FIXED_DT);
     for (const e of w.events.splice(0)) {
       if (e.t !== 'switch') { if (e.t !== 'switchDenied') this.hooks.onEvent?.(e); continue; }
       if (this.transition) { this.transition.start(e.to); this.locked = true; } else this.hooks.onSwap?.();

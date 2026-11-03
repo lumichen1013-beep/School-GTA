@@ -15,8 +15,8 @@ function canUse(w: World, o: ObjState, mode: Mode): boolean {
   return isActiveIn(w, o, mode) && usable(w, o) && !!d.interactable && activeIn(d.interactIn ?? effectiveVisibility(w, o), mode);
 }
 
-/** 玩家身體中心到物件盒的最近距離；2D 忽略 z */
-function distanceTo(w: World, o: ObjState): number {
+/** 玩家身體中心到物件盒的最近距離；2D 忽略 z (機制判斷「範圍內」也用它，例：標籤) */
+export function distanceTo(w: World, o: ObjState): number {
   const p = w.player;
   const b = objBox(o);
   const c = [p.x, p.y + 0.45, p.z];
@@ -52,6 +52,7 @@ const reqOf = (r: ItemReq): { item: string; consume: boolean } =>
 export function interact(w: World): void {
   const t = findTarget(w);
   if (!t) {
+    if (w.rt.mechanics.interactFallback.some(m => m.interactFallback!(w))) return;
     const unreachable = w.player.onGround && w.objs.some(o => isActiveIn(w, o, w.player.mode) && usable(w, o) && o.def.interactable
       && !canUse(w, o, w.player.mode) && distanceTo(w, o) <= INTERACT_RANGE + 1);
     if (unreachable) say(w, 'msg.unreachable');

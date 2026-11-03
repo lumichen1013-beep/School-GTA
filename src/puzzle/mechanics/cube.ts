@@ -1,8 +1,9 @@
 import type { Mechanic } from '../core/registry';
-import type { DoorLinkState, LevelDef, ObjState, TextKey, World } from '../core/types';
+import type { DoorLinkState, ItemId, LevelDef, ObjId, ObjState, TextKey, World } from '../core/types';
 import type { CubeOp, DoorInfo, DoorKind, Side } from '../core/cube';
-import type { TurnBlock } from '../core/chapter';
-import { say } from '../core/world';
+import type { TransferBlock, TurnBlock } from '../core/chapter';
+import { hasItem, say } from '../core/world';
+import { objBox, overlaps } from '../core/geometry';
 
 /** 拉桿的方向字 (內部 id；顯示字「上 / 下 / 左 / 右」在文字表 term.word.*) */
 export type LeverWord = 'up' | 'down' | 'left' | 'right';
@@ -11,8 +12,11 @@ declare module '../core/types' {
   interface ObjKinds {
     /** 拉桿 (N21)：3D 拉下 → 依方向字把自己所在的房間滑一格 (規格 5.4.1「轉自己」) */
     lever: { word: LeverWord };
-    /** 魔方門位 (N21)：side = 本地門位、kind = 門 / 拱門 / 章門；此刻接到哪由章節層寫入 World.ext.cube */
-    cubeDoor: { side: Side; kind: DoorKind };
+    /**
+     * 魔方門位 (N21)：side = 本地門位、kind = 門 / 拱門 / 章門；此刻接到哪由章節層寫入 World.ext.cube。
+     * 章門：key = 開門要的鑰匙 (房間的銅鑰匙，章節道具)；openText = 打開時的訊息 (開了 = 本章通關)
+     */
+    cubeDoor: { side: Side; kind: DoorKind; key?: ItemId; openText?: TextKey };
   }
 }
 
@@ -47,12 +51,50 @@ export const TURN_BLOCK_MSG: Readonly<Record<TurnBlock, TextKey>> = {
   notHere: 'msg.cube.stuck'
 };
 
-/** 屋框 → 訊息 (大門通回門廊；章門走廊要鑰匙，C8 前一律鎖著) */
-const frameMsg = (frame: string): TextKey => (frame === 'porch' ? 'msg.cube.porch' : 'msg.cube.chapterLocked');
+/** 推不過拱門的原因 → 訊息 key */
+export const TRANSFER_BLOCK_MSG: Readonly<Record<TransferBlock, TextKey>> = { notArch: 'msg.cube.doorOnly', occupied: 'msg.cube.archBlocked' };
+
+/** 屋框：大門 → 通回門廊 (只提示)；章門走廊 → 有鑰匙就打開 (本章通關)，沒有就鎖著 */
+function frameDoor(w: World, o: ObjState, frame: string): void {
+  if (frame === 'porch') { say(w, 'msg.cube.porch'); return; }
+  const key = o.def.type === 'cubeDoor' ? o.def.key : undefined;
+  if (key === undefined || !hasItem(w, key)) { say(w, 'msg.cube.chapterLocked'); return; }
+  o.used = true;
+  w.cleared = true;
+  say(w, (o.def.type === 'cubeDoor' && o.def.openText) || 'msg.cube.chapterOpen');
+}
+
+/** 每個世界上一步壓在拱門上的可推物 (只在「推進去的那一刻」發事件 / 說明一次；不入快照，換房即重建) */
+const inArch = new WeakMap<World, ReadonlySet<ObjId>>();
+
+/**
+ * 可推物被推進拱門 (箱子壓到拱門的門位上)：拱門對拱門 → objCross (外殼 → transferObject)；
+ * 對面是門 → 只有人能過 (規格 5.4.1 型別取較窄者)；門後是牆 → 說明。都只在剛推進去時一次
+ */
+function archCrossing(w: World): void {
+  const links = w.ext.cube?.links;
+  if (!links) return;
+  const prev = inArch.get(w);
+  const now = new Set<ObjId>();
+  for (const d of w.objs) {
+    if (d.def.type !== 'cubeDoor' || d.def.kind !== 'arch' || d.gone) continue;
+    const db = objBox(d);
+    for (const o of w.objs) {
+      if (!o.def.pushable || o.gone || !overlaps(objBox(o), db, '3d')) continue;
+      now.add(o.def.id);
+      if (prev?.has(o.def.id)) continue;
+      const l = links[d.def.id];
+      if (l?.to === 'room' && l.kind === 'arch') w.events.push({ t: 'objCross', obj: o.def.id, door: d.def.id });
+      else say(w, l?.to === 'room' ? 'msg.cube.doorOnly' : 'msg.cube.archWall');
+    }
+  }
+  inArch.set(w, now);
+}
 
 /**
  * N21 魔方機關：拉桿 (只在 3D、站穩) → emit turnRequest；魔方門 → 接通則 emit door (外殼換房)，
- * 門後是牆 / 屋框則說明 (無懲罰)。轉動與換房本身在 core/chapter (外殼呼叫)，機制只發事件
+ * 門後是牆 / 屋框則說明 (無懲罰；章門有鑰匙 → 通關)；可推物推進拱門 → objCross。
+ * 轉動、換房、跨房本身在 core/chapter (外殼呼叫)，機制只發事件
  */
 export const cube: Mechanic = {
   id: 'cube',
@@ -63,9 +105,10 @@ export const cube: Mechanic = {
       interact: (w, o) => {
         const l = doorLink(w, o);
         if (l.to === 'room') w.events.push({ t: 'door', door: o.def.id });
-        else if (l.to === 'frame') say(w, frameMsg(l.frame));
+        else if (l.to === 'frame') frameDoor(w, o, l.frame);
         else say(w, 'msg.cube.wall');
       }
     }
-  }
+  },
+  afterPhysics: archCrossing
 };

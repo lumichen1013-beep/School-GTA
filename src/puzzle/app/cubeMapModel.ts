@@ -6,6 +6,7 @@ import { isActiveIn } from '../core/presence';
 import { applyOp, cellContent, isBlocked, links, type Cell, type CubeOp, type FrameKind } from '../core/cube';
 import type { ChapterSession } from '../core/chapter';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
+import { leverWord } from '../mechanics/labels';
 import type { CubeMapModel, MapCell, MapDoor, MapPreview } from '../ui/cubeMap';
 
 export type { CubeMapModel, MapCell, MapDoor, MapFrame, MapLink, MapPreview } from '../ui/cubeMap';
@@ -89,5 +90,6 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
 export function previewFor(cs: ChapterSession): { op: CubeOp; word: string } | null {
   const lv = previewLever(cs.world);
   if (!lv || lv.def.type !== 'lever') return null;
-  return { op: leverOp(cs.state.room, lv.def.word), word: lv.def.word };
+  const word = leverWord(cs.world, lv);
+  return { op: leverOp(cs.state.room, word), word };
 }

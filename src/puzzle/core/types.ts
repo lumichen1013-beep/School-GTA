@@ -132,17 +132,31 @@ export type DoorLinkState =
   | { to: 'room'; room: string; door: ObjId; kind: 'door' | 'arch' }
   | { to: 'frame'; frame: string };
 
-/** World 的外部狀態 (開放式；單房關卡為空物件) */
-export interface WorldExt { cube?: { links: Record<ObjId, DoorLinkState> } }
+/**
+ * World 的外部狀態 (開放式；單房關卡為空物件)。cube / flags 由章節層寫入、機制只讀；
+ * labels = 標籤 id → 貼著的字卡 (章節層載入 / 收回，mechanics/labels 以指令改寫；v0.3 N22)
+ */
+export interface WorldExt {
+  cube?: { links: Record<ObjId, DoorLinkState> };
+  labels?: Record<string, string[]>;
+  /** 章節旗標 (唯讀；例：演出過的驚嚇 scare:*) */
+  flags?: readonly string[];
+}
 
 /**
  * 世界事件：switch / switchDenied = 切換結果；door = 穿過接通的門 (外殼 → enterRoom)；
- * turnRequest = 3D 拉了轉動機關 (外殼 → turn，機關的方向字決定轉向)
+ * turnRequest = 3D 拉了轉動機關 (外殼 → turn，機關的方向字決定轉向)；
+ * objCross = 可推物被推進接通的拱門 (外殼 → transferObject)；labelOpen = 2D 對標籤按 E (外殼開字卡匣)；
+ * card = 貼卡 / 取卡結果 (ok = false：無效字，卡片退回；字卡匣播回饋)；flag = 章節旗標 (演出過的驚嚇，R 不還原)
  */
 export type GameEvent =
   | { t: 'switch'; to: Mode } | { t: 'switchDenied' }
   | { t: 'door'; door: ObjId }
-  | { t: 'turnRequest'; lever: ObjId };
+  | { t: 'turnRequest'; lever: ObjId }
+  | { t: 'objCross'; obj: ObjId; door: ObjId }
+  | { t: 'labelOpen'; label: string; obj: ObjId }
+  | { t: 'card'; label: string; ok: boolean }
+  | { t: 'flag'; flag: string };
 
 export interface Box { min: V3; max: V3 }
 export interface InputState { moveX: number; moveZ: number; jump: boolean }

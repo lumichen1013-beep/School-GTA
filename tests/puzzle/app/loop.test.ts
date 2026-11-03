@@ -6,6 +6,11 @@ import { step } from '../../../src/puzzle/core/step';
 import { interact } from '../../../src/puzzle/core/interact';
 import type { Transition } from '../../../src/puzzle/render/transitions';
 import type { World } from '../../../src/puzzle/core/types';
+import type { Mechanic } from '../../../src/puzzle/core/registry';
+import { createWorld } from '../../../src/puzzle/core/world';
+import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
+import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
+import { TEXT } from '../msgs';
 
 const still = { moveX: 0, moveZ: 0, jump: false, pressed: [] as const };
 const snap = (w: World) => ({ p: { ...w.player }, msgSeq: w.msgSeq, objs: w.objs.map(o => [o.x, o.y, o.z, o.gone, o.used]), time: w.time });
@@ -113,5 +118,19 @@ describe('LevelLoop：固定步長 1/60', () => {
     const loop = new LevelLoop(w, null);
     loop.frame(FIXED_DT, { ...still, moveX: 1 });
     expect(w.player.x - loop.prev.x).toBeCloseTo(3.2 * DT, 6);
+  });
+});
+
+describe('LevelLoop：指令 (字卡匣；v0.3 N22)', () => {
+  it('本幀的指令只送進下一個固定步一次 (與動作相同)；沒有固定步的幀 → 留到下一幀', () => {
+    const seen: number[] = [];
+    const counter: Mechanic = { id: 'counter', command: (ww, _c) => { seen.push(ww.time); return true; } };
+    const w = createWorld(foyer, { mechanics: [counter, ...DEFAULT_MECHANICS], text: TEXT });
+    const loop = new LevelLoop(w, null);
+    const cmd = { t: 'card', label: 'x', card: 'card.right' } as const;
+    expect(loop.frame(1 / 240, { ...still, commands: [cmd] })).toBe(0);
+    expect(seen).toEqual([]);
+    expect(loop.frame(3 / 60, still)).toBeGreaterThan(1);
+    expect(seen).toEqual([0]);
   });
 });

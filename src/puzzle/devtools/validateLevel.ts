@@ -32,6 +32,7 @@ export type IssueCode =
   | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它、也不是 unsealed (永遠解不開)
   | 'cube.field'          // 魔方門的 side / kind、拉桿的方向字不合法
   | 'ref.sequence'        // 順序鎖 (N27)：order 少於 3 條、重複、不是指向本鎖的拉繩；或拉繩的 lock 不是順序鎖 / 不在其 order 裡
+  | 'label.field'         // 標籤 (N22)：id 空白 / 重複；方向字標籤不在拉桿上；名詞標籤沒有 textKey
   | 'text.missing'        // 文字 key 不存在於文字表
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
@@ -55,12 +56,15 @@ const covers = (v: Visibility, m: Mode): boolean => v === 'both' || v === m;
 
 interface KeyRef { key: string; obj?: ObjId }
 
-/** 物件類型專屬欄位裡的文字 key (字條本文、畫像的年份、順序鎖打開的訊息) */
+/** 物件類型專屬欄位裡的文字 key (字條本文、畫像的年份、順序鎖打開的訊息、章門打開的訊息、衣架滑落的訊息) + 名詞標籤的字 */
 function typeKeys(o: ObjDef): (string | undefined)[] {
-  if (o.type === 'note') return [o.textKey];
-  if (o.type === 'portrait') return [o.carved, o.ink];
-  if (o.type === 'drawer') return [o.openText];
-  return [];
+  const label = o.label?.textKey;
+  if (o.type === 'note') return [o.textKey, label];
+  if (o.type === 'portrait') return [o.carved, o.ink, label];
+  if (o.type === 'drawer') return [o.openText, label];
+  if (o.type === 'cubeDoor') return [o.openText, label];
+  if (o.type === 'coatRack') return [o.fallText, label];
+  return [label];
 }
 
 /** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位) */
@@ -137,7 +141,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
 
   // 引用
   const byId = new Map(def.objects.map(o => [o.id, o]));
-  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' ? o.reward : undefined]).filter((g): g is string => typeof g === 'string'));
+  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' ? o.reward : undefined, ...(o.type === 'hook' ? o.also ?? [] : [])]).filter((g): g is string => typeof g === 'string'));
   const start = new Set<string>(ctx.abilities ?? []);
   for (const o of def.objects) {
     if (o.opens !== undefined && (o.opens === o.id || !byId.has(o.opens))) add('ref.opens', `opens "${o.opens}" does not name another object`, o.id);
@@ -151,6 +155,18 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
       if (!SIDES.includes(o.side)) add('cube.field', `cubeDoor side "${String(o.side)}" is not N|S|E|W|U|D`, o.id);
       if (!['door', 'arch', 'chapter'].includes(o.kind)) add('cube.field', `cubeDoor kind "${String(o.kind)}" is not door|arch|chapter`, o.id);
     } else if (o.type === 'lever' && !LEVER_WORDS.includes(o.word)) add('cube.field', `lever word "${String(o.word)}" is not ${LEVER_WORDS.join('|')}`, o.id);
+  }
+
+  // 標籤 (N22)：id 唯一 (本關內)；方向字只貼在拉桿上；名詞要有字
+  const labelIds = new Set<string>();
+  for (const o of def.objects) {
+    const l = o.label;
+    if (!l) continue;
+    if (typeof l.id !== 'string' || l.id === '' || labelIds.has(l.id)) add('label.field', `label id "${String(l.id)}" must be a unique non-empty string`, o.id);
+    labelIds.add(l.id);
+    if (l.kind === 'dir' && o.type !== 'lever') add('label.field', 'direction labels belong on levers', o.id);
+    else if (l.kind === 'noun' && !l.textKey) add('label.field', 'noun labels need a textKey', o.id);
+    else if (l.kind !== 'dir' && l.kind !== 'noun') add('label.field', `label kind "${String(l.kind)}" is not dir|noun`, o.id);
   }
 
   // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)

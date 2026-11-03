@@ -11,10 +11,12 @@ export interface LegacyChapter {
   items: Readonly<Record<string, number>>;
 }
 
-/** 章節狀態 → 存檔 (只存魔方、房間快照、下次進章的房間 / 門、章節道具、旗標) */
+/** 章節狀態 → 存檔 (魔方、房間快照、下次進章的房間 / 門、章節道具、旗標、標籤上的字卡、跨房物件) */
 export function chapterSave(state: ChapterState): ChapterSave {
   if (!state.cube) throw new Error(`chapter ${state.chapter} has no cube`);
-  return JSON.parse(JSON.stringify({ cube: state.cube, rooms: state.rooms, at: { room: state.room, door: state.door }, items: state.items, flags: state.flags })) as ChapterSave;
+  return JSON.parse(JSON.stringify({
+    cube: state.cube, rooms: state.rooms, at: { room: state.room, door: state.door }, items: state.items, flags: state.flags, labels: state.labels, moved: state.moved
+  })) as ChapterSave;
 }
 
 /** 寫入一章的快照 (其餘欄位不變) */
@@ -32,6 +34,7 @@ export function chapterStart(save: Save, spec: ChapterSpec, start: { room: strin
     const known = saved.at.room in spec.rooms && (saved.at.door === null || spec.doors.some(d => d.room === saved.at.room && d.door === saved.at.door));
     return {
       chapter: spec.chapter, cube: saved.cube, rooms: saved.rooms, items: saved.items, flags: saved.flags,
+      labels: saved.labels ?? {}, moved: (saved.moved ?? {}),
       room: known ? saved.at.room : start.room, door: known ? saved.at.door : start.door
     };
   }

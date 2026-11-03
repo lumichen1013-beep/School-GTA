@@ -37,10 +37,11 @@ const CORE_ACTIONS: Readonly<Record<WorldAction, (w: World) => void>> = {
   interact
 };
 
-/** 推進一個固定時間步：先依 ACTION_ORDER 處理本幀動作，再跑物理 */
+/** 推進一個固定時間步：先依 ACTION_ORDER 處理本幀動作，再交指令給機制 (第一個處理的為準)，再跑物理 */
 export function step(w: World, f: ActionFrame, dt: number): void {
   if (w.cleared) return;
   for (const a of ACTION_ORDER) if (f.pressed.includes(a)) CORE_ACTIONS[a](w);
+  for (const c of f.commands ?? []) w.rt.mechanics.command.some(m => m.command!(w, c));
   stepWorld(w, f, dt);
 }
 

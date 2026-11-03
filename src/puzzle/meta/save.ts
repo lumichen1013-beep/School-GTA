@@ -14,8 +14,8 @@ export const NAME_MAX = 12;
 export const SAVE_VERSION = 3;
 
 /**
- * 一章的存檔 (規格 8 ChapterSave 的骨架：魔方排列 + 已離開房間的快照 + 下次從哪扇門進 + 章節道具)；
- * 字卡 / 標籤 / 方向字於 N22 實作時加入
+ * 一章的存檔 (規格 8 ChapterSave：魔方排列 + 已離開房間的快照 + 下次從哪扇門進 + 章節道具 + 旗標；
+ * v0.3 M1b 加：標籤上貼著的字卡 labels、跨房物件 moved)。labels / moved 缺欄 (M1b 之前的存檔) = 空
  */
 export interface ChapterSave {
   cube: CubeState;
@@ -23,6 +23,8 @@ export interface ChapterSave {
   at: { room: string; door: string | null };
   items: Record<string, number>;
   flags: string[];
+  labels?: Record<string, string[]>;
+  moved?: Record<string, { room: string; x: number; y: number; z: number }>;
 }
 
 /** 存檔 v3 (規格 8)；v2 欄位不變，另加 chapters */
@@ -97,7 +99,16 @@ export function sanitizeChapter(v: unknown): ChapterSave | null {
   if (typeof v.at.room !== 'string' || (v.at.door !== null && typeof v.at.door !== 'string')) return null;
   const items: Record<string, number> = {};
   if (isRecord(v.items)) for (const [k, n] of Object.entries(v.items)) if (Number.isInteger(n) && (n as number) > 0) items[k] = n as number;
-  return { cube: { pos, rot }, rooms, at: { room: v.at.room, door: v.at.door as string | null }, items, flags: strs(v.flags) };
+  const labels: Record<string, string[]> = {};
+  if (isRecord(v.labels)) for (const [k, cards] of Object.entries(v.labels)) { const c = strs(cards); if (c.length) labels[k] = c; }
+  const moved: NonNullable<ChapterSave['moved']> = {};
+  if (isRecord(v.moved)) {
+    for (const [k, m] of Object.entries(v.moved)) if (isRecord(m) && typeof m.room === 'string' && [m.x, m.y, m.z].every(finite)) moved[k] = { room: m.room, x: m.x as number, y: m.y as number, z: m.z as number };
+  }
+  return {
+    cube: { pos, rot }, rooms, at: { room: v.at.room, door: v.at.door as string | null }, items, flags: strs(v.flags),
+    ...('labels' in v ? { labels } : {}), ...('moved' in v ? { moved } : {})
+  };
 }
 
 /** 校正 v3 欄位 (型別不符的欄位改回預設值；壞掉的章節快照丟掉)；不是物件 → null */
