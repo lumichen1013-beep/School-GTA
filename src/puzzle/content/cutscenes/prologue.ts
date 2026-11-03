@@ -12,7 +12,7 @@ export const prologue: CutsceneDef = {
   shots: [
     { // 1 書桌上的信封 (火漆「許」)
       art: { kind: 'paper', sceneId: 'prologue.desk', labels: { seal: 'cs.prologue.art.seal' } },
-      motion: { push: 0.05, parallax: 1, durSec: 8 },
+      motion: { push: 0.05, parallax: 0.02, durSec: 8 },
       transitionIn: 'fade',
       lines: ['cs.prologue.1.1'],
       audio: [{ at: 'start', cue: 'pad.in' }, { at: 'start', cue: 'paper.rub' }]
@@ -39,7 +39,7 @@ export const prologue: CutsceneDef = {
     },
     { // 5 山路三層
       art: { kind: 'paper', sceneId: 'prologue.mountain' },
-      motion: { panX: 0.08, parallax: 1, durSec: 8 },
+      motion: { panX: 0.06, parallax: 0.03, durSec: 8 },
       transitionIn: 'crossfade',
       lines: ['cs.prologue.5.1', 'cs.prologue.5.2'],
       audio: [{ at: 'start', cue: 'car.away' }, { at: 'start', cue: 'wind' }]

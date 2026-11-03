@@ -39,7 +39,8 @@ export class KeyboardSource implements InputSource {
       moveZ: (this.held(b.down) ? 1 : 0) - (this.held(b.up) ? 1 : 0),
       jump: this.held(b.jump),
       pressed: INPUT_ACTIONS.filter(a => b[a].some(c => this.pressed.has(c))),
-      anyKey: this.anyKey
+      anyKey: this.anyKey,
+      jumpPressed: b.jump.some(c => this.pressed.has(c))
     };
     this.pressed.clear();
     this.anyKey = false;

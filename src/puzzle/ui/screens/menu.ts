@@ -6,13 +6,17 @@ export interface MenuChapter { titleKey: string; levels: MenuLevel[] }
 export interface MenuModel { name: string; chapters: MenuChapter[] }
 
 /** 章節選單：每關一張卡片 (已通關 / 未解鎖標示)；回傳關閉函式 */
-export function showMenu(text: Text, m: MenuModel, on: { play(id: string): void; rename(): void }): () => void {
+export function showMenu(text: Text, m: MenuModel, on: { play(id: string): void; rename(): void; memories(): void }): () => void {
   const root = openScreen('pz-menu');
   const head = make('div', 'pz-menu-head');
   const rename = make('button', 'pz-link', text('ui.menu.rename'));
   rename.type = 'button';
   rename.addEventListener('click', () => on.rename());
-  head.append(make('span', undefined, text('ui.menu.player', { name: m.name })), rename);
+  const memories = make('button', 'pz-link', text('ui.menu.memories'));
+  memories.type = 'button';
+  memories.id = 'pz-menu-memories';
+  memories.addEventListener('click', () => on.memories());
+  head.append(make('span', undefined, text('ui.menu.player', { name: m.name })), rename, memories);
   root.append(make('h1', undefined, text('ui.menu.title')), head);
   for (const ch of m.chapters) {
     const sec = make('section', 'pz-chapter');

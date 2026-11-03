@@ -54,6 +54,20 @@ describe('KeyboardSource', () => {
     expect(k.poll().moveX).toBe(0);
   });
 
+  it('jumpPressed：跳躍鍵新按下 (同一幀內按下又放開也抓得到；過場用空白鍵推進)', () => {
+    const fw = fakeWindow();
+    const k = new KeyboardSource(DEFAULT_BINDINGS, fw.target);
+    fw.fire('keydown', 'Space'); fw.fire('keyup', 'Space');
+    let f = k.poll();
+    expect([f.jump, f.jumpPressed, f.pressed]).toEqual([false, true, []]);
+    f = k.poll();
+    expect(f.jumpPressed).toBe(false);
+    fw.fire('keydown', 'Space');
+    fw.fire('keydown', 'Space', true);
+    k.poll();
+    expect(k.poll().jumpPressed).toBe(false); // 按住 (repeat) 不算新按
+  });
+
   it('clear 丟棄未取走的按鍵；dispose 移除監聽', () => {
     const fw = fakeWindow();
     const k = new KeyboardSource(mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }), fw.target);

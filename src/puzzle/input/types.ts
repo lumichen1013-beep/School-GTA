@@ -9,7 +9,11 @@ export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';
 export type Bindings = Readonly<Record<InputAction | Axis, readonly string[]>>;
 
 /** 每幀取樣結果：持續軸 + 上次取樣後新按下的動作 */
-export interface InputFrame { moveX: number; moveZ: number; jump: boolean; pressed: InputAction[]; anyKey: boolean }
+export interface InputFrame {
+  moveX: number; moveZ: number; jump: boolean; pressed: InputAction[]; anyKey: boolean;
+  /** 上次取樣後跳躍鍵是否新按下 (快速點按也抓得到；過場用空白鍵推進) */
+  jumpPressed?: boolean;
+}
 
 export interface InputSource {
   /** 每幀取樣 (新按下的動作取走即清空) */
