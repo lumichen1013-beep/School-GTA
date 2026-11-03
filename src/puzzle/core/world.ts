@@ -19,7 +19,7 @@ export function createWorld(level: LevelDef, opts: WorldOptions): World {
     player: { x: level.start.x, y: level.start.y, z: level.start.z, vy: 0, onGround: false, mode: '3d', z3d: level.start.z, facing: 0 },
     checkpoint: -1,
     inv: {}, abilities: [...(opts.abilities ?? [])], cleared: false, msg: '', msgKey: '', msgSeq: 0, time: 0,
-    events: [],
+    events: [], ext: {},
     rt: { mechanics: compileMechanics(opts.mechanics), text: opts.text ?? identity }
   };
   for (const m of w.rt.mechanics.init) m.init!(w);

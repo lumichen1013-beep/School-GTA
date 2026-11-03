@@ -115,13 +115,34 @@ export interface World {
   time: number;
   /** 本步事件外送匣，外殼每幀取走清空 */
   events: GameEvent[];
+  /** 章節層寫入的房間外部狀態 (v0.3：門此刻接到哪；由 core/chapter 每次換房 / 轉動後寫入，機制只讀) */
+  ext: WorldExt;
   /** 不序列化：編譯後的機制表與文字解析器 */
   readonly rt: Runtime;
 }
 
 export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, params?: TextParams) => string }
 
-export type GameEvent = { t: 'switch'; to: Mode } | { t: 'switchDenied' };
+/**
+ * 一扇魔方門此刻的接法 (architecture 4.16)：wall = 門後是牆；room = 接到鄰房的門 (kind 取兩側較窄者)；
+ * frame = 接到屋框 (大門 porch、章門走廊…)
+ */
+export type DoorLinkState =
+  | { to: 'wall' }
+  | { to: 'room'; room: string; door: ObjId; kind: 'door' | 'arch' }
+  | { to: 'frame'; frame: string };
+
+/** World 的外部狀態 (開放式；單房關卡為空物件) */
+export interface WorldExt { cube?: { links: Record<ObjId, DoorLinkState> } }
+
+/**
+ * 世界事件：switch / switchDenied = 切換結果；door = 穿過接通的門 (外殼 → enterRoom)；
+ * turnRequest = 3D 拉了轉動機關 (外殼 → turn，機關的方向字決定轉向)
+ */
+export type GameEvent =
+  | { t: 'switch'; to: Mode } | { t: 'switchDenied' }
+  | { t: 'door'; door: ObjId }
+  | { t: 'turnRequest'; lever: ObjId };
 
 export interface Box { min: V3; max: V3 }
 export interface InputState { moveX: number; moveZ: number; jump: boolean }

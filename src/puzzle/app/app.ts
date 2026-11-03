@@ -30,6 +30,7 @@ import { CutscenePlayer, planCutscene, type CutsceneEvent, type CutsceneView } f
 import { deriveHelp } from './hudModel';
 import { RestartConfirm, routeFrame } from './restartConfirm';
 import { LevelSession } from './levelSession';
+import { newChapterState, singleRoomSpec } from '../core/chapter';
 import { browserStorage } from './services';
 
 /**
@@ -194,9 +195,10 @@ export class PuzzleApp {
     const levelId = e.id;
     const level = e.load();
     const theme = resolveTheme(level.theme ?? CHAPTERS.find(ch => ch.id === e.chapter)?.theme);
+    const spec = singleRoomSpec(level);
     this.session = new LevelSession(
       { renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme },
-      level,
+      spec, newChapterState(spec, level.id, null),
       { abilities: startAbilities(e, this.save), onCleared: () => this.go({ id: 'clear', levelId }) }
     );
     this.resize();
@@ -212,6 +214,7 @@ export class PuzzleApp {
   private restart(): void {
     const s = this.screen;
     if (s.id === 'clear') this.go({ id: 'level', levelId: s.levelId });
+    else if (s.id === 'level' && this.session) { this.session.restartRoom(); this.input.clear(); }
     else if (s.id === 'level') this.startSession(this.entry(s.levelId));
   }
 

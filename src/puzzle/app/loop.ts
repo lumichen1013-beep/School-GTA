@@ -1,4 +1,4 @@
-import type { Mode, World } from '../core/types';
+import type { GameEvent, Mode, World } from '../core/types';
 import type { WorldAction } from '../core/actions';
 import { step } from '../core/step';
 import type { Transition } from '../render/transitions';
@@ -16,6 +16,8 @@ export interface LoopHooks {
   onSwap?(): void;
   /** 世界首次通關 */
   onCleared?(): void;
+  /** 切換以外的世界事件 (v0.3：door / turnRequest，交給章節層) */
+  onEvent?(e: GameEvent): void;
 }
 
 /**
@@ -27,6 +29,7 @@ export class LevelLoop {
   private pending: WorldAction[] = [];
   private locked = false;
   private clearedFired = false;
+  private halted = false;
   /** 最後一個固定步之前的玩家位置 (渲染內插用) */
   readonly prev: PlayerPose;
 
@@ -39,12 +42,20 @@ export class LevelLoop {
   /** 距離下一個固定步的進度 (0～1)，供渲染在 prev 與目前位置之間內插 */
   get alpha(): number { return this.acc / FIXED_DT; }
 
+  /** 本幀剩下的固定步不再執行 (章節層要換房 / 轉動：世界即將被替換或上鎖) */
+  halt(): void {
+    this.halted = true;
+    this.acc = 0;
+    this.pending = [];
+  }
+
   /** 推進一幀；回傳本幀執行的固定步數 */
   frame(elapsedSec: number, input: LoopInput): number {
     for (const a of input.pressed) if (!this.pending.includes(a)) this.pending.push(a);
     this.acc += Math.min(Math.max(elapsedSec, 0), MAX_FRAME_SEC);
+    this.halted = false;
     let n = 0;
-    while (this.acc >= FIXED_DT - 1e-9) {
+    while (!this.halted && this.acc >= FIXED_DT - 1e-9) {
       this.acc = Math.max(this.acc - FIXED_DT, 0);
       n++;
       this.tick(input);
@@ -68,7 +79,7 @@ export class LevelLoop {
     this.pending = [];
     step(w, { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump, pressed }, FIXED_DT);
     for (const e of w.events.splice(0)) {
-      if (e.t !== 'switch') continue;
+      if (e.t !== 'switch') { if (e.t !== 'switchDenied') this.hooks.onEvent?.(e); continue; }
       if (this.transition) { this.transition.start(e.to); this.locked = true; } else this.hooks.onSwap?.();
     }
     if (w.cleared && !this.clearedFired) { this.clearedFired = true; this.hooks.onCleared?.(); }

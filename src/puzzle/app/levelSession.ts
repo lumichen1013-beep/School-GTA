@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import type { AbilityId, LevelDef, Mode, World } from '../core/types';
-import { createWorld } from '../core/world';
+import type { AbilityId, Mode, World } from '../core/types';
+import type { WorldOptions } from '../core/world';
+import { openChapter, restartRoom, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
 import type { Bindings, InputFrame } from '../input/types';
@@ -23,32 +24,64 @@ export interface SessionContext {
   theme: Theme;
 }
 
+export interface SessionHooks {
+  abilities: readonly AbilityId[];
+  onCleared(): void;
+}
+
 const isWorldAction = (a: string): a is WorldAction => a === 'flip' || a === 'reset' || a === 'interact';
 
-/** 一次關卡遊玩：世界 + 固定步長迴圈 + 場景 / 鏡頭；重來 = 換一個新的 session */
+/**
+ * 一次關卡遊玩：章節 session (core/chapter；單房關卡 = 只有一間房、沒有魔方) + 固定步長迴圈 + 場景 / 鏡頭。
+ * 換房 / 重進房間 = 換一個 World，迴圈、場景、鏡頭跟著重建
+ */
 export class LevelSession {
-  readonly world: World;
-  private loop: LevelLoop;
-  private view: PuzzleScene;
-  private cams: PuzzleCameras;
+  private cs: ChapterSession;
+  private loop!: LevelLoop;
+  private view: PuzzleScene | null = null;
+  private cams!: PuzzleCameras;
   private renderMode: Mode = '3d';
+  private aspect = 1;
+  private readonly opts: WorldOptions;
 
-  constructor(private ctx: SessionContext, level: LevelDef, hooks: { abilities: readonly AbilityId[]; onCleared(): void }) {
-    this.world = createWorld(level, { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities });
-    this.loop = new LevelLoop(this.world, ctx.transition, {
+  constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
+    this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
+    this.cs = openChapter(spec, state, this.opts);
+    this.mount();
+  }
+
+  get world(): World { return this.cs.world; }
+  get chapter(): ChapterSession { return this.cs; }
+
+  /** 為目前的 World 建迴圈 / 場景 / 鏡頭 (舊場景釋放)；過場與 HUD 訊息重置 */
+  private mount(): void {
+    const w = this.cs.world;
+    this.view?.dispose();
+    this.renderMode = w.player.mode;
+    this.loop = new LevelLoop(w, this.ctx.transition, {
       onSwap: () => {
         this.renderMode = this.world.player.mode;
         this.cams.follow(1, this.renderMode);
       },
-      onCleared: hooks.onCleared
+      onCleared: this.hooks.onCleared
     });
-    this.view = new PuzzleScene(this.world, ctx.theme);
-    this.cams = new PuzzleCameras(this.world);
-    ctx.transition.cancel();
-    ctx.hud.reset(this.world.msgSeq);
+    this.view = new PuzzleScene(w, this.ctx.theme);
+    this.cams = new PuzzleCameras(w);
+    this.cams.resize(this.aspect);
+    this.ctx.transition.cancel();
+    this.ctx.hud.reset(w.msgSeq);
   }
 
-  resize(aspect: number): void { this.cams.resize(aspect); }
+  /** R 重進房間：整章狀態 (含魔方排列) 回到本次進房時；單房關卡 = 重新開始本關 */
+  restartRoom(): void {
+    this.cs = restartRoom(this.cs, this.opts);
+    this.mount();
+  }
+
+  resize(aspect: number): void {
+    this.aspect = aspect;
+    this.cams.resize(aspect);
+  }
 
   /** 推進世界 (固定步長)；input.pressed 中的外殼動作由 app 處理 */
   update(elapsedSec: number, input: InputFrame): void {
@@ -72,14 +105,15 @@ export class LevelSession {
     try {
       this.cams.follow(0.12, this.renderMode);
       const cam = this.cams.active(this.renderMode);
-      this.view.update(this.renderMode, dt, nowMs / 1000, cam);
-      ctx.renderer.render(this.view.scene, cam);
+      this.view!.update(this.renderMode, dt, nowMs / 1000, cam);
+      ctx.renderer.render(this.view!.scene, cam);
     } finally {
       Object.assign(p, saved);
     }
   }
 
   dispose(): void {
-    this.view.dispose();
+    this.view?.dispose();
+    this.view = null;
   }
 }
