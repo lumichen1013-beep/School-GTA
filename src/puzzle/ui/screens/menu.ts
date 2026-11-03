@@ -3,7 +3,8 @@ import { make, openScreen } from './screen';
 
 export interface MenuLevel { id: string; titleKey: string; state: 'locked' | 'open' | 'cleared' }
 export interface MenuChapter { titleKey: string; levels: MenuLevel[] }
-export interface MenuModel { name: string; chapters: MenuChapter[] }
+/** dev = 開發入口 (網址帶 ?dev=1 才有；原型占位的關卡，例：控制盤原型) */
+export interface MenuModel { name: string; chapters: MenuChapter[]; dev?: MenuChapter }
 
 /** 章節選單：每關一張卡片 (已通關 / 未解鎖標示)；回傳關閉函式 */
 export function showMenu(text: Text, m: MenuModel, on: { play(id: string): void; rename(): void; memories(): void }): () => void {
@@ -18,7 +19,7 @@ export function showMenu(text: Text, m: MenuModel, on: { play(id: string): void;
   memories.addEventListener('click', () => on.memories());
   head.append(make('span', undefined, text('ui.menu.player', { name: m.name })), rename, memories);
   root.append(make('h1', undefined, text('ui.menu.title')), head);
-  for (const ch of m.chapters) {
+  for (const ch of m.dev ? [...m.chapters, m.dev] : m.chapters) {
     const sec = make('section', 'pz-chapter');
     sec.append(make('h2', undefined, text(ch.titleKey)));
     const list = make('div', 'pz-levels');

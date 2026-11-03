@@ -84,22 +84,60 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
   return e;
 };
 
+/** 轉動模式的點擊 (ui 只回呼，不改 session；app 交給 reduceTurnMode → ChapterCommand) */
+export type TurnClick = { t: 'pick'; group: string; dir: TurnDir } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+export interface TurnHandlers { tab(): void; input(i: TurnClick): void }
+
+/** 進入轉動模式後這段時間內「確認」無效 (從互動鍵連點穿透；mobile-controls 2.5) */
+const CONFIRM_GUARD_MS = 300;
+/** 標頭箭頭的邊長 (≥ 44 CSS px；mobile-controls 2.5) 與到格子的間距 */
+const HEAD = 44;
+const HEAD_GAP = 8;
+
+const LOCK_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="7" width="10" height="7.5" rx="1.2" fill="currentColor"/></svg>';
+const WEDGE_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 13 L14 13 L14 4 Z" fill="currentColor"/></svg>';
+const UNDO_SVG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M7 4 L3 8 L7 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 8 H12 a4.5 4.5 0 0 1 0 9 H8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
 export class CubeMapOverlay {
   private card = el('div', 'pz-map');
   private head = el('div', 'pz-map-head');
+  private titleEl = el('span', 'pz-map-title');
+  private inkEl = el('span', 'pz-map-ink');
+  private tab = el('button', 'pz-map-tab');
+  private body = el('div', 'pz-map-body');
+  private stage = el('div', 'pz-map-stage');
   private canvas = el('canvas', 'pz-map-canvas');
+  private heads = el('div', 'pz-turn-heads');
+  private btns = el('div', 'pz-turn-btns');
+  private exitBtn = el('button', 'pz-turn-btn exit');
+  private undoBtn = el('button', 'pz-turn-btn undo');
+  private okBtn = el('button', 'pz-turn-btn ok');
   private caption = el('div', 'pz-map-caption');
+  private keys = el('div', 'pz-map-keys');
   private legend = el('div', 'pz-map-legend');
   private btn = el('button', 'pz-map-btn');
   private last = '';
   private shown = false;
+  private turnSince = 0;
 
-  constructor(root: HTMLElement, text: Text, onToggle: () => void) {
+  constructor(root: HTMLElement, text: Text, onToggle: () => void, private turn?: TurnHandlers) {
     this.btn.type = 'button';
     this.btn.textContent = text('ui.map.btn');
     this.btn.setAttribute('aria-label', text('ui.map.open'));
     this.btn.addEventListener('click', e => { e.preventDefault(); onToggle(); this.btn.blur(); });
-    this.card.append(this.head, this.canvas, this.caption, this.legend);
+    for (const b of [this.tab, this.exitBtn, this.undoBtn, this.okBtn]) { b.type = 'button'; b.tabIndex = -1; }
+    this.tab.addEventListener('click', e => { e.preventDefault(); this.turn?.tab(); });
+    this.exitBtn.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'exit' }); });
+    this.undoBtn.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'undo' }); });
+    this.okBtn.addEventListener('click', e => {
+      e.preventDefault();
+      if (performance.now() - this.turnSince >= CONFIRM_GUARD_MS) this.turn?.input({ t: 'confirm' });
+    });
+    this.btns.append(this.exitBtn, this.undoBtn, this.okBtn);
+    this.head.append(this.titleEl, this.inkEl, this.tab);
+    this.stage.append(this.canvas, this.heads);
+    this.body.append(this.stage, this.btns);
+    this.card.append(this.head, this.body, this.caption, this.keys, this.legend);
     root.append(this.card, this.btn);
   }
 
@@ -109,51 +147,159 @@ export class CubeMapOverlay {
   /** model = null 收起；相同內容不重畫 */
   render(model: CubeMapModel | null): void {
     if (!model) {
-      if (this.shown) { this.card.classList.remove('show'); this.shown = false; }
+      if (this.shown) { this.card.classList.remove('show', 'turning'); this.shown = false; this.last = ''; }
       return;
     }
     if (!this.shown) { this.card.classList.add('show'); this.shown = true; }
+    const t = model.turn ?? null;
+    if (!!t !== this.card.classList.contains('turning')) {
+      this.card.classList.toggle('turning', !!t);
+      if (t) this.turnSince = performance.now();
+    }
     const r = this.card.getBoundingClientRect();
     const key = JSON.stringify(model) + `|${Math.round(r.width)}x${Math.round(r.height)}`;
     if (key === this.last) return;
     this.last = key;
-    this.head.textContent = model.title;
+    this.titleEl.textContent = model.title;
+    this.renderTab(model);
     const pv = model.preview;
-    this.caption.textContent = pv ? (pv.blocked ? `${pv.caption} ${pv.blocked}` : pv.caption) : model.hint;
-    this.caption.classList.toggle('pv', !!pv);
+    if (t) {
+      this.caption.textContent = t.caption;
+      this.caption.classList.toggle('pv', !!t.selected);
+      this.caption.classList.toggle('bad', !!t.blocked);
+      this.keys.textContent = t.text.keys;
+      this.renderInk(t);
+      this.renderButtons(t);
+    } else {
+      this.caption.textContent = pv ? (pv.blocked ? `${pv.caption} ${pv.blocked}` : pv.caption) : model.hint;
+      this.caption.classList.toggle('pv', !!pv);
+      this.caption.classList.remove('bad');
+      this.keys.textContent = '';
+      this.inkEl.textContent = '';
+    }
     this.legend.replaceChildren(...[['open', model.legend.open], ['wall', model.legend.wall], ['arch', model.legend.arch], ['you', model.legend.you]]
-      .map(([k, t]) => el('span', `pz-map-lg ${k}`, t)));
-    this.draw(model);
+      .map(([k, tx]) => el('span', `pz-map-lg ${k}`, tx)));
+    // 先排好版面 (三顆鈕顯示 / 隱藏) 再量畫布
+    const geo = this.draw(model);
+    this.renderHeads(t, geo);
   }
 
-  private draw(m: CubeMapModel): void {
+  private renderTab(m: CubeMapModel): void {
+    const tab = m.tab ?? null;
+    this.tab.classList.toggle('show', !!tab);
+    if (!tab) return;
+    this.tab.textContent = tab.label;
+    this.tab.classList.toggle('active', tab.active);
+    this.tab.classList.toggle('off', !tab.enabled && !tab.active);
+    this.tab.setAttribute('aria-pressed', String(tab.active));
+    this.tab.title = tab.reason ?? '';
+  }
+
+  /** 墨點 (實心 = 剩下、空心 = 用掉；剩 1 滴時外框加粗，不閃爍) + 「墨 3 / 6」 */
+  private renderInk(t: TurnModeModel): void {
+    const dots = el('span', 'pz-ink-dots');
+    for (let i = 0; i < t.ink.max; i++) dots.append(el('i', i < t.ink.left ? 'full' : 'empty'));
+    dots.classList.toggle('last', t.ink.left === 1);
+    this.inkEl.replaceChildren(el('span', 'pz-ink-num', t.text.ink), dots);
+  }
+
+  private renderButtons(t: TurnModeModel): void {
+    this.exitBtn.textContent = t.text.exit;
+    this.undoBtn.innerHTML = `${UNDO_SVG}<span></span>`;
+    this.undoBtn.querySelector('span')!.textContent = t.text.undo;
+    this.undoBtn.disabled = !t.canUndo;
+    this.okBtn.textContent = t.text.confirm;
+    this.okBtn.disabled = !t.selected || !!t.blocked;
+  }
+
+  /** 標頭箭頭 (DOM 按鈕，疊在畫布上；位置依畫布上格子的實際位置) */
+  private renderHeads(t: TurnModeModel | null, geo: { ox: number; oy: number; size: number; cols: number; rows: number } | null): void {
+    if (!t || !geo) { this.heads.replaceChildren(); return; }
+    const { ox, oy, size, cols, rows } = geo;
+    const btns = t.headers.map(h => {
+      const b = el('button', `pz-turn-head ${h.state}${h.selected ? ' sel' : ''}`);
+      b.type = 'button';
+      b.tabIndex = -1;
+      b.setAttribute('aria-label', h.label);
+      b.setAttribute('aria-pressed', String(h.selected));
+      b.title = h.label;
+      b.dataset.group = h.group;
+      b.dataset.dir = String(h.dir);
+      b.innerHTML = `<b>${h.glyph}</b>${h.state === 'locked' ? `<i class="mark">${LOCK_SVG}</i>` : h.state === 'jammed' ? `<i class="mark">${WEDGE_SVG}</i>` : ''}`;
+      let x = 0; let y = 0;
+      const i = h.at.i;
+      if (h.at.side === 'left') { x = ox - HEAD_GAP - HEAD; y = oy + (i + 0.5) * size - HEAD / 2; }
+      else if (h.at.side === 'right') { x = ox + cols * size + HEAD_GAP; y = oy + (i + 0.5) * size - HEAD / 2; }
+      else if (h.at.side === 'top') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy - HEAD_GAP - HEAD; }
+      else if (h.at.side === 'bottom') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy + rows * size + HEAD_GAP; }
+      else { x = ox + cols * size + HEAD_GAP; y = oy + i * (HEAD + HEAD_GAP); }
+      b.style.left = `${Math.round(x)}px`;
+      b.style.top = `${Math.round(y)}px`;
+      b.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'pick', group: h.group, dir: h.dir }); });
+      return b;
+    });
+    this.heads.replaceChildren(...btns);
+  }
+
+  private draw(m: CubeMapModel): { ox: number; oy: number; size: number; cols: number; rows: number } | null {
     const cv = this.canvas;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = cv.clientWidth;
     const H = cv.clientHeight;
-    if (W < 10 || H < 10) return;
+    if (W < 10 || H < 10) return null;
     cv.width = Math.round(W * dpr);
     cv.height = Math.round(H * dpr);
     const g = cv.getContext('2d');
-    if (!g) return;
+    if (!g) return null;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
     const font = (px: number, bold = false) => `${bold ? '700 ' : ''}${Math.round(px)}px "PingFang TC", "Noto Sans TC", sans-serif`;
-    // 留邊給屋框標籤 (左右依標籤實際寬度，標籤不被裁掉)
+    // 留邊給屋框標籤 (左右依標籤實際寬度，標籤不被裁掉)；轉動模式另留標頭箭頭的位置
     const labelPx = 14;
     g.font = font(labelPx);
     const side = (ds: Side[]) => Math.max(0, ...m.frames.filter(f => ds.includes(f.side)).map(f => g.measureText(f.name).width + 18));
-    const mx = Math.max(24, side(['E', 'W']));
-    const my = Math.max(24, m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0);
+    const t = m.turn ?? null;
+    const hx = t?.headers.some(h => h.at.side === 'left' || h.at.side === 'right') ? HEAD + HEAD_GAP + 4 : 0;
+    const hy = t?.headers.some(h => h.at.side === 'top' || h.at.side === 'bottom') ? HEAD + HEAD_GAP + 4 : 0;
+    const mx = Math.max(24, side(['E', 'W']), hx);
+    const my = Math.max(24, m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0, hy);
     const size = Math.min((W - mx * 2) / m.cols, (H - my * 2) / m.rows);
     const ox = (W - size * m.cols) / 2;
     const oy = (H - size * m.rows) / 2;
     const cx = (x: number) => ox + (x + 0.5) * size;
     const cy = (y: number) => oy + (y + 0.5) * size;
     const nameSize = Math.max(14, Math.min(22, size * 0.15));
+    const tp = t?.preview ?? null;
 
-    for (const c of m.cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you);
+    // 轉動模式的預覽：直接畫轉後的樣子 (格、門)；移動的房間加藍色虛線框，虛線箭頭由原位指向新位置
+    const cells = tp ? tp.cells : m.cells;
+    for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you);
     for (const f of m.frames) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
+    if (tp) {
+      for (const d of tp.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
+      g.save();
+      for (const mv of tp.moves) {
+        g.setLineDash([8, 6]);
+        g.strokeStyle = BLUE;
+        g.lineWidth = 3;
+        g.strokeRect(ox + mv.to[0] * size + 6, oy + mv.to[1] * size + 6, size - 12, size - 12);
+        g.setLineDash([]);
+        const [fx, fy] = mv.from;
+        const [tx, ty] = mv.to;
+        // 箭頭畫在房名下方 (橫移) / 右側 (直移)，不壓到字
+        const ax = (x: number) => cx(x) + (fx === tx ? size * 0.3 : 0);
+        const ay = (y: number) => cy(y) + (fy === ty ? size * 0.33 : 0);
+        if (Math.abs(tx - fx) + Math.abs(ty - fy) === 1) this.arrow(g, ax(fx), ay(fy), ax(tx), ay(ty), size * 0.6);
+        else {
+          // 繞回 (列循環)：從原位往外指、再從另一端指進新位置
+          const sx = Math.sign(fx - tx); const sy = Math.sign(fy - ty);
+          this.arrow(g, ax(fx), ay(fy), ax(fx) + sx * size * 0.62, ay(fy) + sy * size * 0.62, size * 0.25);
+          this.arrow(g, ax(tx) - sx * size * 0.62, ay(ty) - sy * size * 0.62, ax(tx), ay(ty), size * 0.25);
+        }
+      }
+      g.restore();
+      return { ox, oy, size, cols: m.cols, rows: m.rows };
+    }
     // 預覽中會改變的門 (同一格) 只畫轉後的樣子，不與現況疊在一起
     const replaced = (d: MapDoor) => !!m.preview?.doors.some(p => p.door === d.door && p.room === d.room && p.x === d.x && p.y === d.y);
     for (const d of m.doors) if (!replaced(d)) this.door(g, d, cx(d.x), cy(d.y), size, 1);
@@ -182,6 +328,7 @@ export class CubeMapOverlay {
       g.restore();
     }
     if (pv) for (const d of pv.doors) this.door(g, d, cx(d.x), cy(d.y), size, 2);
+    return { ox, oy, size, cols: m.cols, rows: m.rows };
   }
 
   private cell(g: CanvasRenderingContext2D, c: MapCell, x: number, y: number, s: number, nameSize: number, font: (px: number, bold?: boolean) => string, you: string): void {

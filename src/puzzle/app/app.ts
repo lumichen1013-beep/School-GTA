@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import '../ui/puzzle.css';
 import { zhHant } from '../content/text/zh-Hant';
-import { LEVELS, levelById, type LevelEntry } from '../content/levels';
+import { LEVELS, levelById, PROTO_LEVELS, protoLevelById, type LevelEntry } from '../content/levels';
 import { CHAPTERS } from '../content/chapters';
 import type { World } from '../core/types';
 import { createText, type Text } from '../text/text';
@@ -75,6 +75,8 @@ export class PuzzleApp {
   private last = performance.now();
   private cs: ActiveCutscene | null = null;
   private closeSkipUi: (() => void) | null = null;
+  /** 開發入口 (網址帶 ?dev=1)：選單多一區「開發：控制盤原型」(原型占位，不計入正式關卡) */
+  private readonly dev = new URLSearchParams(window.location.search).get('dev') === '1';
   /** 音訊掛點：音訊模組 (規格 9.1) 實作前不做事 */
   private onAudioCue: (e: Extract<CutsceneEvent, { type: 'audio' }>) => void = () => { /* 音訊模組尚未實作 */ };
 
@@ -85,7 +87,10 @@ export class PuzzleApp {
       { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' }
     ]);
     this.hud = new PuzzleHud(this.text);
-    this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap());
+    this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
+      tab: () => this.session?.toggleTurnMode(),
+      input: i => this.session?.turnInput(i)
+    });
     this.tray = new CardTray(root, this.text, {
       slot: n => this.session?.trayPick(n),
       remove: () => this.session?.trayRemove(),
@@ -158,7 +163,8 @@ export class PuzzleApp {
           chapters: CHAPTERS.map(ch => ({
             titleKey: ch.titleKey,
             levels: ch.levels.map(levelById).filter((e): e is LevelEntry => !!e).map(e => ({ id: e.id, titleKey: e.titleKey, state: levelState(e, this.save) }))
-          }))
+          })),
+          ...(this.dev ? { dev: { titleKey: 'lvl.proto.menu', levels: PROTO_LEVELS.map(e => ({ id: e.id, titleKey: e.titleKey, state: 'open' as const })) } } : {})
         }, {
           // M1C 前就有暱稱但沒有任何進度的存檔：第一次進 1-1 前播序章
           play: id => this.go(id === '1-1' && shouldAutoPlayPrologue(this.save)
@@ -203,7 +209,7 @@ export class PuzzleApp {
   }
 
   private entry(id: string): LevelEntry {
-    const e = levelById(id);
+    const e = levelById(id) ?? (this.dev ? protoLevelById(id) : undefined);
     if (!e || !isUnlocked(e, this.save)) return LEVELS[0];
     return e;
   }

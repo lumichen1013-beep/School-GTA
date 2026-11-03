@@ -213,6 +213,9 @@ export class LevelSession {
     if (!this.turnMode || this.fx) return;
     const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel);
     const r = reduceTurnMode(this.turnSel, i, m);
+    // 按確認卻轉不動 (鎖著 / 卡住 / 墨乾)：預覽已寫了原因，再用訊息說一次
+    if (i.t === 'confirm' && m.blocked) say(this.world, DIAL_BLOCK_MSG[m.blocked as keyof typeof DIAL_BLOCK_MSG]);
+    if (i.t === 'undo' && !m.canUndo) say(this.world, 'msg.dial.nothingToUndo');
     this.turnSel = r.sel;
     if (r.command) this.chapterQueue.push(r.command);
     if (r.exit) { this.turnMode = false; this.turnSel = null; }

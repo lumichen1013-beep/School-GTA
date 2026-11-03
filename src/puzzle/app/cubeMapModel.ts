@@ -194,13 +194,17 @@ export type TurnModeInput =
 /**
  * 轉動模式的狀態轉移 (純函式)：pick = 選取 (再點同一顆 = 取消)；↑↓ = 換一組 (依控制盤順序循環)；
  * ←→ = 列選方向 (← 往左、→ 往右)，只有一個方向的組 (兩列的行) 改成換到左右相鄰的同類組；
- * confirm = 選了可轉的組 → 恰好一個 turn 指令 (選取保留，可再按一次)；undo = 有可退的一步 → undo 指令；exit = 離開
+ * confirm = 選了可轉的組 → 恰好一個 turn 指令 (並取消選取，圖回到轉後的現況)；被擋 → 不轉、選取保留；undo = 有可退的一步 → undo 指令；exit = 離開
  */
 export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeInput, m: TurnModeModel): { sel: TurnModeModel['selected']; command: ChapterCommand | null; exit: boolean } {
   const none = { command: null, exit: false };
   if (input.t === 'exit') return { sel: null, command: null, exit: true };
   if (input.t === 'undo') return { sel, command: m.canUndo ? { t: 'undo' } : null, exit: false };
-  if (input.t === 'confirm') return { sel, command: sel && m.blocked === null && m.selected ? { t: 'turn', turn: { group: sel.group, dir: sel.dir } } : null, exit: false };
+  if (input.t === 'confirm') {
+    const ok = !!sel && m.blocked === null && !!m.selected;
+    // 轉了之後取消選取：展開圖回到「現在」的樣子 (轉後的結果看得到；要再轉一次就再選)
+    return ok ? { sel: null, command: { t: 'turn', turn: { group: sel!.group, dir: sel!.dir } }, exit: false } : { sel, command: null, exit: false };
+  }
   if (input.t === 'pick') {
     if (!m.headers.some(h => sameTurn({ group: input.group, dir: input.dir }, h))) return { sel, ...none };
     return { sel: sameTurn(sel, input) ? null : { group: input.group, dir: input.dir }, ...none };
@@ -231,8 +235,14 @@ export function turnModeFrame(input: InputFrame, prev: AxisMemo): { loop: LoopIn
   const inputs: TurnModeInput[] = [];
   const x = Math.sign(input.moveX);
   const z = Math.sign(input.moveZ);
-  if (x !== 0 && x !== prev.x) inputs.push({ t: 'step', axis: 'h', d: x as 1 | -1 });
-  if (z !== 0 && z !== prev.z) inputs.push({ t: 'step', axis: 'v', d: z as 1 | -1 });
+  const has = (a: InputFrame['pressed'][number]) => input.pressed.includes(a);
+  // 方向鍵 = 新按下的動作 (快速點按也抓得到)；WASD 只有移動軸 → 看軸「剛按下」(同一軸本幀有方向鍵就不重複算)
+  const nh = has('navLeft') ? -1 : has('navRight') ? 1 : 0;
+  const nv = has('navUp') ? -1 : has('navDown') ? 1 : 0;
+  if (nh) inputs.push({ t: 'step', axis: 'h', d: nh });
+  else if (x !== 0 && x !== prev.x) inputs.push({ t: 'step', axis: 'h', d: x as 1 | -1 });
+  if (nv) inputs.push({ t: 'step', axis: 'v', d: nv });
+  else if (z !== 0 && z !== prev.z) inputs.push({ t: 'step', axis: 'v', d: z as 1 | -1 });
   if (input.pressed.includes('confirm')) inputs.push({ t: 'confirm' });
   if (input.pressed.includes('undo')) inputs.push({ t: 'undo' });
   if (input.pressed.includes('cancel') || input.pressed.includes('turnMode')) inputs.push({ t: 'exit' });

@@ -106,13 +106,13 @@ describe('reduceTurnMode：選取與指令', () => {
     expect(step(null, { t: 'step', axis: 'h', d: -1 }).sel).toEqual({ group: 'row0', dir: -1 });
   });
 
-  it('確認：選了可轉的組 → 恰好一個 turn 指令 (選取保留)；被擋 / 沒選 → 沒有指令；回退：有可退的才有指令；離開', () => {
+  it('確認：選了可轉的組 → 恰好一個 turn 指令 (取消選取，圖回到現況)；被擋 / 沒選 → 沒有指令 (選取保留)；回退：有可退的才有指令；離開', () => {
     const cs = open();
     const sel = { group: 'row0', dir: 1 as const };
     const m = deriveTurnMode(cs, TEXT, sel);
-    expect(reduceTurnMode(sel, { t: 'confirm' }, m)).toEqual({ sel, command: { t: 'turn', turn: { group: 'row0', dir: 1 } }, exit: false });
+    expect(reduceTurnMode(sel, { t: 'confirm' }, m)).toEqual({ sel: null, command: { t: 'turn', turn: { group: 'row0', dir: 1 } }, exit: false });
     const lsel = { group: 'row1', dir: 1 as const };
-    expect(reduceTurnMode(lsel, { t: 'confirm' }, deriveTurnMode(cs, TEXT, lsel)).command).toBeNull();
+    expect(reduceTurnMode(lsel, { t: 'confirm' }, deriveTurnMode(cs, TEXT, lsel))).toEqual({ sel: lsel, command: null, exit: false });
     expect(reduceTurnMode(null, { t: 'confirm' }, deriveTurnMode(cs, TEXT, null)).command).toBeNull();
     expect(reduceTurnMode(sel, { t: 'undo' }, m).command).toBeNull();
     const turned = ok(dialTurn(cs, sel));
@@ -132,6 +132,9 @@ describe('轉動模式的輸入與世界', () => {
     expect(r.inputs).toEqual([{ t: 'step', axis: 'v', d: -1 }, { t: 'confirm' }, { t: 'undo' }]);
     expect(turnModeFrame(frame({ pressed: ['cancel'] }), { x: 0, z: 0 }).inputs).toEqual([{ t: 'exit' }]);
     expect(turnModeFrame(frame({ pressed: ['turnMode'] }), { x: 0, z: 0 }).inputs).toEqual([{ t: 'exit' }]);
+    // 方向鍵快速點按 (按下又放開，取樣時軸已是 0) 也算一步；同幀方向鍵 + 軸不重複
+    expect(turnModeFrame(frame({ pressed: ['navRight'] }), { x: 0, z: 0 }).inputs).toEqual([{ t: 'step', axis: 'h', d: 1 }]);
+    expect(turnModeFrame(frame({ moveZ: 1, pressed: ['navDown'] }), { x: 0, z: 0 }).inputs).toEqual([{ t: 'step', axis: 'v', d: 1 }]);
   });
 
   it('轉動模式中世界照常推進 (時間、機制逐幀與不開圖時相同)，只是玩家不動 (規格 Q-AF)', () => {
@@ -183,8 +186,8 @@ describe('HUD 墨量與按鍵', () => {
     expect(deriveHud(w, TEXT, { ...view, ink: '墨 ●○' }).ink).toBe('墨 ●○');
   });
 
-  it('按鍵：Tab = 轉動模式、Z = 回退 (外殼動作，不進世界)', () => {
-    expect([DEFAULT_BINDINGS.turnMode, DEFAULT_BINDINGS.undo]).toEqual([['Tab'], ['KeyZ']]);
-    expect(INPUT_ACTIONS.slice(-2)).toEqual(['turnMode', 'undo']);
+  it('按鍵：Tab = 轉動模式、Z = 回退、方向鍵 = 選標頭 (外殼動作，不進世界)', () => {
+    expect([DEFAULT_BINDINGS.turnMode, DEFAULT_BINDINGS.undo, DEFAULT_BINDINGS.navLeft, DEFAULT_BINDINGS.navDown]).toEqual([['Tab'], ['KeyZ'], ['ArrowLeft'], ['ArrowDown']]);
+    expect(INPUT_ACTIONS.slice(-6)).toEqual(['turnMode', 'undo', 'navLeft', 'navRight', 'navUp', 'navDown']);
   });
 });

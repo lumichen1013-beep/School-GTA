@@ -1,7 +1,7 @@
 // 【原型占位】M-Dial 控制盤原型 (開發入口；不計入正式關卡)：六間占位房的文字
 export const lvlProto = {
   'lvl.proto.title': '開發：控制盤原型',
-  'lvl.proto.menu': '開發',
+  'lvl.proto.menu': '開發（原型，不計入正式關卡）',
   'lvl.proto.narration': '控制盤的試驗場。房間都是空的，只有門。',
   'lvl.proto.next': '試驗場',
   'lvl.proto.a.title': '甲室',
