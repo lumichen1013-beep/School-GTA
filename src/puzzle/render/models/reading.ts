@@ -104,21 +104,39 @@ export function inkveilModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   return { root: g, update };
 }
 
-/** 閱覽桌：桌面 + 四腳 (純呈現；也用在印房的活字桌) */
+/** 閱覽桌：出簷桌面 + 桌裙 + 四腳 + 下方 H 形橫撐；桌上角落一疊書與墨水瓶 (純呈現；也用在印房的活字桌) */
 export function readingTableModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   const top = p.mesh(box(d.w, 0.08, d.d), pal.tableTop, { map: crateWood(pal), flat: pal.tableTop });
   top.position.y = d.h - 0.04;
-  g.add(top);
+  const apron = p.mesh(box(d.w - 0.16, 0.12, d.d - 0.16), pal.table, { outline: false });
+  apron.position.y = d.h - 0.14;
+  g.add(top, apron);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const leg = p.mesh(box(0.1, d.h - 0.08, 0.1), pal.table, { outline: false });
     leg.position.set(sx * (d.w / 2 - 0.12), (d.h - 0.08) / 2, sz * (d.d / 2 - 0.12));
     g.add(leg);
   }
+  for (const sx of [-1, 1]) {
+    const side = p.mesh(box(0.05, 0.05, d.d - 0.3), pal.shelfDark, { outline: false });
+    side.position.set(sx * (d.w / 2 - 0.12), 0.16, 0);
+    g.add(side);
+  }
+  const mid = p.mesh(box(d.w - 0.3, 0.05, 0.05), pal.shelfDark, { outline: false });
+  mid.position.y = 0.16;
+  g.add(mid);
   const stack = p.mesh(box(0.42, 0.12, 0.3), pal.books[3]);
   stack.position.set(-d.w / 2 + 0.4, d.h + 0.06, -0.1);
   stack.rotation.y = 0.2;
-  g.add(stack);
+  const stack2 = p.mesh(box(0.36, 0.08, 0.26), pal.books[0]);
+  stack2.position.set(-d.w / 2 + 0.42, d.h + 0.16, -0.12);
+  stack2.rotation.y = -0.15;
+  // 墨水瓶 (桌角後側；不擋桌上的謎題物件)
+  const bottle = p.mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 10), pal.inkBlue, { roughness: 0.25 });
+  bottle.position.set(d.w / 2 - 0.2, d.h + 0.06, -d.d / 2 + 0.18);
+  const cork = p.mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 8), pal.shelf, { outline: false });
+  cork.position.set(d.w / 2 - 0.2, d.h + 0.14, -d.d / 2 + 0.18);
+  g.add(stack, stack2, bottle, cork);
   return { root: g };
 }
 

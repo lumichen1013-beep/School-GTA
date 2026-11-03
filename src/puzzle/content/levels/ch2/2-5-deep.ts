@@ -27,8 +27,8 @@ const objects: ObjDef[] = [
   { id: 'chapterE', type: 'cubeDoor', side: 'E', kind: 'chapter', key: 'key.study', openText: 'lvl.ch2.chapterE.open', carving: HOUSE_DRAWING, doneFlag: '2-5',
     x: 5.8, y: LANDING_H, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.chapterE' },
   // ── 前景：書堆上的字條 (L1 / L2) ──
-  { ...noteBase, id: 'noteA', x: -3.4, z: 3.4, textKey: 'lvl.2-5.note.a' },
-  { ...noteBase, id: 'noteA2', x: 0.4, z: 3.4, textKey: 'lvl.2-5.note.a2', revealAfter: 240 }
+  { ...noteBase, id: 'noteA', mount: 'pile', x: -3.4, z: 3.4, textKey: 'lvl.2-5.note.a' },
+  { ...noteBase, id: 'noteA2', mount: 'pile', x: 0.4, z: 3.4, textKey: 'lvl.2-5.note.a2', revealAfter: 240 }
 ];
 
 const decor: DecorItem[] = [

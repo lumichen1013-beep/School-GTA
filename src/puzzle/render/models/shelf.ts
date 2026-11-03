@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { mergeParts } from '../geometry';
 import type { ObjDef, World } from '../../core/types';
 import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
 import { crateWood, glow, inscription, notePaper } from '../textures';
-import { buildBookcase } from '../library';
+import { booksPlane, buildBookcase } from '../library';
 import type { ModelCtx, PropModel } from './types';
 
 // 2-1 書架迴廊 (森林圖書館) 的物件外觀：屋框書牆的一段、矮書架與書、暗格、眉批、燈書與燈座、書擋、書梯、老宅圖殘片
@@ -48,16 +49,46 @@ export function bayShelfModel(p: Painter, d: ObjDef, { pal, room2d }: Theme): Pr
   return { root: bc.root, update };
 }
 
-/** 矮書架 (不擋路)：木頭箱體 + 頂板；書另有物件 (spine) */
+/**
+ * 矮書架 (不擋路；正面朝鏡頭的開放式書格)：踢腳 + 兩側板 + 背板 + 中間一層隔板 + 直隔板，格子裡塞滿書 (貼圖平面)；
+ * 頂板上站著 2-1b 的五本大書 (另有物件 spine)
+ */
 export function lowShelfModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
-  const body = p.mesh(box(d.w, d.h - 0.05, d.d), pal.shelf, { map: crateWood(pal), flat: pal.shelf });
-  body.position.y = (d.h - 0.05) / 2;
-  const top = p.mesh(box(d.w + 0.06, 0.05, d.d + 0.04), pal.shelfDark);
-  top.position.y = d.h - 0.025;
-  const kick = p.mesh(box(d.w - 0.2, 0.12, 0.02), pal.shelfDark, { outline: false });
-  kick.position.set(0, 0.06, d.d / 2 + 0.01);
-  g.add(body, top, kick);
+  const { w, h } = d;
+  const dd = d.d;
+  const wood = { map: crateWood(pal), flat: pal.shelf };
+  const top = p.mesh(box(w + 0.06, 0.05, dd + 0.04), pal.shelfDark);
+  top.position.y = h - 0.025;
+  const back = p.mesh(box(w - 0.04, h - 0.1, 0.04), pal.shelfDark, { outline: false });
+  back.position.set(0, 0.05 + (h - 0.1) / 2, -dd / 2 + 0.02);
+  const kick = p.mesh(box(w - 0.02, 0.1, dd - 0.06), pal.shelfDark, { outline: false });
+  kick.position.set(0, 0.05, -0.01);
+  const mid = p.mesh(box(w - 0.04, 0.04, dd - 0.08), pal.shelf, { outline: false });
+  mid.position.set(0, 0.1 + (h - 0.15) / 2, -0.02);
+  g.add(top, back, kick, mid);
+  for (const s of [-1, 1]) {
+    const side = p.mesh(box(0.06, h - 0.05, dd), pal.shelf, wood);
+    side.position.set(s * (w / 2 - 0.03), (h - 0.05) / 2, 0);
+    g.add(side);
+  }
+  // 直隔板 (約每 1.2 一格)，格子裡兩排書
+  const n = Math.max(1, Math.round(w / 1.2));
+  const cell = (w - 0.12) / n;
+  const rowH = (h - 0.15) / 2 - 0.05;
+  for (let i = 0; i < n; i++) {
+    const x0 = -w / 2 + 0.06 + i * cell;
+    if (i > 0) {
+      const div = p.mesh(box(0.04, h - 0.15, dd - 0.1), pal.shelf, { outline: false });
+      div.position.set(x0, 0.1 + (h - 0.15) / 2, -0.03);
+      g.add(div);
+    }
+    for (let r = 0; r < 2; r++) {
+      const row = booksPlane(p, pal, 3 + i * 5 + r * 2, cell - 0.06, rowH);
+      row.position.set(x0 + cell / 2, 0.1 + r * ((h - 0.15) / 2 + 0.02) + rowH / 2 + 0.01, dd / 2 - 0.12);
+      g.add(row);
+    }
+  }
   return { root: g };
 }
 
@@ -78,17 +109,23 @@ export function libraryStepModel(p: Painter, d: ObjDef, { pal }: Theme): PropMod
   return { root: g };
 }
 
-/** 一本書 (2-1b)：書背朝牆 (正面 = 米白書口)；title = 只畫在藏寶圖上的書名 (墨字)；抽對了 (used) 往外滑出一截 */
+/** 一本書 (2-1b)：書背朝牆的大開本 (兩片書皮夾著書頁；正面 = 米白書口、頂上看得到書頁)；title = 只畫在藏寶圖上的書名 (墨字)；抽對了 (used) 往外滑出一截 */
 export function spineModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   const seed = Math.abs(Math.round(d.x * 7 + d.h * 13));
   const cover = pal.books[seed % pal.books.length];
   const body = new THREE.Group();
-  const shell = p.mesh(box(d.w, d.h, d.d), cover);
-  shell.position.y = d.h / 2;
-  const pages = p.mesh(box(d.w - 0.05, d.h - 0.05, 0.02), pal.paperNote, { outline: false, shadow: false });
-  pages.position.set(0, d.h / 2, d.d / 2 + 0.005);
-  body.add(shell, pages);
+  const t = 0.035;
+  // 書皮 = 兩片側板 + 書背 (朝牆) 合成一個網格
+  const at = (geo: THREE.BufferGeometry, x: number, y: number, z: number) => geo.toNonIndexed().translate(x, y, z);
+  const shell = mergeParts([
+    at(box(t, d.h, d.d), -(d.w / 2 - t / 2), d.h / 2, 0),
+    at(box(t, d.h, d.d), d.w / 2 - t / 2, d.h / 2, 0),
+    at(box(d.w - 2 * t, d.h, t), 0, d.h / 2, -d.d / 2 + t / 2)
+  ]);
+  const pages = p.mesh(box(d.w - 2 * t, d.h - 0.04, d.d - t - 0.015), pal.paperNote, { roughness: 0.95 });
+  pages.position.set(0, (d.h - 0.04) / 2 + 0.02, t / 2 - 0.0075);
+  body.add(p.mesh(shell, cover, { roughness: 0.85 }), pages);
   g.add(body);
   let tag: THREE.Mesh | null = null;
   const build = lazy(text => {
@@ -171,16 +208,23 @@ export function lampBookModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel 
   return { root: g, update };
 }
 
-/** 燈座 (2-1c 的鎖)：黃銅底盤上三盞小燈；依順序鎖的進度點亮 (第 i 盞 = order 的前 i 本已亮)；全亮 = used */
+/** 燈座 (2-1c 的鎖)：胡桃木矮几上的黃銅燭台，三盞小燈；依順序鎖的進度點亮 (第 i 盞 = order 的前 i 本已亮)；全亮 = used */
 export function lampLockModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
-  const base = p.mesh(box(d.w, 0.1, d.d * 0.8), pal.brass, { metalness: 0.6, roughness: 0.4 });
-  base.position.y = 0.05;
-  const stem = p.mesh(new THREE.CylinderGeometry(0.05, 0.07, d.h - 0.2, 10), pal.brass, { metalness: 0.6, roughness: 0.4, outline: false });
-  stem.position.y = 0.1 + (d.h - 0.2) / 2;
-  const bar = p.mesh(box(d.w * 0.9, 0.05, 0.08), pal.goldDeep, { metalness: 0.6, roughness: 0.4 });
-  bar.position.y = d.h - 0.1;
-  g.add(base, stem, bar);
+  const brass = { metalness: 0.6, roughness: 0.4 } as const;
+  const standH = d.h * 0.42;
+  const stand = p.mesh(box(d.w * 0.7, standH - 0.04, d.d * 0.8), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark });
+  stand.position.y = (standH - 0.04) / 2;
+  const slab = p.mesh(box(d.w * 0.78, 0.04, d.d * 0.9), pal.shelf, { outline: false });
+  slab.position.y = standH - 0.02;
+  const base = p.mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.05, 14), pal.brass, brass);
+  base.position.y = standH + 0.025;
+  // 燭台柱頂端插進橫桿 1 cm (頂面不與橫桿頂面共面)
+  const stem = p.mesh(new THREE.CylinderGeometry(0.03, 0.045, d.h - standH - 0.13, 10), pal.brass, { ...brass, outline: false });
+  stem.position.y = standH + 0.05 + (d.h - standH - 0.13) / 2;
+  const bar = p.mesh(box(d.w * 0.82, 0.04, 0.06), pal.goldDeep, brass);
+  bar.position.y = d.h - 0.09;
+  g.add(stand, slab, base, stem, bar);
   const flames: THREE.MeshStandardMaterial[] = [];
   const halos: THREE.Sprite[] = [];
   for (let i = 0; i < 3; i++) {

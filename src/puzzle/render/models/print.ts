@@ -75,22 +75,61 @@ export function pressModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   return { root: g, update };
 }
 
-/** 鉛字盤 (可推)：淺木箱 + 一格格排滿的鉛字 + 兩側提把 */
+/** 鉛字盤 (可推)：活字推車 = 胡桃木矮櫃 (四個鐵腳輪、正面三層淺抽屜與黃銅拉手) + 頂上一圈木框裡排滿的鉛字 + 兩側黃銅提把 */
 export function typeTrayModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
-  const shell = p.mesh(box(d.w, d.h, d.d), pal.crate, { map: crateWood(pal), flat: pal.crate });
-  shell.position.y = d.h / 2;
-  g.add(shell);
+  const { w, h } = d;
+  const dd = d.d;
+  const brass = { metalness: 0.6, roughness: 0.4 } as const;
+  const wheel = 0.1;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const caster = p.mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10), pal.iron, { metalness: 0.5, roughness: 0.5, outline: false });
+    caster.rotation.z = Math.PI / 2;
+    caster.position.set(sx * (w / 2 - 0.12), 0.05, sz * (dd / 2 - 0.12));
+    g.add(caster);
+  }
+  const top = h - 0.08;
+  const body = p.mesh(box(w - 0.04, top - wheel, dd - 0.04), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark });
+  body.position.y = wheel + (top - wheel) / 2;
+  g.add(body);
+  // 正面三層淺抽屜
+  const rows = 3;
+  const rh = (top - wheel - 0.08) / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = wheel + 0.04 + rh * (r + 0.5);
+    const front = p.mesh(box(w - 0.16, rh - 0.05, 0.03), pal.shelf, { outline: false });
+    front.position.set(0, y, (dd - 0.04) / 2 + 0.015);
+    const pull = p.mesh(box(0.18, 0.03, 0.03), pal.brass, { ...brass, outline: false, shadow: false });
+    pull.position.set(0, y, (dd - 0.04) / 2 + 0.045);
+    g.add(front, pull);
+  }
+  // 頂上的木框 (淺盤) 與鉛字
+  const tray = p.mesh(box(w, 0.04, dd), pal.shelf, { outline: false });
+  tray.position.y = top + 0.02;
+  g.add(tray);
+  for (const s of [-1, 1]) {
+    const rimX = p.mesh(box(w, h - top - 0.04, 0.05), pal.shelf, { outline: false });
+    rimX.position.set(0, top + 0.04 + (h - top - 0.04) / 2, s * (dd / 2 - 0.025));
+    const rimZ = p.mesh(box(0.05, h - top - 0.04, dd - 0.1), pal.shelf, { outline: false });
+    rimZ.position.set(s * (w / 2 - 0.025), top + 0.04 + (h - top - 0.04) / 2, 0);
+    g.add(rimX, rimZ);
+  }
   const n = 4;
+  const cw = (w - 0.1) / n, cd = (dd - 0.1) / n;
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-    const lead = p.mesh(box(d.w / n - 0.08, 0.04, d.d / n - 0.08), (i + j) % 2 ? pal.iron : pal.metal, { metalness: 0.5, roughness: 0.5, outline: false, shadow: false });
-    lead.position.set(-d.w / 2 + (i + 0.5) * (d.w / n), d.h + 0.02, -d.d / 2 + (j + 0.5) * (d.d / n));
+    const lead = p.mesh(box(cw - 0.05, 0.025, cd - 0.05), (i + j) % 2 ? pal.iron : pal.metal, { metalness: 0.5, roughness: 0.5, outline: false, shadow: false });
+    lead.position.set(-w / 2 + 0.05 + (i + 0.5) * cw, top + 0.0525, -dd / 2 + 0.05 + (j + 0.5) * cd);
     g.add(lead);
   }
   for (const s of [-1, 1]) {
-    const handle = p.mesh(box(0.06, 0.12, d.d * 0.4), pal.brass, { metalness: 0.6, roughness: 0.4, outline: false });
-    handle.position.set(s * (d.w / 2 + 0.03), d.h * 0.7, 0);
+    const handle = p.mesh(box(0.05, 0.05, dd * 0.4), pal.brass, { ...brass, outline: false });
+    handle.position.set(s * (w / 2 + 0.03), top - 0.12, 0);
     g.add(handle);
+    for (const k of [-1, 1]) {
+      const lug = p.mesh(box(0.05, 0.05, 0.05), pal.brass, { ...brass, outline: false, shadow: false });
+      lug.position.set(s * (w / 2 - 0.005), top - 0.12, k * dd * 0.2);
+      g.add(lug);
+    }
   }
   return { root: g };
 }

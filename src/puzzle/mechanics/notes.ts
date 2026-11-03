@@ -8,7 +8,11 @@ declare module '../core/types' {
      * 紙條：讀出 textKey。revealAfter = L2 / L3 提示字條 (規格 7.1)：一開始是空白的，進房 revealAfter 秒後才浮現字跡
      * (計時以房間為單位：World.time，換房 / R 重新計)
      */
-    note: { textKey?: TextKey; revealAfter?: number };
+    /**
+     * mount = 字條怎麼立著 (只影響外觀，不進碰撞)：未給 = 釘在背後的牆 / 書櫃 / 家具上；
+     * 'post' = 釘在落地的細木柱上 (房間中段、前景)；'pile' = 斜靠在地上的一疊書上
+     */
+    note: { textKey?: TextKey; revealAfter?: number; mount?: 'post' | 'pile' };
   }
 }
 

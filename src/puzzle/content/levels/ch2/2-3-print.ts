@@ -33,9 +33,9 @@ const objects: ObjDef[] = [
   // 2-4b 的線索② (出貨口木柱上的鉛筆字；只在實景)
   { id: 'clueThick', type: 'remark', textKey: 'lvl.2-4.clue.thick', x: -5.0, y: 0.9, z: 3.2, w: 0.8, h: 0.4, d: 0.04, visible: '3d', solid: false, interactable: true, labelKey: 'lvl.2-4.clue' },
   // ── 字條 (父親的筆記；story-bible 7.3) ──
-  { ...noteBase, id: 'noteA', x: -5.6, z: -4.4, textKey: 'lvl.2-3.note.a' }, // 2-3a L1 (釘在活字架側板)
-  { ...noteBase, id: 'noteB', x: 0.4, z: -1.15, textKey: 'lvl.2-3.note.b' }, // 2-3b L1 (釘在印刷機背板)
-  { ...noteBase, id: 'noteC', x: 4.8, z: 3.4, textKey: 'lvl.2-3.note.c' }   // 2-3c L1 (前景木柱，出貨口旁)
+  { ...noteBase, id: 'noteA', mount: 'post', x: -5.6, z: -4.4, textKey: 'lvl.2-3.note.a' }, // 2-3a L1 (釘在活字架側板)
+  { ...noteBase, id: 'noteB', mount: 'post', x: 0.4, z: -1.15, textKey: 'lvl.2-3.note.b' }, // 2-3b L1 (釘在印刷機背板)
+  { ...noteBase, id: 'noteC', mount: 'post', x: 4.8, z: 3.4, textKey: 'lvl.2-3.note.c' }   // 2-3c L1 (前景木柱，出貨口旁)
 ];
 
 const decor: DecorItem[] = [

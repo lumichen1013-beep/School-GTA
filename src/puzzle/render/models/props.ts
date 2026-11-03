@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeParts } from '../geometry';
 import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Palette, Theme } from '../themes';
@@ -229,22 +230,66 @@ export function tableModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   return { root: g };
 }
 
-/** 紙條：釘在牆上的紙 + 紅色圖釘 */
+/** 字條的木柱 (mount 'post')：十字底座 + 方柱 + 柱頭；柱子在紙後面，頂端略高於紙 (原點 = 字條盒底面中心，地板在 y = -floorY) */
+function notePost(p: Painter, pal: Palette, g: THREE.Group, floorY: number, top: number): void {
+  const z = -0.07;
+  const post = p.mesh(box(0.09, floorY + top, 0.09), pal.shelfDark);
+  post.position.set(0, (top - floorY) / 2, z);
+  const cap = p.mesh(box(0.15, 0.05, 0.15), pal.shelf, { outline: false });
+  cap.position.set(0, top + 0.025, z);
+  g.add(post, cap);
+  // 十字底座 (兩根橫木合成一個網格)
+  const foot = mergeParts([box(0.52, 0.06, 0.12), box(0.12, 0.06, 0.52)]);
+  const feet = p.mesh(foot, pal.shelf, { outline: false });
+  feet.position.set(0, -floorY + 0.03, z);
+  g.add(feet);
+}
+
+/** 字條下的一疊書 (mount 'pile')：從地板疊到字條底下，每本略轉一點角度；回傳書堆頂面 (相對原點) */
+function notePile(p: Painter, pal: Palette, g: THREE.Group, floorY: number, seed: number): number {
+  const r = rng(seed);
+  let y = -floorY;
+  for (let i = 0; y < -0.12 && i < 12; i++) {
+    const bh = Math.min(0.1 + r() * 0.08, -y);
+    const b = p.mesh(box(0.56 - r() * 0.12, bh, 0.4 - r() * 0.08), pal.books[(seed + i * 3) % pal.books.length], { roughness: 0.9 });
+    b.position.set((r() - 0.5) * 0.06, y + bh / 2, -0.06 + (r() - 0.5) * 0.05);
+    b.rotation.y = (r() - 0.5) * 0.5;
+    g.add(b);
+    y += bh;
+  }
+  return y;
+}
+
+/** 紙條：紙 + 紅色圖釘；mount = 'post' 釘在落地木柱上、'pile' 斜靠在書堆上、未給 = 釘在背後的牆 / 書櫃 */
 export function noteModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   const reveal = d.type === 'note' ? d.revealAfter : undefined;
+  const mount = d.type === 'note' ? d.mount : undefined;
+  // 斜靠在書堆上：紙往後仰，底邊落在書堆頂
+  const lean = mount === 'pile' ? -0.28 : 0;
+  const base = mount === 'pile' ? notePile(p, pal, g, d.y, Math.round(Math.abs(d.x * 13 + d.z * 7))) : 0;
+  if (mount === 'post') notePost(p, pal, g, d.y, d.h * 0.98);
   const sheet = (map: THREE.Texture) => {
     const m = p.mesh(box(d.w * 0.82, d.h * 0.82, 0.02), 0xffffff, { map, flatMap: true });
     // 紙條正面離牆 5mm：貼在後牆時不與護牆板正面 (z = 牆 + 0.06) 共面
-    m.position.set(0, d.h / 2, 0.005);
-    m.rotation.z = 0.06;
+    m.position.set(0, mount === 'pile' ? base + d.h * 0.41 * Math.cos(lean) : d.h / 2, mount === 'pile' ? -0.06 : 0.005);
+    m.rotation.set(lean, 0, mount === 'pile' ? -0.04 : 0.06);
     g.add(m);
     return m;
   };
   const paper = sheet(notePaper(pal));
   const pin = p.mesh(new THREE.SphereGeometry(0.05, 10, 8), pal.pin, { outline: false });
-  pin.position.set(0, d.h * 0.86, 0.04);
-  g.add(pin);
+  if (mount === 'pile') {
+    // 書堆上立一本書擋在紙後面 (紙靠著它)；圖釘改成壓在紙角的小紙鎮
+    const prop = p.mesh(box(0.42, 0.36, 0.08), pal.books[3], { roughness: 0.9 });
+    prop.position.set(0.02, base + 0.18, -0.2);
+    g.add(prop);
+    pin.position.set(d.w * 0.3, d.h * -0.36, 0.03);
+    paper.add(pin);
+  } else {
+    pin.position.set(0, d.h * 0.86, 0.04);
+    g.add(pin);
+  }
   if (reveal === undefined) return { root: g };
   // 空白的提示字條 (L2 / L3，規格 7.1)：時間到之前只有白紙；浮現時字跡出現、邊角微微發亮 (不彈窗、不閃爍)
   const blank = sheet(blankNotePaper(pal));

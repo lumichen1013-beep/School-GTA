@@ -37,6 +37,11 @@ function rowPlane(p: Painter, tex: THREE.Texture, len: number, h: number, flat: 
   return p.mesh(geo, 0xffffff, { map: tex, flat: flat ?? 0xffffff, flatMap: flat === null, outline: false, shadow: false });
 }
 
+/** 一排書背朝外的書 (貼圖平面；家具內嵌的小書格用)：flat = 藏寶圖的扁平色 (null = 藏寶圖也貼書的圖) */
+export function booksPlane(p: Painter, pal: Palette, seed: number, len: number, h: number, flat: number | null = null): THREE.Mesh {
+  return rowPlane(p, bookRow(pal, seed, 'spine'), len, h, flat);
+}
+
 /** 一座書櫃 (原點 = 底面中心、正面朝 +z) */
 export function buildBookcase(p: Painter, pal: Palette, o: BookcaseOpts): Bookcase {
   const g = new THREE.Group();

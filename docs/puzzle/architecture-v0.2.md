@@ -204,6 +204,7 @@ src/puzzle/
     scene.ts                 PuzzleScene：依 allObjs 對帳（新增 / 移除 / 更新）
     cameras.ts               沿用
     materials.ts             Painter 沿用（2D/3D 雙材質）
+    geometry.ts              同材質零件合成一個網格（mergeParts / placed；render 不能 import three/examples）
     textures.ts              沿用
     transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
     markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、標籤墨框與尺度方槽、字條浮現字跡與邊角發光；v0.3）
@@ -211,6 +212,7 @@ src/puzzle/
     models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
     decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯、樹根、藤蔓、苔蘚、浮書、彩繪玻璃、星圖、魔法陣刻紋…由關卡資料擺放；非實體）
+    decor/furniture.ts       家具裝飾：扶手椅、落地燈、書堆、書梯（v0.4 擺設規則；只在實景、非實體）
     debug.ts                 DEV：碰撞盒線框（可選）
     tension/director.ts      TensionDirector：氛圍、詭異裝飾事件、驚嚇、暈影、色溫、鏡頭緩推（4.13）
     models/chaser.ts         N19 守衛殘影外觀（只在藏寶圖）
@@ -1215,6 +1217,8 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 #### 7.4.6 M1 第二章：2-5 書房深處（逐關開發第五關、章末；規格 6「2-5 書房深處（細化）」）
 
 > 實作註記 (2026-11-04)：**內容** `content/levels/ch2/2-5-deep.ts` (關卡 id `2-5`、房間 id `deep`；章門在 2.0 高的平台上、`carving` = 老宅立面圖、`doneFlag` 2-5)；`rooms.ts` 只剩 H1 夾層占位；`CH2_ZONE25`；登錄表 2-5 (前置 2-4)、章節 2 五關齊。**機制** `mechanics/deep.ts` (`keyBench` 柄 + 三枚齒 → `key.study`、`diaryStand` (`diary.2`)、`landing`)；`cubeDoor.carving`。**外殼** `LevelSession`：`world.cleared` (章門打開 = 整章通關) 時不再送房間通關。第三章尚未製作：`nextAfterClear('2-5','chapter')` = null → 通關畫面沒有「前往」鈕，`nextKey` 是占位文字。**呈現** `render/models/deep.ts`、章門刻圖。**驗證**數字見規格 2-5 區；Playwright：印房推鉛字盤過「間」的洞、鑰匙台、墊腳上平台、手記、章門 (兩種解法：印房在正上方 / 在第 1 行推過去再帶回第 2 行)。
+
+> 實作註記 (2026-11-04，物件風格統一)：使用者回饋「物件跟場景沒有很搭配」→ 規格 6「第二章 2-3～2-5 共用規則」新增**物件外觀規則**。**呈現**：`notes` 的 `note.mount` (`'post'` 落地木柱 / `'pile'` 斜靠書堆；只影響外觀)；`models/props` `noteModel` 依 mount 畫支架；`models/dial` 魔方儀改為胡桃木圓几 + 黃銅渾儀環 (原用第一章木箱色 `pal.crateDark`)；`models/print` 鉛字盤改為活字推車 (腳輪、三層抽屜、木框淺盤；原為 `pal.crate` 亮色木箱)；`models/manuscripts` 閉櫃 (胡桃木、出簷頂板、鑲板門與黃銅圓鈕)、手稿架 (框板、後橫檔、下層紙疊)、手稿櫃頂冠高出櫃身 5 mm (原與櫃身頂面共面)；`models/deep` 章門平台 (踢腳、出簷、正面兩層書格、西側鑲板；拿掉西緣兩根柱子——那一側是墊腳爬上去的方向)、鑰匙台 (工作台：桌裙、橫撐、工具盒、虎鉗、托盤上鑰匙形凹槽)、手記架 (斜面書托)；`models/shelf` 矮書架 (開放書格塞滿書)、書 spine (兩片書皮夾書頁)、燈座 (胡桃木矮几上的燭台)；`models/reading` 閱覽桌 (桌裙、H 形橫撐、墨水瓶)；`render/library` 匯出 `booksPlane`；`render/geometry` (`mergeParts`)；`render/decor/furniture` (`armchair` / `floorLamp` / `bookPile` / `ladder`，只在實景)。**內容**：2-3 / 2-4 / 2-5 的字條加 `mount` (2-3、2-4 木柱；2-5 書堆)、2-4 閱讀角加扶手椅與落地燈、2-4 東側書櫃 x 8.6 → 8.4 (字條釘在書櫃上)。碰撞盒、謎題行為、所有座標相關測試不變。繪製次數 (3D 可見網格)：2-3 247 → 282、2-4 233 → 253、2-5 197 → 231。
 
 ## 8. 取捨與風險
 

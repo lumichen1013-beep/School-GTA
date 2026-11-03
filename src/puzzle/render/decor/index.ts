@@ -4,6 +4,7 @@ import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { paintingDecor, pendantDecor, pitsDecor, rugDecor, wallShelfDecor, wallsDecor } from './room';
 import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor } from './library';
+import { armchairDecor, bookPileDecor, floorLampDecor, ladderDecor } from './furniture';
 import type { DecorFactory } from './types';
 
 export type { DecorCtx, DecorFactory, DecorPart } from './types';
@@ -17,7 +18,9 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   // 森林圖書館 (第二章)
   roots: rootsDecor, stainedGlass: stainedGlassDecor, floatBooks: floatBooksDecor, bookcase: bookcaseDecor,
   // 2-4a：地板上的老宅圖一角
-  floorPiece: floorPieceDecor
+  floorPiece: floorPieceDecor,
+  // 家具 (擺設規則 ①：椅子、落地燈、書堆、書梯；只在實景)
+  armchair: armchairDecor, floorLamp: floorLampDecor, bookPile: bookPileDecor, ladder: ladderDecor
 };
 
 /** 整個房間的裝飾：root = 全部；only3d = 僅現實顯示；occluders = 擋視線時淡出 */

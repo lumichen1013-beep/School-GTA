@@ -40,7 +40,7 @@ export function patternCabinetModel(p: Painter, d: ObjDef, { pal }: Theme): Prop
   const body = p.mesh(box(d.w, d.h - 0.16, d.d - 0.08), pal.shelf, { map: crateWood(pal), flat: pal.shelf });
   body.position.set(0, 0.16 + (d.h - 0.16) / 2, -0.04);
   const crown = p.mesh(box(d.w + 0.12, 0.1, d.d), pal.shelfDark, { outline: false });
-  crown.position.y = d.h - 0.05;
+  crown.position.y = d.h - 0.045; // 頂面高出櫃身 5 mm (不與櫃身頂面共面)
   g.add(body, crown);
   const door = new THREE.Group();
   door.position.set(d.w / 2 - 0.04, 0, d.d / 2 - 0.02);
@@ -58,33 +58,58 @@ export function patternCabinetModel(p: Painter, d: ObjDef, { pal }: Theme): Prop
   return { root: g, update: (c: ModelCtx) => { door.rotation.y = c.obj.used ? 1.2 : 0; } };
 }
 
-/** 閉櫃 (矮櫃)：櫃身 + 兩扇小門 (沒有鎖孔) + 腳；打開 (used) 左扇轉開 */
+/** 閉櫃 (矮櫃)：胡桃木櫃身 + 出簷頂板 + 兩扇鑲板小門 (黃銅圓鈕，沒有鎖孔) + 短腳；打開 (used) 左扇轉開 */
 export function smallCabinetModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
+  const brass = { metalness: 0.7, roughness: 0.35 } as const;
   for (const s of [-1, 1]) { const leg = p.mesh(box(0.08, 0.14, 0.08), pal.shelfDark, { outline: false }); leg.position.set(s * (d.w / 2 - 0.08), 0.07, 0); g.add(leg); }
-  const body = p.mesh(box(d.w, d.h - 0.14, d.d - 0.06), pal.crate, { map: crateWood(pal), flat: pal.crate });
-  body.position.set(0, 0.14 + (d.h - 0.14) / 2, -0.03);
-  g.add(body);
+  const body = p.mesh(box(d.w, d.h - 0.19, d.d - 0.06), pal.shelf, { map: crateWood(pal), flat: pal.shelf });
+  body.position.set(0, 0.14 + (d.h - 0.19) / 2, -0.03);
+  const top = p.mesh(box(d.w + 0.08, 0.05, d.d + 0.02), pal.shelfDark);
+  top.position.y = d.h - 0.025;
+  g.add(body, top);
+  const leafW = d.w / 2 - 0.06, leafH = d.h - 0.34;
+  const leafY = 0.14 + (d.h - 0.19) / 2;
+  const leaf = (parent: THREE.Object3D, x: number, z: number, knobX: number) => {
+    const m = p.mesh(box(leafW, leafH, 0.04), pal.shelfDark, { outline: false });
+    m.position.set(x, leafY, z);
+    const panel = p.mesh(box(leafW - 0.14, leafH - 0.16, 0.02), pal.shelf, { outline: false, shadow: false });
+    panel.position.set(x, leafY, z + 0.03);
+    const knob = p.mesh(new THREE.SphereGeometry(0.035, 8, 6), pal.brass, { ...brass, outline: false, shadow: false });
+    knob.position.set(knobX, leafY, z + 0.05);
+    parent.add(m, panel, knob);
+  };
   const door = new THREE.Group();
   door.position.set(-d.w / 2 + 0.04, 0, d.d / 2 - 0.01);
-  const leaf = p.mesh(box(d.w / 2 - 0.06, d.h - 0.3, 0.04), pal.shelfDark, { outline: false });
-  leaf.position.set((d.w / 2 - 0.06) / 2, 0.14 + (d.h - 0.14) / 2, 0);
-  door.add(leaf);
-  const right = p.mesh(box(d.w / 2 - 0.06, d.h - 0.3, 0.04), pal.shelfDark, { outline: false });
-  right.position.set(d.w / 4, 0.14 + (d.h - 0.14) / 2, d.d / 2 - 0.01);
-  g.add(door, right);
+  leaf(door, leafW / 2, 0, leafW - 0.06);
+  leaf(g, d.w / 4, d.d / 2 - 0.01, d.w / 4 - leafW / 2 + 0.06);
+  g.add(door);
   return { root: g, update: (c: ModelCtx) => { door.rotation.y = c.obj.used ? -1.3 : 0; } };
 }
 
-/** 手稿架：低矮的長木架 (兩層板) */
+/** 手稿架：低矮的長木架 (兩端框板、上層板放手稿捆、後側橫檔、下層板堆著散的紙疊) */
 export function bundleRackModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const leg = p.mesh(box(0.08, d.h, 0.08), pal.shelfDark, { outline: false }); leg.position.set(sx * (d.w / 2 - 0.06), d.h / 2, sz * (d.d / 2 - 0.06)); g.add(leg); }
+  for (const s of [-1, 1]) {
+    const end = p.mesh(box(0.08, d.h - 0.06, d.d), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark });
+    end.position.set(s * (d.w / 2 - 0.04), (d.h - 0.06) / 2, 0);
+    g.add(end);
+  }
   const top = p.mesh(box(d.w, 0.06, d.d), pal.shelf, { map: crateWood(pal), flat: pal.shelf });
   top.position.y = d.h - 0.03;
-  const low = p.mesh(box(d.w - 0.1, 0.04, d.d - 0.1), pal.shelfDark, { outline: false });
-  low.position.y = 0.2;
-  g.add(top, low);
+  const low = p.mesh(box(d.w - 0.16, 0.04, d.d - 0.1), pal.shelfDark, { outline: false });
+  low.position.y = 0.16;
+  const rail = p.mesh(box(d.w - 0.16, 0.06, 0.04), pal.shelfDark, { outline: false });
+  rail.position.set(0, d.h - 0.2, -d.d / 2 + 0.06);
+  g.add(top, low, rail);
+  // 下層的紙疊 (避開正中央的暗格)
+  [-0.38, -0.2, 0.2, 0.36].forEach((k, i) => {
+    const sh = 0.12 + (i % 2) * 0.08;
+    const stack = p.mesh(box(0.5, sh, d.d * 0.55), i % 2 ? pal.paperNote : 0xe8dcbc, { outline: false, roughness: 0.95 });
+    stack.position.set(k * d.w, 0.18 + sh / 2, -0.06);
+    stack.rotation.y = (i - 1.5) * 0.06;
+    g.add(stack);
+  });
   return { root: g };
 }
 

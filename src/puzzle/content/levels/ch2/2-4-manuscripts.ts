@@ -39,17 +39,20 @@ const objects: ObjDef[] = [
   { id: 'cabPlate', type: 'doorPlate', opens: 'stripCab', doneFlag: '2-4c', x: -3.6, y: 1.5, z: 3.0, w: 0.8, h: 0.5, d: 0.05, visible: '2d', solid: false, labelKey: 'lvl.2-4.plate',
     label: { id: 'strip:manuscripts', kind: 'strip', textKey: 'term.glyph.bi', part: 'card.cai', stripped: 'term.glyph.men', solvedText: 'lvl.2-4.strip.solved' } },
   // ── 字條 (父親的筆記；story-bible 7.3) ──
-  { ...noteBase, id: 'noteC', x: -0.4, z: 3.6, textKey: 'lvl.2-4.note.c' }, // 2-4c L1 (扶手椅旁)
-  { ...noteBase, id: 'noteB', x: 3.6, z: -0.9, textKey: 'lvl.2-4.note.b' }, // 2-4b L1 (手稿架尾)
+  { ...noteBase, id: 'noteC', mount: 'post', x: -0.4, z: 3.6, textKey: 'lvl.2-4.note.c' }, // 2-4c L1 (扶手椅旁)
+  { ...noteBase, id: 'noteB', mount: 'post', x: 3.6, z: -0.9, textKey: 'lvl.2-4.note.b' }, // 2-4b L1 (手稿架尾)
   { ...noteBase, id: 'noteA', x: 7.4, z: -4.4, textKey: 'lvl.2-4.note.a' }  // 2-4a L1 (手稿櫃旁)
 ];
 
 const decor: DecorItem[] = [
   { kind: 'walls' },
   { kind: 'bookcase', x: -0.8, w: 2.4, seed: 41 },
-  { kind: 'bookcase', x: 8.6, w: 2.2, seed: 44 },
+  { kind: 'bookcase', x: 8.4, w: 2.2, seed: 44 },
   { kind: 'roots', x: -5.9, side: 'W', seed: 10 },
   { kind: 'rug', x: -2.6, z: 2.6, w: 4.2, d: 2.6 },
+  // 閱讀角：字條旁的扶手椅與落地燈 (只在實景)
+  { kind: 'armchair', x: -1.5, z: 3.7, rot: 0.5, tone: 1 },
+  { kind: 'floorLamp', x: -5.2, z: 4.2 },
   floorPiece('manuscripts', 6.4, 1.8),
   { kind: 'floatBooks', x: 2, y: 3.7, z: -2.2, w: 8, seed: 14 },
   { kind: 'pendant', x: 0.6, z: 0 },
