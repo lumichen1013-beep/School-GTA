@@ -9,6 +9,8 @@ import { CH2_CUBE } from './ch2';
 import { shelf } from '../levels/ch2/2-1-shelf';
 import { deep, manuscripts, mezz, print } from '../levels/ch2/rooms';
 import { reading } from '../levels/ch2/2-2-reading';
+import { CH3_CUBE } from './ch3';
+import { bed, depths, gallery, night, nursery } from '../levels/ch3/rooms';
 import { PROTO_DIAL_ROOMS } from '../levels/proto/dial';
 import { TEST_DIAL_CHAPTER, TEST_DIAL_CUBE } from './test-dial';
 
@@ -28,7 +30,9 @@ export interface CubeChapter {
 export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY },
   // 第二章 書房 (v0.4 控制盤)：2-1～2-5 為完整關卡，H1 夾層為占位房 (隱藏房，要第三章的比例尺)；從衣帽間章門外的走廊進 2-1 西門
-  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep' } }
+  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep' } },
+  // 第三章 溫室 (v0.4 控制盤、滑動)：骨架 = 五間占位房 (溫床沒有門)；從書房深處章門外的走廊進 3-1 苗圃西門
+  { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery' } }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

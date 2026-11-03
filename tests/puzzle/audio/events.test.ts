@@ -31,9 +31,9 @@ describe('映射完整性', () => {
     expect(worldEventActions(sample.flag)).toEqual([{ kind: 'scare', flag: 'scare:coats' }]);
     expect(worldEventActions(sample.done)).toEqual([{ kind: 'sfx', id: 'sfx.puzzle.solved' }, { kind: 'music', op: 'solved' }]);
   });
-  it('過場：CUTSCENES 裡每個音訊提示都有對映 (序章 23 個)；對到的音效都存在；鏡頭音樂只指向存在的鏡頭', () => {
+  it('過場：CUTSCENES 裡每個音訊提示都有對映 (序章 23 個 + cs:ch2 新增 pages.turn / leaves = 25)；對到的音效都存在；鏡頭音樂只指向存在的鏡頭', () => {
     const cues = CUTSCENES.flatMap(c => c.shots.flatMap(s => (s.audio ?? []).map(a => a.cue)));
-    expect(new Set(cues).size).toBe(23);
+    expect(new Set(cues).size).toBe(25);
     expect(cues.filter(c => !(c in CUE_MAP))).toEqual([]);
     for (const [cue, as] of Object.entries(CUE_MAP)) {
       expect(as.length, cue).toBeGreaterThan(0);

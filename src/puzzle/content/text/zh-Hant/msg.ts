@@ -41,6 +41,12 @@ export const msg = {
   'msg.dial.undone': '退回上一步。墨回來了一滴。',
   'msg.dial.unlocked': '喀。有鎖扣彈開了。',
   'msg.dial.latch': '喀。',
+  // 第三章 (滑動)：點格子 / 方向鍵的說明、滑完的訊息
+  'msg.dial.solid': '{name}是實心的，不會動。',
+  'msg.dial.noEmpty': '旁邊沒有空格。',
+  'msg.dial.noDir': '沒有房間能往那邊滑。',
+  'msg.dial.slid': '那間房滑進了空格。',
+  'msg.dial.slidHere': '房間連你一起滑進了空格。',
   // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
   'msg.cord.pulled': '繩子拉下去，停住了。',
   'msg.cord.reset': '喀一聲，繩子全部彈了回去。',

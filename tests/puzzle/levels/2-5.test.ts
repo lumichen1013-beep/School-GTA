@@ -112,7 +112,7 @@ describe('2-5 書房深處：資料與驗證器', () => {
     expect([e.chapter, e.unlock.after, CH2.levels['2-5'], cubeChapterOf('2-5'), CHAPTERS.find(c => c.id === 2)!.levels]).toEqual([2, ['2-4'], 'deep', CH2, ['2-1', '2-2', '2-3', '2-4', '2-5']]);
     const E = def('chapterE');
     expect(E.type === 'cubeDoor' && [E.kind, E.key, E.y, !!E.carving, E.doneFlag]).toEqual(['chapter', 'key.study', 2, true, '2-5']);
-    expect([TEXT(deep.narrationKey), TEXT(deep.nextKey)]).toEqual(['最後一扇門上，刻著同一個圖案。', '書房和溫室，在牆後換了位置。第三章　溫室——還在路上。']);
+    expect([TEXT(deep.narrationKey), TEXT(deep.nextKey)]).toEqual(['最後一扇門上，刻著同一個圖案。', '書房和溫室，在牆後換了位置。']); // 第三章骨架：拿掉「第三章　溫室——還在路上。」
   });
 
   it('擺設三帶；平台高度 (D10)：實景跳 1.25 / 藏寶圖跳 1.6 都 < 2.0；鉛字盤 1.0 + 1.25 ≥ 2.0 (餘裕 ≥ 0.15)；房裡沒有其他可推 / 可站的東西', () => {
@@ -147,7 +147,7 @@ describe('通關腳本 (runScript)', () => {
     cs = finish(trayIntoDeep(cs));
     const save = recordClear({ ...defaultSave(), cleared: ['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4'] }, '2-5', cs.world, Object.keys(CH2.levels));
     expect([save.cleared.includes('2-5'), save.diary]).toEqual([true, [2]]);
-    expect(nextAfterClear('2-5', 'chapter', CHAPTERS)).toBe(null); // 第三章尚未製作：通關畫面沒有「前往」
+    expect(nextAfterClear('2-5', 'chapter', CHAPTERS)).toBe('3-1'); // 第三章骨架：通關畫面「前往第三章　溫室」
   });
 
   it('解法二 (帶物轉運)：印房在第 1 行時正下方是手稿庫 (門，推不過)；下列 ◀ 讓書房深處來到印房正下方 → 推過去 → 下列 ▶ 帶著鉛字盤回到第 2 行', () => {

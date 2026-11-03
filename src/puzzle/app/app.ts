@@ -11,7 +11,7 @@ import type { Bindings, InputFrame, InputSource } from '../input/types';
 import type { KeyValueStorage } from '../meta/storage';
 import { cleanName, loadSave, NAME_MAX, writeSave, type Save } from '../meta/save';
 import { loadSettings, writeSettings, type Settings } from '../meta/settings';
-import { memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/cutscenes';
+import { cutsceneBeforeLevel, memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/cutscenes';
 import { seenCutscenes } from '../meta/save';
 import { cutsceneById, PROLOGUE_ID, type CutsceneId } from '../content/cutscenes';
 import { isUnlocked, levelState, nextAfterClear, recordClear, startAbilities, type ClearKind } from '../meta/progress';
@@ -43,6 +43,7 @@ import { AudioBridge } from './audioBridge';
 
 /**
  * 畫面狀態機：boot →(無暱稱) nickname →(未看序章且無進度) cutscene(prologue) → menu → level → clear → (level | menu)；
+ * 章末：clear (章門) →「前往下一章」→ (還沒看過章末過場) cutscene(例 cs:ch2) → level (下一章第一關)；
  * 選單「回憶」→ memories → cutscene(重看) → memories
  */
 export type Screen =
@@ -177,9 +178,10 @@ export class PuzzleApp {
           ...(this.dev ? { dev: { titleKey: 'lvl.proto.menu', levels: PROTO_LEVELS.map(e => ({ id: e.id, titleKey: e.titleKey, state: 'open' as const })) } } : {})
         }, {
           // M1C 前就有暱稱但沒有任何進度的存檔：第一次進 1-1 前播序章
+          // 第一次進下一章 (例：3-1) 前沒看過上一章的章末過場 (cs:ch2) → 先播
           play: id => this.go(id === '1-1' && shouldAutoPlayPrologue(this.save)
             ? { id: 'cutscene', cutsceneId: PROLOGUE_ID, next: { id: 'level', levelId: id }, replay: false }
-            : { id: 'level', levelId: id }),
+            : this.levelWithCutscene(id)),
           rename: () => this.go({ id: 'nickname' }),
           memories: () => this.go({ id: 'memories' }),
           sound: () => this.audioBridge.openSettings()
@@ -290,7 +292,13 @@ export class PuzzleApp {
     const s = this.screen;
     if (s.id !== 'clear') return;
     const next = nextAfterClear(s.levelId, s.kind ?? 'level', CHAPTERS);
-    if (next) this.go({ id: 'level', levelId: next });
+    if (next) this.go(this.levelWithCutscene(next));
+  }
+
+  /** 進關：還沒看過的章末過場 (觸發關已通關、下一步就是這一關；例 2-5 → cs:ch2 → 3-1) 先播，播完 (或跳過) 再進關 */
+  private levelWithCutscene(levelId: string): Screen {
+    const cut = cutsceneBeforeLevel(this.save, levelId);
+    return cut ? { id: 'cutscene', cutsceneId: cut.id, next: { id: 'level', levelId }, replay: false } : { id: 'level', levelId };
   }
 
   /** 通關的關卡：魔方章 = 玩家此刻所在房間對應的關卡 (章門在 1-3 衣帽間)；單房 = 進場的關卡 */

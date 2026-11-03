@@ -3,7 +3,7 @@ import type { ObjState, World } from '../core/types';
 import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
-import { applyOp, applyTurn, cellContent, isBlocked, turnDirs, type Cell, type CubeOp, type CubeState, type FrameKind, type Turn } from '../core/cube';
+import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, turnDirs, type Cell, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
 import { chapterLinks, dialBlocked, isDialChapter, isLocked, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
@@ -35,7 +35,7 @@ export function previewLever(w: World): ObjState | null {
 /** 屋框名稱 (frame.to 優先，例：書房走廊；否則依種類) */
 const FRAME_KEYS: Readonly<Record<string, string>> = {
   porch: 'ui.map.frame.porch', chapterExit: 'ui.map.frame.chapterExit', skylight: 'ui.map.frame.skylight', study: 'ui.map.frame.study',
-  hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse'
+  hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse', cellar: 'ui.map.frame.cellar'
 };
 const frameName = (text: Text, kind: FrameKind, to: string | undefined): string => text(FRAME_KEYS[to ?? kind] ?? FRAME_KEYS[kind]);
 
@@ -87,7 +87,9 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
       const kind = c === 'empty' || c === 'solid' ? c : 'room';
       const fp = kind === 'room' ? spec.rooms[c]?.decor?.find(d => d.kind === 'floorPiece') : undefined;
       const piece = fp && typeof fp.px === 'number' && typeof fp.py === 'number' && typeof fp.drawing === 'string' ? { px: fp.px, py: fp.py, drawing: fp.drawing } : undefined;
-      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : 'ui.map.solid'), current: c === state.room, ...(piece ? { piece } : {}) });
+      // 實心格的名稱：魔方資料的 label (第三章：工具間 / 水塔)；沒有 = 「實心」
+      const solidKey = kind === 'solid' ? def.cells.find(k => k.room === 'solid' && k.at[0] === x && k.at[1] === y && k.at[2] === layer)?.label ?? 'ui.map.solid' : '';
+      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : solidKey), current: c === state.room, ...(piece ? { piece } : {}) });
     }
   }
   const ls = chapterLinks(spec, cube, cs.world.ext.labels ?? state.labels);
@@ -135,7 +137,8 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const { spec, state } = cs;
   const def = spec.cube!;
   const cube = state.cube!;
-  const groups = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id) && g.kind !== 'slideCell');
+  const all = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id));
+  const groups = all.filter(g => g.kind !== 'slideCell');
   const headers: TurnHeader[] = [];
   /** 標頭的名稱 (不含「鎖著」)：說明列用 */
   const names = new Map<string, string>();
@@ -160,19 +163,21 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
       });
     }
   }
+  const layer = cube.pos[state.room]?.[2] ?? 0;
+  const slide = all.some(g => g.kind === 'slideCell');
+  if (slide) headers.push(...slideHeaders(cs, text, sel, layer, names));
   const max = turnBudgetFor(spec, state, cs.world);
   const left = state.turns?.left ?? max;
-  const g = sel ? groups.find(x => x.id === sel.group) : undefined;
+  const g = sel ? all.find(x => x.id === sel.group) : undefined;
   const blocked = sel && g ? dialBlocked(cs, sel as Turn) : null;
   let preview: TurnModeModel['preview'] = null;
-  let caption = text('ui.turn.hint');
+  let caption = text(slide ? 'ui.turn.hintSlide' : 'ui.turn.hint');
   if (sel && g) {
     const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index);
     if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: text(DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG]) });
     else {
       const r = applyTurn(def, cube, sel as Turn);
       if (!isBlocked(r)) {
-        const layer = cube.pos[state.room]?.[2] ?? 0;
         const after = layout(cs, text, r, layer);
         const moves = Object.keys(cube.pos).filter(room => cube.pos[room][2] === layer && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1]))
           .map(room => ({ room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0], cube.pos[room][1]] as [number, number], to: [r.pos[room][0], r.pos[room][1]] as [number, number] }));
@@ -185,21 +190,103 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
     headers, selected: sel && g ? sel : null, preview, ink: { left, max }, canUndo: (state.turns?.undo.length ?? 0) > 0,
     blocked: blocked ?? null, blockedText: blocked ? text(DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG]) : null,
     caption,
-    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text('ui.turn.keys') }
+    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? 'ui.turn.keysSlide' : 'ui.turn.keys') },
+    ...(slide ? { cells: layout(cs, text, cube, layer).cells } : {})
   };
+}
+
+/** 滑動的方向 → 箭頭符號 (上 = 北) 與方向的文字 */
+const SLIDE_GLYPH: Readonly<Record<'N' | 'E' | 'S' | 'W', string>> = { N: '\u25B2', E: '\u25B6', S: '\u25BC', W: '\u25C0' };
+const SLIDE_DIR_KEY: Readonly<Record<'N' | 'E' | 'S' | 'W', string>> = { N: 'ui.turn.dir.up', E: 'ui.turn.dir.right', S: 'ui.turn.dir.down', W: 'ui.turn.dir.left' };
+/** 卡住的房：箭頭換成楔形 (形狀區分，不只靠顏色) */
+const WEDGE_GLYPH = '\u25E2';
+const RING: readonly ('N' | 'E' | 'S' | 'W')[] = ['N', 'E', 'S', 'W'];
+
+/**
+ * 滑動 (第三章 slideCell) 的標頭：每一間與空格相鄰的房 × 指向空格的方向一顆 (依格號、N E S W)；卡住 (卡榫) 的畫楔形 (state jammed)。
+ * 實心格、空格、不鄰接空格的房不給標頭
+ */
+function slideHeaders(cs: ChapterSession, text: Text, sel: TurnModeModel['selected'], layer: number, names: Map<string, string>): TurnHeader[] {
+  const def = cs.spec.cube!;
+  const cube = cs.state.cube!;
+  const out: TurnHeader[] = [];
+  const [W, H] = def.dims;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const at: Cell = [x, y, layer];
+    const room = cellContent(def, cube, at);
+    if (room === 'empty' || room === 'solid') continue;
+    const index = x + y * W + layer * W * H;
+    const g = def.dial?.groups.find(k => k.kind === 'slideCell' && k.index === index);
+    if (!g) continue;
+    for (const dir of RING) {
+      const to = addSide(at, dir);
+      if (!inCube(def, to) || cellContent(def, cube, to) !== 'empty') continue;
+      const jam = dialBlocked(cs, { group: g.id, dir }) === 'jammed';
+      const plain = text('ui.turn.headerSlide', { room: text(cs.spec.rooms[room]?.titleKey ?? room), dir: text(SLIDE_DIR_KEY[dir]) });
+      names.set(`${g.id}|${dir}`, plain);
+      out.push({
+        group: g.id, kind: 'slideCell', dir, state: jam ? 'jammed' : 'ok', at: { side: 'cell', i: index }, cell: { x, y },
+        glyph: jam ? WEDGE_GLYPH : SLIDE_GLYPH[dir], label: jam ? text('ui.turn.headerJammed', { name: plain }) : plain, selected: sameTurn(sel, { group: g.id, dir })
+      });
+    }
+  }
+  return out;
 }
 
 /** 轉動模式的輸入：點標頭 (pick)、方向鍵 (step：h = ←→、v = ↑↓)、確認、回退、離開 */
 export type TurnModeInput =
   | { t: 'pick'; group: string; dir: TurnDir } | { t: 'step'; axis: 'h' | 'v'; d: 1 | -1 }
+  | { t: 'cell'; x: number; y: number }
   | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+
+/** 轉動模式的說明 (只說明、不轉；外殼以 say 顯示)：key = 文字 key */
+export interface TurnNote { key: string; params?: Readonly<Record<string, string>> }
+type Sel = TurnModeModel['selected'];
+type Reduced = { sel: Sel; command: ChapterCommand | null; exit: boolean; note?: TurnNote };
+
+/** 在 list 裡選下一個 (現在選的不在 list → 第一個；wrap = 到尾端時回到第一個，否則 null = 取消選取) */
+function cycle(sel: Sel, list: readonly TurnHeader[], wrap: boolean): Sel {
+  if (!list.length) return sel;
+  const i = list.findIndex(h => sameTurn(sel, h));
+  if (i < 0) return { group: list[0].group, dir: list[0].dir };
+  if (i + 1 < list.length) return { group: list[i + 1].group, dir: list[i + 1].dir };
+  return wrap ? { group: list[0].group, dir: list[0].dir } : null;
+}
+const STEP_SIDE = (axis: 'h' | 'v', d: 1 | -1): Side => (axis === 'h' ? (d < 0 ? 'W' : 'E') : d < 0 ? 'N' : 'S');
+
+/**
+ * 滑動章節 (第三章) 的選取：方向鍵 = 選「往那個方向滑」的房 (同方向有兩間 → 再按換另一間；沒有 → 說明、選取不變)；
+ * 點房間 = 選這間房的第一個滑動 (再點 → 下一個方向；最後一個再點 = 取消)；點空格 = 選滑進這個空格的房 (有兩間時再點換另一間)；
+ * 點實心格 / 不鄰接空格的房 → 說明
+ */
+function reduceSlide(sel: Sel, input: Extract<TurnModeInput, { t: 'step' } | { t: 'cell' }>, m: TurnModeModel): Reduced {
+  const none = { command: null, exit: false };
+  const slides = m.headers.filter(h => h.kind === 'slideCell' && h.cell);
+  if (input.t === 'step') {
+    const side = STEP_SIDE(input.axis, input.d);
+    const list = slides.filter(h => h.dir === side);
+    if (!list.length) return { sel, ...none, note: { key: 'msg.dial.noDir' } };
+    return { sel: cycle(sel, list, true), ...none };
+  }
+  const c = m.cells?.find(k => k.x === input.x && k.y === input.y);
+  if (!c) return { sel, ...none };
+  if (c.kind === 'solid') return { sel, ...none, note: { key: 'msg.dial.solid', params: { name: c.name } } };
+  if (c.kind === 'room') {
+    const own = slides.filter(h => h.cell!.x === c.x && h.cell!.y === c.y);
+    if (!own.length) return { sel, ...none, note: { key: 'msg.dial.noEmpty' } };
+    return { sel: cycle(sel, own, false), ...none };
+  }
+  const into = slides.filter(h => { const [dx, dy] = SIDE_STEP[h.dir as 'N' | 'E' | 'S' | 'W']; return h.cell!.x + dx === c.x && h.cell!.y + dy === c.y; });
+  return { sel: cycle(sel, into, true), ...none };
+}
+const SIDE_STEP: Readonly<Record<'N' | 'E' | 'S' | 'W', readonly [number, number]>> = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 
 /**
  * 轉動模式的狀態轉移 (純函式)：pick = 選取 (再點同一顆 = 取消)；↑↓ = 換一組 (依控制盤順序循環)；
  * ←→ = 列選方向 (← 往左、→ 往右)，只有一個方向的組 (兩列的行) 改成換到左右相鄰的同類組；
  * confirm = 選了可轉的組 → 恰好一個 turn 指令 (並取消選取，圖回到轉後的現況)；被擋 → 不轉、選取保留；undo = 有可退的一步 → undo 指令；exit = 離開
  */
-export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeInput, m: TurnModeModel): { sel: TurnModeModel['selected']; command: ChapterCommand | null; exit: boolean } {
+export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeInput, m: TurnModeModel): Reduced {
   const none = { command: null, exit: false };
   if (input.t === 'exit') return { sel: null, command: null, exit: true };
   if (input.t === 'undo') return { sel, command: m.canUndo ? { t: 'undo' } : null, exit: false };
@@ -212,6 +299,9 @@ export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeIn
     if (!m.headers.some(h => sameTurn({ group: input.group, dir: input.dir }, h))) return { sel, ...none };
     return { sel: sameTurn(sel, input) ? null : { group: input.group, dir: input.dir }, ...none };
   }
+  // 滑動章節 (第三章)：方向鍵與點格子另有規則；列 / 行章節點格子不做事
+  if (m.cells) return reduceSlide(sel, input, m);
+  if (input.t === 'cell') return { sel, ...none };
   const groups = [...new Set(m.headers.map(h => h.group))];
   if (!groups.length) return { sel, ...none };
   const dirsOf = (g: string) => m.headers.filter(h => h.group === g).map(h => h.dir);

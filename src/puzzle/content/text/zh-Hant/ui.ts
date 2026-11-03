@@ -57,6 +57,7 @@ export const ui = {
   'ui.map.frame.skylight': '天窗',
   'ui.map.frame.hall': '來時的走廊',
   'ui.map.frame.greenhouse': '溫室走廊',
+  'ui.map.frame.cellar': '地下室走廊',
   // 控制盤的轉動模式 (v0.4 N32；規格 5.4.1、mobile-controls 2.5 / 3.3)
   'ui.turn.tab': '轉',
   'ui.turn.group.row': '第 {n} 列',
@@ -82,6 +83,11 @@ export const ui = {
   'ui.turn.ink': '墨 {n} / {max}',
   'ui.turn.inkHud': '墨 {dots}',
   'ui.turn.keys': '方向鍵 選一排　Enter 確認　Z 回退　Esc 離開',
+  // 第三章 (滑動)：每間與空格相鄰的房 × 指向空格的方向一顆箭頭 (規格 6「第三章骨架與銜接」)
+  'ui.turn.headerSlide': '{room}{dir}滑',
+  'ui.turn.headerJammed': '{name}（卡住了）',
+  'ui.turn.hintSlide': '點房間邊上的箭頭（或點房間、再點空格）看預覽，按「確認」才會滑。',
+  'ui.turn.keysSlide': '方向鍵 選往哪滑　Enter 確認　Z 回退　Esc 離開',
   'ui.help.turn': '轉動模式（藏寶圖、魔方儀啟動後）／回退',
   'ui.confirm.restart.title': '要重新進房嗎？',
   'ui.confirm.restart.body': '這個房間的機關會回到原樣。',

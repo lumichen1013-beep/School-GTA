@@ -8,6 +8,7 @@ import { reading } from './ch2/2-2-reading';
 import { print } from './ch2/2-3-print';
 import { manuscripts } from './ch2/2-4-manuscripts';
 import { deep } from './ch2/2-5-deep';
+import { nursery } from './ch3/3-1-nursery';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -43,7 +44,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 2-4 手稿庫：第二章第四關；2-3 通關後開放 (章內：開場就從閱覽室南門走得到)
   { id: '2-4', chapter: 2, titleKey: 'lvl.2-4.title', abilities: ['nib'], unlock: { after: ['2-3'] }, load: () => manuscripts },
   // 2-5 書房深處：第二章章末；2-4 通關後開放；章門打開 = 第二章通關
-  { id: '2-5', chapter: 2, titleKey: 'lvl.2-5.title', abilities: ['nib'], unlock: { after: ['2-4'] }, load: () => deep }
+  { id: '2-5', chapter: 2, titleKey: 'lvl.2-5.title', abilities: ['nib'], unlock: { after: ['2-4'] }, load: () => deep },
+  // 3-1 苗圃：第三章第一關 (魔方 3×3 滑動、控制盤 = 園丁羅盤)；第二章章門打開 (2-5 通關) 後開放；前置能力 = 筆尖 (占位版，謎題逐關加入)
+  { id: '3-1', chapter: 3, titleKey: 'lvl.3-1.title', abilities: ['nib'], unlock: { after: ['2-5'] }, load: () => nursery }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

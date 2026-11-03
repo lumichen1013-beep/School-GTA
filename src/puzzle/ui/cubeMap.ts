@@ -45,7 +45,10 @@ export interface TurnHeader {
   kind: 'row' | 'col' | 'slideCell' | 'layer' | 'slice';
   dir: TurnDir;
   state: 'ok' | 'locked' | 'jammed';
-  at: { side: 'top' | 'bottom' | 'left' | 'right' | 'ring'; i: number };
+  /** cell = 滑動 (第三章)：畫在房間 (cell) 與 dir 那一側空格的交界上 */
+  at: { side: 'top' | 'bottom' | 'left' | 'right' | 'ring' | 'cell'; i: number };
+  /** 滑動的標頭：房間此刻的格位 */
+  cell?: { x: number; y: number };
   glyph: string;
   /** 無障礙名稱 (含序號與方向) */
   label: string;
@@ -70,6 +73,8 @@ export interface TurnModeModel {
   /** 說明列 (沒選 = 怎麼操作；選了 = 預覽：第 1 列往右 (還沒轉) / 被擋的原因) */
   caption: string;
   text: { confirm: string; undo: string; exit: string; ink: string; keys: string };
+  /** 滑動章節 (第三章)：此刻的格 (點格子選取用：房間 / 空格 / 實心)；列 / 行章節沒有 */
+  cells?: MapCell[];
 }
 
 const INK = '#3a2618';
@@ -86,7 +91,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 };
 
 /** 轉動模式的點擊 (ui 只回呼，不改 session；app 交給 reduceTurnMode → ChapterCommand) */
-export type TurnClick = { t: 'pick'; group: string; dir: TurnDir } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+export type TurnClick = { t: 'pick'; group: string; dir: TurnDir } | { t: 'cell'; x: number; y: number } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
 export interface TurnHandlers { tab(): void; input(i: TurnClick): void }
 
 /** 進入轉動模式後這段時間內「確認」無效 (從互動鍵連點穿透；mobile-controls 2.5) */
@@ -94,6 +99,9 @@ const CONFIRM_GUARD_MS = 300;
 /** 標頭箭頭的邊長 (≥ 44 CSS px；mobile-controls 2.5) 與到格子的間距 */
 const HEAD = 44;
 const HEAD_GAP = 8;
+/** 滑動箭頭的最小邊長 (格子小時縮小，避免同一個角上的箭頭互相重疊；觸控區由格子負責) 與點格子時算「點到箭頭」的距離 (格) */
+const SLIDE_MIN = 28;
+const SLIDE_REACH = 0.4;
 
 const LOCK_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="7" width="10" height="7.5" rx="1.2" fill="currentColor"/></svg>';
 const WEDGE_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 13 L14 13 L14 4 Z" fill="currentColor"/></svg>';
@@ -217,6 +225,31 @@ export class CubeMapOverlay {
   private renderHeads(t: TurnModeModel | null, geo: { ox: number; oy: number; size: number; cols: number; rows: number } | null): void {
     if (!t || !geo) { this.heads.replaceChildren(); return; }
     const { ox, oy, size, cols, rows } = geo;
+    // 滑動章節 (第三章)：箭頭畫在房間與空格的交界；格子小 (手機) 時箭頭縮到 ≥ 28 px 不互相重疊，觸控區改由格子負責——
+    // 每一格都是點擊區 (≥ 44 px)：點在某個箭頭附近 (0.4 格內) = 選那個箭頭；否則 = 點格子 (房間 / 空格選取、實心格說明)
+    const arrow = Math.max(SLIDE_MIN, Math.min(HEAD, Math.floor(size * 0.46)));
+    const slides = t.headers.filter(h => h.at.side === 'cell' && h.cell && typeof h.dir === 'string');
+    const mid = (h: TurnHeader): [number, number] => { const [dx, dy] = DIR[h.dir as Side]; return [h.cell!.x + 0.5 + dx / 2, h.cell!.y + 0.5 + dy / 2]; };
+    const cellBtns = (t.cells ?? []).map(c => {
+      const b = el('button', `pz-turn-cell ${c.kind}`);
+      b.type = 'button';
+      b.tabIndex = -1;
+      b.setAttribute('aria-label', c.name);
+      b.dataset.cell = `${c.x},${c.y}`;
+      b.style.left = `${Math.round(ox + c.x * size)}px`;
+      b.style.top = `${Math.round(oy + c.y * size)}px`;
+      b.style.width = b.style.height = `${Math.round(size)}px`;
+      b.addEventListener('click', e => {
+        e.preventDefault();
+        const r = this.stage.getBoundingClientRect();
+        const px = (e.clientX - r.left - ox) / size, py = (e.clientY - r.top - oy) / size;
+        let best: TurnHeader | null = null;
+        let bd = SLIDE_REACH;
+        for (const h of slides) { const [mx, my] = mid(h); const d = Math.hypot(px - mx, py - my); if (d < bd) { bd = d; best = h; } }
+        this.turn?.input(best ? { t: 'pick', group: best.group, dir: best.dir } : { t: 'cell', x: c.x, y: c.y });
+      });
+      return b;
+    });
     const btns = t.headers.map(h => {
       const b = el('button', `pz-turn-head ${h.state}${h.selected ? ' sel' : ''}`);
       b.type = 'button';
@@ -233,13 +266,21 @@ export class CubeMapOverlay {
       else if (h.at.side === 'right') { x = ox + cols * size + HEAD_GAP; y = oy + (i + 0.5) * size - HEAD / 2; }
       else if (h.at.side === 'top') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy - HEAD_GAP - HEAD; }
       else if (h.at.side === 'bottom') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy + rows * size + HEAD_GAP; }
+      else if (h.at.side === 'cell' && h.cell && typeof h.dir === 'string') {
+        // 滑動：房間與空格交界線的中點 (一半在房間、一半在空格，不壓房名)
+        const [mx, my] = mid(h);
+        x = ox + mx * size - arrow / 2;
+        y = oy + my * size - arrow / 2;
+        b.classList.add('slide');
+        b.style.width = b.style.height = `${arrow}px`;
+      }
       else { x = ox + cols * size + HEAD_GAP; y = oy + i * (HEAD + HEAD_GAP); }
       b.style.left = `${Math.round(x)}px`;
       b.style.top = `${Math.round(y)}px`;
       b.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'pick', group: h.group, dir: h.dir }); });
       return b;
     });
-    this.heads.replaceChildren(...btns);
+    this.heads.replaceChildren(...cellBtns, ...btns);
   }
 
   private draw(m: CubeMapModel): { ox: number; oy: number; size: number; cols: number; rows: number } | null {
@@ -393,6 +434,17 @@ export class CubeMapOverlay {
       g.strokeStyle = 'rgba(58,38,24,0.35)';
       g.lineWidth = 1;
       for (let k = -s; k < s; k += 10) { g.beginPath(); g.moveTo(x + k, y); g.lineTo(x + k + s, y + s); g.stroke(); }
+      // 有名字的實心格 (第三章：工具間 / 水塔) 寫上名字 (白底，不被斜線吃掉)
+      if (c.name) {
+        g.font = font(nameSize * 0.8, true);
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        const tw = g.measureText(c.name).width;
+        g.fillStyle = 'rgba(246,226,192,0.92)';
+        g.fillRect(x + s / 2 - tw / 2 - 6, y + s / 2 - nameSize * 0.55, tw + 12, nameSize * 1.1);
+        g.fillStyle = 'rgba(58,38,24,0.8)';
+        g.fillText(c.name, x + s / 2, y + s / 2);
+      }
     }
     g.restore();
   }

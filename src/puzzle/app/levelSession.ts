@@ -225,6 +225,8 @@ export class LevelSession {
     // 按確認卻轉不動 (鎖著 / 卡住 / 墨乾)：預覽已寫了原因，再用訊息說一次
     if (i.t === 'confirm' && m.blocked) say(this.world, DIAL_BLOCK_MSG[m.blocked as keyof typeof DIAL_BLOCK_MSG]);
     if (i.t === 'undo' && !m.canUndo) say(this.world, 'msg.dial.nothingToUndo');
+    // 點實心格 / 不鄰接空格的房 / 沒有房間能往那邊滑 (第三章)：只說明
+    if (r.note) say(this.world, r.note.key, r.note.params);
     this.turnSel = r.sel;
     if (r.command) this.chapterQueue.push(r.command);
     if (r.exit) { this.turnMode = false; this.turnSel = null; }
@@ -239,7 +241,8 @@ export class LevelSession {
     this.saveChapter();
     const after = r.state.cube?.pos[r.state.room];
     const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1]);
-    const done = c.t === 'undo' ? 'msg.dial.undone' : moved ? 'msg.dial.turnedHere' : 'msg.dial.turned';
+    const slide = r.spec.cube?.ops === 'slide';
+    const done = c.t === 'undo' ? 'msg.dial.undone' : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
     if (!moved) { say(this.world, done); return; }
     // 過場方向 = 你這間房的移動方向 (列循環繞回時依轉動方向)
     const dx = after![0] - before![0];

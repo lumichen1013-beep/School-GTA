@@ -1,4 +1,4 @@
-// 序章 12 鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
+// 序章 12 鏡與 cs:ch2 三鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
 // 顏色一律取自主題 (render/themes)；畫面內的字由 labels 傳入 (文字表)；時間 t = 鏡頭秒數 (含轉場)
 import type { Palette } from '../themes';
 import {
@@ -1156,6 +1156,183 @@ const title: SceneDraw = s => {
   g.globalAlpha = 1;
 };
 
+// ── cs:ch2 爸爸的書房「第四十一次」(3 鏡；cutscenes-v0.1 4) ──
+
+/** cs:ch2 鏡 1：書桌上攤開的爸爸筆記 (魔法陣草圖、日期、問號、劃掉的字)；第 2 段時最後一行 (labels.note) 被檯燈照亮 */
+const ch2Notebook: SceneDraw = s => {
+  const { g, pal, t } = s;
+  // 桌面 (胡桃木) 蓋滿畫面
+  fillView(s, hex(pal.tableTop));
+  woodGrain(g, L(s), R(s), s.view.y0 - 80, B(s), 1201, 'rgba(70,40,20,0.22)');
+  layer(s, 0.5, () => {
+    // 桌角：墨水瓶、鋼筆架、散落的便條
+    cut(g, roughRect(760, 90, 70, 86, 1202, 0.8), '#2d3f8f', { shadow: 5 });
+    cut(g, roughRect(774, 70, 42, 24, 1203, 0.5), hex(pal.trim), { shadow: 2, lw: 1.6 });
+    for (const [x, y, a, sd] of [[90, 120, -0.2, 1], [120, 560, 0.15, 2], [790, 560, -0.1, 3]] as const) {
+      g.save(); g.translate(x, y); g.rotate(a);
+      cut(g, roughRect(-60, -40, 120, 80, 1210 + sd, 1.2), tint(pal.paperNote, -0.08), { shadow: 3 });
+      for (let i = 0; i < 3; i++) scribble(g, -46, -18 + i * 18, 84 - i * 14, 1220 + sd * 3 + i, 'rgba(74,50,32,0.55)', 1.5);
+      g.restore();
+    }
+  }, [450, 340]);
+  layer(s, 1, () => {
+    // 攤開的筆記本 (兩頁)
+    g.save();
+    g.translate(450, 330);
+    g.rotate(-0.04);
+    cut(g, roughPoly([[-330, -230], [0, -246], [330, -230], [322, 236], [0, 222], [-322, 236]], 1230, 1.6), hex(pal.paperNote), { shadow: 10 });
+    g.fillStyle = 'rgba(160,120,70,0.10)'; g.fillRect(-320, -228, 640, 460);
+    g.strokeStyle = 'rgba(58,38,24,0.45)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, -246); g.lineTo(0, 222); g.stroke();
+    // 左頁：三個大小不一的魔法陣草圖 (一個被劃掉)
+    for (const [x, y, r, sd] of [[-170, -120, 78, 1], [-230, 70, 52, 2], [-96, 92, 60, 3]] as const) {
+      g.save(); g.translate(x, y); g.scale(1, 0.92);
+      sigil(g, r, rgba(pal.inkBlue, 0.6 + 0.1 * sd), 1.4);
+      g.restore();
+      if (sd === 2) { g.strokeStyle = 'rgba(165,69,45,0.7)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x - r, y - r * 0.8); g.lineTo(x + r, y + r * 0.8); g.stroke(); }
+    }
+    serif(g, '?', -40, -170, 34, '#a5452d', { weight: 700 });
+    serif(g, '?', -300, -10, 26, '#a5452d', { weight: 700 });
+    // 右頁：日期 + 字跡 + 劃掉的字，一行一行往下
+    for (let i = 0; i < 8; i++) {
+      const y = -196 + i * 46;
+      serif(g, `${3 + (i % 9)}/${10 + i * 2}`, 44, y, 15, 'rgba(74,50,32,0.7)', { align: 'left' });
+      scribble(g, 100, y, 150 - (i % 3) * 30, 1240 + i, '#4a3220', 2);
+      if (i % 3 === 1) { g.strokeStyle = 'rgba(74,50,32,0.8)'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(96, y - 2); g.lineTo(240 - (i % 3) * 30, y + 2); g.stroke(); }
+      if (i % 4 === 2) serif(g, '?', 280, y, 22, '#a5452d', { weight: 700 });
+    }
+    // 最後一行：爸爸寫的「第四十一次。還是不亮？」(畫面字；第 2 段時被檯燈照亮)
+    const hl = smooth(4.0, 5.6, t);
+    if (hl > 0) additive(g, () => glow(g, 170, 196, 190, pal.lampLight, 0.32 * hl));
+    serif(g, s.labels.note ?? '', 172, 196, 24, INK, { weight: 600 });
+    g.strokeStyle = 'rgba(74,50,32,0.55)'; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(40, 214); g.lineTo(306, 212); g.stroke();
+    g.restore();
+  }, [560, 520]);
+  // 檯燈的暖光 (左上)
+  additive(g, () => glow(g, 180, 60, 420, pal.lampLight, 0.16));
+  vignette(s, 450, 360, 220, 'rgba(30,18,10,A)', 0.55);
+};
+
+/** 殘影 (只在 2D：半透明灰藍；story-bible 8.2)：手裡一本書，phase 0..1 = 翻一頁、搖一次頭 */
+function readingGhost(g: CanvasRenderingContext2D, x: number, y: number, h: number, phase: number, flip: number, reduce: boolean): void {
+  const ghost = 'rgba(138,150,176,0.42)';
+  const shake = reduce ? 0 : Math.sin(clamp01((phase - 0.55) / 0.4) * TAU * 2) * 0.12 * (phase > 0.55 && phase < 0.95 ? 1 : 0);
+  g.save();
+  g.translate(x, y);
+  g.scale(flip, 1);
+  standingFigure(g, 0, 0, h, ghost, 1300, { outline: 'rgba(90,100,130,0.55)', lean: shake * 0.3 });
+  // 書 (攤在手上)：翻頁 = 右頁抬起翻到左邊
+  const by = -h * 0.5, bx = h * 0.2;
+  g.fillStyle = 'rgba(230,226,236,0.55)'; g.strokeStyle = 'rgba(90,100,130,0.6)'; g.lineWidth = 1.6;
+  g.beginPath(); g.rect(bx - 22, by - 14, 44, 28); g.fill(); g.stroke();
+  const turn = reduce ? 0 : clamp01(phase / 0.45);
+  const fx = bx + Math.cos(turn * Math.PI) * 20;
+  g.beginPath(); g.moveTo(bx, by - 14); g.lineTo(fx, by - 16 + Math.sin(turn * Math.PI) * -10); g.lineTo(fx, by + 12); g.lineTo(bx, by + 14); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+}
+
+/** cs:ch2 鏡 2：藏寶圖風格的書庫 (奶油紙、淡墨格線、扁平書架)：兩道殘影在書架之間來回翻書、搖頭 (2.4 秒一輪；靜止長鏡頭) */
+const ch2Shadows: SceneDraw = s => {
+  const { g, pal, t, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, pal.bgTop], [1, pal.bgBottom]]));
+  g.strokeStyle = rgba(pal.inkBlue, 0.06); g.lineWidth = 1.2;
+  for (let x = Math.floor(view.x0 / 50) * 50; x < view.x1; x += 50) { g.beginPath(); g.moveTo(x, view.y0); g.lineTo(x, view.y1); g.stroke(); }
+  for (let y = Math.floor(view.y0 / 50) * 50; y < view.y1; y += 50) { g.beginPath(); g.moveTo(view.x0, y); g.lineTo(view.x1, y); g.stroke(); }
+  // 地板線
+  g.fillStyle = 'rgba(58,38,24,0.12)'; g.fillRect(L(s), 560, R(s) - L(s), B(s) - 560);
+  g.strokeStyle = INK; g.lineWidth = 2.4; g.beginPath(); g.moveTo(L(s), 560); g.lineTo(R(s), 560); g.stroke();
+  // 三座高書架 (扁平色 + 描邊，同遊戲裡的藏寶圖)
+  for (const [x, w, sd] of [[60, 200, 1], [350, 200, 2], [640, 200, 3]] as const) {
+    cut(g, roughRect(x, 60, w, 500, 1310 + sd, 1.2), hex(pal.shelf), { shadow: 4, lw: 2.4 });
+    const r = rng(1320 + sd);
+    for (let row = 0; row < 5; row++) {
+      const y = 76 + row * 96;
+      g.fillStyle = hex(pal.shelfDark); g.fillRect(x + 12, y + 80, w - 24, 8);
+      let bx = x + 16;
+      while (bx < x + w - 24) {
+        const bw = 12 + r() * 12, bh = 52 + r() * 24;
+        cut(g, roughRect(bx, y + 80 - bh, bw, bh, 1330 + row * 40 + Math.round(bx), 0.5), hex(pal.books[Math.floor(r() * pal.books.length)]), { shadow: 0, lw: 1.3 });
+        bx += bw + 3;
+      }
+    }
+  }
+  // 兩道殘影 (書架之間的走道)，錯開半輪：翻一頁、搖一次頭
+  const k = s.reduce ? 0.3 : (t % 2.4) / 2.4;
+  readingGhost(g, 305, 560, 170, k, 1, s.reduce);
+  readingGhost(g, 595, 560, 165, (k + 0.5) % 1, -1, s.reduce);
+  vignette(s, 450, 330, 240, 'rgba(60,48,30,A)', 0.35);
+};
+
+/** 剖面魔方的一格：書庫 (書架) 或溫室 (玻璃格 + 植物)；x, y = 左上角 */
+function ch2Block(g: CanvasRenderingContext2D, pal: Palette, kind: 'study' | 'greenhouse', x: number, y: number, w: number, h: number, seed: number): void {
+  cut(g, roughRect(x, y, w, h, seed, 1.2), kind === 'study' ? '#e9c9a0' : '#cfe3c6', { shadow: 8, lw: 3 });
+  g.fillStyle = 'rgba(40,24,12,0.14)'; g.fillRect(x + 4, y + 4, w - 8, 12);
+  cut(g, roughRect(x, y + h - 20, w, 20, seed + 1, 0.6), hex(pal.floorB), { shadow: 0, lw: 2 });
+  const r = rng(seed + 2);
+  if (kind === 'study') {
+    for (const sx of [0.08, 0.56]) {
+      const bx = x + w * sx, bw = w * 0.36;
+      cut(g, roughRect(bx, y + 26, bw, h - 52, seed + 3 + sx * 10, 0.6), hex(pal.shelf), { shadow: 2, lw: 1.8 });
+      for (let row = 0; row < 3; row++) for (let b = 0; b < 4; b++) {
+        cut(g, roughRect(bx + 6 + b * (bw - 12) / 4, y + 32 + row * (h - 60) / 3, (bw - 12) / 4 - 2, (h - 60) / 3 - 8, seed + 20 + row * 4 + b, 0.3), hex(pal.books[Math.floor(r() * pal.books.length)]), { shadow: 0, lw: 1 });
+      }
+    }
+    // 書庫的門 (右下)
+    cut(g, roughRect(x + w - 40, y + h - 84, 30, 64, seed + 40, 0.4), hex(pal.door), { shadow: 2, lw: 1.6 });
+  } else {
+    // 玻璃屋頂 (斜格) + 彩繪玻璃窗 + 幾盆植物
+    const colors = ['#3e8a5a', '#d9a441', '#6aa84f', '#9fe3d0'];
+    for (let c = 0; c < 4; c++) for (let k = 0; k < 2; k++) {
+      cut(g, roughRect(x + 14 + c * (w - 28) / 4, y + 24 + k * 46, (w - 28) / 4 - 6, 40, seed + 50 + c * 2 + k, 0.4), colors[(c + k * 2 + Math.floor(r() * 2)) % 4], { shadow: 0, lw: 1.6, alpha: 0.9 });
+    }
+    for (let i = 0; i < 3; i++) {
+      const px = x + 30 + i * (w - 60) / 2, py = y + h - 20;
+      cut(g, roughPoly([[px - 16, py - 30], [px + 16, py - 30], [px + 11, py], [px - 11, py]], seed + 60 + i, 0.4), hex(pal.crate), { shadow: 2, lw: 1.6 });
+      cut(g, roughEllipse(px, py - 46, 22, 20, seed + 70 + i, 1.2), '#5f8a3a', { shadow: 2, lw: 1.6 });
+    }
+  }
+}
+
+/** cs:ch2 鏡 3：剖面魔方——書庫方塊與溫室方塊沿格線對調 (2.5 秒：一個從上面繞、一個從下面繞)；交換後彩繪玻璃的綠光照進書庫的門 */
+const ch2Swap: SceneDraw = s => {
+  const { g, pal, t } = s;
+  const tt = s.reduce ? 6 : t;
+  fillView(s, vGrad(g, s.view.y0, s.view.y1, [[0, '#24303a'], [0.6, '#3c4a46'], [1, '#4a5a48']]));
+  layer(s, 0.3, () => {
+    const r = rng(1400);
+    g.fillStyle = 'rgba(230,240,220,0.7)';
+    for (let i = 0; i < 36; i++) { g.beginPath(); g.arc(r() * 1300 - 200, r() * 280 - 40, 1 + r() * 1.5, 0, TAU); g.fill(); }
+  });
+  const W = 260, H = 200, Y = 240, AX = 150, BX = 490;
+  layer(s, 1, () => {
+    // 外框 (老宅剖面)
+    cut(g, roughPoly([[AX - 50, Y + 4], [450, Y - 170], [BX + W + 50, Y + 4]], 1401, 2), '#5b3424', { shadow: 8 });
+    cut(g, roughRect(AX - 20, Y - 10, BX + W - AX + 40, H + 30, 1402, 1.4), '#4a2f22', { shadow: 8 });
+    g.fillStyle = '#20141c'; g.fillRect(AX, Y, W, H); g.fillRect(BX, Y, W, H);
+    // 對調：0.8～3.3 秒；書庫從上面繞到右邊、溫室從下面繞到左邊
+    const u = smooth(0.8, 3.3, tt);
+    const lift = Math.sin(u * Math.PI);
+    const studyX = AX + (BX - AX) * u, greenX = BX + (AX - BX) * u;
+    const items = [{ kind: 'greenhouse' as const, x: greenX, y: Y + lift * 70, sd: 1450 }, { kind: 'study' as const, x: studyX, y: Y - lift * 90, sd: 1410 }];
+    for (const it of items) {
+      if (lift > 0.05) { g.fillStyle = `rgba(0,0,0,${0.22 * lift})`; g.fillRect(it.x + 14, it.y + 18, W, H); }
+      ch2Block(g, pal, it.kind, it.x, it.y, W, H, it.sd);
+    }
+    // 交換後：彩繪玻璃的綠光從溫室 (左) 照進書庫 (右) 的門
+    const green = smooth(3.4, 5.0, tt);
+    if (green > 0) {
+      additive(g, () => {
+        g.fillStyle = rgba(0x3e8a5a, 0.35 * green);
+        g.beginPath(); g.moveTo(AX + W - 10, Y + 40); g.lineTo(BX + W - 40, Y + H - 84); g.lineTo(BX + W - 10, Y + H - 20); g.lineTo(AX + W - 10, Y + H - 30); g.closePath(); g.fill();
+        glow(g, BX + W - 25, Y + H - 52, 90, 0x6aa84f, 0.45 * green);
+      });
+    }
+  }, [450, 340]);
+  motes(g, 150, 160, 600, 380, 24, t, 1490, 'rgba(210,240,200,0.5)', 2, s.reduce, -16);
+  vignette(s, 450, 360, 220, 'rgba(8,14,12,A)', 0.55);
+};
+
 /** 未登錄 sceneId 的退回畫面：素紙 */
 export const blankScene: SceneDraw = s => fillView(s, vGrad(s.g, s.view.y0, s.view.y1, [[0, s.pal.bgTop], [1, s.pal.bgBottom]]));
 
@@ -1172,5 +1349,8 @@ export const PAPER_SCENES: Readonly<Record<string, SceneDraw>> = {
   'prologue.locked': locked,
   'prologue.flatten': flatten,
   'prologue.note': note,
-  'prologue.title': title
+  'prologue.title': title,
+  'ch2.notebook': ch2Notebook,
+  'ch2.shadows': ch2Shadows,
+  'ch2.swap': ch2Swap
 };

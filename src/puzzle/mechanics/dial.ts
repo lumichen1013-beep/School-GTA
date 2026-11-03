@@ -9,8 +9,11 @@ import { say } from '../core/world';
 
 declare module '../core/types' {
   interface ObjKinds {
-    /** 魔方儀 (黃銅魔方儀、園丁羅盤…)：chapter = 啟動哪一章的控制盤 */
-    dial: { chapter: number };
+    /**
+     * 魔方儀 (黃銅魔方儀、園丁羅盤…)：chapter = 啟動哪一章的控制盤；useText (ObjBase) = 啟動時的訊息 (沒有 = msg.dial.activated)；
+     * readyText = 已啟動再按的訊息 (沒有 = msg.dial.ready)；fixedCells = 盤上的實心格 [行, 列] (外觀：園丁羅盤的黃銅方塊)
+     */
+    dial: { chapter: number; readyText?: TextKey; fixedCells?: ReadonlyArray<readonly [number, number]> };
     /** 鎖扣開關 (一次性)：拉下 = used；doneFlag 給解開條件 (useText = 拉下時的訊息) */
     latch: {};
   }
@@ -47,7 +50,7 @@ export const dial: Mechanic = {
       verbKey: 'obj.dial.verb',
       interact: (w, o) => {
         if (o.def.type !== 'dial') return;
-        if (w.ext.dial?.active) { say(w, 'msg.dial.ready'); return; }
+        if (w.ext.dial?.active) { say(w, o.def.readyText ?? 'msg.dial.ready'); return; }
         w.events.push({ t: 'dialActivate', chapter: o.def.chapter });
       }
     },

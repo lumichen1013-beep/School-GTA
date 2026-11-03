@@ -71,6 +71,7 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'spine') return [o.title, o.drawnText, label];
   if (o.type === 'bookLock') return [o.openText, o.wrongText, o.doneText, label];
   if (o.type === 'remark') return [o.textKey, label];
+  if (o.type === 'dial') return [o.readyText, label];
   if (o.type === 'lampBook') return [o.title, label];
   if (o.type === 'lampLock') return [o.openText, o.stepText, o.resetText, label];
   if (o.type === 'openBook') return [o.readText, label];

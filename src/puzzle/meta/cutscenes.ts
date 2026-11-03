@@ -1,6 +1,8 @@
 // 過場紀錄與回憶頁規則 (cutscenes-v0.1 2.3、3；純函式)
 import { CUTSCENES, PROLOGUE_ID } from '../content/cutscenes';
 import type { CutsceneDef } from '../content/cutsceneTypes';
+import { CHAPTERS } from '../content/chapters';
+import { nextAfterClear } from './progress';
 import { seenCutscenes, skippedCutscenes, type Save } from './save';
 
 /**
@@ -39,4 +41,16 @@ export function memoryEntries(s: Save, defs: readonly CutsceneDef[] = CUTSCENES)
   return defs
     .filter(d => seen.includes(d.id) || reached(d, s))
     .map(d => ({ id: d.id, titleKey: d.titleKey, status: sk.includes(d.id) ? 'unfinished' : seen.includes(d.id) ? 'seen' : 'unseen' }));
+}
+
+/**
+ * 進 levelId 之前要先播的章末過場 (cutscenes-v0.1 3；規格 6「第三章骨架與銜接」)：某個 afterClear 過場的觸發關已通關、還沒看過，
+ * 而且那一關章末的「繼續」就是 levelId (例：cs:ch2 = 2-5 通關 → 前往 3-1)。通關畫面的「繼續」與選單進關共用；沒有 = undefined
+ */
+export function cutsceneBeforeLevel(s: Save, levelId: string, defs: readonly CutsceneDef[] = CUTSCENES, chapters = CHAPTERS): CutsceneDef | undefined {
+  const seen = seenCutscenes(s);
+  return defs.find(d => {
+    const at = d.trigger.afterClear;
+    return at !== undefined && s.cleared.includes(at) && !seen.includes(d.id) && nextAfterClear(at, 'chapter', chapters) === levelId;
+  });
 }

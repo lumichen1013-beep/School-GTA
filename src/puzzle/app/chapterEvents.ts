@@ -50,7 +50,9 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
   if (e.t === 'flag') return { kind: 'state', cs: noteFlag(cs, e.flag) };
   if (e.t === 'dialActivate') {
     if (!isDialChapter(cs.spec) || cs.state.dial || e.chapter !== cs.spec.chapter) return { kind: 'none' };
-    say(w, 'msg.dial.activated');
+    // 啟動訊息 = 魔方儀物件的 useText (第三章：「九個花盆格，空了兩格。」)；沒有 = 通用說明 (第二章)
+    const entry = cs.spec.cube?.dial?.entry;
+    say(w, (entry && w.byId.get(entry.obj)?.def.useText) ?? 'msg.dial.activated');
     return { kind: 'dial', cs: activateDial(cs) };
   }
   if (e.t === 'done') return { kind: 'state', cs: refreshUnlocks(clearUndo(cs, [e])).cs };

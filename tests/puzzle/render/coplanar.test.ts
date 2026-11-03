@@ -9,6 +9,7 @@ import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
 import { deep, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { THEMES } from '../../../src/puzzle/render/themes';
+import { bed, depths, gallery, night, nursery } from '../../../src/puzzle/content/levels/ch3/rooms';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
 function stubCanvas(): void {
@@ -290,5 +291,23 @@ describe('渲染：深度打架 (共面)：2-2 閱覽室與印房的活字桌 (�
     view.update('3d', 1 / 60, 0, cams.active('3d'));
     expect(zFightPairs(view.scene, [print.bounds.minX + 3, print.bounds.maxX - 3])).toEqual([]);
     view.dispose();
+  });
+});
+
+describe('渲染：深度打架 (共面)：第三章溫室的五間占位房 (彩繪玻璃窗、育苗床、陶盆、園丁羅盤)', () => {
+  beforeAll(stubCanvas);
+
+  it('五間房的 3D 場景 (溫室主題) 鏡頭看得到的面沒有共面 (含已啟動、照排列擺好小陶盆的園丁羅盤)；藏寶圖畫得出來', () => {
+    for (const room of [nursery, gallery, night, depths, bed]) {
+      const w = newWorld(room);
+      w.ext = { cube: { links: {}, at: [0, 1, 0], layout: { nursery: [0, 1, 0], night: [1, 1, 0], gallery: [2, 1, 0], bed: [1, 2, 0], depths: [2, 2, 0] } }, dial: { active: true } };
+      const view = new PuzzleScene(w, THEMES.greenhouse);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
   });
 });

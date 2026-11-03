@@ -223,6 +223,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   font-size: 20px; color: var(--inkblue); background: #eef1ff; border: 2px solid var(--inkblue); border-radius: 10px;
 }
 .pz-turn-head b { font-weight: 700; line-height: 1; }
+/* 第三章 (滑動)：每一格的點擊區 (透明；箭頭鈕疊在上層)、按下時淡淡框出 */
+.pz-turn-cell { position: absolute; padding: 0; background: transparent; border: 0; border-radius: 6px; }
+.pz-turn-cell:active, .pz-turn-cell:focus-visible { box-shadow: inset 0 0 0 3px rgba(61,99,255,.35); }
+.pz-turn-cell.solid { cursor: help; }
+.pz-turn-head.slide { font-size: 16px; border-radius: 8px; }
+.pz-turn-head.slide .mark { right: -5px; top: -5px; width: 16px; height: 16px; }
 .pz-turn-head.sel { color: var(--paper); background: var(--inkblue); box-shadow: 0 0 0 3px rgba(61,99,255,.3); }
 .pz-turn-head.locked, .pz-turn-head.jammed { color: #7a6a5a; background: var(--paper2); border-style: dashed; border-color: #7a6a5a; }
 .pz-turn-head.locked b, .pz-turn-head.jammed b { opacity: .45; }

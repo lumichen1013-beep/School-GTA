@@ -72,7 +72,7 @@ export const CUE_MAP: Readonly<Record<string, readonly AudioAction[]>> = {
   'pad.semitoneDown': [music('semitoneDown')],
   'paper.flutter': [sfx('sfx.cs.paper.flutter')],
   'pad.out': [music('padOut')],
-  // 其他過場 (分鏡第 5 節；cs:ch1 起尚未實作)
+  // 其他過場 (分鏡第 5 節；cs:ch2 用到 pages.turn、leaves，其餘尚未實作)
   'paper.tear': [sfx('sfx.cs.paper.tear')],
   'pages.turn': [sfx('sfx.cs.paper.rub')],
   birds: [sfx('sfx.cs.birds')],
@@ -87,11 +87,13 @@ export const CUE_MAP: Readonly<Record<string, readonly AudioAction[]>> = {
 
 /** 過場鏡頭開始時的音樂動作 (分鏡的「音效 / 音樂」欄有、但資料沒有提示的地方)；鏡頭 1 起算 */
 export const SHOT_MUSIC: Readonly<Record<string, Readonly<Record<number, readonly MusicOp[]>>>> = {
-  'cs:prologue': { 11: ['viewOpen', 'padWarm'], 12: ['title'] }
+  'cs:prologue': { 11: ['viewOpen', 'padWarm'], 12: ['title'] },
+  // cs:ch2 鏡 3：書庫和溫室對調、綠光透進來 → 長音墊轉暖
+  'cs:ch2': { 3: ['padWarm'] }
 };
 
 /** 過場 → 配樂 (沒列的過場 = 目前章節的配樂、安靜情境) */
-export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:endA': 'endA', 'cs:endB': 'endB' };
+export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:ch2': 'ch2', 'cs:endA': 'endA', 'cs:endB': 'endB' };
 
 /** 過場 (calmTension) 降一半音量的音效 (分鏡 2.5：cs:night 的低頻長音與撕紙聲) */
 export const CALM_HALF: readonly string[] = ['sfx.cs.paper.tear', 'sfx.cs.wood.groan', 'sfx.cs.circle.hum'];

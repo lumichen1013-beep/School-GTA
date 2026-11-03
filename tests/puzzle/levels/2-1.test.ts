@@ -631,7 +631,7 @@ describe('進度：選單解鎖、通關記錄、繼續', () => {
   });
 
   it('第一章章門打開 (1-3) 的「繼續」= 第二章第一關 2-1；1-1 門廊的「繼續」= 1-2；第一章不是控制盤章 → 房間不會「通關」', () => {
-    expect([nextAfterClear('1-3', 'chapter', CHAPTERS), nextAfterClear('1-1', 'level', CHAPTERS), nextAfterClear('2-1', 'chapter', CHAPTERS)]).toEqual(['2-1', '1-2', null]);
+    expect([nextAfterClear('1-3', 'chapter', CHAPTERS), nextAfterClear('1-1', 'level', CHAPTERS), nextAfterClear('2-1', 'chapter', CHAPTERS)]).toEqual(['2-1', '1-2', '3-1']); // 第三章登錄後：第二章的章末 → 第三章第一關
     const ch1 = openChapter(CH1_SPEC, chapterStart(defaultSave(), CH1_SPEC, CH1.start, CH1.legacy), OPTS);
     expect(roomCleared(CH1_SPEC, ch1.state, ch1.world)).toBe(false);
   });

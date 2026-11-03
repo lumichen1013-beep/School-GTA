@@ -13,8 +13,8 @@ export interface CubeDef {
   id: string;
   dims: Cell;
   ops: CubeOps;
-  /** 初始排列：room = 房間 id，或 'solid' (實心格，不能進入、不會動)；沒列出的格 = 空格 */
-  cells: ReadonlyArray<{ at: Cell; room: string }>;
+  /** 初始排列：room = 房間 id，或 'solid' (實心格，不能進入、不會動)；沒列出的格 = 空格。label = 實心格在展開圖上的名稱 (文字 key；v0.4 第三章：工具間 / 水塔) */
+  cells: ReadonlyArray<{ at: Cell; room: string; label?: string }>;
   /** 屋框：接在固定格邊上的開口 (大門、章門走廊、天窗)；不隨轉動移動 */
   frame: ReadonlyArray<{ at: Cell; side: Side; kind: FrameKind; to?: string }>;
   /** v0.4 轉動手段：lever = 房間裡的拉桿 (第一章；未給 = lever)、dial = 展開圖的控制盤 (第二章起，N32) */
