@@ -13,5 +13,8 @@ export const term = {
   'term.card.right': '詞卡「右」',
   // 房間的銅鑰匙 (章門；章節道具) 與許問津的手記 (收集物，章末寫進 save.diary)
   'term.key.brass': '銅鑰匙',
-  'term.diary.1': '手記第一頁'
+  'term.diary.1': '手記第一頁',
+  // 第二章：銅鑰匙的齒 (三條鏈各一枚，2-5 組裝)、老宅圖殘片 (收集物，通關時寫進 save.scraps)
+  'term.tooth.shelf': '銅鑰匙的齒・一',
+  'term.scrap.1': '老宅圖殘片'
 } as const;

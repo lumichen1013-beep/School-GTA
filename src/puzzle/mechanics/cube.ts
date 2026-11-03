@@ -14,9 +14,10 @@ declare module '../core/types' {
     lever: { word: LeverWord };
     /**
      * 魔方門位 (N21)：side = 本地門位、kind = 門 / 拱門 / 章門；此刻接到哪由章節層寫入 World.ext.cube。
-     * 章門：key = 開門要的鑰匙 (房間的銅鑰匙，章節道具)；openText = 打開時的訊息 (開了 = 本章通關)
+     * 章門：key = 開門要的鑰匙 (房間的銅鑰匙，章節道具)；openText = 打開時的訊息 (開了 = 本章通關)；
+     * frameText = 這扇門接到屋框的入口 (來時的走廊) 時的說明 (第二章起；沒有 = 大門「來時的門廊」)
      */
-    cubeDoor: { side: Side; kind: DoorKind; key?: ItemId; openText?: TextKey };
+    cubeDoor: { side: Side; kind: DoorKind; key?: ItemId; openText?: TextKey; frameText?: TextKey };
   }
 }
 
@@ -54,9 +55,10 @@ export const TURN_BLOCK_MSG: Readonly<Record<TurnBlock, TextKey>> = {
 /** 推不過拱門的原因 → 訊息 key */
 export const TRANSFER_BLOCK_MSG: Readonly<Record<TransferBlock, TextKey>> = { notArch: 'msg.cube.doorOnly', occupied: 'msg.cube.archBlocked' };
 
-/** 屋框：大門 → 通回門廊 (只提示)；章門走廊 → 有鑰匙就打開 (本章通關)，沒有就鎖著 */
+/** 屋框：大門 / 來時的走廊 (門有 frameText) → 只提示；章門走廊 → 有鑰匙就打開 (本章通關)，沒有就鎖著 */
 function frameDoor(w: World, o: ObjState, frame: string): void {
-  if (frame === 'porch') { say(w, 'msg.cube.porch'); return; }
+  const entry = o.def.type === 'cubeDoor' ? o.def.frameText : undefined;
+  if (frame === 'porch' || entry) { say(w, entry ?? 'msg.cube.porch'); return; }
   const key = o.def.type === 'cubeDoor' ? o.def.key : undefined;
   if (key === undefined || !hasItem(w, key)) { say(w, 'msg.cube.chapterLocked'); return; }
   o.used = true;

@@ -3,7 +3,7 @@ import type { AbilityId, GameEvent, Mode, World } from '../core/types';
 import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
 import type { Side } from '../core/cube';
-import { applyChapterCommand, captureState, clearUndo, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { applyChapterCommand, captureState, clearUndo, isDialChapter, openChapter, refreshUnlocks, restartRoom, roomCleared, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
@@ -50,6 +50,8 @@ export interface SessionHooks {
   onCleared(): void;
   /** 章節狀態寫入時機 (規格 8：換房、轉動完成、重進房間)；單房關卡不呼叫 */
   onChapterSave?(state: ChapterState): void;
+  /** v0.4 控制盤章節：所在房間的謎題全部完成 (房間通關，例：2-1)；同一個場景只通知一次 */
+  onRoomCleared?(room: string): void;
 }
 
 const isWorldAction = (a: string): a is WorldAction => a === 'flip' || a === 'reset' || a === 'interact';
@@ -86,6 +88,8 @@ export class LevelSession {
   private chapterQueue: ChapterCommand[] = [];
   /** 魔方儀剛啟動：下一次能進轉動模式時 (切到藏寶圖、站穩) 自動打開展開圖的轉動模式 (規格 5.4.2) */
   private autoTurn = false;
+  /** 房間通關已通知 (每個場景一次；外殼另以存檔判斷是否顯示通關畫面) */
+  private roomClearSent = false;
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -123,6 +127,7 @@ export class LevelSession {
     this.turnMode = false;
     this.turnSel = null;
     this.chapterQueue = [];
+    this.roomClearSent = false;
     this.trayLabel = null;
     this.pendingTray = null;
     this.commands = [];
@@ -340,6 +345,10 @@ export class LevelSession {
     const r = refreshUnlocks(cleared);
     if (r.cs !== this.cs) { this.cs = r.cs; this.saveChapter(); }
     if (r.added.length && !evs.some(e => e.t === 'done')) say(this.world, 'msg.dial.unlocked');
+    if (!this.roomClearSent && roomCleared(this.cs.spec, this.cs.state, this.world)) {
+      this.roomClearSent = true;
+      this.hooks.onRoomCleared?.(this.cs.state.room);
+    }
   }
 
   /** 畫一幀：HUD 依目前狀態；玩家位置在上一步與目前之間內插 (高更新率螢幕不頓) */

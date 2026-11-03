@@ -100,9 +100,13 @@ export class PuzzleHud {
     this.narrationEl.classList.remove('hide');
   }
   hideNarration(): void { this.narrationEl.classList.add('hide'); }
-  showClear(title: string, nextRoom: string): void {
+  /** 通關畫面；cont = 「繼續」鈕的字 (null = 沒有下一步，隱藏) */
+  showClear(title: string, nextRoom: string, cont: string | null = null): void {
     $('pz-clear-title').textContent = title;
     $('pz-next').textContent = nextRoom;
+    const b = $('pz-continue');
+    b.textContent = cont ?? '';
+    b.hidden = cont === null;
     this.clearEl.classList.add('show');
   }
   hideClear(): void { this.clearEl.classList.remove('show'); }
@@ -113,4 +117,5 @@ export class PuzzleHud {
   }
   onReplay(fn: () => void): void { $('pz-replay').addEventListener('click', fn); }
   onMenu(fn: () => void): void { $('pz-tomenu').addEventListener('click', fn); }
+  onContinue(fn: () => void): void { $('pz-continue').addEventListener('click', fn); }
 }

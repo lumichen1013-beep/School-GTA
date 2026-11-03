@@ -261,7 +261,7 @@ export class CubeMapOverlay {
     const t = m.turn ?? null;
     const hx = t?.headers.some(h => h.at.side === 'left' || h.at.side === 'right') ? HEAD + HEAD_GAP + 4 : 0;
     const hy = (s: 'top' | 'bottom') => (t?.headers.some(h => h.at.side === s) ? HEAD + HEAD_GAP + 4 : 0);
-    const mx = Math.max(24, side(['E', 'W']), hx);
+    const mx = Math.max(24, hx || side(['E', 'W']));
     const fy = m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0;
     const mt = Math.max(t ? 10 : 24, fy, hy('top'));
     const mb = Math.max(t ? 10 : 24, fy, hy('bottom'));
@@ -276,7 +276,8 @@ export class CubeMapOverlay {
     // 轉動模式的預覽：直接畫轉後的樣子 (格、門)；移動的房間加藍色虛線框，虛線箭頭由原位指向新位置
     const cells = tp ? tp.cells : m.cells;
     for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you);
-    for (const f of m.frames) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
+    // 轉動模式有列標頭時，左右兩側的屋框標籤會被箭頭蓋住 → 不畫 (門的接線照畫；一般展開圖照常標)
+    for (const f of m.frames) if (!(hx && (f.side === 'E' || f.side === 'W'))) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
     if (tp) {
       for (const d of tp.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
       g.save();
@@ -345,12 +346,15 @@ export class CubeMapOverlay {
       g.fillRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
       g.strokeRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
       g.fillStyle = INK;
-      g.font = font(nameSize, true);
       g.textAlign = 'center';
       g.textBaseline = 'middle';
+      // 房名放不下格子 (窄螢幕、四字房名) → 字縮小到留 10px 邊
+      const room = s - pad * 2 - 10;
+      const fit = (px: number, bold: boolean, str: string) => { g.font = font(px, bold); const w = g.measureText(str).width; if (w > room) g.font = font(px * room / w, bold); };
+      fit(nameSize, true, c.name);
       g.fillText(c.name, x + s / 2, y + s / 2 - (c.current ? nameSize * 0.45 : 0));
       if (c.current) {
-        g.font = font(nameSize * 0.72);
+        fit(nameSize * 0.72, false, `● ${you}`);
         g.fillStyle = '#a8640f';
         g.fillText(`● ${you}`, x + s / 2, y + s / 2 + nameSize * 0.75);
       }

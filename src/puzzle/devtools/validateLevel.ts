@@ -56,14 +56,20 @@ const covers = (v: Visibility, m: Mode): boolean => v === 'both' || v === m;
 
 interface KeyRef { key: string; obj?: ObjId }
 
-/** 物件類型專屬欄位裡的文字 key (字條本文、畫像的年份、順序鎖打開的訊息、章門打開的訊息、衣架滑落的訊息) + 名詞標籤的字 */
+/** 物件類型專屬欄位裡的文字 key (字條本文、畫像的年份、順序鎖打開的訊息、章門打開 / 屋框入口的訊息、衣架滑落的訊息、2-1 的書擋 / 書 / 暗格 / 眉批 / 燈書 / 燈座) + 名詞標籤的字 */
 function typeKeys(o: ObjDef): (string | undefined)[] {
   const label = o.label?.textKey;
   if (o.type === 'note') return [o.textKey, label];
   if (o.type === 'portrait') return [o.carved, o.ink, label];
   if (o.type === 'drawer') return [o.openText, label];
-  if (o.type === 'cubeDoor') return [o.openText, label];
+  if (o.type === 'cubeDoor') return [o.openText, o.frameText, label];
   if (o.type === 'coatRack') return [o.fallText, label];
+  if (o.type === 'bookend') return [o.readText, o.plateText, label];
+  if (o.type === 'spine') return [o.title, o.drawnText, label];
+  if (o.type === 'bookLock') return [o.openText, o.wrongText, o.doneText, label];
+  if (o.type === 'remark') return [o.textKey, label];
+  if (o.type === 'lampBook') return [o.title, label];
+  if (o.type === 'lampLock') return [o.openText, o.stepText, o.resetText, label];
   return [label];
 }
 
@@ -141,7 +147,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
 
   // 引用
   const byId = new Map(def.objects.map(o => [o.id, o]));
-  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' ? o.reward : undefined, ...(o.type === 'hook' ? o.also ?? [] : [])]).filter((g): g is string => typeof g === 'string'));
+  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' ? o.reward : undefined, ...(o.type === 'hook' ? o.also ?? [] : [])]).filter((g): g is string => typeof g === 'string'));
   const start = new Set<string>(ctx.abilities ?? []);
   for (const o of def.objects) {
     if (o.opens !== undefined && (o.opens === o.id || !byId.has(o.opens))) add('ref.opens', `opens "${o.opens}" does not name another object`, o.id);
@@ -169,16 +175,24 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     else if (l.kind !== 'dir' && l.kind !== 'noun') add('label.field', `label kind "${String(l.kind)}" is not dir|noun`, o.id);
   }
 
-  // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)
+  // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)：抽屜 + 拉繩 (1-2d)、燈座 + 燈書 (2-1c)
+  const STEP_OF: Readonly<Record<string, string>> = { drawer: 'cord', lampLock: 'lampBook' };
   for (const o of def.objects) {
-    if (o.type === 'drawer') {
+    if (o.type === 'drawer' || o.type === 'lampLock') {
       const order = Array.isArray(o.order) ? o.order : [];
-      const cordOf = (id: ObjId) => { const c = byId.get(id); return c?.type === 'cord' && c.lock === o.id; };
-      if (order.length < 3 || new Set(order).size !== order.length || !order.every(cordOf)) add('ref.sequence', `drawer order must list >= 3 distinct cords locked to "${o.id}"`, o.id);
-      if (typeof o.reward !== 'string' || o.reward === '') add('object.field', 'reward must be a non-empty item id', o.id);
-    } else if (o.type === 'cord') {
+      const cordOf = (id: ObjId) => { const c = byId.get(id); return c?.type === STEP_OF[o.type] && (c.type === 'cord' || c.type === 'lampBook') && c.lock === o.id; };
+      if (order.length < 3 || new Set(order).size !== order.length || !order.every(cordOf)) add('ref.sequence', `${o.type} order must list >= 3 distinct ${STEP_OF[o.type]}s locked to "${o.id}"`, o.id);
+      if (o.type === 'drawer' && (typeof o.reward !== 'string' || o.reward === '')) add('object.field', 'reward must be a non-empty item id', o.id);
+    } else if (o.type === 'cord' || o.type === 'lampBook') {
       const lock = byId.get(o.lock);
-      if (lock?.type !== 'drawer' || !lock.order.includes(o.id)) add('ref.sequence', `cord lock "${o.lock}" is not a drawer whose order lists it`, o.id);
+      const want = o.type === 'cord' ? 'drawer' : 'lampLock';
+      if ((lock?.type !== 'drawer' && lock?.type !== 'lampLock') || lock.type !== want || !lock.order.includes(o.id)) add('ref.sequence', `${o.type} lock "${o.lock}" is not a ${want} whose order lists it`, o.id);
+    } else if (o.type === 'spine') {
+      const lock = byId.get(o.lock);
+      if (lock?.type !== 'bookLock') add('ref.sequence', `spine lock "${o.lock}" is not a bookLock`, o.id);
+    } else if (o.type === 'bookLock') {
+      const ans = byId.get(o.answer);
+      if (ans?.type !== 'spine' || ans.lock !== o.id) add('ref.sequence', `bookLock answer "${o.answer}" is not a spine locked to it`, o.id);
     }
   }
 

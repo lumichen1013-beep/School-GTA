@@ -5,6 +5,9 @@ import { foyer } from '../levels/ch1/1-2-foyer';
 import { stair } from '../levels/ch1/stair';
 import { closet } from '../levels/ch1/closet';
 import { CH1_CUBE, CH1_LEGACY } from './ch1';
+import { CH2_CUBE } from './ch2';
+import { shelf } from '../levels/ch2/2-1-shelf';
+import { deep, manuscripts, mezz, print, reading } from '../levels/ch2/rooms';
 import { PROTO_DIAL_ROOMS } from '../levels/proto/dial';
 import { TEST_DIAL_CHAPTER, TEST_DIAL_CUBE } from './test-dial';
 
@@ -22,7 +25,9 @@ export interface CubeChapter {
 }
 
 export const CUBE_CHAPTERS: readonly CubeChapter[] = [
-  { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY }
+  { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY },
+  // 第二章 書房 (v0.4 控制盤)：2-1 書架迴廊為完整關卡，其餘五間為占位房；從衣帽間章門外的走廊進 2-1 西門
+  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf' } }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

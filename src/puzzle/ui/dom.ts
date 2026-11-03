@@ -24,7 +24,10 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   replay.type = 'button';
   const toMenu = el('button', 'pz-tomenu', text('ui.clear.menu')) as HTMLButtonElement;
   toMenu.type = 'button';
-  clear.append(el('h1', 'pz-clear-title'), el('p', 'pz-next'), replay, toMenu);
+  // 繼續 (章門打開 → 下一章；章內的房間通關 → 回到本章)；沒有下一步時隱藏
+  const cont = el('button', 'pz-continue') as HTMLButtonElement;
+  cont.type = 'button';
+  clear.append(el('h1', 'pz-clear-title'), el('p', 'pz-next'), cont, replay, toMenu);
   root.append(el('div', 'pz-canvas'), el('div', 'pz-fade'), el('div', 'pz-veil'), hud, el('div', 'pz-narration'), clear);
 }
 

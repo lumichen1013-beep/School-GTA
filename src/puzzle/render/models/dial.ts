@@ -28,7 +28,8 @@ export function dialModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const cells: THREE.Mesh[] = [];
   for (let y = 0; y < 2; y++) for (let x = 0; x < 3; x++) {
     const c = p.mesh(box(s, s, s), (x + y) % 2 ? pal.brass : pal.gold, { metalness: 0.65, roughness: 0.35 });
-    c.position.set((x - 1) * (s + 0.02), (1 - y) * (s + 0.02) - 0.1, 0);
+    // 相鄰兩格高低差 4 mm：轉成斜的時頂面 / 底面的包圍框會重疊，錯開才不共面 (z-fighting)
+    c.position.set((x - 1) * (s + 0.02), (1 - y) * (s + 0.02) - 0.1 + ((x + y) % 2) * 0.004, 0);
     cubes.add(c);
     cells.push(c);
   }

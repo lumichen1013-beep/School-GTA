@@ -6,6 +6,9 @@ import { FOYER_V02, newWorld } from '../helpers';
 import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
+import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
+import { deep, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
+import { THEMES } from '../../../src/puzzle/render/themes';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
 function stubCanvas(): void {
@@ -214,5 +217,50 @@ describe('渲染：深度打架 (共面)：1-2 玄關改版 (1-2d；v0.2 玄關�
     const bad = mine.flatMap(a => faces.filter(b => b.mesh !== a.mesh && Math.abs(a.c - b.c) <= 1e-4 && a.look !== b.look
       && Math.min(a.u1, b.u1) - Math.max(a.u0, b.u0) > 1e-4 && Math.min(a.w1, b.w1) - Math.max(a.w0, b.w0) > 1e-4).map(b => `${a.name}@${a.c.toFixed(3)} / ${b.name}`));
     expect(bad).toEqual([]);
+  });
+});
+
+describe('渲染：深度打架 (共面)：2-1 書架迴廊 (第二章；森林圖書館)', () => {
+  beforeAll(stubCanvas);
+
+  /** 2-1 跟隨鏡頭的 x 範圍 */
+  const CAM_X = [shelf.bounds.minX + 3, shelf.bounds.maxX - 3] as const;
+
+  it('三段書牆 (2-1 在第 0 / 1 / 2 行) 各自的 3D 場景：鏡頭看得到的面沒有共面；背後只有那一段的物件', () => {
+    for (const c of [0, 1, 2]) {
+      const w = newWorld(shelf);
+      w.ext = { cube: { links: {}, at: [c, 0, 0] } };
+      const view = new PuzzleScene(w, THEMES.study);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([c, zFightPairs(view.scene, CAM_X)]).toEqual([c, []]);
+      expect(['bay0', 'bay1', 'bay2'].map(id => view.modelRoot(id)!.visible)).toEqual([0, 1, 2].map(k => k === c));
+      view.dispose();
+    }
+  });
+
+  it('全部完成後 (書擋倒下、暗格打開、D 抽出、三盞燈亮、書背轉過來) 也沒有共面；藏寶圖畫得出來 (墨字書名只在藏寶圖)', () => {
+    const w = newWorld(shelf);
+    w.ext = { cube: { links: {}, at: [2, 0, 0] } };
+    for (const id of ['bookend', 'bookLock', 'bookD', 'lampLin', 'lampShu', 'lampMen', 'lampLock']) w.byId.get(id)!.used = true;
+    const view = new PuzzleScene(w, THEMES.study);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 300; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, CAM_X)).toEqual([]);
+    w.player.mode = '2d';
+    view.update('2d', 1 / 60, 5, cams.active('2d'));
+    expect([view.modelRoot('bookYing')!.visible, view.modelRoot('remark1')!.visible, view.modelRoot('remark2')!.visible]).toEqual([true, true, false]);
+    view.dispose();
+  });
+
+  it('占位房 (書櫃、樹根) 的 3D 場景沒有共面', () => {
+    for (const room of [reading, deep]) {
+      const w = newWorld(room);
+      const view = new PuzzleScene(w, THEMES.study);
+      const cams = new PuzzleCameras(w);
+      view.update('3d', 1 / 60, 0, cams.active('3d'));
+      expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
+      view.dispose();
+    }
   });
 });

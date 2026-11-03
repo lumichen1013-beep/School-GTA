@@ -34,7 +34,8 @@ export function previewLever(w: World): ObjState | null {
 
 /** 屋框名稱 (frame.to 優先，例：書房走廊；否則依種類) */
 const FRAME_KEYS: Readonly<Record<string, string>> = {
-  porch: 'ui.map.frame.porch', chapterExit: 'ui.map.frame.chapterExit', skylight: 'ui.map.frame.skylight', study: 'ui.map.frame.study'
+  porch: 'ui.map.frame.porch', chapterExit: 'ui.map.frame.chapterExit', skylight: 'ui.map.frame.skylight', study: 'ui.map.frame.study',
+  hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse'
 };
 const frameName = (text: Text, kind: FrameKind, to: string | undefined): string => text(FRAME_KEYS[to ?? kind] ?? FRAME_KEYS[kind]);
 

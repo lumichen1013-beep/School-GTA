@@ -12,5 +12,10 @@ export const obj = {
   'obj.label.verb': '寫',
   'obj.dial.verb': '啟動',
   'obj.latch.verb': '拉下',
+  'obj.bookend.verb': '推倒',
+  'obj.spine.verb': '抽',
+  'obj.remark.verb': '讀',
+  'obj.scrap.verb': '拿',
+  'obj.lampBook.verb': '點亮',
   'obj.default.verb': '互動'
 } as const;

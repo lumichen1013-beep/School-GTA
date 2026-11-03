@@ -8,9 +8,12 @@ export function effectiveVisibility(_w: World, o: ObjState): Visibility {
   return o.def.visible;
 }
 
-/** 單一真相來源：物件在此模式是否存在 (未被拾取且可見模式吻合) */
+/** 機制的存在條件 (Mechanic.hidden；OR 合成)：此刻不在場 */
+export const isHidden = (w: World, o: ObjState): boolean => w.rt.mechanics.hidden.some(m => m.hidden!(w, o));
+
+/** 單一真相來源：物件在此模式是否存在 (未被拾取、沒有被機制藏起來，且可見模式吻合) */
 export function isActiveIn(w: World, o: ObjState, mode: Mode): boolean {
-  return !o.gone && activeIn(effectiveVisibility(w, o), mode);
+  return !o.gone && activeIn(effectiveVisibility(w, o), mode) && !isHidden(w, o);
 }
 
 /** 世界中所有物件 (日後含推導物件) */

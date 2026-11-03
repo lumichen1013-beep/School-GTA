@@ -228,16 +228,17 @@ const strikeParts = (text: string): { s: string; struck: boolean }[] =>
  * 牌子上的一行字 (1-2d 畫像的年份)：carved = 黃銅牌上的刻字 (實景)、ink = 紙籤上的墨字 (藏寶圖)；
  * 劃掉的片段畫單條橫線、字仍可辨識 (story-bible 7.1)
  */
-export const inscription = (pal: Palette, text: string, look: 'carved' | 'ink'): THREE.Texture => cachedFor(pal, `ins|${look}|${text}`, () => canvas(256, 80, g => {
+export const inscription = (pal: Palette, text: string, look: 'carved' | 'ink' | 'pencil', width = 256): THREE.Texture => cachedFor(pal, `ins|${look}|${width}|${text}`, () => canvas(width, 80, g => {
   if (look === 'carved') {
     const grad = g.createLinearGradient(0, 0, 0, 80);
     grad.addColorStop(0, shade(pal.brass, 1.15)); grad.addColorStop(1, shade(pal.brass, 0.8));
-    g.fillStyle = grad; g.fillRect(0, 0, 256, 80);
-    g.strokeStyle = shade(pal.brass, 0.55); g.lineWidth = 4; g.strokeRect(4, 4, 248, 72);
+    g.fillStyle = grad; g.fillRect(0, 0, width, 80);
+    g.strokeStyle = shade(pal.brass, 0.55); g.lineWidth = 4; g.strokeRect(4, 4, width - 8, 72);
   } else {
-    g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 256, 80);
+    g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, width, 80);
   }
-  const ink = look === 'carved' ? shade(pal.brass, 0.35) : toCss(pal.inkBlue);
+  // pencil = 實景書架上爸爸的鉛筆字 (灰)；ink = 藏寶圖上的墨字
+  const ink = look === 'carved' ? shade(pal.brass, 0.35) : look === 'pencil' ? '#5a554e' : toCss(pal.inkBlue);
   const font = (px: number) => (look === 'carved' ? `bold ${px}px Georgia, serif` : `italic bold ${px}px Georgia, serif`);
   g.textBaseline = 'middle';
   const parts = strikeParts(text);
@@ -246,10 +247,10 @@ export const inscription = (pal: Palette, text: string, look: 'carved' | 'ink'):
   const total = (ws: number[]) => ws.reduce((a, b) => a + b, 0) + gap * (parts.length - 1);
   // 一行放不下 (例：劃掉的年份 + 改寫的年份) → 字縮小到留 12px 邊
   g.font = font(50);
-  const fit = Math.min(1, 232 / Math.max(1, total(measure())));
+  const fit = Math.min(1, (width - 24) / Math.max(1, total(measure())));
   g.font = font(Math.floor(50 * fit));
   const widths = measure();
-  let x = (256 - total(widths)) / 2;
+  let x = (width - total(widths)) / 2;
   parts.forEach((p, i) => {
     g.fillStyle = ink;
     g.globalAlpha = p.struck ? 0.75 : 1;
@@ -307,3 +308,34 @@ export const labelTag = (pal: Palette, text: string, covered: boolean, scale: bo
 export const blankNotePaper = (pal: Palette): THREE.Texture => cachedFor(pal, 'noteBlank', () => canvas(64, 80, g => {
   g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 64, 80);
 }));
+
+/**
+ * 一排書 (第二章書牆；貼在書櫃每一層的平面上，水平重複)：spine = 書背朝外 (彩色書背、金色橫條)；
+ * back = 書背朝牆 (只看得到書口：米白的紙頁 + 深色書殼邊；「書都背對著你」)。依配色與種子快取
+ */
+export const bookRow = (pal: Palette, seed: number, look: 'spine' | 'back'): THREE.Texture => {
+  const t = cachedFor(pal, `books|${look}|${seed}`, () => canvas(512, 128, g => {
+    const r = rng(seed * 977 + (look === 'back' ? 31 : 7));
+    g.fillStyle = shade(pal.shelfDark, 0.7); g.fillRect(0, 0, 512, 128);
+    let x = 0;
+    while (x < 512) {
+      const bw = 14 + Math.floor(r() * 18);
+      const bh = 128 * (0.62 + r() * 0.38);
+      const col = pal.books[Math.floor(r() * pal.books.length)];
+      const top = 128 - bh;
+      if (look === 'spine') {
+        g.fillStyle = toCss(col); g.fillRect(x, top, bw - 2, bh);
+        g.fillStyle = shade(col, 0.7); g.fillRect(x + bw - 4, top, 2, bh);
+        g.fillStyle = toCss(pal.gold); g.fillRect(x + 2, top + bh * 0.18, bw - 6, 3); g.fillRect(x + 2, top + bh * 0.78, bw - 6, 3);
+      } else {
+        g.fillStyle = shade(col, 0.6); g.fillRect(x, top, bw - 2, bh);
+        g.fillStyle = toCss(pal.paperNote); g.fillRect(x + 2, top + 3, bw - 6, bh - 6);
+        g.strokeStyle = shade(pal.paperNote, 0.82); g.lineWidth = 1;
+        for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(x + 2 + (bw - 6) * k / 4, top + 4); g.lineTo(x + 2 + (bw - 6) * k / 4, 124); g.stroke(); }
+      }
+      x += bw;
+    }
+  }));
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+};

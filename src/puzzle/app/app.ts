@@ -14,7 +14,7 @@ import { loadSettings, writeSettings, type Settings } from '../meta/settings';
 import { memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/cutscenes';
 import { seenCutscenes } from '../meta/save';
 import { cutsceneById, PROLOGUE_ID, type CutsceneId } from '../content/cutscenes';
-import { isUnlocked, levelState, recordClear, startAbilities } from '../meta/progress';
+import { isUnlocked, levelState, nextAfterClear, recordClear, startAbilities, type ClearKind } from '../meta/progress';
 import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom } from '../ui/dom';
@@ -45,7 +45,7 @@ import { browserStorage } from './services';
  */
 export type Screen =
   | { id: 'boot' } | { id: 'nickname' } | { id: 'menu' }
-  | { id: 'level'; levelId: string } | { id: 'clear'; levelId: string }
+  | { id: 'level'; levelId: string } | { id: 'clear'; levelId: string; kind?: ClearKind }
   | { id: 'memories' }
   | { id: 'cutscene'; cutsceneId: CutsceneId; next: Screen; replay: boolean };
 
@@ -105,6 +105,7 @@ export class PuzzleApp {
     this.hud.onPrompt(() => this.session?.tap());
     this.hud.onReplay(() => this.restart());
     this.hud.onMenu(() => this.go({ id: 'menu' }));
+    this.hud.onContinue(() => this.continueAfterClear());
     window.addEventListener('resize', () => this.resize());
     // 失焦 / 切到背景：暫停過場時間軸
     const pause = (): void => { this.cs?.player.pause(); this.input.releaseAll(); };
@@ -192,16 +193,23 @@ export class PuzzleApp {
         const e = this.entry(s.levelId);
         document.title = this.text('ui.docTitle', { level: this.text(e.titleKey) });
         this.startSession(e);
-        if (prev.id !== 'clear') this.showNarration(e);
+        // 從通關畫面重玩 / 回到本章：不重播旁白；前往下一章 (換了關卡)：播新房間的旁白
+        if (prev.id !== 'clear' || prev.levelId !== s.levelId) this.showNarration(e);
         break;
       }
       case 'clear': {
         // 魔方章：章門打開 = 本章每個房間 (關卡) 都記為通關 (例：1-3 的章門 → 1-2、1-3)
         const e = levelById(s.levelId) ?? this.entry(s.levelId);
         const def = e.load();
-        this.hud.showClear(this.text('ui.clear.title', { level: this.text(e.titleKey) }), this.text(def.nextKey));
         const cc = cubeChapterOf(e.id);
-        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc ? Object.keys(cc.levels) : []));
+        const room = s.kind === 'room';
+        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? Object.keys(cc.levels) : []));
+        // 繼續：章門打開 → 下一章的第一關 (「前往第二章　書房」)；章內的房間通關 → 回到本章 (「繼續探索」)
+        const kind = s.kind ?? 'level';
+        const next = nextAfterClear(e.id, kind, CHAPTERS);
+        const nextCh = next && kind === 'chapter' ? CHAPTERS.find(ch => ch.levels.includes(next)) : undefined;
+        const cont = next === null ? null : room ? this.text('ui.clear.continue') : this.text('ui.clear.next', { level: this.text(nextCh?.titleKey ?? levelById(next)!.titleKey) });
+        this.hud.showClear(this.text('ui.clear.title', { level: this.text(e.titleKey) }), this.text(def.nextKey), cont);
         break;
       }
       default: break;
@@ -249,12 +257,28 @@ export class PuzzleApp {
       spec, state,
       {
         abilities: startAbilities(e, this.save),
-        onCleared: () => this.go({ id: 'clear', levelId: this.clearedLevel(levelId) }),
-        onChapterSave: st => this.commit(withChapter(this.save, st))
+        onCleared: () => this.go({ id: 'clear', levelId: this.clearedLevel(levelId), kind: cubeChapterOf(levelId) ? 'chapter' : 'level' }),
+        onChapterSave: st => this.commit(withChapter(this.save, st)),
+        onRoomCleared: room => this.roomCleared(levelId, room)
       }
     );
     this.resize();
     this.input.clear();
+  }
+
+  /** 房間通關 (v0.4 控制盤章節，例：2-1 三題都完成)：這間房是登錄表的關卡、且還沒記為通關 → 通關畫面 (只記這一關) */
+  private roomCleared(fallback: string, room: string): void {
+    const cc = cubeChapterOf(fallback);
+    const id = cc && Object.entries(cc.levels).find(([, r]) => r === room)?.[0];
+    if (id && !this.save.cleared.includes(id)) this.go({ id: 'clear', levelId: id, kind: 'room' });
+  }
+
+  /** 通關畫面的「繼續」 */
+  private continueAfterClear(): void {
+    const s = this.screen;
+    if (s.id !== 'clear') return;
+    const next = nextAfterClear(s.levelId, s.kind ?? 'level', CHAPTERS);
+    if (next) this.go({ id: 'level', levelId: next });
   }
 
   /** 通關的關卡：魔方章 = 玩家此刻所在房間對應的關卡 (章門在 1-3 衣帽間)；單房 = 進場的關卡 */

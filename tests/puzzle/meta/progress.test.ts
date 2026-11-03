@@ -77,13 +77,13 @@ describe('第一章：1-1 門廊 → 1-2 玄關', () => {
   });
 
   it('全新存檔只能玩 1-1；通關 1-1 後 1-2 開放', () => {
-    expect(states(defaultSave())).toEqual([['1-1', 'open'], ['1-2', 'locked'], ['1-3', 'locked']]);
-    expect(states(s(['1-1']))).toEqual([['1-1', 'cleared'], ['1-2', 'open'], ['1-3', 'locked']]);
-    expect(states(s(['1-1', '1-2']))).toEqual([['1-1', 'cleared'], ['1-2', 'cleared'], ['1-3', 'open']]);
+    expect(states(defaultSave())).toEqual([['1-1', 'open'], ['1-2', 'locked'], ['1-3', 'locked'], ['2-1', 'locked']]);
+    expect(states(s(['1-1']))).toEqual([['1-1', 'cleared'], ['1-2', 'open'], ['1-3', 'locked'], ['2-1', 'locked']]);
+    expect(states(s(['1-1', '1-2']))).toEqual([['1-1', 'cleared'], ['1-2', 'cleared'], ['1-3', 'open'], ['2-1', 'locked']]);
   });
 
   it('已通關 1-2 (1-1 加入前的存檔) 不被擋：1-2 仍可玩，1-1 也可玩', () => {
-    expect(states(s(['1-2']))).toEqual([['1-1', 'open'], ['1-2', 'cleared'], ['1-3', 'open']]);
+    expect(states(s(['1-2']))).toEqual([['1-1', 'open'], ['1-2', 'cleared'], ['1-3', 'open'], ['2-1', 'locked']]);
     expect(isUnlocked(levelById('1-2')!, s(['1-2']))).toBe(true);
   });
 
@@ -98,6 +98,6 @@ describe('第一章：1-1 門廊 → 1-2 玄關', () => {
   });
 
   it('舊玄關存檔遷移 (cleared 1-1、1-2)：兩關都是已通關', () => {
-    expect(states(s(['1-1', '1-2']))).toEqual([['1-1', 'cleared'], ['1-2', 'cleared'], ['1-3', 'open']]);
+    expect(states(s(['1-1', '1-2']))).toEqual([['1-1', 'cleared'], ['1-2', 'cleared'], ['1-3', 'open'], ['2-1', 'locked']]);
   });
 });

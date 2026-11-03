@@ -144,7 +144,8 @@ export type DoorLinkState =
  * labels = 標籤 id → 貼著的字卡 (章節層載入 / 收回，mechanics/labels 以指令改寫；v0.3 N22)
  */
 export interface WorldExt {
-  cube?: { links: Record<ObjId, DoorLinkState> };
+  /** at = 這間房此刻在魔方上的格位 [行, 列, 層] (v0.4；房內依位置改變的東西用，例：屋框書牆的哪一段在背後) */
+  cube?: { links: Record<ObjId, DoorLinkState>; at?: readonly [number, number, number] };
   labels?: Record<string, string[]>;
   /** 章節旗標 (唯讀；例：演出過的驚嚇 scare:*) */
   flags?: readonly string[];

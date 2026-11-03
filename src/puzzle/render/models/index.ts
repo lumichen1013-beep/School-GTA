@@ -9,6 +9,7 @@ import { cubeDoorModel, leverModel } from './cube';
 import { cordModel, drawerModel, portraitModel } from './sequence';
 import { coatRackModel, hookModel } from './closet';
 import { dialModel, latchModel } from './dial';
+import { bayShelfModel, bookendModel, bookLockModel, lampBookModel, lampLockModel, libraryStepModel, lowShelfModel, remarkModel, scrapModel, spineModel } from './shelf';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
@@ -33,7 +34,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   cubeDoor: cubeDoorModel, lever: leverModel,
   portrait: portraitModel, cord: cordModel, drawer: drawerModel,
   coatRack: coatRackModel, hook: hookModel,
-  dial: dialModel, latch: latchModel
+  dial: dialModel, latch: latchModel,
+  bayShelf: bayShelfModel, lowShelf: lowShelfModel, libraryStep: libraryStepModel, spine: spineModel, bookLock: bookLockModel, remark: remarkModel,
+  lampBook: lampBookModel, lampLock: lampLockModel, bookend: bookendModel, scrap: scrapModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

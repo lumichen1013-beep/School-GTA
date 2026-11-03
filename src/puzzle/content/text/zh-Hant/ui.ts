@@ -45,6 +45,8 @@ export const ui = {
   'ui.map.frame.study': '書房走廊',
   'ui.map.frame.chapterExit': '章門走廊',
   'ui.map.frame.skylight': '天窗',
+  'ui.map.frame.hall': '來時的走廊',
+  'ui.map.frame.greenhouse': '溫室走廊',
   // 控制盤的轉動模式 (v0.4 N32；規格 5.4.1、mobile-controls 2.5 / 3.3)
   'ui.turn.tab': '轉',
   'ui.turn.group.row': '第 {n} 列',
@@ -78,6 +80,9 @@ export const ui = {
   'ui.clear.title': '{level} · 機關解開了',
   'ui.clear.replay': '重玩',
   'ui.clear.menu': '回到選單',
+  // 通關畫面的「繼續」：章門打開 → 下一章的第一關；章內的房間通關 → 回到本章繼續
+  'ui.clear.next': '前往{level}',
+  'ui.clear.continue': '繼續探索',
   'ui.docTitle.menu': '圖紙之間',
   'ui.menu.title': '圖紙之間',
   'ui.menu.player': '玩家：{name}',

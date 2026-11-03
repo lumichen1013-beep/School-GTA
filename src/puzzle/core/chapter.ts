@@ -123,15 +123,21 @@ export function roomLinks(spec: ChapterSpec, state: ChapterState): Record<ObjId,
   return out;
 }
 
+/** World.ext.cube：門的接法 + 這間房此刻的格位 */
+function cubeExt(spec: ChapterSpec, state: ChapterState): NonNullable<World['ext']['cube']> {
+  const at = state.cube?.pos[state.room];
+  return { links: roomLinks(spec, state), ...(at ? { at: [at[0], at[1], at[2]] as const } : {}) };
+}
+
 /** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫) */
 function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
-  if (spec.cube && state.cube) w.ext = { ...w.ext, cube: { links: roomLinks(spec, state) } };
+  if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state) };
 }
 
 /** 進房時寫入 World.ext：門的接法、標籤、旗標；控制盤章節另寫魔方儀是否已啟動 (單房關卡不寫，ext 維持空物件) */
 function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (!spec.cube || !state.cube) return;
-  w.ext = { ...w.ext, cube: { links: roomLinks(spec, state) }, labels: clone(state.labels), flags: [...state.flags] };
+  w.ext = { ...w.ext, cube: cubeExt(spec, state), labels: clone(state.labels), flags: [...state.flags] };
   if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial } };
 }
 
@@ -301,6 +307,17 @@ export function doneFlags(spec: ChapterSpec, state: ChapterState, world?: World)
     for (const s of snap.objs) { const d = defs.find(o => o.id === s.id); if (d?.doneFlag && s.used) out.add(d.doneFlag); }
   }
   return out;
+}
+
+/**
+ * 房間通關 (v0.4 控制盤章節，例：2-1 三題都完成)：本房 puzzles 的每一題都有成立的 doneFlag。
+ * 沒有列謎題、或不是控制盤章節 (第一章：章門打開才通關) → false
+ */
+export function roomCleared(spec: ChapterSpec, state: ChapterState, world?: World): boolean {
+  const puzzles = spec.rooms[state.room]?.puzzles ?? [];
+  if (!isDialChapter(spec) || !puzzles.length) return false;
+  const done = doneFlags(spec, state, world);
+  return puzzles.every(p => done.has(p.id));
 }
 
 /** 這間房此刻的墨量上限 (LevelDef.turnBudget；目前謎題是有 P4 預算、尚未完成的題 → 用 P4 預算；沒有設定 = 0) */

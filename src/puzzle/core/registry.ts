@@ -32,6 +32,8 @@ export interface Mechanic {
   command?(w: World, cmd: WorldCommand): boolean;
   /** v0.4 卡榫 (P3)：此刻房內有東西伸進魔方軌道 → 牽涉這間房的控制盤轉動一律轉不動 (OR 合成；第三章 scale 實作) */
   blocksTrack?(w: World): boolean;
+  /** v0.4 存在條件：此刻這個物件不在場 (OR 合成；例：屋框書牆的某一段只在房間位於那一行時存在，mechanics/shelf) */
+  hidden?(w: World, o: ObjState): boolean;
 }
 
 export interface CompiledMechanics {
@@ -44,6 +46,7 @@ export interface CompiledMechanics {
   readonly interactFallback: readonly Mechanic[];
   readonly command: readonly Mechanic[];
   readonly blocksTrack: readonly Mechanic[];
+  readonly hidden: readonly Mechanic[];
 }
 
 /** 編譯機制表：重複的機制 id / 物件類型 → 拋錯 */
@@ -67,6 +70,7 @@ export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics {
     afterPhysics: list.filter(m => m.afterPhysics),
     interactFallback: list.filter(m => m.interactFallback),
     command: list.filter(m => m.command),
-    blocksTrack: list.filter(m => m.blocksTrack)
+    blocksTrack: list.filter(m => m.blocksTrack),
+    hidden: list.filter(m => m.hidden)
   };
 }
