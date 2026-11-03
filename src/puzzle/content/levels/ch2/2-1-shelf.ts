@@ -1,4 +1,5 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
+import { floorPiece } from './drawing';
 
 // 2-1 書架迴廊 (第二章魔方的上列第 0 行；房間 id 'shelf'，關卡 id '2-1'；規格 6「2-1 書架迴廊（細化）」)
 //   沒有後牆：z=-5～-4.5 是屋框北牆上一整面固定的書牆，分三段 (frameBay 0 / 1 / 2 = 上列第 0 / 1 / 2 行的背後)；
@@ -80,6 +81,7 @@ const decor: DecorItem[] = [
   { kind: 'stainedGlass', x: -3, z: 1.4 },
   { kind: 'floatBooks', x: -1, y: 3.6, z: -2.6, w: 9, seed: 4 },
   { kind: 'rug', x: -1, z: 1.4, w: 6, d: 3.2 },
+  floorPiece('shelf', 5.6, 2.2),
   { kind: 'pendant', x: -5.5, z: 0.5 },
   { kind: 'pendant', x: 4.5, z: 0.5 }
 ];

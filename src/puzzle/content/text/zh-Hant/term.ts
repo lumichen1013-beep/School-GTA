@@ -44,5 +44,9 @@ export const term = {
   'term.glyph.mu': '木',
   'term.glyph.huo': '火',
   'term.proof': '校樣',
-  'term.key.bow': '銅鑰匙的柄'
+  'term.key.bow': '銅鑰匙的柄',
+  // 2-4 手稿庫：門牌「閉」、銅鑰匙的齒・三、爸爸的手稿
+  'term.glyph.bi': '閉',
+  'term.tooth.manuscripts': '銅鑰匙的齒・三',
+  'term.ms.father': '爸爸的手稿'
 } as const;

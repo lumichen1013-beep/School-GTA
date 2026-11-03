@@ -3,7 +3,7 @@ import type { DecorItem, LevelDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { paintingDecor, pendantDecor, pitsDecor, rugDecor, wallShelfDecor, wallsDecor } from './room';
-import { bookcaseDecor, floatBooksDecor, rootsDecor, stainedGlassDecor } from './library';
+import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor } from './library';
 import type { DecorFactory } from './types';
 
 export type { DecorCtx, DecorFactory, DecorPart } from './types';
@@ -15,7 +15,9 @@ export type { DecorCtx, DecorFactory, DecorPart } from './types';
 export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   walls: wallsDecor, painting: paintingDecor, wallShelf: wallShelfDecor, rug: rugDecor, pendant: pendantDecor, pits: pitsDecor,
   // 森林圖書館 (第二章)
-  roots: rootsDecor, stainedGlass: stainedGlassDecor, floatBooks: floatBooksDecor, bookcase: bookcaseDecor
+  roots: rootsDecor, stainedGlass: stainedGlassDecor, floatBooks: floatBooksDecor, bookcase: bookcaseDecor,
+  // 2-4a：地板上的老宅圖一角
+  floorPiece: floorPieceDecor
 };
 
 /** 整個房間的裝飾：root = 全部；only3d = 僅現實顯示；occluders = 擋視線時淡出 */

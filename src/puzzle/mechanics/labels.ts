@@ -19,11 +19,14 @@ declare module '../core/types' {
      * v0.4 'blank' = 字謎的空格 (P18；2-2b 下聯)：textKey 含 {c} (空格處)；answers = 詞典 (收的詞卡，D14 列同義字)；
      * 貼上收的卡 → 物件 used (doneFlag 成立 → done 事件)、opens 指向的物件 used、取得 reward、說 solvedText (只在第一次)；
      * v0.4 'plate' = 門牌 (規格「門牌「間」」)：textKey = 原字「門」；answers = 收的部件卡；forms[卡] = 貼上後的字 (「間」)；
-     * 寫成 = 同 blank (第一次 used / done / solvedText)；門接到哪由章節層依標籤上的卡決定 (core/chapter activePlates)
+     * 寫成 = 同 blank (第一次 used / done / solvedText)；門接到哪由章節層依標籤上的卡決定 (core/chapter activePlates)；
+     * v0.4 'strip' = 拆字 (2-4c)：textKey = 原字「閉」；part = 原本就貼在上面的部件 (「才」，物件 used 前算貼著)；取下 part →
+     * 物件 used、opens / reward / solvedText / done、part 進字卡匣；之後的字 = stripped (「門」)；拆過不收任何卡
      */
     label?: {
-      id: string; kind: 'dir' | 'noun' | 'blank' | 'plate'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
+      id: string; kind: 'dir' | 'noun' | 'blank' | 'plate' | 'strip'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
       answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey; forms?: Readonly<Record<ItemId, TextKey>>;
+      part?: ItemId; stripped?: TextKey;
     };
   }
 }
@@ -57,6 +60,14 @@ export const TRAY_SLOTS = 3;
 
 /** 標籤上貼著的字卡 */
 export const cardsOn = (w: World, label: string): readonly string[] => w.ext.labels?.[label] ?? [];
+
+/** 物件標籤此刻貼著的卡：拆字標籤還沒拆 = 原本的部件；其餘 = cardsOn */
+export const attachedCards = (w: World, o: ObjState): readonly string[] => {
+  const l = o.def.label;
+  if (!l) return [];
+  if (l.kind === 'strip') return !o.used && l.part ? [l.part] : [];
+  return cardsOn(w, l.id);
+};
 
 /** 詞典：這張卡貼在這個標籤上是否成立 (方向字 + 方向詞卡 = 新方向；字謎空格 + 詞典收的卡 = 成字；名詞配詞卡 = 不成字) */
 export function accepts(o: ObjState, card: string): boolean {
@@ -138,8 +149,24 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
 
+/** 拆字 (2-4c)：取下原本的部件 → 物件 used、opens 的物件 used、取得部件與 reward、solvedText、done */
+function strip(w: World, o: ObjState, card: string): void {
+  const l = o.def.label;
+  if (l?.kind !== 'strip' || o.used || card !== l.part) return;
+  o.used = true;
+  addItem(w, card, 1);
+  const target = o.def.opens ? w.byId.get(o.def.opens) : undefined;
+  if (target) target.used = true;
+  if (l.reward) addItem(w, l.reward, 1);
+  say(w, l.solvedText ?? 'msg.label.removed');
+  if (o.def.doneFlag) w.events.push({ t: 'done', flag: o.def.doneFlag });
+  w.events.push({ t: 'card', label: l.id, ok: true });
+}
+
 function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
-  if (!targetFor(w, cmd.label)) return;
+  const o = targetFor(w, cmd.label);
+  if (!o) return;
+  if (o.def.label?.kind === 'strip') { strip(w, o, cmd.card); return; }
   const cur = cardsOn(w, cmd.label);
   if (!cur.includes(cmd.card)) return;
   setCards(w, cmd.label, cur.filter(c => c !== cmd.card));
@@ -155,7 +182,7 @@ function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
 export function writableTarget(w: World): ObjState | null {
   const t = labelTarget(w);
   if (!t) return null;
-  return trayCards(w).length > 0 || cardsOn(w, t.def.label!.id).length > 0 ? t : null;
+  return trayCards(w).length > 0 || attachedCards(w, t).length > 0 ? t : null;
 }
 
 /**

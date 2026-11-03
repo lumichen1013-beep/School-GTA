@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { glowSprite } from '../materials';
 import { glow } from '../textures';
 import { buildBookcase } from '../library';
-import { num } from './fields';
+import { num, str } from './fields';
+import { drawingTexture } from '../models/manuscripts';
 import type { DecorFactory } from './types';
 
 // 森林圖書館 (第二章；story-bible 8.1 / 8.4) 的裝飾：穿牆的樹根、彩繪玻璃透進來的森林綠光、半浮的書、靠牆的書櫃。
@@ -102,4 +103,17 @@ export const bookcaseDecor: DecorFactory = (p, item, { level, theme: { pal, room
   const bc = buildBookcase(p, pal, { w: num(item, 'w'), h: 5.4, d, seed: num(item, 'seed', 0), pale: { board: room2d.trim, row: room2d.wainscot } });
   bc.root.position.set(num(item, 'x'), 0, level.bounds.minZ + 0.13 + d / 2);
   return { root: bc.root };
+};
+
+/**
+ * floorPiece：地板上畫著的老宅立面圖的一角 (2-4a；只在現實——藏寶圖改看展開圖格子裡的同一角)；
+ * 欄位 x、z (中心)、w (邊長)、px / py (這一角在整張圖上的格)、drawing (整張圖的折線，content/levels/ch2/drawing)
+ */
+export const floorPieceDecor: DecorFactory = (p, item) => {
+  const w = num(item, 'w', 2.6);
+  const map = drawingTexture(str(item, 'drawing'), num(item, 'px'), num(item, 'py'), 1, 1, 256, '#eadcb8', '#2c2016');
+  const m = p.mesh(new THREE.PlaneGeometry(w, w), 0xffffff, { map, flatMap: true, outline: false, shadow: false, unique: true });
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(num(item, 'x'), 0.009, num(item, 'z'));
+  return { root: m, only3d: [m] };
 };

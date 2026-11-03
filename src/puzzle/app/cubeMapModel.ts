@@ -85,7 +85,9 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
     for (let x = 0; x < def.dims[0]; x++) {
       const c = cellContent(def, cube, [x, y, layer]);
       const kind = c === 'empty' || c === 'solid' ? c : 'room';
-      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : 'ui.map.solid'), current: c === state.room });
+      const fp = kind === 'room' ? spec.rooms[c]?.decor?.find(d => d.kind === 'floorPiece') : undefined;
+      const piece = fp && typeof fp.px === 'number' && typeof fp.py === 'number' && typeof fp.drawing === 'string' ? { px: fp.px, py: fp.py, drawing: fp.drawing } : undefined;
+      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : 'ui.map.solid'), current: c === state.room, ...(piece ? { piece } : {}) });
     }
   }
   const ls = chapterLinks(spec, cube, cs.world.ext.labels ?? state.labels);

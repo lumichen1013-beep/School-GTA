@@ -1,5 +1,6 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 import type { Side } from '../../../core/cube';
+import { floorPiece } from './drawing';
 
 // 第二章的占位房 (規格 6「第二章魔方與門位（v0.4 細化）」)：H1 夾層、2-4 手稿庫、2-5 書房深處 (2-2 閱覽室、2-3 印房已是完整關卡，這裡轉出)。
 // 只有門 (可進出、不計題；謎題另做；印房多一張活字桌與 2-2c 的鏡片)；2-5 的東章門此版本一律鎖著 (三枚銅鑰匙的齒在 2-5 組裝，尚未實作)。
@@ -32,10 +33,10 @@ const decor = (seed: number): DecorItem[] => [
 ];
 
 const TITLE_KEYS: Readonly<Record<string, string>> = {
-  mezz: 'lvl.ch2.mezz.title', manuscripts: 'lvl.ch2.manuscripts.title', deep: 'lvl.ch2.deep.title'
+  mezz: 'lvl.ch2.mezz.title', deep: 'lvl.ch2.deep.title'
 };
 
-const room = (id: string, objects: ObjDef[], seed: number): LevelDef => ({
+const room = (id: string, objects: ObjDef[], seed: number, extraDecor: DecorItem[] = []): LevelDef => ({
   id,
   titleKey: TITLE_KEYS[id],
   bounds: { minX: -6, maxX: 6, minZ: -5, maxZ: 5 },
@@ -46,7 +47,7 @@ const room = (id: string, objects: ObjDef[], seed: number): LevelDef => ({
   theme: 'study',
   // 每次穿門進房補滿 6 滴墨 (規格 5.4.9 第二章基礎預算)
   turnBudget: { base: 6 },
-  decor: decor(seed),
+  decor: [...decor(seed), ...extraDecor],
   objects: [floor, ...objects]
 });
 
@@ -55,20 +56,14 @@ export { reading } from './2-2-reading';
 /** 2-3 印房 (上列右格)：完整關卡 (2-3-print.ts)；沿用舊的匯入位置 */
 export { print } from './2-3-print';
 /** H1 夾層 (下列左格；隱藏房)：只有西門，只用列轉時接不上任何房 */
-export const mezz = room('mezz', [door('W', { glyph: 'term.glyph.huo' }), holeN], 3);
-/** 2-4 手稿庫 (下列中格)：北門接 2-2 南門；東門接 2-5 西門 */
-export const manuscripts = room('manuscripts', [
-  door('N', { glyph: 'term.glyph.mu' }), door('E', { glyph: 'term.glyph.shui' }),
-  // 2-3c 排字架 (三個字輪；剛好三扇門的路線：印房 → … → 手稿庫，出門那一側門旁的活字)
-  { id: 'typeLock', type: 'typeLock', glyphs: ['term.glyph.shan', 'term.glyph.shui', 'term.glyph.mu', 'term.glyph.huo'], from: 'print', to: 'manuscripts', hops: 3,
-    need: 'proof', needText: 'lvl.2-3.lock.need', reward: 'key.bow', openText: 'lvl.2-3.lock.open', doneText: 'lvl.2-3.lock.done', doneFlag: '2-3c',
-    x: -3, y: 0, z: -3.9, w: 3.2, h: 0.9, d: 0.8, visible: 'both', solid: false, labelKey: 'lvl.2-3.lock' },
-  ...[0, 1, 2].map((i): ObjDef => ({ id: `wheel${i}`, type: 'typeWheel', lock: 'typeLock', index: i, x: -4 + i, y: 0.9, z: -3.9, w: 0.4, h: 0.4, d: 0.4,
-    visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-3.wheel' }))
-], 4);
+export const mezz = room('mezz', [door('W', { glyph: 'term.glyph.huo' }), holeN], 3, [floorPiece('mezz', 2.6, 2.4, 2.2)]);
+/** 2-4 手稿庫 (下列中格)：完整關卡 (2-4-manuscripts.ts)；沿用舊的匯入位置 */
+export { manuscripts } from './2-4-manuscripts';
 /** 2-5 書房深處 (下列右格)：西門；東章門 (往溫室；要房間的銅鑰匙，此版本取不到) */
 export const deep = room('deep', [
   door('W', { glyph: 'term.glyph.shan' }), holeN,
   { id: 'chapterE', type: 'cubeDoor', side: 'E', kind: 'chapter', key: 'key.study', openText: 'lvl.ch2.chapterE.open',
-    x: 5.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.chapterE' }
-], 5);
+    x: 5.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.chapterE' },
+  // 2-4b 的線索③ (只在藏寶圖的墨字；爸爸劃掉的誤推)
+  { id: 'clueWax', type: 'remark', textKey: 'lvl.2-4.clue.wax', ink: true, x: -3, y: 1.6, z: -4.4, w: 1.6, h: 0.5, d: 0.04, visible: '2d', solid: false, interactable: true, labelKey: 'lvl.2-4.clue' }
+], 5, [floorPiece('deep', 2.6, 2.4, 2.2)]);

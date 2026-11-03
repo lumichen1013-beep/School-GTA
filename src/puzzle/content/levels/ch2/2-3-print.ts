@@ -1,4 +1,5 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
+import { floorPiece } from './drawing';
 
 // 2-3 印房 (第二章魔方的上列第 2 行；房間 id 'print'，關卡 id '2-3'；規格 6「2-3 印房（細化）」)
 //   x∈[-6, 6]、z∈[-5, 5] (同占位版；東門 x=5.8)；東門 (上列轉一次接 2-1 西門)、南拱門 (前緣、只在 3D；門牌在藏寶圖上)
@@ -29,6 +30,8 @@ const objects: ObjDef[] = [
     label: { id: 'plate:print', kind: 'plate', textKey: 'term.glyph.men', answers: ['card.ri'], forms: { 'card.ri': 'term.glyph.jian' },
       solvedText: 'lvl.2-3.plate.solved', noCardText: 'lvl.2-3.plate.noCard' } },
   { id: 'tray', type: 'typeTray', pushable: true, x: 4.0, y: 0, z: 2.4, w: 1.2, h: 1.0, d: 1.2, visible: 'both', solid: true, labelKey: 'lvl.2-3.tray' },
+  // 2-4b 的線索② (出貨口木柱上的鉛筆字；只在實景)
+  { id: 'clueThick', type: 'remark', textKey: 'lvl.2-4.clue.thick', x: -5.0, y: 0.9, z: 3.2, w: 0.8, h: 0.4, d: 0.04, visible: '3d', solid: false, interactable: true, labelKey: 'lvl.2-4.clue' },
   // ── 字條 (父親的筆記；story-bible 7.3) ──
   { ...noteBase, id: 'noteA', x: -5.6, z: -4.4, textKey: 'lvl.2-3.note.a' }, // 2-3a L1 (釘在活字架側板)
   { ...noteBase, id: 'noteB', x: 0.4, z: -1.15, textKey: 'lvl.2-3.note.b' }, // 2-3b L1 (釘在印刷機背板)
@@ -40,6 +43,7 @@ const decor: DecorItem[] = [
   { kind: 'bookcase', x: 0.6, w: 2.2, seed: 31 },
   { kind: 'roots', x: -5.9, side: 'W', seed: 8 },
   { kind: 'rug', x: 0.2, z: 1.6, w: 4.4, d: 2.4 },
+  floorPiece('print', -3.8, 1.4, 2.2),
   { kind: 'floatBooks', x: -1, y: 3.6, z: -2, w: 6, seed: 12 },
   { kind: 'pendant', x: 0.2, z: -0.4 },
   { kind: 'pendant', x: -3.2, z: -3 }

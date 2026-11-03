@@ -2,7 +2,7 @@
 import type { ObjState, World } from '../core/types';
 import type { WorldCommand } from '../core/actions';
 import type { Text } from '../text/text';
-import { cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writableTarget } from '../mechanics/labels';
+import { attachedCards, cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writableTarget } from '../mechanics/labels';
 import { findTarget } from '../core/interact';
 import type { InputAction } from '../input/types';
 import { WORD_KEYS } from '../mechanics/cube';
@@ -30,6 +30,7 @@ export function labelGlyph(w: World, text: Text, o: ObjState): { now: string; ba
     return { now: fill(card ? cardGlyph(text, card) : text('ui.label.blank')), base: fill(text('ui.label.blank')) };
   }
   const t = l.textKey ? text(l.textKey) : '';
+  if (l.kind === 'strip') return { now: text(o.used && l.stripped ? l.stripped : l.textKey ?? ''), base: t };
   if (l.kind === 'plate') {
     // 門牌 (2-3a)：原字「門」；貼了收的部件卡 = forms 裡的字 (「間」)
     const form = cardsOn(w, l.id).map(c => l.forms?.[c]).find(k => k !== undefined);
@@ -59,18 +60,18 @@ export function deriveCardTray(w: World, text: Text, feedbackSeq: number): CardT
     title: labelTitle(w, text, t),
     glyph: g.now,
     base: g.base,
-    covered: g.now !== g.base || cardsOn(w, id).length > 0,
+    covered: g.now !== g.base || attachedCards(w, t).length > 0,
     scale: !!t.def.label.scale,
     slots: Array.from({ length: TRAY_SLOTS }, (_, i) => {
       const card = held[i] ?? null;
       return card ? { card, glyph: cardGlyph(text, card), name: cardName(text, card), key: String(i + 1) } : { card: null, glyph: '', name: text('ui.cards.empty'), key: String(i + 1) };
     }),
-    attached: cardsOn(w, id).map(card => ({ card, glyph: cardGlyph(text, card), name: cardName(text, card) })),
+    attached: attachedCards(w, t).map(card => ({ card, glyph: cardGlyph(text, card), name: cardName(text, card) })),
     message: LABEL_MSGS.has(w.msgKey) ? w.msg : '',
     feedbackSeq,
     text: {
       head: text('ui.cards.head', { title: labelTitle(w, text, t) }), close: text('ui.cards.close'),
-      remove: text('ui.cards.remove', { word: cardsOn(w, id)[0] ? cardGlyph(text, cardsOn(w, id)[0]) : '' }), howto: ['ui.cards.howto.paste', 'ui.cards.howto.remove', 'ui.cards.howto.close'].map(k => text(k)), scale: text('ui.cards.scale')
+      remove: text('ui.cards.remove', { word: attachedCards(w, t)[0] ? cardGlyph(text, attachedCards(w, t)[0]) : '' }), howto: ['ui.cards.howto.paste', 'ui.cards.howto.remove', 'ui.cards.howto.close'].map(k => text(k)), scale: text('ui.cards.scale')
     }
   };
 }

@@ -4,7 +4,8 @@ import type { DoorKind, FrameKind, Side } from '../core/cube';
 import type { Text } from '../text/text';
 
 export type MapLink = 'room' | 'wall' | 'frame';
-export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid'; room: string | null; name: string; current: boolean }
+/** piece = 這間房地板上畫的圖的一角 (2-4a；整張圖的折線與這一角的格) */
+export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid'; room: string | null; name: string; current: boolean; piece?: { px: number; py: number; drawing: string } }
 /** via = 接通時通道的型別 (兩側較窄者；拱門對拱門才是 arch) */
 export interface MapDoor { room: string; door: string; x: number; y: number; side: Side; kind: DoorKind; link: MapLink; via?: 'door' | 'arch' }
 export interface MapFrame { x: number; y: number; side: Side; kind: FrameKind; name: string }
@@ -336,6 +337,19 @@ export class CubeMapOverlay {
     return { ox, oy, size, cols: m.cols, rows: m.rows };
   }
 
+  /** 地板上那一角的圖 (淡墨線；房名蓋在上面)：整張圖的 [px, py]～[px + 1, py + 1] 畫進邊長 s 的格子 */
+  private piece(g: CanvasRenderingContext2D, pc: NonNullable<MapCell['piece']>, x: number, y: number, s: number): void {
+    g.save();
+    g.beginPath(); g.rect(x, y, s, s); g.clip();
+    g.strokeStyle = 'rgba(58,43,28,0.38)'; g.lineWidth = Math.max(1.5, s / 40); g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const line of pc.drawing.split(';')) {
+      g.beginPath();
+      line.trim().split(/\s+/).forEach((pt, i) => { const [px, py] = pt.split(',').map(Number); const X = x + (px - pc.px) * s, Y = y + (py - pc.py) * s; if (i) g.lineTo(X, Y); else g.moveTo(X, Y); });
+      g.stroke();
+    }
+    g.restore();
+  }
+
   private cell(g: CanvasRenderingContext2D, c: MapCell, x: number, y: number, s: number, nameSize: number, font: (px: number, bold?: boolean) => string, you: string): void {
     const pad = 4;
     g.save();
@@ -345,6 +359,7 @@ export class CubeMapOverlay {
       g.lineWidth = 2.5;
       g.fillRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
       g.strokeRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
+      if (c.piece) this.piece(g, c.piece, x + pad, y + pad, s - pad * 2);
       g.fillStyle = INK;
       g.textAlign = 'center';
       g.textBaseline = 'middle';

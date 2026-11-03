@@ -129,7 +129,7 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
     expect(CH2_CUBE.cells.map(c => [c.at[0], c.at[1], c.room])).toEqual([[0, 0, 'shelf'], [1, 0, 'reading'], [2, 0, 'print'], [0, 1, 'mezz'], [1, 1, 'manuscripts'], [2, 1, 'deep']]);
     expect(CH2_CUBE.dial!.entry).toEqual({ room: 'shelf', obj: 'dial' });
     expect(CH2_CUBE.dial!.locks.map(l => `${l.group}<-${l.until}`)).toEqual(['row1<-2-1a', 'col0<-2-3a', 'col1<-2-3a', 'col2<-2-3a']);
-    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading', '2-3': 'print' });
+    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts' });
     expect(CH2.start).toEqual({ room: 'shelf', door: 'doorW' });
     expect(cubeChapterOf('2-1')).toBe(CH2);
   });
@@ -174,10 +174,10 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
   });
 
   it('占位房：只有門 (validateLevel 0 issue)、不計題、每房預算 6；2-5 東章門要的鑰匙本章取不到 (此版本一律鎖著)', () => {
-    // 2-2 閱覽室、2-3 印房已是完整關卡 (levels/2-2.test.ts、2-3.test.ts)；手稿庫多了 2-3c 的排字架與字輪 (2-3 的題，不計在手稿庫)
-    const extra: Readonly<Record<string, readonly string[]>> = { manuscripts: ['typeLock', 'wheel0', 'wheel1', 'wheel2'] };
-    expect([print.id, print.turnBudget]).toEqual(['2-3', { base: 6, puzzles: { '2-3b': 3 } }]);
-    for (const r of [mezz, manuscripts, deep]) {
+    // 2-2 閱覽室、2-3 印房、2-4 手稿庫已是完整關卡 (levels/2-2～2-4.test.ts)；書房深處多了 2-4b 的線索③ (2-4 的題，不計在這裡)
+    const extra: Readonly<Record<string, readonly string[]>> = { deep: ['clueWax'] };
+    expect([print.id, print.turnBudget, manuscripts.id]).toEqual(['2-3', { base: 6, puzzles: { '2-3b': 3 } }, '2-4']);
+    for (const r of [mezz, deep]) {
       expect([r.id, validateLevel(r, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })]).toEqual([r.id, []]);
       expect([r.id, r.puzzles, r.turnBudget, r.objects.every(o => o.type === 'floor' || o.type === 'cubeDoor' || (extra[r.id] ?? []).includes(o.id))]).toEqual([r.id, undefined, { base: 6 }, true]);
     }
@@ -194,7 +194,7 @@ describe('2-1 書架迴廊：資料與驗證器', () => {
     expect(shelf.puzzles!.map(q => TEXT(q.titleKey))).toEqual(['2-1a 整列一起走', '2-1b 那年的推測', '2-1c 書名的順序']);
     const e = levelById('2-1')!;
     expect([e.chapter, e.unlock.after, e.abilities]).toEqual([2, ['1-3'], ['nib']]);
-    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3'] });
+    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4'] });
     expect([TEXT('ch.2.title'), shelf.theme, shelf.turnBudget]).toEqual(['第二章　書房', 'study', { base: 6 }]);
   });
 

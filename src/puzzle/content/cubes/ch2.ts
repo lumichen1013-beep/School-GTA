@@ -106,3 +106,29 @@ export const CH2_ZONE23 = {
   start: 'shelf',
   finish: '2-3c'
 };
+
+/** 2-4a 的目標排列 (手稿櫃門上的圖；content/levels/ch2/drawing HOUSE_TARGET 同值) */
+const HOUSE: Readonly<Record<string, readonly [number, number]>> = { reading: [0, 0], shelf: [1, 0], mezz: [2, 0], print: [0, 1], manuscripts: [1, 1], deep: [2, 1] };
+const isHouse = (s: CubeState): boolean => Object.entries(HOUSE).every(([r, at]) => s.pos[r]?.[0] === at[0] && s.pos[r]?.[1] === at[1]);
+
+/**
+ * 2-4 區的抽象模型 (devtools/validateDial；規格 6「2-4 手稿庫（細化）」)：兩列 + 三行；印房南拱門在 2-3a 之後讀作「間」。
+ * 題：2-1a / 2-3a (兩個鎖扣)；2-4c = 手稿庫 (不需轉動)；2-4b.clue = 走進印房讀到線索② (要轉一次)；2-4b = 回到手稿庫 (需 2-4c、2-4b.clue)；
+ * 2-4a = 手稿庫、排列 = 手稿櫃的圖 (需 2-3a：三行)；終點 ch2.mid = 2-4a、2-4b 都完成
+ */
+export const CH2_ZONE24 = {
+  cube: CH2_CUBE,
+  puzzles: [
+    { id: '2-1a', room: 'shelf', needs: [], teaching: true, goal: s => shelfCol(s) === 2 },
+    { id: '2-3a', room: 'print', needs: [], teaching: true },
+    { id: '2-4c', room: 'manuscripts', needs: [], teaching: true },
+    { id: '2-4b.clue', room: 'print', needs: [] },
+    // 2-4b = 拿著兩條線索走回手稿庫 (走路；轉動的部分在 2-4b.clue，本質不同 2 種) → 不計 D16 唯一解
+    { id: '2-4b', room: 'manuscripts', needs: ['2-4c', '2-4b.clue'], teaching: true, goal: (_s, f) => f.has('2-4c') && f.has('2-4b.clue') },
+    { id: '2-4a', room: 'manuscripts', needs: ['2-3a'], teaching: true, goal: (s, f) => f.has('2-3a') && isHouse(s) },
+    { id: 'ch2.mid', room: 'manuscripts', needs: ['2-4a', '2-4b'], teaching: true, goal: (_s, f) => f.has('2-4a') && f.has('2-4b') }
+  ] as readonly ZonePuzzle[],
+  plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  start: 'shelf',
+  finish: 'ch2.mid'
+};

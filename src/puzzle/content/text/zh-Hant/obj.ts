@@ -27,5 +27,8 @@ export const obj = {
   'obj.typeCase.verb': '翻找',
   'obj.press.verb': '壓版',
   'obj.typeWheel.verb': '轉動',
+  'obj.patternCabinet.verb': '打開',
+  'obj.smallCabinet.verb': '拉拉看',
+  'obj.bundle.verb': '抽出',
   'obj.default.verb': '互動'
 } as const;

@@ -45,7 +45,7 @@ export const offBay = (w: World, o: ObjState): boolean => o.def.frameBay !== und
 
 /** 抽一本書 (3D)：暗格已開 → 說明；是答案 → 打開、取得 reward、done 事件；不是 → 滑回去 */
 export function pullSpine(w: World, book: ObjState): void {
-  if (book.def.type !== 'spine') return;
+  if (book.def.type !== 'spine' && book.def.type !== 'bundle') return; // 2-4b 的手稿捆同規則
   const lock = w.byId.get(book.def.lock);
   if (!lock || lock.def.type !== 'bookLock') return;
   if (lock.used) { say(w, lock.def.doneText); return; }

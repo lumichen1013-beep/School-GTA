@@ -137,7 +137,7 @@ describe('2-3 印房：資料與驗證器', () => {
     expect(print.puzzles!.map(q => TEXT(q.titleKey))).toEqual(['2-3a 門裡多一個日', '2-3b 墨只夠三次', '2-3c 沿路的符號']);
     const e = levelById('2-3')!;
     expect([e.chapter, e.unlock.after, e.abilities, print.turnBudget, print.theme]).toEqual([2, ['2-2'], ['nib'], { base: 6, puzzles: { '2-3b': 3 } }, 'study']);
-    expect([CH2.levels['2-3'], cubeChapterOf('2-3'), CHAPTERS.find(c => c.id === 2)!.levels]).toEqual(['print', CH2, ['2-1', '2-2', '2-3']]);
+    expect([CH2.levels['2-3'], cubeChapterOf('2-3'), CHAPTERS.find(c => c.id === 2)!.levels.slice(0, 3)]).toEqual(['print', CH2, ['2-1', '2-2', '2-3']]);
     expect([TEXT(print.narrationKey), TEXT(print.nextKey)]).toEqual(['一盤活字，每個字都缺了一角。', '印好的那張紙上，只有一行字：門後有人。']);
     expect([def('plateS').doneFlag, def('press').doneFlag, manuscripts.objects.find(o => o.id === 'typeLock')!.doneFlag]).toEqual(['2-3a', '2-3b', '2-3c']);
   });

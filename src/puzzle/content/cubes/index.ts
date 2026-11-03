@@ -28,7 +28,7 @@ export interface CubeChapter {
 export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY },
   // 第二章 書房 (v0.4 控制盤)：2-1 書架迴廊、2-2 閱覽室、2-3 印房為完整關卡，其餘三間為占位房；從衣帽間章門外的走廊進 2-1 西門
-  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print' } }
+  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts' } }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

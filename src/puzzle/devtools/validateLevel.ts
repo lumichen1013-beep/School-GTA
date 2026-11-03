@@ -79,10 +79,12 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'coupletCabinet') return [o.upper, o.lockedRead, o.openRead, label];
   if (o.type === 'cardCatalog') return [o.emptyText, label];
   if (o.type === 'typeCase') return [o.emptyText, label];
+  if (o.type === 'patternCabinet') return [o.okText, o.notText, o.readText, label];
+  if (o.type === 'smallCabinet') return [o.lockedRead, o.openRead, label];
   if (o.type === 'press') return [o.okText, o.looseText, o.readText, o.side, label];
   if (o.type === 'typeLock') return [...o.glyphs, o.openText, o.doneText, o.needText, label];
-  if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.noCardText, ...Object.values(o.label?.forms ?? {})];
-  return [label, o.label?.solvedText];
+  if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.stripped, ...Object.values(o.label?.forms ?? {})];
+  return [label, o.label?.solvedText, o.label?.stripped];
 }
 
 /** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
@@ -191,7 +193,8 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     else if (l.kind === 'noun' && !l.textKey) add('label.field', 'noun labels need a textKey', o.id);
     else if (l.kind === 'blank' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => c in CARDS))) add('label.field', 'blank labels need a textKey and answers that are word cards', o.id);
     else if (l.kind === 'plate' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => CARDS[c]?.slot === 'part') || !def.objects.some(d => d.type === 'cubeDoor' && d.plate === l.id))) add('label.field', 'plate labels need a textKey, part-card answers and a cubeDoor whose plate is this label', o.id);
-    else if (l.kind !== 'dir' && l.kind !== 'noun' && l.kind !== 'blank' && l.kind !== 'plate') add('label.field', `label kind "${String(l.kind)}" is not dir|noun|blank|plate`, o.id);
+    else if (l.kind === 'strip' && (!l.textKey || !l.stripped || !l.part || CARDS[l.part]?.slot !== 'part')) add('label.field', 'strip labels need a textKey, a stripped key and a part card', o.id);
+    else if (l.kind !== 'dir' && l.kind !== 'noun' && l.kind !== 'blank' && l.kind !== 'plate' && l.kind !== 'strip') add('label.field', `label kind "${String(l.kind)}" is not dir|noun|blank|plate|strip`, o.id);
   }
 
   // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)：抽屜 + 拉繩 (1-2d)、燈座 + 燈書 (2-1c)
@@ -206,12 +209,12 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
       const lock = byId.get(o.lock);
       const want = o.type === 'cord' ? 'drawer' : 'lampLock';
       if ((lock?.type !== 'drawer' && lock?.type !== 'lampLock') || lock.type !== want || !lock.order.includes(o.id)) add('ref.sequence', `${o.type} lock "${o.lock}" is not a ${want} whose order lists it`, o.id);
-    } else if (o.type === 'spine') {
+    } else if (o.type === 'spine' || o.type === 'bundle') {
       const lock = byId.get(o.lock);
-      if (lock?.type !== 'bookLock') add('ref.sequence', `spine lock "${o.lock}" is not a bookLock`, o.id);
+      if (lock?.type !== 'bookLock') add('ref.sequence', `${o.type} lock "${o.lock}" is not a bookLock`, o.id);
     } else if (o.type === 'bookLock') {
       const ans = byId.get(o.answer);
-      if (ans?.type !== 'spine' || ans.lock !== o.id) add('ref.sequence', `bookLock answer "${o.answer}" is not a spine locked to it`, o.id);
+      if ((ans?.type !== 'spine' && ans?.type !== 'bundle') || ans.lock !== o.id) add('ref.sequence', `bookLock answer "${o.answer}" is not a spine / bundle locked to it`, o.id);
     }
   }
 

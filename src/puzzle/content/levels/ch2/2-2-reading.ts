@@ -1,4 +1,5 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
+import { floorPiece } from './drawing';
 
 // 2-2 閱覽室 (第二章魔方的上列第 1 行；房間 id 'reading'，關卡 id '2-2'；規格 6「2-2 閱覽室（細化）」)
 //   x∈[-6, 14] (往東加長；西門維持占位版的 x=-5.8)；西門 (S0 / 上列 +1 時接 2-1 東門；上列 −1 時面對入口屋框)、南門 (前緣、只在 3D；同一行時接 2-4 北門)
@@ -52,6 +53,7 @@ const decor: DecorItem[] = [
   { kind: 'stainedGlass', x: 6, z: 1.6 },
   { kind: 'floatBooks', x: 3, y: 3.7, z: -2.4, w: 8, seed: 9 },
   { kind: 'rug', x: 3, z: 1.2, w: 6, d: 3 },
+  floorPiece('reading', 10.6, 1.6),
   { kind: 'pendant', x: -1, z: 0.4 },
   { kind: 'pendant', x: 7.5, z: 0.4 }
 ];

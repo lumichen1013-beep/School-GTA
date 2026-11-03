@@ -33,6 +33,7 @@ export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: bool
     const glyph = c.world.rt.text(w !== undefined && GLYPH_KEYS[w] ? GLYPH_KEYS[w] : 'ui.label.blank');
     return { text: l.textKey ? c.world.rt.text(l.textKey, { c: glyph }) : '', covered: w !== undefined };
   }
+  if (l.kind === 'strip') return { text: c.world.rt.text((c.obj.used ? l.stripped : undefined) ?? l.textKey ?? ''), covered: false };
   if (l.kind === 'plate') {
     // 門牌 (2-3a)：原字「門」；貼了收的部件卡 = forms 的字 (「間」)
     const form = cards.map(k => l.forms?.[k]).find((k): k is string => k !== undefined);
