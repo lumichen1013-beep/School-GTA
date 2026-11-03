@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newWorld, place, DT } from '../helpers';
+import { FOYER_V02, newWorld, place, DT } from '../helpers';
 import { ACTION_ORDER } from '../../../src/puzzle/core/actions';
 import { step, stepWorld } from '../../../src/puzzle/core/step';
 import { trySwitchMode } from '../../../src/puzzle/core/switchMode';
@@ -30,7 +30,7 @@ describe('step(ActionFrame)', () => {
   });
 
   it('歸位先於互動：同幀按 E 與 T，最後的訊息是互動結果', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     const seq = w.msgSeq;
     step(w, { moveX: 0, moveZ: 0, jump: false, pressed: ['interact', 'reset'] }, DT);

@@ -10,7 +10,7 @@ const view = { renderMode: '3d' as const, locked: false, bindings: DEFAULT_BINDI
 
 describe('deriveHud (純函式)', () => {
   it('模式文字、無持有物、紙條提示與舊 HUD 相同', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     const m = deriveHud(w, TEXT, view);
     expect(m.mode).toBe('3d');
@@ -48,7 +48,7 @@ describe('deriveHud (純函式)', () => {
   });
 
   it('提示的按鍵名跟著重綁', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     expect(deriveHud(w, TEXT, { ...view, bindings: mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }) }).prompt).toBe('[G] 閱讀　爸爸的筆記');
   });

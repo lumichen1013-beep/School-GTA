@@ -7,5 +7,7 @@ export const term = {
   'term.word.up': '上',
   'term.word.down': '下',
   'term.word.left': '左',
-  'term.word.right': '右'
+  'term.word.right': '右',
+  // 字卡匣裡的詞卡 (物品 id card.<方向字>；HUD 物品欄以 term.<物品 id> 顯示；文字引用只展開一層，所以直接寫字)
+  'term.card.right': '詞卡「右」'
 } as const;

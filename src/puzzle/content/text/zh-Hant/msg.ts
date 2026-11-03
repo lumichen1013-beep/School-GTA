@@ -16,5 +16,8 @@ export const msg = {
   'msg.cube.turned': '整個房間滑了過去。',
   'msg.cube.porch': '大門外是來時的門廊。這一趟只能往屋裡走。',
   'msg.cube.chapterLocked': '門鎖著。鑰匙孔是銅的。',
-  'msg.cube.mapOnly2d': '展開圖只畫在[[term.mode2d]]上。'
+  'msg.cube.mapOnly2d': '展開圖只畫在[[term.mode2d]]上。',
+  // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
+  'msg.cord.pulled': '繩子拉下去，停住了。',
+  'msg.cord.reset': '喀一聲，繩子全部彈了回去。'
 } as const;

@@ -46,7 +46,7 @@ describe('LevelLoop：固定步長 1/60', () => {
   });
 
   it('本幀按下的動作只送進下一個固定步；沒有步數的幀不會遺失按鍵', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     const loop = new LevelLoop(w, null);
     const seq = w.msgSeq;

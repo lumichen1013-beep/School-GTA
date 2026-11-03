@@ -4,6 +4,16 @@ import { ITEM_ICONS } from './icons';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 
+/** 寫入一行字：`~~x~~` 片段畫成刪除線 (爸爸劃掉的字，story-bible 7.1)；其餘為純文字節點 (不解析 HTML) */
+export function setStruckText(el: HTMLElement, text: string): void {
+  el.replaceChildren(...text.split(/(~~.+?~~)/).filter(s => s !== '').map(s => {
+    if (!(s.startsWith('~~') && s.endsWith('~~'))) return document.createTextNode(s);
+    const del = document.createElement('s');
+    del.textContent = s.slice(2, -2);
+    return del;
+  }));
+}
+
 /** ui 只認得的 HUD 資料形狀 (由 app/hudModel 的 deriveHud 產生) */
 export interface HudData {
   mode: Mode;
@@ -73,7 +83,7 @@ export class PuzzleHud {
     this.promptEl.classList.toggle('show', !!text);
   }
   private toast(text: string, nowMs: number, ms = 3500): void {
-    this.toastEl.textContent = text;
+    setStruckText(this.toastEl, text);
     this.toastEl.classList.toggle('show', !!text);
     this.toastUntil = nowMs + ms;
   }

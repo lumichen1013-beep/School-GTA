@@ -31,6 +31,7 @@ export type IssueCode =
   | 'ref.requires'        // requires 的物品在本關取不到、也不在開場能力白名單
   | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它、也不是 unsealed (永遠解不開)
   | 'cube.field'          // 魔方門的 side / kind、拉桿的方向字不合法
+  | 'ref.sequence'        // 順序鎖 (N27)：order 少於 3 條、重複、不是指向本鎖的拉繩；或拉繩的 lock 不是順序鎖 / 不在其 order 裡
   | 'text.missing'        // 文字 key 不存在於文字表
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
@@ -54,11 +55,19 @@ const covers = (v: Visibility, m: Mode): boolean => v === 'both' || v === m;
 
 interface KeyRef { key: string; obj?: ObjId }
 
-/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / note.textKey) */
+/** 物件類型專屬欄位裡的文字 key (字條本文、畫像的年份、順序鎖打開的訊息) */
+function typeKeys(o: ObjDef): (string | undefined)[] {
+  if (o.type === 'note') return [o.textKey];
+  if (o.type === 'portrait') return [o.carved, o.ink];
+  if (o.type === 'drawer') return [o.openText];
+  return [];
+}
+
+/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位) */
 function levelKeyRefs(level: LevelDef): KeyRef[] {
   const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey)].map(key => ({ key }));
   for (const o of level.objects) {
-    const keys = [o.labelKey, o.lockedText, o.useText, o.type === 'note' ? o.textKey : undefined].filter((k): k is string => k !== undefined);
+    const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o)].filter((k): k is string => k !== undefined);
     refs.push(...keys.map(key => ({ key, obj: o.id })));
   }
   return refs;
@@ -128,7 +137,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
 
   // 引用
   const byId = new Map(def.objects.map(o => [o.id, o]));
-  const granted = new Set(def.objects.map(o => o.grants).filter((g): g is string => typeof g === 'string'));
+  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' ? o.reward : undefined]).filter((g): g is string => typeof g === 'string'));
   const start = new Set<string>(ctx.abilities ?? []);
   for (const o of def.objects) {
     if (o.opens !== undefined && (o.opens === o.id || !byId.has(o.opens))) add('ref.opens', `opens "${o.opens}" does not name another object`, o.id);
@@ -142,6 +151,19 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
       if (!SIDES.includes(o.side)) add('cube.field', `cubeDoor side "${String(o.side)}" is not N|S|E|W|U|D`, o.id);
       if (!['door', 'arch', 'chapter'].includes(o.kind)) add('cube.field', `cubeDoor kind "${String(o.kind)}" is not door|arch|chapter`, o.id);
     } else if (o.type === 'lever' && !LEVER_WORDS.includes(o.word)) add('cube.field', `lever word "${String(o.word)}" is not ${LEVER_WORDS.join('|')}`, o.id);
+  }
+
+  // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)
+  for (const o of def.objects) {
+    if (o.type === 'drawer') {
+      const order = Array.isArray(o.order) ? o.order : [];
+      const cordOf = (id: ObjId) => { const c = byId.get(id); return c?.type === 'cord' && c.lock === o.id; };
+      if (order.length < 3 || new Set(order).size !== order.length || !order.every(cordOf)) add('ref.sequence', `drawer order must list >= 3 distinct cords locked to "${o.id}"`, o.id);
+      if (typeof o.reward !== 'string' || o.reward === '') add('object.field', 'reward must be a non-empty item id', o.id);
+    } else if (o.type === 'cord') {
+      const lock = byId.get(o.lock);
+      if (lock?.type !== 'drawer' || !lock.order.includes(o.id)) add('ref.sequence', `cord lock "${o.lock}" is not a drawer whose order lists it`, o.id);
+    }
   }
 
   // 出口 (魔方上的房間以魔方門進出，不需要出口門)

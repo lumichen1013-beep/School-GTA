@@ -31,7 +31,7 @@ function pump(cs: ChapterSession): { cs: ChapterSession; kind: string } {
   return { cs: r.kind === 'enter' ? r.next : r.kind === 'turn' ? r.cs : cs, kind: r.kind };
 }
 
-// 1-2a → 1-2b → 1-2c (踏板) 的同一路線 (levels/1-2.test 的 SOLVE_A～C，此處只走路線)；從南拱門進來，先走到原起點
+// 路段 (缺口) → 1-2a (筆尖) → 1-2b (踏板) 的同一路線 (levels/1-2.test 的 ROUTE_GAP / SOLVE_A / SOLVE_B，此處只走路線)；從南拱門進來，先走到原起點
 const TO_EXIT_AREA: Cmd[] = [
   { wait: 0.2 }, { walkTo: [-18, 2] },
   { walkTo: [-10.3, 2], zFirst: true }, { act: 'flip' }, { walkTo: [-4.5, null] }, { act: 'flip' }, { wait: 0.2 },
@@ -41,7 +41,7 @@ const TO_EXIT_AREA: Cmd[] = [
   { walkTo: [null, -4.5] }, { hold: { moveZ: -1 }, seconds: 0.3 }, { walkTo: [5.6, null] }, { walkTo: [null, -5.4] }, { walkTo: [-0.1, null] },
   { act: 'flip' }, { wait: 0.1 }, { act: 'flip' },
   { walkTo: [1.5, null] }, { walkTo: [null, 0] }, { walkTo: [12, null] },
-  { expect: w => { expect(w.byId.get('gate')!.used).toBe(true); expect(hasItem(w, 'nib')).toBe(true); expect(w.player.x).toBeGreaterThan(11.5); }, label: '1-2a～1-2c (踏板) 完成、在出口區' }
+  { expect: w => { expect(w.byId.get('gate')!.used).toBe(true); expect(hasItem(w, 'nib')).toBe(true); expect(w.player.x).toBeGreaterThan(11.5); }, label: '路段、1-2a、1-2b (踏板) 完成、在出口區' }
 ];
 const AT_DOOR_E: Cmd[] = [{ walkTo: [19.3, 0] }, { expect: w => expect(findTarget(w)?.def.id).toBe('doorE'), label: '東門' }];
 const AT_LEVER: Cmd[] = [{ walkTo: [15, -5.1] }, { expect: w => expect(findTarget(w)?.def.id).toBe('lever'), label: '拉桿' }];

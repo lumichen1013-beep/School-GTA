@@ -3,14 +3,15 @@ import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { LEVELS } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
-import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
 import { validateEntry, validateLevel, type LevelIssue } from '../../../src/puzzle/devtools/validateLevel';
 import type { AbilityId, LevelDef, ObjDef } from '../../../src/puzzle/core/types';
 import type { LevelEntry } from '../../../src/puzzle/content/levels';
 import { FOYER_V02 } from '../fixtures/foyerV02';
+import { TEST_BUNDLE } from '../msgs';
 
-const ctx = { mechanics: DEFAULT_MECHANICS, bundle: zhHant };
+/** zh-Hant + v0.2 凍結場景的文字 (C7 起 v0.2 才有的 key 不在 zh-Hant) */
+const ctx = { mechanics: DEFAULT_MECHANICS, bundle: TEST_BUNDLE };
 const reg = { ...ctx, levels: LEVELS, chapters: CHAPTERS };
 const codes = (issues: LevelIssue[]) => issues.map(i => [i.code, i.obj ?? null]);
 /** 複製 v0.2 玄關 (含墨水閥 / 出口門的固定場景) 並改動物件 (id 對應的物件以 patch 覆寫；patch 為 null 則移除) */

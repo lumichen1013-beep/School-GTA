@@ -219,3 +219,64 @@ export function stoneBlocks(pal: Palette, repeatX: number, repeatY: number): THR
   t.needsUpdate = true;
   return t;
 }
+
+/** 一行字拆成「照常 / 劃掉」片段 (`~~x~~` = 劃掉) */
+const strikeParts = (text: string): { s: string; struck: boolean }[] =>
+  text.split(/(~~.+?~~)/).filter(s => s !== '').map(s => (s.startsWith('~~') && s.endsWith('~~') ? { s: s.slice(2, -2), struck: true } : { s, struck: false }));
+
+/**
+ * 牌子上的一行字 (1-2d 畫像的年份)：carved = 黃銅牌上的刻字 (實景)、ink = 紙籤上的墨字 (藏寶圖)；
+ * 劃掉的片段畫單條橫線、字仍可辨識 (story-bible 7.1)
+ */
+export const inscription = (pal: Palette, text: string, look: 'carved' | 'ink'): THREE.Texture => cachedFor(pal, `ins|${look}|${text}`, () => canvas(256, 80, g => {
+  if (look === 'carved') {
+    const grad = g.createLinearGradient(0, 0, 0, 80);
+    grad.addColorStop(0, shade(pal.brass, 1.15)); grad.addColorStop(1, shade(pal.brass, 0.8));
+    g.fillStyle = grad; g.fillRect(0, 0, 256, 80);
+    g.strokeStyle = shade(pal.brass, 0.55); g.lineWidth = 4; g.strokeRect(4, 4, 248, 72);
+  } else {
+    g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 256, 80);
+  }
+  const ink = look === 'carved' ? shade(pal.brass, 0.35) : toCss(pal.inkBlue);
+  const font = (px: number) => (look === 'carved' ? `bold ${px}px Georgia, serif` : `italic bold ${px}px Georgia, serif`);
+  g.textBaseline = 'middle';
+  const parts = strikeParts(text);
+  const gap = 14;
+  const measure = () => parts.map(p => g.measureText(p.s).width);
+  const total = (ws: number[]) => ws.reduce((a, b) => a + b, 0) + gap * (parts.length - 1);
+  // 一行放不下 (例：劃掉的年份 + 改寫的年份) → 字縮小到留 12px 邊
+  g.font = font(50);
+  const fit = Math.min(1, 232 / Math.max(1, total(measure())));
+  g.font = font(Math.floor(50 * fit));
+  const widths = measure();
+  let x = (256 - total(widths)) / 2;
+  parts.forEach((p, i) => {
+    g.fillStyle = ink;
+    g.globalAlpha = p.struck ? 0.75 : 1;
+    g.fillText(p.s, x, 42);
+    if (p.struck) {
+      g.strokeStyle = ink; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(x - 4, 40); g.lineTo(x + widths[i] + 4, 38); g.stroke();
+    }
+    g.globalAlpha = 1;
+    x += widths[i] + gap;
+  });
+}));
+
+/** 畫像 (1-2d)：深色底 + 半身剪影；variant 0 = 成人、1 = 小孩、2 = 白髮老人 */
+export const portraitCanvas = (variant: number): THREE.Texture => cached(`portrait${variant}`, () => canvas(120, 150, g => {
+  const bgs = ['#5b4a6e', '#6e5a3e', '#3e5a52'];
+  const grad = g.createRadialGradient(60, 60, 10, 60, 75, 90);
+  grad.addColorStop(0, '#d8c39a'); grad.addColorStop(1, bgs[variant % bgs.length]);
+  g.fillStyle = grad; g.fillRect(0, 0, 120, 150);
+  const child = variant === 1;
+  const headR = child ? 17 : 20;
+  const headY = child ? 72 : 60;
+  g.fillStyle = '#2f2622';
+  g.beginPath(); g.ellipse(60, 150, child ? 34 : 46, child ? 46 : 58, 0, Math.PI, 0); g.fill(); // 肩
+  g.fillStyle = '#e6c8a8';
+  g.beginPath(); g.arc(60, headY, headR, 0, Math.PI * 2); g.fill(); // 臉
+  g.fillStyle = variant === 2 ? '#e8e4dc' : '#3a2a20';
+  g.beginPath(); g.arc(60, headY - 6, headR + 1, Math.PI, 0); g.fill(); // 髮
+  if (variant === 2) { g.fillStyle = '#e8e4dc'; g.fillRect(48, headY + 10, 24, 6); } // 白鬍
+}));

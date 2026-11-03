@@ -220,7 +220,7 @@ describe('狀態機、檢查點與掉落', () => {
   });
 
   it('空中不能互動', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     expect(findTarget(w)?.def.id).toBe('note');
     w.player.onGround = false;
@@ -228,7 +228,7 @@ describe('狀態機、檢查點與掉落', () => {
   });
 
   it('紙條可讀', () => {
-    const w = newWorld();
+    const w = newWorld(FOYER_V02); // 字條在 x=-17 的凍結場景 (C7 起正式玄關的西區是 1-2d 拉繩)
     place(w, -17, 0, -5.2);
     interact(w);
     expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的？');

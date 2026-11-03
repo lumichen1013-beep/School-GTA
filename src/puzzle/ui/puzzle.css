@@ -38,6 +38,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   box-shadow: 4px 4px 0 rgba(58,38,24,.25); opacity: 0; transition: opacity .4s;
 }
 #pz-toast.show { opacity: 1; }
+#pz-toast s { opacity: 0.7; text-decoration-thickness: 1px; }
 #pz-narration {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 12%;
   font: 26px/1.9 "Songti TC", "Noto Serif TC", serif; letter-spacing: .12em; color: var(--ink);
