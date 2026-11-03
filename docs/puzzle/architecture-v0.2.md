@@ -4,6 +4,7 @@
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
+> | v0.2（新劇情：老宅魔方・森林圖書館） | 2026-11-03 | 只改劇情名詞與指向：追逐者改稱守衛殘影；解答手稿改為許問津的解答手稿；`story.*` key 移除律師來信 `story.letter`、日記改為許問津的手記；新增 N20 接縫（`mechanics/seam.ts`，規格 5.4，架構細節待 Q-K 確認後補）；章節主題改為森林中的圖書館（`render/themes/<章>.ts`、`render/decor/`，規格 9.3） |
 > | v0.2（劇情演出） | 2026-11-03 | 新增 4.15 過場系統（`text/readingTime.ts`、`app/cutscene.ts`、`ui/cutscene.ts`、`render/cutscene/`、`content/cutscenes/`）與畫面狀態 `cutscene`；設計見 `cutscenes-v0.1.md` |
 > | v0.2（手機觸控） | 2026-11-02 | 4.6 輸入層加入觸控（`input/touch.ts`、`touchLayout.ts`、`merge.ts`、`ui/touchOverlay.ts`）、純檔案 DOM 規則、文字 key、擴充劇本「新增一種輸入」；設計細節見 `mobile-controls-v0.1.md` |
 > | v0.2（老宅尋寶・單人詭異版） | 2026-11-02 | 劇情改為老宅尋寶（顯示名見 `story-bible-v0.2.md`）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 `mechanics/chase`（N19 追逐，確定性）與 `chase` 事件；`calmTension` 語意擴大（驚嚇平靜版、追逐自動通過） |
@@ -161,10 +162,11 @@ src/puzzle/
     light.ts                 N6/N7/N15：燈、caster、影子推導與定稿
     section.ts               N8：剖面
     mark.ts                  N16：墨記、區域限制
-    chase.ts                 N19：追逐（輪廓路徑、2D 限定判定、檢查點、減弱模式自動通過；4.14）
+    chase.ts                 N19：追逐（守衛殘影路徑、2D 限定判定、檢查點、減弱模式自動通過；4.14）
+    seam.ts                  N20：接縫門（`seam.to`、`blind` 門在 3D 擋路、只在 3D 穿門；規格 5.4，暫定 Q-K）
   content/                   L2 純資料
     items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
-    chapters.ts              CHAPTERS（章、主題 id、旁白 key）
+    chapters.ts              CHAPTERS（章、主題 id、旁白 key；主題 = 森林中的圖書館各章，規格 9.3）
     moodTypes.ts             MoodDef 純型別（零依賴，4.13）
     cutsceneTypes.ts         CutsceneDef / ShotDef 純型別（零依賴，4.15）
     cutscenes/*.ts           每場過場一檔（cs:prologue … cs:endB）
@@ -195,20 +197,20 @@ src/puzzle/
     textures.ts              沿用
     transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
     markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線、字條浮現字跡與邊角發光）
-    themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組
+    themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組；各章主題（入口、書庫、溫室、根窖、觀星閣樓、林心草地；色板見 story-bible 8.2）
     models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
-    decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯…由關卡資料擺放）
+    decor/index.ts           DecorKind → 建構函式（掛畫、吊燈、地毯、樹根、藤蔓、苔蘚、浮書、彩繪玻璃、星圖、魔法陣刻紋…由關卡資料擺放；非實體）
     debug.ts                 DEV：碰撞盒線框（可選）
     tension/director.ts      TensionDirector：氛圍、詭異裝飾事件、驚嚇、暈影、色溫、鏡頭緩推（4.13）
-    models/chaser.ts         N19 輪廓外觀（只在藏寶圖）
+    models/chaser.ts         N19 守衛殘影外觀（只在藏寶圖）
   audio/                     L4 最小 Web Audio 合成（4.13）
     synth.ts                 PuzzleAudio：章節底音、分層音軌、脈動低音、鐘音、驚嚇音、限幅器、回饋音
   ui/                        L4 DOM
     hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
     icons.ts                 物品 id → SVG
     touchOverlay.ts          觸控疊層 DOM、Pointer Events、pointer capture、阻止瀏覽器手勢；事件經 TouchSink 交給 app
-    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的字條，唯讀）、guide（叔公的解答手稿頁，解答模式）
+    screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的字條，唯讀）、guide（許問津的解答手稿頁，解答模式）
     puzzle.css               沿用
   app/                       L5 外殼
     app.ts                   畫面狀態機
@@ -677,7 +679,7 @@ export interface Text {
 export function createText(bundle: TextBundle, fallback?: TextBundle): Text;   // 缺 key → fallback → 回傳 key 本身（DEV 警告）
 ```
 
-- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、字條、物件 label）、`note.<puzzleId>.<1|2|3>`（提示字條；劇情字條仍在 `lvl.<levelId>.note.*`）、`guide.<puzzleId>`（解答手稿）、`story.*`（旁白、叔公日記 `story.diary.<1..5>`、殘片背面 `story.scrap.<1..6>`、律師來信 `story.letter.<章>`、結局 `story.ending.<A|B>`）、`term.*`（詞彙表）。
+- key 命名：`ui.*`（HUD / 選單）、`msg.*`（系統訊息）、`obj.<type>.*`（類型預設 label / verb）、`lvl.<levelId>.*`（標題、旁白、字條、物件 label）、`note.<puzzleId>.<1|2|3>`（提示字條；劇情字條仍在 `lvl.<levelId>.note.*`）、`guide.<puzzleId>`（解答手稿）、`story.*`（旁白、許問津的手記 `story.diary.<1..5>`、老宅圖殘片背面 `story.scrap.<1..6>`、結局 `story.ending.<A|B>`）、`term.*`（詞彙表）。
 - 觸控 key（`mobile-controls-v0.1.md` 5）：`ui.prompt.touch`、`ui.touch.btn.<控制 id>`（aria-label）、`ui.touch.hold`、`ui.touch.rotate`、`ui.help.touch.*`、`ui.settings.touch.*`；不得在 `ui/touchOverlay.ts` 寫死文字。
 - **劇情詞彙與內部 id 分離**：內部一律用規格代號（`key`、`valve`、`pin`、`mark`、模式 `'2d'`）；玩家看到的名稱集中在 `term.*`：`term.mode3d='現實'`、`term.nib='筆尖'`。劇情 4 節的改名 = 改 `term.*` 幾行，其他字串透過 `[[term.nib]]` 自動跟著變。
 - 暱稱：`{name}` 參數由 app 從存檔傳入（劇情 2 節「系統文字用玩家暱稱」）。
@@ -715,7 +717,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 
 ### 4.13 氛圍、緊張與驚嚇呈現（`render/tension/`、`audio/`；規格 9.1）
 
-全遊戲使用，強度逐章上升（規格 9.1 曲線）；**純呈現層**，核心與機制不知道它存在。四種詭異手法（只在藏寶圖出現的輪廓、不一致的影子、回到圖釘後的小變化、切換瞬間換位的裝飾）全部是 decor，不是 `ObjDef`。
+全遊戲使用，強度逐章上升（規格 9.1 曲線）；**純呈現層**，核心與機制不知道它存在。四種詭異手法（只在藏寶圖出現的守衛殘影、不一致的影子、回到圖釘後的小變化、切換瞬間換位的裝飾）全部是 decor，不是 `ObjDef`。
 
 - **資料位置**：放在 content 層 `LevelEntry`（4.8）的 `mood?: MoodDef` 欄位，**不放進 core 的 `LevelDef`**（否則核心型別得認識呈現資料）。型別在 `content/moodTypes.ts`（純型別、零依賴）。
 
@@ -770,7 +772,7 @@ export interface PuzzleAudio {
 
 ### 4.14 N19 追逐（`mechanics/chase.ts`；規格 4.2）
 
-**確定性邏輯，放機制層**；輪廓的外觀放 `render/models/chaser.ts`（依 `allObjs` 對帳，與其他物件相同）。
+**確定性邏輯，放機制層**；守衛殘影的外觀放 `render/models/chaser.ts`（依 `allObjs` 對帳，與其他物件相同）。
 
 ```ts
 export interface ChaseDef {
@@ -789,7 +791,7 @@ export interface ChaseDef {
 //   presence(2d)：恆 true（不受剖面過濾）
 //   afterStep：若已觸發 → 依 t 推進位置；玩家在 2D 且 x-y 盒重疊 → respawn 到 checkpoint、重置 t、caught+1、emit { t:'chase', s:'caught' }
 //              抵達 endZone → setFlag(`${id}:done`)、emit { t:'chase', s:'end' }
-//   options.calmTension：startFlag 成立時直接 setFlag(`${id}:done`)、emit { t:'chase', s:'autoPass' }，不生成輪廓
+//   options.calmTension：startFlag 成立時直接 setFlag(`${id}:done`)、emit { t:'chase', s:'autoPass' }，不生成殘影
 ```
 
 - 走道位於謎題 `area` 之外；`validate` 檢查：走道與任何謎題 `area` 不相交、走道沒有可推物、`region` 與相鄰區域不重疊、`startFlag` 只在某題 `doneFlag` 之後可達（規格：追逐不屬於任何謎題）。
