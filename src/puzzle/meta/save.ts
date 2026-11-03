@@ -1,4 +1,6 @@
 import type { AbilityId } from '../core/types';
+import type { Cell, CubeState } from '../core/cube';
+import type { ObjSnapshot, RoomSnapshot } from '../core/chapter';
 import { isRecord, type KeyValueStorage } from './storage';
 
 export const SAVE_KEY = 'puzzle:save';
@@ -8,9 +10,24 @@ export const LEGACY_FOYER_KEY = 'puzzle:foyer:cleared';
 export const ABILITY_IDS: readonly AbilityId[] = ['nib', 'pin', 'section', 'mark'];
 export const NAME_MAX = 12;
 
-/** 存檔 v2 (規格 8) */
-export interface SaveV2 {
-  v: 2;
+/** 存檔版本 (v0.3：v3 = 加章節快照) */
+export const SAVE_VERSION = 3;
+
+/**
+ * 一章的存檔 (規格 8 ChapterSave 的骨架：魔方排列 + 已離開房間的快照 + 下次從哪扇門進 + 章節道具)；
+ * 字卡 / 標籤 / 方向字於 N22 實作時加入
+ */
+export interface ChapterSave {
+  cube: CubeState;
+  rooms: Record<string, RoomSnapshot>;
+  at: { room: string; door: string | null };
+  items: Record<string, number>;
+  flags: string[];
+}
+
+/** 存檔 v3 (規格 8)；v2 欄位不變，另加 chapters */
+export interface SaveV3 {
+  v: 3;
   cleared: string[];
   current: string;
   abilities: AbilityId[];
@@ -26,28 +43,71 @@ export interface SaveV2 {
    */
   seenCutscenes?: string[];
   skippedCutscenes?: string[];
+  /**
+   * 章節快照 (key = 章號字串)。選填：缺欄 / 缺章 = 從該章開始狀態進入 (規格 8 遷移 v2 → v3)；
+   * 第一次換房 / 轉動時才寫入
+   */
+  chapters?: Record<string, ChapterSave>;
 }
 
-export const defaultSave = (): SaveV2 => ({ v: 2, cleared: [], current: '', abilities: [], diary: [], scraps: [], endings: { A: false, B: false }, name: '' });
+/** 目前版本的存檔 */
+export type Save = SaveV3;
+
+export const defaultSave = (): SaveV3 => ({ v: 3, cleared: [], current: '', abilities: [], diary: [], scraps: [], endings: { A: false, B: false }, name: '' });
 
 type Migration = (raw: Record<string, unknown>, s: KeyValueStorage) => Record<string, unknown>;
 /** MIGRATIONS[n]：v=n → v=n+1；v0 = 沒有 puzzle:save */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // 舊玄關即新 1-2；1-1 門廊視為已通過以免老玩家重教 (規格 8)
   0: (_r, s) => s.get(LEGACY_FOYER_KEY) === '1' ? { v: 1, cleared: ['1-1', '1-2'], abilities: ['nib'] } : { v: 1, cleared: [], abilities: [] },
-  1: r => ({ ...defaultSave(), ...r, v: 2 })
+  1: r => ({ ...defaultSave(), ...r, v: 2 }),
+  // v0.3：能力只留 nib (pin / section / mark 隨機制退役)；chapters 缺欄 = 各章從頭 (舊存檔已通關 1-2 的預設旗標在開章時套用，見 meta/chapters)
+  2: r => ({ ...r, v: 3, abilities: Array.isArray(r.abilities) ? r.abilities.filter(a => a === 'nib') : r.abilities })
 };
 
 const strs = (v: unknown): string[] => Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
 const ints = (v: unknown, lo: number, hi: number): number[] =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is number => Number.isInteger(x) && x >= lo && x <= hi))].sort((a, b) => a - b) : [];
 
-/** 校正 v2 欄位 (型別不符的欄位改回預設值)；不是物件 → null */
-export function sanitizeSave(v: unknown): SaveV2 | null {
-  if (!isRecord(v) || v.v !== 2) return null;
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isCell = (v: unknown): v is Cell => Array.isArray(v) && v.length === 3 && v.every(n => Number.isInteger(n));
+
+function sanitizeObj(v: unknown): ObjSnapshot | null {
+  if (!isRecord(v) || typeof v.id !== 'string' || ![v.x, v.y, v.z].every(finite)) return null;
+  if (![v.gone, v.used, v.touched].every(b => typeof b === 'boolean')) return null;
+  return { id: v.id, x: v.x as number, y: v.y as number, z: v.z as number, gone: v.gone as boolean, used: v.used as boolean, touched: v.touched as boolean };
+}
+
+/** 一章的存檔；結構不合 → null (該章從頭) */
+export function sanitizeChapter(v: unknown): ChapterSave | null {
+  if (!isRecord(v) || !isRecord(v.cube) || !isRecord(v.cube.pos) || !isRecord(v.cube.rot) || !isRecord(v.rooms) || !isRecord(v.at)) return null;
+  const pos: Record<string, Cell> = {};
+  const rot: Record<string, 0 | 1 | 2 | 3> = {};
+  for (const [room, c] of Object.entries(v.cube.pos)) {
+    if (!isCell(c)) return null;
+    pos[room] = [c[0], c[1], c[2]];
+    const r = v.cube.rot[room];
+    rot[room] = r === 1 || r === 2 || r === 3 ? r : 0;
+  }
+  const rooms: Record<string, RoomSnapshot> = {};
+  for (const [room, snap] of Object.entries(v.rooms)) {
+    if (!isRecord(snap) || !Array.isArray(snap.objs)) continue;
+    rooms[room] = { objs: snap.objs.map(sanitizeObj).filter((o): o is ObjSnapshot => o !== null), flags: strs(snap.flags) };
+  }
+  if (typeof v.at.room !== 'string' || (v.at.door !== null && typeof v.at.door !== 'string')) return null;
+  const items: Record<string, number> = {};
+  if (isRecord(v.items)) for (const [k, n] of Object.entries(v.items)) if (Number.isInteger(n) && (n as number) > 0) items[k] = n as number;
+  return { cube: { pos, rot }, rooms, at: { room: v.at.room, door: v.at.door as string | null }, items, flags: strs(v.flags) };
+}
+
+/** 校正 v3 欄位 (型別不符的欄位改回預設值；壞掉的章節快照丟掉)；不是物件 → null */
+export function sanitizeSave(v: unknown): SaveV3 | null {
+  if (!isRecord(v) || v.v !== SAVE_VERSION) return null;
   const e = isRecord(v.endings) ? v.endings : {};
+  const chapters: Record<string, ChapterSave> = {};
+  if (isRecord(v.chapters)) for (const [n, c] of Object.entries(v.chapters)) { const ok = sanitizeChapter(c); if (ok) chapters[n] = ok; }
   return {
-    v: 2,
+    v: 3,
     cleared: strs(v.cleared),
     current: typeof v.current === 'string' ? v.current : '',
     abilities: strs(v.abilities).filter((a): a is AbilityId => (ABILITY_IDS as readonly string[]).includes(a)),
@@ -56,19 +116,20 @@ export function sanitizeSave(v: unknown): SaveV2 | null {
     endings: { A: e.A === true, B: e.B === true },
     name: typeof v.name === 'string' ? cleanName(v.name) : '',
     ...('seenCutscenes' in v ? { seenCutscenes: strs(v.seenCutscenes) } : {}),
-    ...('skippedCutscenes' in v ? { skippedCutscenes: strs(v.skippedCutscenes) } : {})
+    ...('skippedCutscenes' in v ? { skippedCutscenes: strs(v.skippedCutscenes) } : {}),
+    ...('chapters' in v ? { chapters } : {})
   };
 }
 
 /** 已看過的過場 (缺欄 = 空) */
-export const seenCutscenes = (s: SaveV2): readonly string[] => s.seenCutscenes ?? [];
+export const seenCutscenes = (s: Save): readonly string[] => s.seenCutscenes ?? [];
 /** 跳過 (未看完) 的過場 (缺欄 = 空) */
-export const skippedCutscenes = (s: SaveV2): readonly string[] => s.skippedCutscenes ?? [];
+export const skippedCutscenes = (s: Save): readonly string[] => s.skippedCutscenes ?? [];
 
 /** 暱稱：去頭尾空白、最多 NAME_MAX 字 */
 export const cleanName = (n: string): string => [...n.trim()].slice(0, NAME_MAX).join('');
 
-export function writeSave(s: KeyValueStorage, save: SaveV2): void {
+export function writeSave(s: KeyValueStorage, save: Save): void {
   s.set(SAVE_KEY, JSON.stringify(save));
 }
 
@@ -76,16 +137,16 @@ export function writeSave(s: KeyValueStorage, save: SaveV2): void {
  * 讀存檔：依序套遷移 → 校正 → 有變動才寫回；舊 key 在成功寫回後才刪。
  * 壞資料 (JSON 失敗、不是物件、版本不明)：原字串備份到 puzzle:save:corrupt，回傳並寫入預設存檔，不丟例外。
  */
-export function loadSave(s: KeyValueStorage): SaveV2 {
+export function loadSave(s: KeyValueStorage): Save {
   const raw = s.get(SAVE_KEY);
   let data: unknown = { v: 0 };
   if (raw !== null) {
     try { data = JSON.parse(raw); } catch { return corrupt(s, raw); }
   }
-  if (!isRecord(data) || !Number.isInteger(data.v) || (data.v as number) < 0 || (data.v as number) > 2) return corrupt(s, raw ?? '');
+  if (!isRecord(data) || !Number.isInteger(data.v) || (data.v as number) < 0 || (data.v as number) > SAVE_VERSION) return corrupt(s, raw ?? '');
   const from = data.v as number;
   let cur: Record<string, unknown> = data;
-  for (let v = from; v < 2; v++) cur = MIGRATIONS[v](cur, s);
+  for (let v = from; v < SAVE_VERSION; v++) cur = MIGRATIONS[v](cur, s);
   const save = sanitizeSave(cur);
   if (!save) return corrupt(s, raw ?? '');
   const text = JSON.stringify(save);
@@ -94,7 +155,7 @@ export function loadSave(s: KeyValueStorage): SaveV2 {
   return save;
 }
 
-function corrupt(s: KeyValueStorage, raw: string): SaveV2 {
+function corrupt(s: KeyValueStorage, raw: string): Save {
   s.set(SAVE_CORRUPT_KEY, raw);
   const save = defaultSave();
   writeSave(s, save);

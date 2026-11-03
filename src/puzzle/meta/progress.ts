@@ -1,6 +1,6 @@
 import type { AbilityId, World } from '../core/types';
 import { LEVELS, type LevelEntry } from '../content/levels';
-import { ABILITY_IDS, type SaveV2 } from './save';
+import { ABILITY_IDS, type Save } from './save';
 
 export type LevelState = 'locked' | 'open' | 'cleared';
 
@@ -19,22 +19,22 @@ function dependents(id: string, levels: readonly LevelEntry[]): Set<string> {
  * 解鎖：前置關卡全部通關；或本關 / 任何以本關為 (遞移) 前置的後續關已通關 → 保持可玩
  * (新增前置關時，例如 1-1 加在 1-2 之前，已通關 1-2 或之後關卡的存檔不被擋住)
  */
-export function isUnlocked(e: LevelEntry, save: SaveV2, levels: readonly LevelEntry[] = LEVELS): boolean {
+export function isUnlocked(e: LevelEntry, save: Save, levels: readonly LevelEntry[] = LEVELS): boolean {
   if (e.unlock.after.every(id => save.cleared.includes(id)) || save.cleared.includes(e.id)) return true;
   for (const id of dependents(e.id, levels)) if (save.cleared.includes(id)) return true;
   return false;
 }
 
-export function levelState(e: LevelEntry, save: SaveV2, levels: readonly LevelEntry[] = LEVELS): LevelState {
+export function levelState(e: LevelEntry, save: Save, levels: readonly LevelEntry[] = LEVELS): LevelState {
   if (save.cleared.includes(e.id)) return 'cleared';
   return isUnlocked(e, save, levels) ? 'open' : 'locked';
 }
 
 /** 開場可用能力 = 關卡白名單 ∩ 存檔已得能力 */
-export const startAbilities = (e: LevelEntry, save: SaveV2): AbilityId[] => e.abilities.filter(a => save.abilities.includes(a));
+export const startAbilities = (e: LevelEntry, save: Save): AbilityId[] => e.abilities.filter(a => save.abilities.includes(a));
 
 /** 通關後的新存檔：記通關、目前關卡、本關持有的能力 (例：玄關的筆尖) */
-export function recordClear(save: SaveV2, levelId: string, w: World): SaveV2 {
+export function recordClear(save: Save, levelId: string, w: World): Save {
   const got = [...w.abilities, ...ABILITY_IDS.filter(a => (w.inv[a] ?? 0) > 0)];
   return {
     ...save,

@@ -9,7 +9,7 @@ import { DEFAULT_BINDINGS, mergeBindings } from '../input/bindings';
 import { KeyboardSource } from '../input/keyboard';
 import type { Bindings, InputFrame, InputSource } from '../input/types';
 import type { KeyValueStorage } from '../meta/storage';
-import { cleanName, loadSave, NAME_MAX, writeSave, type SaveV2 } from '../meta/save';
+import { cleanName, loadSave, NAME_MAX, writeSave, type Save } from '../meta/save';
 import { loadSettings, writeSettings, type Settings } from '../meta/settings';
 import { memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/cutscenes';
 import { seenCutscenes } from '../meta/save';
@@ -54,7 +54,7 @@ const NARRATION_MS = 4000;
 export class PuzzleApp {
   readonly text: Text = createText(zhHant);
   private storage: KeyValueStorage = browserStorage();
-  private save: SaveV2 = loadSave(this.storage);
+  private save: Save = loadSave(this.storage);
   private settings: Settings = loadSettings(this.storage);
   private bindings: Bindings = mergeBindings(DEFAULT_BINDINGS, this.settings.keys);
   private renderer: THREE.WebGLRenderer;
@@ -189,7 +189,7 @@ export class PuzzleApp {
     return e;
   }
 
-  private commit(save: SaveV2): void {
+  private commit(save: Save): void {
     this.save = save;
     writeSave(this.storage, save);
   }

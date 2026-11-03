@@ -5,8 +5,8 @@ import { defaultSettings, loadSettings, SETTINGS_KEY, writeSettings } from '../.
 import { memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../../../src/puzzle/meta/cutscenes';
 
 describe('存檔：過場紀錄欄位 (規格 8：seenCutscenes / skippedCutscenes)', () => {
-  it('M1C 之前的 v2 存檔沒有新欄位：讀取不改寫、讀值為空清單 (安全預設)', () => {
-    const old = { v: 2, cleared: ['1-1'], current: '1-1', abilities: [], diary: [], scraps: [], endings: { A: false, B: false }, name: '阿青' };
+  it('M1C 之前的存檔沒有新欄位 (以目前版本 v3 表示)：讀取不改寫、讀值為空清單 (安全預設)', () => {
+    const old = { v: 3, cleared: ['1-1'], current: '1-1', abilities: [], diary: [], scraps: [], endings: { A: false, B: false }, name: '阿青' };
     const s = memoryStorage({ [SAVE_KEY]: JSON.stringify(old) });
     const set = vi.spyOn(s, 'set');
     const save = loadSave(s);

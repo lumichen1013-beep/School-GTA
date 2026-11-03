@@ -42,11 +42,11 @@ describe('存檔遷移鏈 (puzzle:save v2)', () => {
     }
   });
 
-  it('已是合法 v2：原樣回傳、不寫回', () => {
-    const v2 = { v: 2, cleared: ['1-2'], current: '1-2', abilities: ['nib'], diary: [1], scraps: [], endings: { A: false, B: true }, name: '阿青' };
-    const s = memoryStorage({ [SAVE_KEY]: JSON.stringify(v2) });
+  it('已是合法 v3 (目前版本)：原樣回傳、不寫回', () => {
+    const v3 = { v: 3, cleared: ['1-2'], current: '1-2', abilities: ['nib'], diary: [1], scraps: [], endings: { A: false, B: true }, name: '阿青' };
+    const s = memoryStorage({ [SAVE_KEY]: JSON.stringify(v3) });
     const set = vi.spyOn(s, 'set');
-    expect(loadSave(s)).toEqual(v2);
+    expect(loadSave(s)).toEqual(v3);
     expect(set).not.toHaveBeenCalled();
   });
 
