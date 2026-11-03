@@ -21,7 +21,15 @@ export interface CubeDef {
   control?: 'lever' | 'dial';
   /** v0.4 控制盤 (control = 'dial')：魔方儀在哪、列出的組 (未列出 = 轉不到)、鎖扣 */
   dial?: DialDef;
+  /** v0.4 第三章 光路 (N26)：房間 id → 彩繪玻璃 (沒給 = 本章沒有光路；core/chapter lightPaths 讀它) */
+  glass?: Readonly<Record<string, RoomGlass>>;
 }
+
+/**
+ * 一間房的彩繪玻璃 (光路 N26；本地門位)：glass = 有玻璃的邊；prism = 稜鏡 (成對、雙向：從 a 進來的光轉向 b，從 b 進來的轉向 a)；
+ * covered = 有玻璃但此刻被東西蓋住 (當成沒有玻璃；例：溫室深處的苔窗被巨根蓋住，3-4b 縮小後由章節層列入 uncovered)
+ */
+export interface RoomGlass { glass: readonly Side[]; prism?: ReadonlyArray<readonly [Side, Side]>; covered?: readonly Side[] }
 
 /**
  * 轉動組的種類 (v0.4；規格 5.4.4)：row = 一列循環平移、col = 一行循環平移 (兩列時 = 對調)、

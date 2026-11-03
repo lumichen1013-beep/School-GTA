@@ -195,7 +195,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 2-5 書房深處：鑰匙組好、拿起手記 (撿到的聲音另由道具欄決定)
   keyBench: 'sfx.latch.open', diaryStand: 'sfx.note.read',
   // 3-1 苗圃：花秤倒向一邊閂住 (秤盤落下)、花架門被拉起、樹根從軌道鬆開 (木頭摩擦聲)
-  balance: 'sfx.plate.press', trellis: 'sfx.gate.open', root: 'sfx.crate.push'
+  balance: 'sfx.plate.press', trellis: 'sfx.gate.open', root: 'sfx.crate.push',
+  // 3-2 玻璃長廊：感光花開 (光路接上；溫和的亮燈聲)
+  sensor: 'sfx.lamp.on'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

@@ -64,12 +64,12 @@ const through = (cs: ChapterSession, door: string): ChapterSession => {
 
 describe('第三章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第三章 (溫室主題、levels 3-1)；LevelEntry 3-1 (筆尖、前置 2-5)；CUBE_CHAPTERS chapter 3 (五間房、從苗圃西門進)', () => {
-    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1'] });
+    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2'] }); // 3-2 登錄
     expect([TEXT('ch.3.title'), THEMES.greenhouse.id]).toEqual(['第三章　溫室', 'greenhouse']);
     const e = levelById('3-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([3, ['nib'], ['2-5'], nursery, '苗圃']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
-    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
+    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery', '3-2': 'gallery' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
   });
 
   it('CH3_CUBE：3×3 滑動、控制盤；S0 (北列 空｜空｜工具間、中列 苗圃｜夜溫室｜長廊、南列 水塔｜溫床｜深處)；屋框；九個 slideCell 組、沒有鎖扣', () => {
@@ -85,8 +85,9 @@ describe('第三章骨架：登錄表與魔方', () => {
   it('彩繪玻璃資料 (規格房間表)：苗圃沒有；長廊 N / W / S + 稜鏡 W↔S；夜溫室 N / S；深處 N / W；溫床 N / E + 稜鏡 N↔E', () => {
     expect(CH3_GLASS).toEqual({
       nursery: { glass: [] }, gallery: { glass: ['N', 'W', 'S'], prism: [['W', 'S']] }, night: { glass: ['N', 'S'] },
-      depths: { glass: ['N', 'W'] }, bed: { glass: ['N', 'E'], prism: [['N', 'E']] }
+      depths: { glass: ['N', 'W'], covered: ['W'] }, bed: { glass: ['N', 'E'], prism: [['N', 'E']] } // 3-2：深處的苔窗被巨根蓋住 (3-4b 才露出)
     });
+    expect(CH3_CUBE.glass).toBe(CH3_GLASS);
     expect(Object.keys(CH3_GLASS).sort()).toEqual(Object.keys(CH3.rooms).sort());
   });
 });
@@ -95,14 +96,14 @@ describe('第三章骨架：五間占位房', () => {
   it('門位 (型別、本地門位、座標)：苗圃 W 門 / E 拱門 / S 拱門；長廊 W 門 / S 門；夜溫室四個拱門；深處 N 拱門 / S 章門 (key.greenhouse)；溫床沒有門', () => {
     const doors = (l: typeof nursery) => l.objects.filter(o => o.type === 'cubeDoor').map(o => o.type === 'cubeDoor' && [o.id, o.side, o.kind, o.x, o.z, o.visible]);
     expect(doors(nursery)).toEqual([['doorW', 'W', 'door', -5.8, 0, 'both'], ['archE', 'E', 'arch', 7.8, 0, 'both'], ['archS', 'S', 'arch', 3, 4.8, '3d']]);
-    expect(doors(gallery)).toEqual([['doorW', 'W', 'door', -7.8, 0, 'both'], ['doorS', 'S', 'door', -2.4, 4.8, '3d']]);
+    expect(doors(gallery)).toEqual([['doorW', 'W', 'door', -9.8, 0, 'both'], ['doorS', 'S', 'door', -2.4, 4.8, '3d']]); // 3-2 細化：長廊加寬到 [-10, 10]，西門貼西牆
     expect(doors(night)).toEqual([['archN', 'N', 'arch', -3, -4.8, 'both'], ['archW', 'W', 'arch', -11.8, 0, 'both'], ['archE', 'E', 'arch', 11.8, 0, 'both'], ['archS', 'S', 'arch', 3, 4.8, '3d']]);
     expect(doors(depths)).toEqual([['archN', 'N', 'arch', 0, -4.8, 'both'], ['chapterS', 'S', 'chapter', 3, 4.8, '3d']]);
     expect(doors(bed)).toEqual([]);
     const S = depths.objects.find(o => o.id === 'chapterS')!;
     expect(S.type === 'cubeDoor' && S.key).toBe('key.greenhouse');
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX, l.turnBudget, l.theme])).toEqual([
-      [-6, 8, { base: 8 }, 'greenhouse'], [-8, 8, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8 }, 'greenhouse'], [-8, 8, { base: 8 }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
+      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8 }, 'greenhouse'], [-8, 8, { base: 8 }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
     ]);
   });
 

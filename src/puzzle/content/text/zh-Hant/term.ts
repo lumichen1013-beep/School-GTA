@@ -58,5 +58,8 @@ export const term = {
   'term.card.xiao': '尺度卡「小」',
   'term.glyph.da': '大',
   'term.glyph.xiao': '小',
-  'term.pane.1': '花窗玻璃片・一'
+  'term.pane.1': '花窗玻璃片・一',
+  // 3-2 玻璃長廊：花窗玻璃片二 (3-2a)、老宅圖殘片 2 (3-2b 隱藏點)
+  'term.pane.2': '花窗玻璃片・二',
+  'term.scrap.2': '老宅圖殘片'
 } as const;

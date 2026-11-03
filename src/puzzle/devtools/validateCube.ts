@@ -1,6 +1,7 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Turn } from '../core/cube';
+import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
 import type { CH1_MODEL } from '../content/cubes/ch1';
@@ -156,6 +157,11 @@ export interface DialPuzzle {
   teaching?: boolean;
   /** 刻意排除的較長策略 (例：不縮小要 5 步)：其步數必須 > 預算 */
   excluded?: { name: string; minSteps: number };
+  /**
+   * v0.4 第三章 光路 (N26)：這間房 (p.room) 此刻要有從 from 進來、穿過至少 via 間房的光 (core/chapter lightPaths + lightState = lit；
+   * 與 goal 同時成立才算)。內容層只能 import 核心型別，光路條件以資料宣告，由這裡以同一個純函式判定
+   */
+  light?: { from: Side; via: number };
 }
 
 export interface DialModel {
@@ -195,6 +201,20 @@ function roomsIn(def: CubeDef, s: CubeState, group: string): string[] {
 /** 這組旗標下讀作「間」的門 (`room.door`) */
 function platesFor(m: DialModel, flags: ReadonlySet<string>): Set<string> {
   return new Set((m.plates ?? []).filter(p => flags.has(p.when)).map(p => `${p.room}.${p.door}`));
+}
+
+/** 每個排列的光路 (只算一次；沒有彩繪玻璃的魔方 = 空) */
+const lightMemo = new WeakMap<CubeState, Record<string, LightHit[]>>();
+function hitsAt(def: CubeDef, s: CubeState): Record<string, LightHit[]> {
+  let h = lightMemo.get(s);
+  if (!h) { h = def.glass ? lightPaths(def, s).hits : {}; lightMemo.set(s, h); }
+  return h;
+}
+
+/** 題目的排列條件此刻是否成立：goal (沒給 = 成立) 且光路條件 (沒給 = 成立) */
+function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet<string>): boolean {
+  if (p.light && lightState(hitsAt(m.cube, s)[p.room] ?? [], p.light.from, p.light.via) !== 'lit') return false;
+  return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)) });
 }
 
 export interface DialPuzzleReport {
@@ -358,7 +378,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     const flags = flagSet(f);
     m.puzzles.forEach((p, i) => {
       if (f & (1 << i) || rooms[r] !== p.room) return;
-      if (p.goal && !p.goal(arr.states[a], flags, { links: () => links(def, arr.states[a], m.doors, platesFor(m, flags)) })) return;
+      if (!goalHolds(m, p, arr.states[a], flags)) return;
       if (!p.needs.every(q => flags.has(q))) early.add(p.id);
       add(enc(a, r, f | (1 << i), d, k));
     });
@@ -409,7 +429,7 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
     while (q.length) { const r = q.shift()!; for (const l of ls) if (l.from.room === r && 'room' in l.to && !seen.has(l.to.room)) { seen.add(l.to.room); q.push(l.to.room); } }
     return [...seen].sort();
   };
-  const solved = (a: number, rs: readonly string[]) => rs.includes(p.room) && (!p.goal || p.goal(arr.states[a], flags, { links: () => links(def, arr.states[a], m.doors, plates) }));
+  const solved = (a: number, rs: readonly string[]) => rs.includes(p.room) && goalHolds(m, p, arr.states[a], flags);
   const perDepth = Math.max(1, Math.floor(cap / Math.max(1, budget)));
   const lengths: number[] = [];
   const multisets = new Map<string, number>();

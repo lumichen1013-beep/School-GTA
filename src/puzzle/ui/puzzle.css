@@ -266,6 +266,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 .pz-map-lg.wall::before { border-top-style: dashed; }
 .pz-map-lg.arch::before { height: 3px; border-top-width: 2px; border-bottom: 2px solid var(--ink); }
 .pz-map-lg.you::before { width: 10px; height: 10px; border: 0; border-radius: 50%; background: #a8640f; }
+/* 第三章光路 (形狀區分：穿過玻璃的光 = 虛線、白光 = 點線) */
+.pz-map-lg.stained::before { border-top: 3px dashed #c98a1a; }
+.pz-map-lg.white::before { border-top: 3px dotted #9c8f6c; }
 .pz-map-btn {
   position: absolute; right: 18px; bottom: 22%; width: 56px; height: 56px; border-radius: 50%; display: none; z-index: 6;
   font: 700 20px/1 inherit; color: var(--paper); background: var(--inkblue); border: 2px solid var(--ink); box-shadow: 3px 3px 0 rgba(58,38,24,.3); pointer-events: auto;

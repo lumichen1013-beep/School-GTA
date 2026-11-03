@@ -38,5 +38,6 @@ export const obj = {
   'obj.trellis.verb': '查看',
   'obj.root.verb': '查看',
   'obj.pane.verb': '拿起',
+  'obj.sensor.verb': '查看',
   'obj.default.verb': '互動'
 } as const;

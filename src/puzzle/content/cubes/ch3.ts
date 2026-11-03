@@ -3,8 +3,23 @@
 //   南列：■ 水塔 (實心)｜H2 溫床 (bed，隱藏房占位)｜3-4 溫室深處 (depths)
 //   屋框：章門入口 (來時的走廊，接書房深處的章門) 在 [0,1] 西側；天窗在 [0,0]、[1,0] 北側；章門出口 (往地下室) 在 [2,2] 南側
 // 組 = 九格各一個 slideCell (c0～c8，格號 x + 3y)；沒有鎖扣 (本章的限制改由卡榫擔任，3-1b 起)
-import type { CubeDef, CubeState, Side } from '../../core/cube';
+import type { CubeDef, CubeState, RoomGlass } from '../../core/cube';
 import type { ZonePuzzle } from './ch2';
+
+export type { RoomGlass } from '../../core/cube';
+
+/**
+ * 第三章各房的彩繪玻璃 (規格「第三章魔方與門位」房間表；CH3_CUBE.glass → core/chapter.lightPaths)。
+ * 苗圃屋頂是木棚 (沒有玻璃)；長廊 N / W / S + 稜鏡 W↔S；夜溫室 N / S (玻璃屋頂，光直穿)；深處 N (九格花窗) / W (苔窗：被巨根蓋住，3-4b 才露出)；
+ * 溫床 N / E + 稜鏡 N↔E
+ */
+export const CH3_GLASS: Readonly<Record<string, RoomGlass>> = {
+  nursery: { glass: [] },
+  gallery: { glass: ['N', 'W', 'S'], prism: [['W', 'S']] },
+  night: { glass: ['N', 'S'] },
+  depths: { glass: ['N', 'W'], covered: ['W'] },
+  bed: { glass: ['N', 'E'], prism: [['N', 'E']] }
+};
 
 export const CH3_CUBE: CubeDef = {
   id: 'ch3',
@@ -26,22 +41,8 @@ export const CH3_CUBE: CubeDef = {
     entry: { room: 'nursery', obj: 'dial' },
     groups: Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, kind: 'slideCell' as const, index: i })),
     locks: []
-  }
-};
-
-/** 一間房的彩繪玻璃 (光路 N26)：glass = 有玻璃的邊 (本地門位)；prism = 稜鏡 (成對、雙向：從 a 進來的光轉向 b，從 b 進來的轉向 a) */
-export interface RoomGlass { glass: readonly Side[]; prism?: ReadonlyArray<readonly [Side, Side]> }
-
-/**
- * 第三章各房的彩繪玻璃 (規格「第三章魔方與門位」房間表；光路傳播在 3-2 實作時讀這張表 → core/chapter.lightPaths)。
- * 苗圃屋頂是木棚 (沒有玻璃)；長廊 N / W / S + 稜鏡 W↔S；夜溫室 N / S (玻璃屋頂，光直穿)；深處 N (九格花窗) / W (苔窗)；溫床 N / E + 稜鏡 N↔E
- */
-export const CH3_GLASS: Readonly<Record<string, RoomGlass>> = {
-  nursery: { glass: [] },
-  gallery: { glass: ['N', 'W', 'S'], prism: [['W', 'S']] },
-  night: { glass: ['N', 'S'] },
-  depths: { glass: ['N', 'W'] },
-  bed: { glass: ['N', 'E'], prism: [['N', 'E']] }
+  },
+  glass: CH3_GLASS
 };
 
 /** 苗圃此刻不在原格 [0,1] */
@@ -62,4 +63,22 @@ export const CH3_ZONE31 = {
   jams: [{ room: 'nursery', until: '3-1b.shrink' }, { room: 'depths' }] as ReadonlyArray<{ room: string; until?: string; from?: string }>,
   start: 'nursery',
   finish: '3-1b'
+};
+
+/**
+ * 3-2 區的抽象模型 (devtools/validateDial；規格 6「3-2 玻璃長廊（細化）」)：九格滑動、預算各房 8；卡榫 = 苗圃與溫室深處一直卡著
+ * (3-1b 之前的最壞情況：證明 3-2 不需要 3-1b；苗圃鬆開的變體在測試另驗)。題 (光路條件以資料宣告，validateDial 用 core/chapter lightPaths 判定)：
+ * 3-2a = 長廊從北邊照進穿過至少一間房的光 (P6 首次，教學)；3-2b = 長廊從西邊照進穿過至少兩間房的光；兩題沒有先後；
+ * 終點 ch3.gallery = 兩題都完成、人在長廊 (終點標記，教學 = 不查多解)
+ */
+export const CH3_ZONE32 = {
+  cube: CH3_CUBE,
+  puzzles: [
+    { id: '3-2a', room: 'gallery', needs: [], teaching: true, light: { from: 'N', via: 1 } },
+    { id: '3-2b', room: 'gallery', needs: [], light: { from: 'W', via: 2 } },
+    { id: 'ch3.gallery', room: 'gallery', needs: ['3-2a', '3-2b'], teaching: true, goal: (_s, f) => f.has('3-2a') && f.has('3-2b') }
+  ] as readonly ZonePuzzle[],
+  jams: [{ room: 'nursery' }, { room: 'depths' }] as ReadonlyArray<{ room: string; until?: string; from?: string }>,
+  start: 'nursery',
+  finish: 'ch3.gallery'
 };

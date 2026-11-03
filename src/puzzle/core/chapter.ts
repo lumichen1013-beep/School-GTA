@@ -3,8 +3,8 @@
 import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World } from './types';
 import { createWorld, type WorldOptions } from './world';
 import {
-  applyOp, applyTurn, cellsOf, initialCube, inverseTurn, isBlocked, links, sameCell,
-  type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DoorInfo, type Side, type Turn, type TurnBlockCube
+  addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, OPPOSITE, rotateSide, sameCell,
+  type Cell, type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DoorInfo, type Side, type Turn, type TurnBlockCube
 } from './cube';
 import { boxAt, clamp, objBox, overlaps } from './geometry';
 import { solidsFor } from './presence';
@@ -164,6 +164,8 @@ function cubeExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record
 /** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫；門牌以即時標籤算) */
 function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state, w.ext.labels ?? state.labels) };
+  const light = lightExt(spec, state);
+  if (light) w.ext = { ...w.ext, light };
 }
 
 /** 標籤改了 (門牌貼上 / 取下「日」) → 重算當前房間的門接法 (World 只更新 ext) */
@@ -177,6 +179,8 @@ function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (!spec.cube || !state.cube) return;
   w.ext = { ...w.ext, cube: cubeExt(spec, state), labels: clone(state.labels), flags: [...state.flags] };
   if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial } };
+  const light = lightExt(spec, state);
+  if (light) w.ext = { ...w.ext, light };
 }
 
 /** 物件原本屬於哪間房 (第一個在關卡資料裡列出它的房間) */
@@ -527,6 +531,88 @@ export function clearUndo(cs: ChapterSession, events: readonly GameEvent[], gotI
   const end = gotItem || events.some(e => e.t === 'done' || e.t === 'flag' || e.t === 'objCross' || (e.t === 'card' && e.ok));
   return end ? { ...cs, state: { ...cs.state, turns: { ...turns, undo: [] } } } : cs;
 }
+
+// ── v0.4 第三章 光路 (N26；規格 6「第三章共用規則」光路、「3-2 玻璃長廊（細化）」；architecture 4.19) ──
+
+/** 光照進一間房的一次：from = 從哪一側 (魔方上的實際方位) 進來、via = 之前穿過幾間房、out = 從哪一側出去 (null = 停在房內)、rooms = 之前穿過的房 */
+export interface LightHit { from: Side; via: number; out: Side | null; rooms: readonly string[] }
+/** 一條光路的一格 (照進的那間房) */
+export interface LightStep { room: string; cell: Cell; from: Side; via: number; out: Side | null }
+/**
+ * 一扇天窗的光路：source = 天窗所在的格 (光從 side 那一側照進來)；steps = 依序照進的房；
+ * stop = 光撞上的那一格與那一側 (空格 / 實心格 / 沒有玻璃 / 魔方外 / 已照過的房；null = 停在最後那間房裡)
+ */
+export interface LightBeam { source: Cell; side: Side; steps: LightStep[]; stop: { at: Cell; side: Side } | null }
+export interface LightPaths { beams: LightBeam[]; hits: Record<string, LightHit[]> }
+
+declare module './types' {
+  interface WorldExt {
+    /** v0.4 第三章 光路：這間房此刻照進來的光 (章節層在進房 / 轉動 / 改標籤後寫入；mechanics/light 的感光物只讀) */
+    light?: { hits: ReadonlyArray<LightHit> };
+  }
+}
+
+/** 本地門位 → 魔方上的方位 (rot 順時針) 的反向：魔方方位 → 本地 */
+const localSide = (s: Side, rot: number): Side => rotateSide(s, (4 - (rot % 4)) % 4);
+
+/**
+ * 天窗的光路 (純函式、確定性)：每扇天窗 (屋框 skylight，依 def.frame 順序) 從那一側照進那一格，逐格傳播——
+ * 光從 s 側進格內的房 → 該房 s 側 (本地) 要有玻璃且沒被蓋住才進得去 (空格、實心格、沒有玻璃 = 停在牆外)；
+ * 進得去 = 照到 (記下 from / via / rooms)；出去的那一側 = 稜鏡的另一側 (從稜鏡的一側進來) 或對側，那一側也要有玻璃，否則停在房內；
+ * 同一條光不會兩次進同一間房。uncovered = 此刻露出來的被蓋住的玻璃 (`room.side`，本地門位)
+ */
+export function lightPaths(def: CubeDef, cube: CubeState, uncovered: ReadonlySet<string> = new Set()): LightPaths {
+  const beams: LightBeam[] = [];
+  const hits: Record<string, LightHit[]> = {};
+  const table = def.glass ?? {};
+  const has = (room: string, local: Side): boolean => {
+    const g = table[room];
+    return !!g && g.glass.includes(local) && (!g.covered?.includes(local) || uncovered.has(`${room}.${local}`));
+  };
+  for (const f of def.frame) {
+    if (f.kind !== 'skylight') continue;
+    const beam: LightBeam = { source: [f.at[0], f.at[1], f.at[2]], side: f.side, steps: [], stop: null };
+    beams.push(beam);
+    let at: Cell = beam.source;
+    let side: Side = f.side;
+    const passed: string[] = [];
+    for (;;) {
+      const room = inCube(def, at) ? cellContent(def, cube, at) : 'empty';
+      const rot = cube.rot[room] ?? 0;
+      if (!inCube(def, at) || room === 'empty' || room === 'solid' || passed.includes(room) || !has(room, localSide(side, rot))) {
+        beam.stop = { at, side };
+        break;
+      }
+      const inLocal = localSide(side, rot);
+      const prism = table[room].prism?.find(p => p[0] === inLocal || p[1] === inLocal);
+      const outLocal = prism ? (prism[0] === inLocal ? prism[1] : prism[0]) : OPPOSITE[inLocal];
+      const out = has(room, outLocal) ? rotateSide(outLocal, rot) : null;
+      beam.steps.push({ room, cell: at, from: side, via: passed.length, out });
+      (hits[room] ??= []).push({ from: side, via: passed.length, out, rooms: [...passed] });
+      passed.push(room);
+      if (!out) break;
+      at = addSide(at, out);
+      side = OPPOSITE[out];
+    }
+  }
+  return { beams, hits };
+}
+
+/** 感光物此刻的光 (機制、驗證器、展開圖共用)：沒有從 from 進來的光 = dark；via 夠 = lit；只有天窗直射 (via 0) = white；0 < via < 要求 = weak */
+export type LightState = 'dark' | 'white' | 'weak' | 'lit';
+export function lightState(hits: ReadonlyArray<Pick<LightHit, 'from' | 'via'>>, from: Side, via: number): LightState {
+  const mine = hits.filter(h => h.from === from);
+  if (!mine.length) return 'dark';
+  if (mine.some(h => h.via >= via)) return 'lit';
+  return mine.some(h => h.via > 0) ? 'weak' : 'white';
+}
+
+/** 當前房間此刻的光 (章節沒有光路 = undefined；寫入 World.ext.light) */
+function lightExt(spec: ChapterSpec, state: ChapterState): WorldExtLight | undefined {
+  if (!spec.cube?.glass || !state.cube) return undefined;
+  return { hits: lightPaths(spec.cube, state.cube).hits[state.room] ?? [] };
+}
+type WorldExtLight = NonNullable<World['ext']['light']>;
 
 /** 單房關卡 (不在魔方上)：一間房、沒有門位；行為同 createWorld */
 export function singleRoomSpec(level: LevelDef): ChapterSpec {

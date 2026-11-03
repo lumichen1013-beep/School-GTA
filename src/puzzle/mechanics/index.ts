@@ -20,13 +20,14 @@ import { deep } from './deep';
 import { scale, jamQuery } from './scale';
 import { balance } from './balance';
 import { nursery } from './nursery';
+import { light } from './light';
 import { chapterDoors } from './cube';
 import type { CubeDef } from '../core/cube';
 import type { ChapterSpec } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 
-/** 預設機制表：陣列順序即執行順序 (afterPhysics：plates 必須在 links 之前；scale 的 beforePhysics 重算尺寸，balance 在 afterPhysics 讀重量) */
-export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts, deep, scale, balance, nursery];
+/** 預設機制表：陣列順序即執行順序 (afterPhysics：plates 必須在 links 之前；scale 的 beforePhysics 重算尺寸，balance 在 afterPhysics 讀重量；light 在 afterPhysics 讀章節層寫入的光) */
+export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts, deep, scale, balance, nursery, light];
 
 /**
  * 一章的 ChapterSpec (app / 測試共用)：門位由各房的 cubeDoor 整理 (chapterDoors)；卡榫查詢 (不在場的房) 由 mechanics/scale 注入

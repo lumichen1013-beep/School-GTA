@@ -1,9 +1,9 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 import type { DoorKind } from '../../../core/cube';
 
-// 第三章的占位房 (規格 6「第三章骨架與銜接（v0.4 細化）」)：3-2 玻璃長廊、3-3 夜溫室、3-4 溫室深處、H2 溫床 (3-1 苗圃另檔，這裡轉出)。
+// 第三章的占位房 (規格 6「第三章骨架與銜接（v0.4 細化）」)：3-3 夜溫室、3-4 溫室深處、H2 溫床 (3-1 苗圃、3-2 玻璃長廊另檔，這裡轉出)。
 // 只有門、彩繪玻璃 (資料在 content/cubes/ch3 CH3_GLASS；這裡是窗的裝飾與窗邊的紙籤)、裝飾；謎題逐關取代。
-// 門位 (本地)：長廊 西門 / 南門、夜溫室 北 / 西 / 東 / 南 四個拱門、深處 北拱門 / 南章門 (要 key.greenhouse；本版沒有給鑰匙的物件 → 鎖著)、溫床沒有門。
+// 門位 (本地)：夜溫室 北 / 西 / 東 / 南 四個拱門、深處 北拱門 / 南章門 (要 key.greenhouse；本版沒有給鑰匙的物件 → 鎖著)、溫床沒有門。
 // E / W 門位 z = 0；N 在後牆 z = -4.8；S 在前緣 z = 4.8 (只在實景)。每房墨 8。文字 = content/text/zh-Hant/lvl-ch3.ts
 // 座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -5
 /** 門的名稱 (文字 key；id = 型別 + 門位) */
@@ -12,7 +12,7 @@ const DOOR_KEYS: Readonly<Record<string, string>> = {
 };
 /** 房間標題 (文字 key) */
 const TITLE_KEYS: Readonly<Record<string, string>> = {
-  gallery: 'lvl.ch3.gallery.title', night: 'lvl.ch3.night.title', depths: 'lvl.ch3.depths.title', bed: 'lvl.ch3.bed.title'
+  night: 'lvl.ch3.night.title', depths: 'lvl.ch3.depths.title', bed: 'lvl.ch3.bed.title'
 };
 
 /** 一扇門 / 拱門：E / W 在側牆 (z = 0)、N 在後牆、S 在前緣 (只在實景) */
@@ -50,27 +50,8 @@ function room(id: string, minX: number, maxX: number, objects: ObjDef[], decor: 
 /** 3-1 苗圃 (中列左格；入口)：完整檔在 3-1-nursery.ts */
 export { nursery } from './3-1-nursery';
 
-/**
- * 3-2 玻璃長廊 (中列右格)：西門 (S0 接夜溫室東拱門)、南門 (S0 接溫室深處北拱門)；彩繪玻璃 N / W / S + 稜鏡 W↔S。
- * 後景北窗與窗下花台 (紙籤) ｜ 中景走道一側長椅、另一側盆栽 ｜ 前景南門旁的蕨、西南角的稜鏡吊飾、地上的彩色光斑 (南窗在前緣看不到)
- */
-export const gallery = room('gallery', -8, 8, [
-  door('W', 'door', -7.8), door('S', 'door', -2.4),
-  plaque('plaqueN', 'lvl.ch3.gallery.plaqueN', 2.4, 0.95, -4.88)
-], [
-  { kind: 'glassPane', side: 'N', at: 2.4, y: 3.0, w: 4.2, h: 2.6, cols: 4, rows: 3, seed: 41 },
-  { kind: 'glassPane', side: 'W', at: -2.2, y: 2.8, w: 2.6, h: 2.4, cols: 2, rows: 3, seed: 43 },
-  { kind: 'planter', x: 2.4, z: -3.9, w: 3.4, d: 0.8, rot: 0, seed: 45 },
-  { kind: 'bench', x: -3.6, z: -1.6, w: 1.8, rot: 0 },
-  { kind: 'bench', x: 4.8, z: -1.4, w: 1.8, rot: 0.1 },
-  { kind: 'pots', x: -0.4, z: 1.4, n: 4, seed: 47 },
-  { kind: 'pots', x: 6.4, z: 1.8, n: 3, seed: 49 },
-  { kind: 'pots', x: -5.6, z: 3.6, n: 3, seed: 51, fern: 1 },
-  { kind: 'prism', x: -6.6, y: 2.6, z: 3.4 },
-  { kind: 'stainedGlass', x: 1.6, z: 3.2 },
-  { kind: 'pendant', x: -2.0, z: 0 },
-  { kind: 'pendant', x: 4.0, z: 0 }
-]);
+/** 3-2 玻璃長廊 (中列右格)：完整檔在 3-2-gallery.ts */
+export { gallery } from './3-2-gallery';
 
 /**
  * 3-3 夜溫室 (中心格)：四個拱門 (北 / 西 / 東 / 南)；彩繪玻璃 N / S (玻璃屋頂，光直穿)。燈熄了，只剩螢光植物。

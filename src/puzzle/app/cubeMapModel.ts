@@ -3,17 +3,17 @@ import type { ObjState, World } from '../core/types';
 import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
-import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, turnDirs, type Cell, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
-import { chapterLinks, dialBlocked, isDialChapter, isLocked, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, rotateSide, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
+import { chapterLinks, dialBlocked, isDialChapter, isLocked, lightPaths, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import type { InputFrame } from '../input/types';
-import type { CubeMapModel, MapCell, MapDoor, MapPreview, TurnDir, TurnHeader, TurnModeModel } from '../ui/cubeMap';
+import type { CubeMapModel, MapCell, MapDoor, MapLight, MapPreview, TurnDir, TurnHeader, TurnModeModel } from '../ui/cubeMap';
 
-export type { CubeMapModel, MapCell, MapDoor, MapFrame, MapLink, MapPreview, TurnHeader, TurnModeModel, TurnPreview } from '../ui/cubeMap';
+export type { CubeMapModel, MapCell, MapDoor, MapFrame, MapLight, MapLink, MapPreview, TurnHeader, TurnModeModel, TurnPreview } from '../ui/cubeMap';
 
 /** 2D 時玩家附近 (互動範圍內，不必站穩) 的拉桿：展開圖顯示它的轉動預覽；3D 不預覽 (規劃在 2D、行動在 3D) */
 export function previewLever(w: World): ObjState | null {
@@ -65,14 +65,63 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
       pv = { caption: text('ui.map.preview', { word }), blocked: null, moved: { room: preview.op.room, name: name(preview.op.room), from: [from[0], from[1]], to: [to[0], to[1]] }, doors: changed };
     }
   }
+  const light = mapLight(def, cube, layer);
   return {
     title: text('ui.map.title'),
     cols: def.dims[0], rows: def.dims[1], cells, doors,
     frames: def.frame.filter(f => f.at[2] === layer).map(f => ({ x: f.at[0], y: f.at[1], side: f.side, kind: f.kind, name: frameName(text, f.kind, f.to) })),
     preview: pv,
     hint: text('ui.map.hint'),
-    legend: { open: text('ui.map.legend.open'), wall: text('ui.map.legend.wall'), arch: text('ui.map.legend.arch'), you: text('ui.map.you') }
+    legend: {
+      open: text('ui.map.legend.open'), wall: text('ui.map.legend.wall'), arch: text('ui.map.legend.arch'), you: text('ui.map.you'),
+      ...(light ? { stained: text('ui.map.legend.stained'), white: text('ui.map.legend.white') } : {})
+    },
+    ...(light ? { light } : {})
   };
+}
+
+/** 光路走的「車道」(格內偏右下；同 ui/cubeMap LANE)：格 (x, y) 裡的轉折點 */
+const LANE = 0.72;
+const SIDE_VEC: Readonly<Record<Side, readonly [number, number]>> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], U: [0, 0], D: [0, 0] };
+
+/**
+ * 展開圖的光路圖層 (第三章；魔方沒有彩繪玻璃 = undefined)：core/chapter lightPaths 的結果換成格座標的折線——
+ * 每扇天窗：屋框外 → 第一格的邊 (白光) → 格內車道點 (白光：還沒穿過任何房) → 出去的那一側的邊 (穿過玻璃的光) → 下一格…；
+ * 停在牆外 = 撞上的那一格那一側的邊 (短橫槓)，停在房內 = 最後那格的車道點 (圓點)。窗記號 = 每間房有玻璃 (沒被蓋住) 的那幾側，稜鏡 = 兩側
+ */
+export function mapLight(def: CubeDef, cube: CubeState, layer: number): MapLight | undefined {
+  if (!def.glass) return undefined;
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  const lane = (c: Cell) => ({ x: r3(c[0] + LANE), y: r3(c[1] + LANE) });
+  // 邊上的點：沿著光前進的方向在車道上 (N / S 邊取車道的 x、E / W 邊取車道的 y)
+  const edge = (c: Cell, side: Side) => {
+    const [dx, dy] = SIDE_VEC[side];
+    return { x: r3(dx ? c[0] + 0.5 + dx * 0.5 : c[0] + LANE), y: r3(dy ? c[1] + 0.5 + dy * 0.5 : c[1] + LANE) };
+  };
+  const out: MapLight = { segs: [], stops: [], glass: [], prisms: [] };
+  const seg = (a: { x: number; y: number }, b: { x: number; y: number }, white: boolean) => out.segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, white });
+  for (const beam of lightPaths(def, cube).beams) {
+    if (beam.source[2] !== layer) continue;
+    const e0 = edge(beam.source, beam.side);
+    const [dx, dy] = SIDE_VEC[beam.side];
+    seg({ x: r3(e0.x + dx * 0.32), y: r3(e0.y + dy * 0.32) }, e0, true);
+    beam.steps.forEach((st, i) => {
+      const mid = lane(st.cell);
+      seg(edge(st.cell, st.from), mid, i === 0);
+      if (st.out) seg(mid, edge(st.cell, st.out), false);
+    });
+    const last = beam.steps[beam.steps.length - 1];
+    if (beam.stop) { const p = edge(beam.stop.at, beam.stop.side); out.stops.push({ ...p, kind: 'wall', side: beam.stop.side }); }
+    else if (last) out.stops.push({ ...lane(last.cell), kind: 'room', side: last.from });
+  }
+  for (const [room, c] of Object.entries(cube.pos)) {
+    const g = def.glass[room];
+    if (!g || c[2] !== layer) continue;
+    const rot = cube.rot[room] ?? 0;
+    for (const side of g.glass) if (!g.covered?.includes(side)) out.glass.push({ x: c[0], y: c[1], side: rotateSide(side, rot) });
+    for (const [a, b] of g.prism ?? []) out.prisms.push({ x: c[0], y: c[1], a: rotateSide(a, rot), b: rotateSide(b, rot) });
+  }
+  return out;
 }
 
 /** 某個魔方狀態在 layer 層的格 (房名 / 空格 / 實心) 與門位接通狀態 (現況與預覽共用) */
@@ -181,7 +230,8 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
         const after = layout(cs, text, r, layer);
         const moves = Object.keys(cube.pos).filter(room => cube.pos[room][2] === layer && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1]))
           .map(room => ({ room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0], cube.pos[room][1]] as [number, number], to: [r.pos[room][0], r.pos[room][1]] as [number, number] }));
-        preview = { cells: after.cells, doors: after.doors, moves };
+        const light = mapLight(def, r, layer);
+        preview = { cells: after.cells, doors: after.doors, moves, ...(light ? { light } : {}) };
       }
       caption = text('ui.turn.preview', { what: label });
     }

@@ -19,6 +19,17 @@ export interface MapPreview {
   /** 轉後的門 (只列出與現在不同的) */
   doors: MapDoor[];
 }
+/**
+ * v0.4 第三章 光路圖層 (規格 6「3-2 玻璃長廊（細化）」、7.2)：座標 = 格單位 (格 (x, y) 的左上角 = (x, y))。
+ * segs = 光路折線 (white = 天窗直射、還沒穿過任何房的那一段：點線；其餘 = 穿過玻璃的光：虛線 + 箭頭紋)；
+ * stops = 光停下的地方 (wall = 撞上牆 / 空格 / 實心格：短橫槓；room = 停在房內：圓點)；glass = 窗記號 (房間那一側的邊)；prisms = 稜鏡記號 (兩側之間的角)
+ */
+export interface MapLight {
+  segs: Array<{ x0: number; y0: number; x1: number; y1: number; white: boolean }>;
+  stops: Array<{ x: number; y: number; kind: 'wall' | 'room'; side: Side }>;
+  glass: Array<{ x: number; y: number; side: Side }>;
+  prisms: Array<{ x: number; y: number; a: Side; b: Side }>;
+}
 /** 展開圖資料 (由 app/cubeMapModel 的 deriveCubeMap 產生；字串已解析) */
 export interface CubeMapModel {
   title: string;
@@ -30,7 +41,10 @@ export interface CubeMapModel {
   preview: MapPreview | null;
   /** 沒有預覽時的提示 (站到拉桿旁看預覽) */
   hint: string;
-  legend: { open: string; wall: string; arch: string; you: string };
+  /** white / stained = 光路圖例 (只有有彩繪玻璃的章節) */
+  legend: { open: string; wall: string; arch: string; you: string; white?: string; stained?: string };
+  /** v0.4 第三章：此刻的光路 (沒有彩繪玻璃的章節不給) */
+  light?: MapLight;
   /** v0.4 控制盤章節：「轉」頁籤 (null = 本章不是控制盤章)；turn = 轉動模式中的資料 (deriveTurnMode) */
   tab?: { label: string; enabled: boolean; reason: string | null; active: boolean } | null;
   turn?: TurnModeModel | null;
@@ -59,6 +73,8 @@ export interface TurnPreview {
   cells: MapCell[];
   doors: MapDoor[];
   moves: Array<{ room: string; name: string; from: [number, number]; to: [number, number] }>;
+  /** 轉後的光路 (第三章；沒有彩繪玻璃的章節不給) */
+  light?: MapLight;
 }
 export interface TurnModeModel {
   headers: TurnHeader[];
@@ -81,6 +97,12 @@ const INK = '#3a2618';
 const PAPER = '#fdf4e1';
 const PAPER2 = '#f6e2c0';
 const BLUE = '#3d63ff';
+/** 光路：穿過玻璃的光 (琥珀) / 白光 (淡褐)；窗與稜鏡記號 (青綠) */
+const LIGHT = '#c98a1a';
+const LIGHT_WHITE = '#9c8f6c';
+const GLASS_MARK = '#3e8a7a';
+/** 光路走的「車道」：格內偏右下 (不壓房名中心、不壓邊上的門與箭頭) */
+const LANE = 0.72;
 const DIR: Readonly<Record<Side, [number, number]>> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], U: [0, 0], D: [0, 0] };
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -186,7 +208,9 @@ export class CubeMapOverlay {
       this.keys.textContent = '';
       this.inkEl.textContent = '';
     }
-    this.legend.replaceChildren(...[['open', model.legend.open], ['wall', model.legend.wall], ['arch', model.legend.arch], ['you', model.legend.you]]
+    const lg = model.legend;
+    this.legend.replaceChildren(...[['open', lg.open], ['wall', lg.wall], ['arch', lg.arch], ['you', lg.you], ['stained', lg.stained], ['white', lg.white]]
+      .filter((e): e is [string, string] => typeof e[1] === 'string')
       .map(([k, tx]) => el('span', `pz-map-lg ${k}`, tx)));
     // 先排好版面 (三顆鈕顯示 / 隱藏) 再量畫布
     const geo = this.draw(model);
@@ -317,7 +341,11 @@ export class CubeMapOverlay {
 
     // 轉動模式的預覽：直接畫轉後的樣子 (格、門)；移動的房間加藍色虛線框，虛線箭頭由原位指向新位置
     const cells = tp ? tp.cells : m.cells;
-    for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you);
+    for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'bg');
+    // 第三章光路圖層 (轉動預覽 = 轉後的光路)：畫在格底之上、房名之下 (房名另描紙色邊，線經過也讀得到)
+    const light = tp ? tp.light : m.light;
+    if (light) this.light(g, light, ox, oy, size);
+    for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'text', !!light);
     // 轉動模式有列標頭時，左右兩側的屋框標籤會被箭頭蓋住 → 不畫 (門的接線照畫；一般展開圖照常標)
     for (const f of m.frames) if (!(hx && (f.side === 'E' || f.side === 'W'))) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
     if (tp) {
@@ -391,29 +419,38 @@ export class CubeMapOverlay {
     g.restore();
   }
 
-  private cell(g: CanvasRenderingContext2D, c: MapCell, x: number, y: number, s: number, nameSize: number, font: (px: number, bold?: boolean) => string, you: string): void {
+  /** 一格：phase 'bg' = 底與框 (房間 / 空格的虛框 / 實心格的斜線)、'text' = 房名與「你」(halo = 描紙色邊：光路線從底下經過也讀得到) */
+  private cell(g: CanvasRenderingContext2D, c: MapCell, x: number, y: number, s: number, nameSize: number, font: (px: number, bold?: boolean) => string, you: string, phase: 'bg' | 'text', halo = false): void {
     const pad = 4;
     g.save();
-    if (c.kind === 'room') {
+    if (c.kind === 'room' && phase === 'bg') {
       g.fillStyle = c.current ? '#f7d58e' : PAPER;
       g.strokeStyle = INK;
       g.lineWidth = 2.5;
       g.fillRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
       g.strokeRect(x + pad, y + pad, s - pad * 2, s - pad * 2);
       if (c.piece) this.piece(g, c.piece, x + pad, y + pad, s - pad * 2);
+    } else if (c.kind === 'room') {
       g.fillStyle = INK;
+      g.lineJoin = 'round';
+      const say = (str: string, tx: number, ty: number) => {
+        if (halo) { g.strokeStyle = c.current ? '#f7d58e' : PAPER; g.lineWidth = 5; g.strokeText(str, tx, ty); }
+        g.fillText(str, tx, ty);
+      };
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       // 房名放不下格子 (窄螢幕、四字房名) → 字縮小到留 10px 邊
       const room = s - pad * 2 - 10;
       const fit = (px: number, bold: boolean, str: string) => { g.font = font(px, bold); const w = g.measureText(str).width; if (w > room) g.font = font(px * room / w, bold); };
       fit(nameSize, true, c.name);
-      g.fillText(c.name, x + s / 2, y + s / 2 - (c.current ? nameSize * 0.45 : 0));
+      say(c.name, x + s / 2, y + s / 2 - (c.current ? nameSize * 0.45 : 0));
       if (c.current) {
         fit(nameSize * 0.72, false, `● ${you}`);
         g.fillStyle = '#a8640f';
-        g.fillText(`● ${you}`, x + s / 2, y + s / 2 + nameSize * 0.75);
+        say(`● ${you}`, x + s / 2, y + s / 2 + nameSize * 0.75);
       }
+    } else if (phase === 'text') {
+      // 空格 / 實心格的字跟底一起畫 (bg)
     } else if (c.kind === 'empty') {
       g.strokeStyle = 'rgba(58,38,24,0.45)';
       g.setLineDash([6, 6]);
@@ -492,6 +529,78 @@ export class CubeMapOverlay {
     if (d.kind === 'chapter') {
       g.lineWidth = 2;
       g.strokeRect(ex - dx * 14 - 4, ey - dy * 14 - 4, 8, 8);
+    }
+    g.restore();
+  }
+
+  /**
+   * 光路圖層：窗記號 (房間那一側的邊上、靠一端的小窗格，不壓邊中央的門)、稜鏡 (兩側之間的角上的小三角)、
+   * 光路 (白光 = 點線；穿過玻璃的光 = 虛線 + 每段中點一個箭頭紋 ›)、停下的地方 (牆外 = 垂直於光的短橫槓；房內 = 圓點)
+   */
+  private light(g: CanvasRenderingContext2D, l: MapLight, ox: number, oy: number, s: number): void {
+    const X = (x: number) => ox + x * s;
+    const Y = (y: number) => oy + y * s;
+    g.save();
+    g.lineCap = 'round';
+    g.strokeStyle = GLASS_MARK;
+    g.fillStyle = GLASS_MARK;
+    for (const w of l.glass) {
+      const [dx, dy] = DIR[w.side];
+      if (dx === 0 && dy === 0) continue;
+      // 窗：沿邊、從靠左 / 靠上那一端 0.1～0.3 格；往房內縮 7px
+      const inset = 7;
+      const ex = X(w.x + 0.5 + dx * 0.5) - dx * inset;
+      const ey = Y(w.y + 0.5 + dy * 0.5) - dy * inset;
+      const tx = -dy, ty = dx;
+      const a0 = -0.4 * s, a1 = -0.2 * s;
+      g.lineWidth = 2;
+      g.beginPath();
+      for (const off of [-2.5, 2.5]) { g.moveTo(ex + tx * a0 - dx * off, ey + ty * a0 - dy * off); g.lineTo(ex + tx * a1 - dx * off, ey + ty * a1 - dy * off); }
+      for (const t of [a0, (a0 + a1) / 2, a1]) { g.moveTo(ex + tx * t - dx * 2.5, ey + ty * t - dy * 2.5); g.lineTo(ex + tx * t + dx * 2.5, ey + ty * t + dy * 2.5); }
+      g.stroke();
+    }
+    for (const p of l.prisms) {
+      const [ax, ay] = DIR[p.a], [bx, by] = DIR[p.b];
+      const cx = X(p.x + 0.5 + (ax + bx) * 0.36), cy = Y(p.y + 0.5 + (ay + by) * 0.36);
+      const k = s * 0.09;
+      g.beginPath();
+      g.moveTo(cx + ax * k, cy + ay * k);
+      g.lineTo(cx + bx * k, cy + by * k);
+      g.lineTo(cx - (ax + bx) * k * 0.6, cy - (ay + by) * k * 0.6);
+      g.closePath();
+      g.globalAlpha = 0.85;
+      g.fill();
+      g.globalAlpha = 1;
+    }
+    for (const seg of l.segs) {
+      const x0 = X(seg.x0), y0 = Y(seg.y0), x1 = X(seg.x1), y1 = Y(seg.y1);
+      g.strokeStyle = seg.white ? LIGHT_WHITE : LIGHT;
+      g.lineWidth = 3.5;
+      g.setLineDash(seg.white ? [1, 6] : [7, 5]);
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      g.setLineDash([]);
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      if (seg.white || len < 14) continue;
+      // 箭頭紋 › (指向光前進的方向)
+      const ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+      const mx = (x0 + x1) / 2 + ux * 3, my = (y0 + y1) / 2 + uy * 3;
+      const h = 7;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(mx - ux * h - uy * h, my - uy * h + ux * h);
+      g.lineTo(mx, my);
+      g.lineTo(mx - ux * h + uy * h, my - uy * h - ux * h);
+      g.stroke();
+    }
+    for (const st of l.stops) {
+      const x = X(st.x), y = Y(st.y);
+      g.fillStyle = LIGHT;
+      g.strokeStyle = LIGHT;
+      if (st.kind === 'room') { g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill(); continue; }
+      const [dx, dy] = DIR[st.side];
+      const k = 7;
+      g.lineWidth = 3;
+      g.beginPath(); g.moveTo(x + dy * k, y - dx * k); g.lineTo(x - dy * k, y + dx * k); g.stroke();
     }
     g.restore();
   }

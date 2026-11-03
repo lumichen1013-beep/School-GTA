@@ -2,7 +2,7 @@
 //   上列：2-1 書架迴廊 (shelf)｜2-2 閱覽室 (reading)｜2-3 印房 (print)；下列：H1 夾層 (mezz)｜2-4 手稿庫 (manuscripts)｜2-5 書房深處 (deep)
 //   屋框：章門入口 (來時的走廊，接衣帽間章門) 在 [0,0] 西側；章門出口 (往溫室) 在 [2,1] 東側；上列北側是一整面固定的書牆 (2-1 的 frameBay)
 // 鎖扣：下列 ← 2-1a (迴廊盡頭的書擋落下)；三行 ← 2-3a (印房的門牌寫成「間」)
-import type { CubeDef, CubeState } from '../../core/cube';
+import type { CubeDef, CubeState, Side } from '../../core/cube';
 
 export const CH2_CUBE: CubeDef = {
   id: 'ch2',
@@ -33,7 +33,12 @@ export const CH2_CUBE: CubeDef = {
 /** 題目條件可用的跨房資訊 (devtools/validateCube 的 GoalCtx 同形)：此刻的連接表 (含讀作「間」的門) */
 interface ZoneLink { from: { room: string; door: string }; to: { room: string; door: string } | { frame: string } }
 /** 抽象模型的一題 (devtools/validateCube 的 DialPuzzle 同形；content 不 import devtools) */
-export interface ZonePuzzle { id: string; room: string; needs: readonly string[]; teaching?: boolean; goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[] }) => boolean }
+/** 區模型的一題 (devtools DialPuzzle 的內容版)；light = 第三章光路條件 (這間房要有從 from 進來、穿過至少 via 間房的光；validateDial 以 core/chapter lightPaths 判定) */
+export interface ZonePuzzle {
+  id: string; room: string; needs: readonly string[]; teaching?: boolean;
+  goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[] }) => boolean;
+  light?: { from: Side; via: number };
+}
 
 /** 2-1 在上列的第幾行 (不在上列 = -1) */
 const shelfCol = (s: CubeState): number => (s.pos.shelf && s.pos.shelf[1] === 0 ? s.pos.shelf[0] : -1);

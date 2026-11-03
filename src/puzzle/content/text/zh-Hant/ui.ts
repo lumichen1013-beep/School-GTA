@@ -51,6 +51,8 @@ export const ui = {
   'ui.map.legend.open': '接通',
   'ui.map.legend.wall': '門後是牆',
   'ui.map.legend.arch': '拱門',
+  'ui.map.legend.stained': '穿過玻璃的光',
+  'ui.map.legend.white': '白光',
   'ui.map.frame.porch': '大門（門廊）',
   'ui.map.frame.study': '書房走廊',
   'ui.map.frame.chapterExit': '章門走廊',
