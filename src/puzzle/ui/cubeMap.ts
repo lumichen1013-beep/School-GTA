@@ -260,12 +260,14 @@ export class CubeMapOverlay {
     const side = (ds: Side[]) => Math.max(0, ...m.frames.filter(f => ds.includes(f.side)).map(f => g.measureText(f.name).width + 18));
     const t = m.turn ?? null;
     const hx = t?.headers.some(h => h.at.side === 'left' || h.at.side === 'right') ? HEAD + HEAD_GAP + 4 : 0;
-    const hy = t?.headers.some(h => h.at.side === 'top' || h.at.side === 'bottom') ? HEAD + HEAD_GAP + 4 : 0;
+    const hy = (s: 'top' | 'bottom') => (t?.headers.some(h => h.at.side === s) ? HEAD + HEAD_GAP + 4 : 0);
     const mx = Math.max(24, side(['E', 'W']), hx);
-    const my = Math.max(24, m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0, hy);
-    const size = Math.min((W - mx * 2) / m.cols, (H - my * 2) / m.rows);
+    const fy = m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0;
+    const mt = Math.max(t ? 10 : 24, fy, hy('top'));
+    const mb = Math.max(t ? 10 : 24, fy, hy('bottom'));
+    const size = Math.min((W - mx * 2) / m.cols, (H - mt - mb) / m.rows);
     const ox = (W - size * m.cols) / 2;
-    const oy = (H - size * m.rows) / 2;
+    const oy = mt + (H - mt - mb - size * m.rows) / 2;
     const cx = (x: number) => ox + (x + 0.5) * size;
     const cy = (y: number) => oy + (y + 0.5) * size;
     const nameSize = Math.max(14, Math.min(22, size * 0.15));
@@ -278,6 +280,8 @@ export class CubeMapOverlay {
     if (tp) {
       for (const d of tp.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
       g.save();
+      // 箭頭半透明：房名與門的記號仍讀得到 (小螢幕的格子小，箭頭難免經過字旁)
+      g.globalAlpha = 0.6;
       for (const mv of tp.moves) {
         g.setLineDash([8, 6]);
         g.strokeStyle = BLUE;
@@ -287,8 +291,8 @@ export class CubeMapOverlay {
         const [fx, fy] = mv.from;
         const [tx, ty] = mv.to;
         // 箭頭畫在房名下方 (橫移) / 右側 (直移)，不壓到字
-        const ax = (x: number) => cx(x) + (fx === tx ? size * 0.3 : 0);
-        const ay = (y: number) => cy(y) + (fy === ty ? size * 0.33 : 0);
+        const ax = (x: number) => cx(x) + (fx === tx ? size * 0.27 : 0);
+        const ay = (y: number) => cy(y) + (fy === ty ? size * 0.27 : 0);
         if (Math.abs(tx - fx) + Math.abs(ty - fy) === 1) this.arrow(g, ax(fx), ay(fy), ax(tx), ay(ty), size * 0.6);
         else {
           // 繞回 (列循環)：從原位往外指、再從另一端指進新位置
