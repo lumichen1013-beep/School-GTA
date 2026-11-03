@@ -5,6 +5,9 @@ import type { Bindings } from '../input/types';
 import { keyLabel } from '../input/bindings';
 import type { HelpRow } from '../ui/dom';
 import type { HudData } from '../ui/hud';
+import { leverWord, writableTarget } from '../mechanics/labels';
+import { WORD_KEYS } from '../mechanics/cube';
+import { labelTitle } from './cardTrayModel';
 
 /** HUD 要顯示的一切 (純資料；ui/hud.ts 只做 diff 後寫 DOM)：模式、物品、[E] 提示 (過場中 / 通關後為 null)、最後訊息 */
 export type HudModel = HudData;
@@ -15,11 +18,17 @@ export interface HudView { renderMode: Mode; locked: boolean; bindings: Bindings
 export function deriveHud(w: World, text: Text, view: HudView): HudModel {
   const t = view.locked || w.cleared ? null : findTarget(w);
   let prompt: string | null = null;
+  const key = keyLabel(view.bindings.interact[0] ?? '');
   if (t) {
-    const key = keyLabel(view.bindings.interact[0] ?? '');
     const verb = text(w.rt.mechanics.types.get(t.def.type)?.spec.verbKey ?? 'obj.default.verb');
-    const label = t.def.labelKey ? text(t.def.labelKey) : '';
+    // 有標籤的拉桿：名稱跟著此刻的方向字 (詞卡蓋上去之後顯示新字；mobile-controls 2.1「拉　上」)
+    const label = t.def.type === 'lever' && t.def.label ? text('ui.lever.label', { word: text(WORD_KEYS[leverWord(w, t)]) })
+      : t.def.labelKey ? text(t.def.labelKey) : '';
     prompt = label ? text('ui.prompt.withLabel', { key, verb, label }) : text('ui.prompt', { key, verb });
+  } else if (!view.locked && !w.cleared) {
+    // 2D 靠近可寫的標籤 (N22)：「寫　拉桿：左」
+    const l = writableTarget(w);
+    if (l) prompt = text('ui.prompt.withLabel', { key, verb: text('obj.label.verb'), label: labelTitle(w, text, l) });
   }
   return {
     mode: view.renderMode,

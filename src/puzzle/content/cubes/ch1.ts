@@ -33,10 +33,13 @@ export const CH1_MODEL = {
   ] as readonly DoorInfo[],
   /** 各房拉桿的原字 (玄關「上」、衣帽間「左」) */
   levers: { foyer: 'up', closet: 'left' } as Readonly<Record<string, 'up' | 'down' | 'left' | 'right'>>,
-  /** 1-2d：在 card.room 取得詞卡 card.word；貼在 card.lever 房的拉桿上 = 改方向字 (1-3b) */
-  card: { room: 'foyer', word: 'right', lever: 'closet' } as const,
-  /** 1-3a：木箱起點的房間；只能經拱門對拱門跨房；箱子在 key.room 才取得到掛鉤上的鑰匙 */
-  crate: { room: 'closet' },
+  /**
+   * 1-2d：在 card.room 取得詞卡 card.word；可貼在 card.levers 任一房的拉桿標籤上 (= 改那支拉桿的方向字；同時只貼一處、可取下)。
+   * 1-3b 的正解是貼在衣帽間；貼在玄關是規格列的錯誤嘗試 (玄關在 A 往右是樓梯間 / 在 D 往右是衣帽間，都推不動)
+   */
+  card: { room: 'foyer', word: 'right', levers: ['foyer', 'closet'] } as const,
+  /** 1-3a：木箱 (closetCrate) 起點的房間；只能經拱門對拱門跨房；箱子在 key.room 才取得到掛鉤上的鑰匙 */
+  crate: { room: 'closet', id: 'closetCrate' },
   key: { room: 'foyer' },
   /** 起點 (從大門進玄關) 與終點 (帶鑰匙穿過章門到屋框 frame) */
   start: { room: 'foyer' },

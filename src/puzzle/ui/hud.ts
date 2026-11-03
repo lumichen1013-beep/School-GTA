@@ -101,6 +101,11 @@ export class PuzzleHud {
     this.clearEl.classList.add('show');
   }
   hideClear(): void { this.clearEl.classList.remove('show'); }
+  /** 互動提示可點 (觸控：點提示 = 按 E)；只有互動提示可點，展開圖提示不可點 */
+  setPromptTap(on: boolean): void { this.promptEl.classList.toggle('tap', on); }
+  onPrompt(fn: () => void): void {
+    this.promptEl.addEventListener('click', e => { if (this.promptEl.classList.contains('tap')) { e.preventDefault(); fn(); } });
+  }
   onReplay(fn: () => void): void { $('pz-replay').addEventListener('click', fn); }
   onMenu(fn: () => void): void { $('pz-tomenu').addEventListener('click', fn); }
 }

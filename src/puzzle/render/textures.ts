@@ -280,3 +280,30 @@ export const portraitCanvas = (variant: number): THREE.Texture => cached(`portra
   g.beginPath(); g.arc(60, headY - 6, headR + 1, Math.PI, 0); g.fill(); // 髮
   if (variant === 2) { g.fillStyle = '#e8e4dc'; g.fillRect(48, headY + 10, 24, 6); } // 白鬍
 }));
+
+/**
+ * 標籤 (N22；只畫在藏寶圖)：墨框 + 字；covered = 原字被詞卡蓋住 (卡片底色 + 卡角)；
+ * scale = 字旁多一格空著的方槽 (尺度卡槽，規格 7.2：可貼尺度卡的標籤多一格方槽；第一章只鋪陳)
+ */
+export const labelTag = (pal: Palette, text: string, covered: boolean, scale: boolean): THREE.Texture => cachedFor(pal, `label|${text}|${covered}|${scale}`, () => canvas(256, 112, g => {
+  const ink = toCss(pal.inkBlue);
+  const w = scale ? 176 : 248;
+  g.fillStyle = toCss(pal.paperNote); g.fillRect(4, 4, w - 8, 104);
+  g.strokeStyle = ink; g.lineWidth = 6; g.strokeRect(6, 6, w - 12, 100);
+  if (covered) {
+    g.fillStyle = '#fff6dc'; g.fillRect(24, 16, w - 48, 80);
+    g.strokeStyle = shade(pal.brass, 0.7); g.lineWidth = 3; g.strokeRect(24, 16, w - 48, 80);
+    g.fillStyle = shade(pal.brass, 0.7); g.beginPath(); g.moveTo(w - 24, 16); g.lineTo(w - 40, 16); g.lineTo(w - 24, 32); g.closePath(); g.fill();
+  }
+  g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `bold ${text.length > 1 ? 54 : 66}px "PingFang TC", "Noto Sans TC", "Songti TC", serif`;
+  g.fillText(text, w / 2, 60);
+  if (scale) {
+    g.setLineDash([10, 8]); g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(w + 6, 22, 64, 68); g.setLineDash([]);
+  }
+}));
+
+/** 空白的提示字條 (L2 / L3 浮現前)：只有紙，沒有字跡 */
+export const blankNotePaper = (pal: Palette): THREE.Texture => cachedFor(pal, 'noteBlank', () => canvas(64, 80, g => {
+  g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 64, 80);
+}));

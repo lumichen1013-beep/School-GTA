@@ -17,11 +17,16 @@ export const DEFAULT_BINDINGS: Bindings = {
   confirm: ['Enter', 'NumpadEnter'],
   cancel: ['Escape'],
   /** 展開圖 (v0.3；只在藏寶圖看得到) */
-  map: ['KeyM']
+  map: ['KeyM'],
+  /** 字卡匣 (v0.3 N22；開著時才有作用)：貼第 1～3 格的卡、取下標籤上的卡 */
+  slot1: ['Digit1', 'Numpad1'],
+  slot2: ['Digit2', 'Numpad2'],
+  slot3: ['Digit3', 'Numpad3'],
+  uncard: ['KeyX', 'Backspace']
 };
 
 /** 動作在 poll 結果中的順序 (固定，便於測試) */
-export const INPUT_ACTIONS: readonly InputAction[] = ['flip', 'reset', 'interact', 'restart', 'confirm', 'cancel', 'map'];
+export const INPUT_ACTIONS: readonly InputAction[] = ['flip', 'reset', 'interact', 'restart', 'confirm', 'cancel', 'map', 'slot1', 'slot2', 'slot3', 'uncard'];
 
 /** 以設定中的覆寫 (settings.keys) 合併預設按鍵；不認得的名稱與非字串清單忽略 */
 export function mergeBindings(base: Bindings, override: Readonly<Record<string, unknown>> | undefined): Bindings {

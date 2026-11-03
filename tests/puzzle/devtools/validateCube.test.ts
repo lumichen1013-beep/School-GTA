@@ -20,13 +20,18 @@ describe('validateCube：第一章模型', () => {
     ]);
   });
 
-  it('抽象狀態數：本模型實算 69 (非終點 65 + 帶鑰匙出章門的終點 4)；規格寫 64，差異見 C5 報告 (規格未定義狀態編碼細節)', () => {
+  it('抽象狀態數：本模型實算 96 (C8：詞卡也可貼在玄關拉桿上 = 規格 1-3b 的錯誤嘗試，多 27)；只許貼衣帽間拉桿 (C5～C7 的模型) 仍是 69 (非終點 65 + 終點 4)', () => {
     const r = validateCube(MODEL);
-    expect(r.states).toBe(69);
+    expect(r.states).toBe(96);
+    const goals = (m: typeof MODEL) => { const seen = new Set<string>(); const q = [m.initial]; let n = 0; seen.add(m.key(m.initial)); while (q.length) { const s = q.shift()!; if (m.isGoal(s)) { n++; continue; } for (const mv of m.moves(s)) if (!seen.has(m.key(mv.next))) { seen.add(m.key(mv.next)); q.push(mv.next); } } return n; };
+    expect(goals(MODEL)).toBe(6);
+    const old = validateCube(MODEL, ['write:foyer']);
+    expect([old.states, old.arrangements, old.deadEnds, old.minTurns]).toEqual([69, 3, 0, 3]);
   });
 
-  it('捷徑檢查 ④：不寫字 / 不推箱 / 不拉玄關拉桿 / 不拉衣帽間拉桿 / 不取詞卡 / 不取鑰匙，皆無解', () => {
-    for (const tag of ['write', 'crate', 'lever:foyer', 'lever:closet', 'card', 'key']) {
+  it('捷徑檢查 ④：不寫字 (衣帽間) / 不推箱 / 不拉玄關拉桿 / 不拉衣帽間拉桿 / 不取詞卡 / 不取鑰匙，皆無解；只禁玄關的寫字仍有解 (那是錯誤嘗試，不是必要步驟)', () => {
+    expect(validateCube(MODEL, ['write:foyer']).solvable).toBe(true);
+    for (const tag of ['write:closet', 'crate', 'lever:foyer', 'lever:closet', 'card', 'key']) {
       const r = validateCube(MODEL, [tag]);
       expect([tag, r.solvable, r.minTurns]).toEqual([tag, false, null]);
     }

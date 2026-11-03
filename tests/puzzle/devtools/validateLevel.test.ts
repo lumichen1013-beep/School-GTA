@@ -28,11 +28,12 @@ describe('validateLevel：玄關', () => {
 });
 
 describe('validateLevel：門廊 1-1', () => {
-  it('門廊 1-1 零問題 (關卡與登錄表)；登錄表兩關都驗', () => {
+  it('門廊 1-1 零問題 (關卡與登錄表)；登錄表每關都驗 (C8 加 1-3)', () => {
     expect(validateLevel(porch, ctx)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '1-1')!, reg)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '1-2')!, reg)).toEqual([]);
-    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2']);
+    expect(validateEntry(LEVELS.find(e => e.id === '1-3')!, reg)).toEqual([]);
+    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2', '1-3']);
   });
 
   it('沒有封印的門 (unsealed) 不需要打開它的物件；拿掉 unsealed 就回報 ref.exitLocked', () => {

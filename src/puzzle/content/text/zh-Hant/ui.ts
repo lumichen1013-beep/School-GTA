@@ -14,6 +14,17 @@ export const ui = {
   'ui.help.restart': '重新進房',
   'ui.help.restart.note': '（需確認）',
   'ui.help.map': '展開圖（藏寶圖）',
+  'ui.help.cards': '字卡匣：貼上 / 取下',
+  // 字卡匣 (v0.3 N22；mobile-controls 2.5)
+  'ui.help.cards.keys': '{a}～{b}',
+  'ui.cards.head': '字卡匣　·　{title}',
+  'ui.cards.close': '關閉',
+  'ui.cards.remove': '取下「{word}」',
+  'ui.cards.empty': '（空）',
+  'ui.cards.scale': '空著的卡槽',
+  'ui.cards.hint': '[1～3] 貼上　[X] 取下　[Esc] 關閉',
+  'ui.label.dir': '{name}：{word}',
+  'ui.lever.label': '拉桿「{word}」',
   // 展開圖 (v0.3；規格 5.4.1：接通 = 實線 + 墨點、門後是牆 = 斷線 + ×、拱門 = 雙線)
   'ui.map.title': '展開圖',
   'ui.map.open': '展開圖',

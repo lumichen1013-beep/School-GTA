@@ -95,19 +95,22 @@ export function validateCube<S>(m: ChapterModel<S>, without: readonly string[] =
 
 // ── 第一章模型 ──
 
-/** 第一章抽象狀態：魔方 × 玩家所在房 × 詞卡 (沒有 / 在手上 / 貼在拉桿上) × 木箱在哪房 × 鑰匙 × 是否已出章門 */
-export interface Ch1State { cube: CubeState; at: string; card: 0 | 1 | 2; crate: string; key: boolean; done: boolean }
+/**
+ * 第一章抽象狀態：魔方 × 玩家所在房 × 詞卡 (null = 還沒拿、'hand' = 在字卡匣、房間 id = 貼在那間房的拉桿上) × 木箱在哪房 × 鑰匙 × 是否已出章門
+ */
+export interface Ch1State { cube: CubeState; at: string; card: string | null; crate: string; key: boolean; done: boolean }
 
 /**
- * 第一章模型 (content/cubes/ch1 的 CH1_MODEL)：動作 = 穿過接通的門 (walk)、拉所在房的拉桿 (lever:<房>，方向字依詞卡)、
- * 取詞卡 (card)、貼 / 取詞卡 (write)、經拱門對拱門推箱 (crate)、箱子在場時取鑰匙 (key)、帶鑰匙穿過章門 (exit)
+ * 第一章模型 (content/cubes/ch1 的 CH1_MODEL)：動作 = 穿過接通的門 (walk)、拉所在房的拉桿 (lever:<房>，方向字依標籤上的詞卡)、
+ * 取詞卡 (card)、在所在房的拉桿標籤貼 / 取詞卡 (write；card.levers 每一支都可貼)、經拱門對拱門推箱 (crate)、箱子在場時取鑰匙 (key)、
+ * 帶鑰匙穿過章門 (exit)
  */
 export function chapterOneModel(def: CubeDef, data: typeof CH1_MODEL): ChapterModel<Ch1State> {
   const doors: readonly DoorInfo[] = data.doors;
   const linksFrom = (s: Ch1State, room: string) => links(def, s.cube, doors).filter(l => l.from.room === room);
   return {
-    initial: { cube: initialCube(def), at: data.start.room, card: 0, crate: data.crate.room, key: false, done: false },
-    key: s => `${cubeKey(s.cube)}|${s.at}|${s.card}|${s.crate}|${s.key ? 1 : 0}|${s.done ? 1 : 0}`,
+    initial: { cube: initialCube(def), at: data.start.room, card: null, crate: data.crate.room, key: false, done: false },
+    key: s => `${cubeKey(s.cube)}|${s.at}|${s.card ?? '-'}|${s.crate}|${s.key ? 1 : 0}|${s.done ? 1 : 0}`,
     arrangement: s => cubeKey(s.cube),
     isGoal: s => s.done,
     moves: s => {
@@ -118,13 +121,14 @@ export function chapterOneModel(def: CubeDef, data: typeof CH1_MODEL): ChapterMo
       }
       const word = data.levers[s.at];
       if (word) {
-        const w = s.at === data.card.lever && s.card === 2 ? data.card.word : word;
+        const w = s.card === s.at ? data.card.word : word;
         const r = applyOp(def, s.cube, leverOp(s.at, w));
         if (!isBlocked(r)) out.push({ label: `lever ${s.at}:${w}`, tag: `lever:${s.at}`, turn: true, next: { ...s, cube: r } });
       }
-      if (s.at === data.card.room && s.card === 0) out.push({ label: 'card', tag: 'card', turn: false, next: { ...s, card: 1 } });
-      if (s.at === data.card.lever && s.card === 1) out.push({ label: 'write', tag: 'write', turn: false, next: { ...s, card: 2 } });
-      if (s.at === data.card.lever && s.card === 2) out.push({ label: 'unwrite', tag: 'write', turn: false, next: { ...s, card: 1 } });
+      if (s.at === data.card.room && s.card === null) out.push({ label: 'card', tag: 'card', turn: false, next: { ...s, card: 'hand' } });
+      const writable = (data.card.levers as readonly string[]).includes(s.at);
+      if (writable && s.card === 'hand') out.push({ label: s.at === 'closet' ? 'write' : `write ${s.at}`, tag: `write:${s.at}`, turn: false, next: { ...s, card: s.at } });
+      if (writable && s.card === s.at) out.push({ label: s.at === 'closet' ? 'unwrite' : `unwrite ${s.at}`, tag: `write:${s.at}`, turn: false, next: { ...s, card: 'hand' } });
       if (s.crate === s.at) {
         for (const l of linksFrom(s, s.at)) {
           if (l.kind === 'arch' && 'room' in l.to) out.push({ label: `crate ${s.at}→${l.to.room}`, tag: 'crate', turn: false, next: { ...s, crate: l.to.room } });

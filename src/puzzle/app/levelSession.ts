@@ -8,17 +8,19 @@ import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
 import type { Bindings, InputFrame } from '../input/types';
 import { keyLabel } from '../input/bindings';
-import type { WorldAction } from '../core/actions';
+import type { WorldAction, WorldCommand } from '../core/actions';
 import { PuzzleScene } from '../render/scene';
 import { PuzzleCameras } from '../render/cameras';
 import type { Fx, Transition } from '../render/transitions';
 import type { Theme } from '../render/themes';
 import type { PuzzleHud } from '../ui/hud';
 import type { CubeMapOverlay } from '../ui/cubeMap';
+import type { CardTray } from '../ui/cardTray';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
 import { deriveCubeMap, previewFor } from './cubeMapModel';
+import { deriveCardTray, slotCommand, uncardCommand } from './cardTrayModel';
 
 export interface SessionContext {
   renderer: THREE.WebGLRenderer;
@@ -32,6 +34,12 @@ export interface SessionContext {
   fx?(dir: Side | null): Fx;
   /** 展開圖疊層 (在魔方上的關卡才用) */
   map?: CubeMapOverlay;
+  /** 字卡匣 (N22) */
+  tray?: CardTray;
+  /** 減弱緊張效果 (驚嚇改平靜版；規格 9.1) */
+  calm?: boolean;
+  /** 字卡匣打開時：按著的鍵一律視為放開 (mobile-controls 2.5 releaseAll) */
+  onTrayOpen?(): void;
 }
 
 export interface SessionHooks {
@@ -60,6 +68,11 @@ export class LevelSession {
   /** 進行中的章節過場與其換畫面點要做的事 */
   private fx: { fx: Fx; onSwap(): void } | null = null;
   private mapOpen = false;
+  /** 字卡匣開著的標籤 (null = 關著)；無效字回饋序號；字卡匣送出、下一幀進世界的指令；點互動提示 = 下一幀按 E */
+  private trayLabel: string | null = null;
+  private traySeq = 0;
+  private commands: WorldCommand[] = [];
+  private tapInteract = false;
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -74,6 +87,8 @@ export class LevelSession {
   /** 章節過場進行中 (開發期自動化驗證用) */
   get busy(): boolean { return this.fx !== null || this.loop.isLocked; }
   get isMapOpen(): boolean { return this.mapOpen && this.renderMode === '2d'; }
+  /** 字卡匣開著的標籤 id (開發期自動化驗證用) */
+  get trayOpen(): string | null { return this.trayLabel; }
 
   /** 為目前的 World 建迴圈 / 場景 / 鏡頭 (舊場景釋放)；過場與 HUD 訊息重置 */
   private mount(): void {
@@ -88,7 +103,9 @@ export class LevelSession {
       onCleared: this.hooks.onCleared,
       onEvent: e => { this.events.push(e); this.loop.halt(); }
     });
-    this.view = new PuzzleScene(w, this.ctx.theme);
+    this.trayLabel = null;
+    this.commands = [];
+    this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm });
     this.cams = new PuzzleCameras(w);
     this.cams.resize(this.aspect);
     this.ctx.transition.cancel();
@@ -119,10 +136,13 @@ export class LevelSession {
     this.fx = null;
   }
 
-  /** 換房 / 轉動：交給章節層；轉動 = 連接表立即更新、過場中段說明；換房 = 過場中段換場景 */
+  /** 換房 / 轉動 / 跨房 / 旗標：交給章節層；轉動 = 連接表立即更新、過場中段說明；換房 = 過場中段換場景。字卡匣事件：開匣 / 無效字回饋 */
   private handleEvents(): void {
     for (const e of this.events.splice(0)) {
+      if (e.t === 'labelOpen') { this.openTray(e.label); continue; }
+      if (e.t === 'card') { if (!e.ok) this.traySeq++; continue; }
       const r = applyChapterEvent(this.cs, e, this.opts);
+      if (r.kind === 'state') { this.cs = r.cs; this.saveChapter(); continue; }
       if (r.kind === 'enter') {
         const next = r.next;
         this.mapOpen = false;
@@ -140,6 +160,25 @@ export class LevelSession {
         return;
       }
     }
+  }
+
+  private openTray(label: string): void {
+    this.trayLabel = label;
+    this.mapOpen = false;
+    this.ctx.onTrayOpen?.();
+  }
+
+  closeTray(): void { this.trayLabel = null; }
+  /** 字卡匣：貼第 n 格的卡 (1 起算) / 取下標籤上的卡 (指令下一幀進世界) */
+  trayPick(n: number): void { const m = this.trayModel(); const c = m && slotCommand(m, n); if (c) this.commands.push(c); }
+  trayRemove(): void { const m = this.trayModel(); const c = m && uncardCommand(m); if (c) this.commands.push(c); }
+  /** 點互動提示 (觸控)：等同下一幀按 E */
+  tap(): void { this.tapInteract = true; }
+
+  private trayModel() {
+    if (this.trayLabel === null) return null;
+    const m = deriveCardTray(this.world, this.ctx.text, this.traySeq);
+    return m && m.label === this.trayLabel ? m : null;
   }
 
   /** M / 「圖」鍵：展開圖只在藏寶圖 (2D) 看得到；實景按下只提示 */
@@ -162,8 +201,23 @@ export class LevelSession {
       if (r.done) this.fx = null;
       return;
     }
-    if (input.pressed.includes('map')) this.toggleMap();
-    this.loop.frame(elapsedSec, { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump, pressed: input.pressed.filter(isWorldAction) });
+    let pressed = input.pressed.filter(isWorldAction);
+    if (this.tapInteract) { this.tapInteract = false; if (!pressed.includes('interact')) pressed = [...pressed, 'interact']; }
+    let move = { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump };
+    if (this.trayLabel !== null) {
+      // 字卡匣開著：1～3 貼卡、X 取下、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)
+      if (!this.trayModel()) this.trayLabel = null;
+      else {
+        const slot = (['slot1', 'slot2', 'slot3'] as const).findIndex(a => input.pressed.includes(a));
+        if (slot >= 0) this.trayPick(slot + 1);
+        if (input.pressed.includes('uncard')) this.trayRemove();
+        if (input.pressed.includes('cancel') || pressed.includes('interact')) this.trayLabel = null;
+        pressed = [];
+        move = { moveX: 0, moveZ: 0, jump: false };
+      }
+    } else if (input.pressed.includes('map')) this.toggleMap();
+    const commands = this.commands.splice(0);
+    this.loop.frame(elapsedSec, { ...move, pressed, ...(commands.length ? { commands } : {}) });
     this.handleEvents();
   }
 
@@ -174,13 +228,18 @@ export class LevelSession {
     const locked = this.loop.isLocked || this.fx !== null;
     const hud = deriveHud(w, ctx.text, { renderMode: this.renderMode, locked, bindings: ctx.bindings });
     if (this.renderMode === '3d') this.mapOpen = false;
+    const tray = locked ? null : this.trayModel();
+    if (tray) hud.prompt = null;
+    // 互動提示可點 (觸控 = 按 E；mobile-controls 2.1)；展開圖的提示不可點 (另有「圖」鍵)
+    ctx.hud.setPromptTap(!!hud.prompt);
     // 2D、在魔方上、沒有其他提示：提示可以看展開圖
-    if (this.onCube && !hud.prompt && !locked && this.renderMode === '2d' && !this.mapOpen) {
+    if (this.onCube && !hud.prompt && !tray && !locked && this.renderMode === '2d' && !this.mapOpen) {
       hud.prompt = ctx.text('ui.prompt', { key: keyLabel(ctx.bindings.map[0] ?? ''), verb: ctx.text('ui.map.open') });
     }
     ctx.hud.render(hud, nowMs);
-    ctx.map?.setButton(this.onCube && this.renderMode === '2d' && !locked);
-    ctx.map?.render(this.isMapOpen && !locked ? deriveCubeMap(this.cs, ctx.text, previewFor(this.cs)) : null);
+    ctx.map?.setButton(this.onCube && this.renderMode === '2d' && !locked && !tray);
+    ctx.map?.render(this.isMapOpen && !locked && !tray ? deriveCubeMap(this.cs, ctx.text, previewFor(this.cs)) : null);
+    ctx.tray?.render(tray);
     const p = w.player;
     const prev = this.loop.prev;
     const saved = { x: p.x, y: p.y, z: p.z };
@@ -202,6 +261,7 @@ export class LevelSession {
 
   dispose(): void {
     this.cancelFx();
+    this.ctx.tray?.render(null);
     this.ctx.map?.render(null);
     this.ctx.map?.setButton(false);
     this.view?.dispose();

@@ -20,7 +20,7 @@ export interface CubeChapter {
 }
 
 export const CUBE_CHAPTERS: readonly CubeChapter[] = [
-  { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer' }, legacy: CH1_LEGACY }
+  { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY }
 ];
 
 /** 這個關卡 id 是否在某章的魔方上 */

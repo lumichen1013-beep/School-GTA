@@ -40,8 +40,8 @@ export class PuzzleScene {
   private lastY = 0;
   private lastZ = 0;
 
-  /** theme：配色 / 燈光 / 過場 (主題切換 = 重建場景)；未給 = 預設主題 */
-  constructor(private world: World, private theme: Theme = DEFAULT_THEME) {
+  /** theme：配色 / 燈光 / 過場 (主題切換 = 重建場景)；未給 = 預設主題；calm = 減弱緊張效果 (驚嚇改平靜版) */
+  constructor(private world: World, private theme: Theme = DEFAULT_THEME, private opts: { calm?: boolean } = {}) {
     const L = theme.lights;
     this.paint = new Painter(theme.pal.outline);
     this.sun = new THREE.DirectionalLight(L.sun, L.sunIntensity);
@@ -115,7 +115,9 @@ export class PuzzleScene {
   private setOpacity(m: THREE.Mesh, a: number): void {
     const mat = m.material as THREE.Material;
     mat.opacity = a;
-    mat.transparent = a < 0.999;
+    const transparent = a < 0.999;
+    // 透明與否會換著色器設定：切換時要 needsUpdate，否則 (首次編譯為不透明的材質) 仍畫成不透明
+    if (mat.transparent !== transparent) { mat.transparent = transparent; mat.needsUpdate = true; }
     mat.depthWrite = a > 0.6;
   }
 
@@ -168,7 +170,7 @@ export class PuzzleScene {
       const z = is2d && o.def.visible === '2d' ? FRONT_2D : o.z;
       root.position.set(o.x, o.y, z);
       if (!root.visible) continue;
-      e.model.update?.({ obj: o, world: w, mode: renderMode, t, dt });
+      e.model.update?.({ obj: o, world: w, mode: renderMode, t, dt, calm: this.opts.calm });
     }
     this.decor.update(t, is2d);
     if (!is2d) this.fadeOccluders(camera, dt);

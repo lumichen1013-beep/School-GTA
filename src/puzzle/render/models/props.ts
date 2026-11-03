@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Palette, Theme } from '../themes';
-import { crateWood, notePaper } from '../textures';
-import type { PropModel } from './types';
+import { blankNotePaper, crateWood, glow, notePaper } from '../textures';
+import { glowSprite } from '../materials';
+import type { ModelCtx, PropModel } from './types';
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 
@@ -231,12 +232,30 @@ export function tableModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
 /** 紙條：釘在牆上的紙 + 紅色圖釘 */
 export function noteModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
-  const paper = p.mesh(box(d.w * 0.82, d.h * 0.82, 0.02), 0xffffff, { map: notePaper(pal), flatMap: true });
-  // 紙條正面離牆 5mm：貼在後牆時不與護牆板正面 (z = 牆 + 0.06) 共面
-  paper.position.set(0, d.h / 2, 0.005);
-  paper.rotation.z = 0.06;
+  const reveal = d.type === 'note' ? d.revealAfter : undefined;
+  const sheet = (map: THREE.Texture) => {
+    const m = p.mesh(box(d.w * 0.82, d.h * 0.82, 0.02), 0xffffff, { map, flatMap: true });
+    // 紙條正面離牆 5mm：貼在後牆時不與護牆板正面 (z = 牆 + 0.06) 共面
+    m.position.set(0, d.h / 2, 0.005);
+    m.rotation.z = 0.06;
+    g.add(m);
+    return m;
+  };
+  const paper = sheet(notePaper(pal));
   const pin = p.mesh(new THREE.SphereGeometry(0.05, 10, 8), pal.pin, { outline: false });
   pin.position.set(0, d.h * 0.86, 0.04);
-  g.add(paper, pin);
-  return { root: g };
+  g.add(pin);
+  if (reveal === undefined) return { root: g };
+  // 空白的提示字條 (L2 / L3，規格 7.1)：時間到之前只有白紙；浮現時字跡出現、邊角微微發亮 (不彈窗、不閃爍)
+  const blank = sheet(blankNotePaper(pal));
+  const halo = glowSprite(glow(), pal.lampLight, d.w * 1.3, 0);
+  halo.position.set(0, d.h / 2, -0.02);
+  g.add(halo);
+  const update = (c: ModelCtx) => {
+    const on = c.world.time >= reveal;
+    paper.visible = on;
+    blank.visible = !on;
+    halo.material.opacity = on ? 0.32 : 0;
+  };
+  return { root: g, update };
 }

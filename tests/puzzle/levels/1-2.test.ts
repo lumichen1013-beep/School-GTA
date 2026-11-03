@@ -165,7 +165,7 @@ describe('1-2 玄關：資料與驗證器', () => {
   it('內部物件 id 沿用 (存檔 / 房間快照以 id 對應)：v0.2 書架字條 note 移除；加 1-2c 字條、1-2d 畫像 / 拉繩 / 抽屜 / 字條', () => {
     expect(foyer.objects.map(o => o.id)).toEqual(['floorA', 'floorB', 'shelf', 'railFront', 'railL', 'railR', 'table', 'plate', 'note3',
       'crate', 'note2', 'plinth', 'key', 'partBack', 'partFront', 'lintel', 'gate', 'lever', 'doorE', 'archS',
-      'noteC', 'portraitL', 'portraitM', 'portraitR', 'cordL', 'cordM', 'cordR', 'drawer', 'noteD']);
+      'noteC', 'portraitL', 'portraitM', 'portraitR', 'cordL', 'cordM', 'cordR', 'drawer', 'noteD', 'hook']);
     const L = def('lever'); const E = def('doorE'); const S = def('archS');
     // 規格 6：拉桿「上」在出口區 (鐵柵門後)、E 門在出口區東端 x≈20、S 拱門在西區前緣 x≈-17
     expect([L.type === 'lever' && L.word, L.x > EXIT_MIN_X, L.interactIn]).toEqual(['up', true, '3d']);

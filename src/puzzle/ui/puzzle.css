@@ -181,3 +181,48 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 }
 .pz-map-btn.show { display: block; }
 @media (max-aspect-ratio: 1/1) { .pz-map { height: 50vh; top: 56px; } }
+/* 字卡匣 (v0.3 N22；mobile-controls 2.5)：從底部升起的紙卡；卡片 ≥ 56 px；寫錯 → 標籤字顫動、墨色變淡 (不閃爍) */
+.pz-tray {
+  position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 110%); width: min(720px, 100%); box-sizing: border-box;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: var(--paper); border: 2px solid var(--inkblue); border-bottom: 0;
+  border-radius: 16px 16px 0 0; box-shadow: 0 -4px 0 rgba(58,38,24,.18); transition: transform .25s ease-out; pointer-events: auto; z-index: 5;
+  display: flex; flex-direction: column; gap: 10px; color: #2c3fb0;
+}
+.pz-tray.show { transform: translate(-50%, 0); }
+.pz-tray-head { font-weight: 700; letter-spacing: .2em; font-size: 15px; }
+.pz-tray-body { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.pz-tray-tag { display: flex; align-items: center; gap: 8px; }
+.pz-tray-glyph {
+  min-width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; font: 700 44px "Songti TC", "Noto Serif TC", serif;
+  border: 4px solid var(--inkblue); background: #fff8e6; color: var(--inkblue); border-radius: 4px; padding: 0 8px;
+}
+.pz-tray-glyph.covered { background: #fff3cf; box-shadow: inset 0 0 0 3px #b8892f; }
+.pz-tray-glyph.bad { animation: pz-ink-shake .6s ease-out; }
+@keyframes pz-ink-shake {
+  0% { transform: translateX(0); opacity: 1; } 15% { transform: translateX(-6px); opacity: .55; } 30% { transform: translateX(6px); opacity: .45; }
+  45% { transform: translateX(-4px); opacity: .5; } 60% { transform: translateX(3px); opacity: .6; } 100% { transform: translateX(0); opacity: 1; }
+}
+.pz-tray-scale { width: 34px; height: 40px; border: 3px dashed var(--inkblue); border-radius: 3px; opacity: .7; }
+.pz-tray-cards { display: flex; gap: 12px; flex: 1; justify-content: flex-start; }
+.pz-tray-card {
+  min-width: 64px; min-height: 72px; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: #fff3cf; border: 2px solid #8a6a2f; border-radius: 6px; font-size: 12px; color: var(--ink); cursor: pointer; position: relative;
+}
+.pz-tray-card b { font: 700 30px "Songti TC", "Noto Serif TC", serif; color: var(--inkblue); }
+.pz-tray-card kbd { position: absolute; top: 3px; left: 5px; font-size: 11px; opacity: .7; }
+.pz-tray-card.empty { background: transparent; border-style: dashed; color: #9a8a76; cursor: default; }
+.pz-tray-card:not(.empty):hover { background: #ffe9a8; }
+.pz-tray-remove, .pz-tray-close {
+  min-height: 48px; padding: 0 16px; font-size: 14px; border-radius: 999px; border: 2px solid var(--ink); background: var(--paper2); color: var(--ink); cursor: pointer;
+}
+.pz-tray-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: #5b4a8a; }
+.pz-tray-msg { flex: 1; }
+#pz-prompt.tap { pointer-events: auto; cursor: pointer; }
+@media (max-width: 600px) {
+  .pz-tray { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .pz-tray-body { gap: 12px; }
+  .pz-tray-cards { gap: 8px; }
+  .pz-tray-card { min-width: 58px; }
+}
+/* 窄螢幕 (手機直屏)：鍵盤操作說明會蓋住狀態列與展開圖，收起 (觸控不用鍵盤) */
+@media (max-width: 600px) { #pz-help { display: none; } }

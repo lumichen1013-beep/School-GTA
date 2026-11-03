@@ -1,7 +1,10 @@
 import type { WorldAction } from '../core/actions';
 
-/** 外殼動作 (不進世界模擬；map = 開關展開圖，v0.3)；notes / menu 等於對應畫面實作時加入 */
-export type ShellAction = 'restart' | 'confirm' | 'cancel' | 'map';
+/**
+ * 外殼動作 (不進世界模擬；map = 開關展開圖，v0.3；slot1～3 / uncard = 字卡匣開著時貼第 n 格的卡 / 取下，v0.3 N22)；
+ * notes / menu 等於對應畫面實作時加入
+ */
+export type ShellAction = 'restart' | 'confirm' | 'cancel' | 'map' | 'slot1' | 'slot2' | 'slot3' | 'uncard';
 export type InputAction = WorldAction | ShellAction;
 /** 持續軸 */
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';

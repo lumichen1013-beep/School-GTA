@@ -38,5 +38,8 @@ export const lvl12 = {
   'lvl.1-2.portrait.L.ink': '~~1926~~ 1958',
   'lvl.1-2.portrait.M.ink': '1979',
   'lvl.1-2.portrait.R.carved': '1931',
-  'lvl.1-2.drawer.open': '喀。畫像下的小抽屜彈開了，裡面是一張[[term.card.right]]。'
+  'lvl.1-2.drawer.open': '喀。畫像下的小抽屜彈開了，裡面是一張[[term.card.right]]。',
+  // 1-3a 的目標 (掛在玄關西區高處)
+  'lvl.1-2.hook': '掛鉤',
+  'lvl.1-2.hook.use': '取下了一把[[term.key.brass]]。鑰匙下面，夾著一頁舊手記。'
 } as const;

@@ -20,6 +20,7 @@ import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom } from '../ui/dom';
 import { PuzzleHud } from '../ui/hud';
 import { CubeMapOverlay } from '../ui/cubeMap';
+import { CardTray } from '../ui/cardTray';
 import { keyLabel } from '../input/bindings';
 import { showMenu } from '../ui/screens/menu';
 import { showNickname } from '../ui/screens/nickname';
@@ -63,6 +64,7 @@ export class PuzzleApp {
   private renderer: THREE.WebGLRenderer;
   private hud: PuzzleHud;
   private cubeMap: CubeMapOverlay;
+  private tray: CardTray;
   private input: InputSource;
   private session: LevelSession | null = null;
   private screen: Screen = { id: 'boot' };
@@ -77,15 +79,24 @@ export class PuzzleApp {
   private onAudioCue: (e: Extract<CutsceneEvent, { type: 'audio' }>) => void = () => { /* 音訊模組尚未實作 */ };
 
   constructor(root: HTMLElement) {
-    buildPuzzleDom(root, this.text, [...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' }]);
+    buildPuzzleDom(root, this.text, [
+      ...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' },
+      { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' }
+    ]);
     this.hud = new PuzzleHud(this.text);
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap());
+    this.tray = new CardTray(root, this.text, {
+      slot: n => this.session?.trayPick(n),
+      remove: () => this.session?.trayRemove(),
+      close: () => this.session?.closeTray()
+    });
     this.input = new KeyboardSource(this.bindings);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     document.getElementById('pz-canvas')!.appendChild(this.renderer.domElement);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.hud.onPrompt(() => this.session?.tap());
     this.hud.onReplay(() => this.restart());
     this.hud.onMenu(() => this.go({ id: 'menu' }));
     window.addEventListener('resize', () => this.resize());
@@ -178,10 +189,12 @@ export class PuzzleApp {
         break;
       }
       case 'clear': {
-        const e = this.entry(s.levelId);
+        // 魔方章：章門打開 = 本章每個房間 (關卡) 都記為通關 (例：1-3 的章門 → 1-2、1-3)
+        const e = levelById(s.levelId) ?? this.entry(s.levelId);
         const def = e.load();
         this.hud.showClear(this.text('ui.clear.title', { level: this.text(e.titleKey) }), this.text(def.nextKey));
-        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world));
+        const cc = cubeChapterOf(e.id);
+        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc ? Object.keys(cc.levels) : []));
         break;
       }
       default: break;
@@ -220,17 +233,27 @@ export class PuzzleApp {
       {
         renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme,
         fx: dir => cssCubeFx(document.getElementById('pz-canvas')!, document.getElementById('pz-veil')!, dir, this.reduceMotion()),
-        map: this.cubeMap
+        map: this.cubeMap,
+        tray: this.tray,
+        calm: this.settings.calmTension,
+        onTrayOpen: () => this.input.releaseAll()
       },
       spec, state,
       {
         abilities: startAbilities(e, this.save),
-        onCleared: () => this.go({ id: 'clear', levelId }),
+        onCleared: () => this.go({ id: 'clear', levelId: this.clearedLevel(levelId) }),
         onChapterSave: st => this.commit(withChapter(this.save, st))
       }
     );
     this.resize();
     this.input.clear();
+  }
+
+  /** 通關的關卡：魔方章 = 玩家此刻所在房間對應的關卡 (章門在 1-3 衣帽間)；單房 = 進場的關卡 */
+  private clearedLevel(fallback: string): string {
+    const cc = cubeChapterOf(fallback);
+    const room = this.session?.chapter.state.room;
+    return (cc && Object.entries(cc.levels).find(([, r]) => r === room)?.[0]) || fallback;
   }
 
   private endSession(): void {
