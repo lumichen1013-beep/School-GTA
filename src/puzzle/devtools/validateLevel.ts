@@ -67,11 +67,11 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   return [label];
 }
 
-/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位) */
+/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
 function levelKeyRefs(level: LevelDef): KeyRef[] {
   const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey)].map(key => ({ key }));
   for (const o of level.objects) {
-    const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o)].filter((k): k is string => k !== undefined);
+    const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o), o.label?.noCardText].filter((k): k is string => k !== undefined);
     refs.push(...keys.map(key => ({ key, obj: o.id })));
   }
   return refs;

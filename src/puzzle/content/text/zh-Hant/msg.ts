@@ -32,5 +32,9 @@ export const msg = {
   'msg.label.written': '字蓋上去了，墨還沒乾。',
   'msg.label.removed': '字卡取了下來，原來的字還在。',
   'msg.label.invalid': '字抖了一下，墨色淡了。卡片退了回來。',
-  'msg.label.noNib': '少了筆尖，寫不上去。'
+  'msg.label.noNib': '少了筆尖，寫不上去。',
+  // 謎題標籤前按 E、匣裡沒有卡：卡貼在別的標籤上 (關卡自己的缺卡指路見 label.noCardText)
+  'msg.label.cardElsewhere': '{card}還貼在別的標籤上。先去把它取下來。',
+  // 字卡匣關著時按 1～3 / X：說明怎麼打開
+  'msg.cards.howto': '字卡匣要在[[term.mode2d]]裡、站在標籤前按 E 打開。'
 } as const;

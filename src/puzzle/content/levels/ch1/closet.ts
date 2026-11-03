@@ -19,7 +19,7 @@ const objects: ObjDef[] = [
   { id: 'chapterE', type: 'cubeDoor', side: 'E', kind: 'chapter', key: 'key.brass', openText: 'lvl.1-3.chapterE.open',
     x: 6.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.1-3.chapterE' },
   // 拉桿「左」(貼後牆；只在 3D 拉得動)；標籤只在藏寶圖看得到、寫得到 (N22)
-  { id: 'lever', type: 'lever', word: 'left', label: { id: 'lever:closet', kind: 'dir' },
+  { id: 'lever', type: 'lever', word: 'left', label: { id: 'lever:closet', kind: 'dir', noCardText: 'lvl.1-3.lever.noCard' },
     x: 2.5, y: 0.2, z: -4.7, w: 0.6, h: 1.4, d: 0.4, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.1-3.lever' },
   // 衣帽間的木箱 (id 與玄關的 crate 不同：跨房後兩個箱子同在玄關)；正北推 → 半個箱身壓進拱門
   { id: 'closetCrate', type: 'crate', x: -1.6, y: 0, z: 1.2, w: 1.2, h: 1.1, d: 1.2, visible: 'both', solid: true, pushable: true, labelKey: 'lvl.1-3.crate' },

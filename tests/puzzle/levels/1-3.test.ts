@@ -19,12 +19,12 @@ import { captureState, newChapterState, restartRoom, snapshotRoom, transferObjec
 import type { WorldCommand } from '../../../src/puzzle/core/actions';
 import type { ObjDef, World } from '../../../src/puzzle/core/types';
 import { deriveHud } from '../../../src/puzzle/app/hudModel';
-import { deriveCardTray, slotCommand, uncardCommand } from '../../../src/puzzle/app/cardTrayModel';
+import { closedTrayKey, deriveCardTray, slotCommand, uncardCommand } from '../../../src/puzzle/app/cardTrayModel';
 import { deriveCubeMap, previewFor } from '../../../src/puzzle/app/cubeMapModel';
 import { chapterSave, chapterStart, withChapter } from '../../../src/puzzle/meta/chapters';
 import { defaultSave, loadSave, writeSave } from '../../../src/puzzle/meta/save';
 import { memoryStorage } from '../../../src/puzzle/meta/storage';
-import { recordClear } from '../../../src/puzzle/meta/progress';
+import { isUnlocked, levelState, recordClear } from '../../../src/puzzle/meta/progress';
 import { DEFAULT_BINDINGS } from '../../../src/puzzle/input/bindings';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
 import { scanShortcuts, type ScanSpec } from '../../../src/puzzle/devtools/shortcutScan';
@@ -101,7 +101,7 @@ describe('1-3 衣帽間：資料與驗證器', () => {
 
   it('與抽象模型一致：拉桿原字「左」、木箱 id、章門要的鑰匙 = 掛鉤給的鑰匙；兩支拉桿都有可寫的方向字標籤', () => {
     const L = def('lever');
-    expect([L.type === 'lever' && L.word, L.label]).toEqual([CH1_MODEL.levers.closet, { id: 'lever:closet', kind: 'dir' }]);
+    expect([L.type === 'lever' && L.word, L.label]).toEqual([CH1_MODEL.levers.closet, { id: 'lever:closet', kind: 'dir', noCardText: 'lvl.1-3.lever.noCard' }]);
     expect(fdef('lever').label).toEqual({ id: 'lever:foyer', kind: 'dir' });
     expect([...CH1_MODEL.card.levers].sort()).toEqual(['closet', 'foyer']);
     expect(def(CRATE).pushable).toBe(true);
@@ -487,15 +487,55 @@ describe('字卡匣 (UI 模型) 與 HUD', () => {
     expect(hud(cs.world)).toBe('[E] 拉　拉桿「右」');
   });
 
-  it('沒有卡可貼 (字卡匣空) → 不開匣：提示照舊、E 說「看得見，卻碰不到」；有卡但沒有筆尖 → 寫不上去', () => {
+  it('沒有卡可貼 (字卡匣空) → 不開匣：拉桿是謎題標籤 → 照樣提示「寫」、E 說缺一張字卡與去哪裡找 (不是「看得見，卻碰不到」)；有卡但沒有筆尖 → 寫不上去', () => {
     let cs = closetS2({ nib: 1 });
     runScript(cs.world, [...AT_CLOSET_LEVER, { act: 'flip' }, { wait: 0.1 }]);
-    expect([hud(cs.world), deriveCardTray(cs.world, TEXT, 0)]).toEqual([null, null]);
+    expect([hud(cs.world), deriveCardTray(cs.world, TEXT, 0)]).toEqual(['[E] 寫　拉桿：左', null]);
     runScript(cs.world, [{ act: 'interact' }]);
-    expect(cs.world.msgKey).toBe('msg.unreachable');
+    expect([cs.world.msgKey, cs.world.msg, cs.world.events.some(e => e.t === 'labelOpen')])
+      .toEqual(['lvl.1-3.lever.noCard', '手上少一張字卡。玄關後牆的畫像下面，好像有什麼。', false]);
+    // 衣架的「大衣」不是謎題標籤 (沒有缺卡說明)：空匣時不提示、不開匣
+    runScript(cs.world, [{ place: [-4.6, 0, -3], mode: '2d' }]);
+    expect([hud(cs.world), deriveCardTray(cs.world, TEXT, 0)]).toEqual([null, null]);
     cs = closetS2({ [CARD]: 1 });
     runScript(cs.world, [...AT_CLOSET_LEVER, { act: 'flip' }, { wait: 0.1 }, { act: 'interact' }, write('lever:closet')]);
     expect([cs.world.msg, cardsOn(cs.world, 'lever:closet'), cs.world.events.some(e => e.t === 'labelOpen')]).toEqual(['少了筆尖，寫不上去。', [], false]);
+  });
+
+  it('詞卡「右」貼在玄關的拉桿上、人在衣帽間：拉桿前按 E 說卡貼在別處 (要先取下)；取回來之後照常開匣', () => {
+    const st = newChapterState(SPEC, 'closet', 'archN');
+    st.cube = JSON.parse(JSON.stringify(S2));
+    st.items = { nib: 1 };
+    st.labels = { 'lever:foyer': [CARD] };
+    const cs = open(st);
+    runScript(cs.world, [...AT_CLOSET_LEVER, { act: 'flip' }, { wait: 0.1 }]);
+    expect(hud(cs.world)).toBe('[E] 寫　拉桿：左');
+    runScript(cs.world, [{ act: 'interact' }]);
+    expect([cs.world.msgKey, cs.world.msg]).toEqual(['msg.label.cardElsewhere', '詞卡「右」還貼在別的標籤上。先去把它取下來。']);
+    cs.world.ext = { ...cs.world.ext, labels: {} };
+    cs.world.inv[CARD] = 1;
+    runScript(cs.world, [{ act: 'interact' }]);
+    expect(cs.world.events.filter(e => e.t === 'labelOpen')).toEqual([{ t: 'labelOpen', label: 'lever:closet', obj: 'lever' }]);
+  });
+
+  it('字卡匣關著時按 1～3 / X：2D 站在標籤前 = 按 E 打開並補做這一下；不在標籤前 → 說明怎麼打開；房裡沒有標籤 → 不出聲', () => {
+    const cs = closetS2();
+    runScript(cs.world, [...AT_CLOSET_LEVER]);
+    // 3D (看不到標籤)：說明
+    expect(closedTrayKey(cs.world, ['slot1'])).toEqual({ n: 1, open: false, howto: true });
+    expect(TEXT('msg.cards.howto')).toBe('字卡匣要在藏寶圖裡、站在標籤前按 E 打開。');
+    runScript(cs.world, [{ act: 'flip' }, { wait: 0.1 }]);
+    expect([closedTrayKey(cs.world, ['slot1']), closedTrayKey(cs.world, ['slot3']), closedTrayKey(cs.world, ['uncard']), closedTrayKey(cs.world, ['map'])])
+      .toEqual([{ n: 1, open: true, howto: false }, { n: 3, open: true, howto: false }, { n: 0, open: true, howto: false }, null]);
+    // 2D 走開 (範圍外)：說明
+    runScript(cs.world, [{ walkTo: [5.6, null] }]);
+    expect(closedTrayKey(cs.world, ['slot2'])).toEqual({ n: 2, open: false, howto: true });
+    // 2D 標籤旁有別的互動目標 (字條) → 不搶 E，只說明
+    runScript(cs.world, [{ walkTo: [5, null] }]);
+    expect([findTarget(cs.world)?.def.id, closedTrayKey(cs.world, ['slot1'])]).toEqual(['noteB', { n: 1, open: false, howto: true }]);
+    // 沒有標籤的房間 (樓梯間)：不出聲
+    const stairCs = at('stair', 'doorS', S1);
+    expect(closedTrayKey(stairCs.world, ['slot1'])).toEqual({ n: 1, open: false, howto: false });
   });
 
   it('指令只對此刻範圍內的那個標籤有效：空中 / 走開 / 標籤 id 不對 / 沒持有的卡 → 不生效', () => {
@@ -507,6 +547,47 @@ describe('字卡匣 (UI 模型) 與 HUD', () => {
     expect([cardsOn(cs.world, 'lever:closet'), cardsOn(cs.world, 'lever:foyer')]).toEqual([[], []]);
     runScript(cs.world, [{ walkTo: [5, null] }, write('lever:closet')]);
     expect(cardsOn(cs.world, 'lever:closet')).toEqual([]);
+  });
+});
+
+describe('舊存檔 (1-2 已通關、沒有詞卡「右」) 從選單進 1-3：不會無解，缺卡時有指路', () => {
+  const ENTRY = LEVELS.find(e => e.id === '1-3')!;
+  /** 同 app.chapterFor：在魔方上的關卡 → 整章 (接著存檔玩)，沒有章節快照 → 從大門進玄關 (舊存檔套預設旗標) */
+  const enter = (raw: unknown): ChapterSession => {
+    const s = memoryStorage();
+    s.set('puzzle:save', JSON.stringify(raw));
+    const save = loadSave(s);
+    expect([isUnlocked(ENTRY, save), levelState(ENTRY, save)]).toEqual([true, 'open']);
+    return open(chapterStart(save, SPEC, CH1.start, CH1.legacy));
+  };
+  const BACK_TO_CLOSET: Cmd[] = [{ walkTo: [-17, 5.2] }, { expect: w => expect(findTarget(w)?.def.id).toBe('archS'), label: '南拱門' }, { act: 'interact' }];
+
+  it('v2 存檔 (舊玄關通關、只有筆尖)：從玄關南拱門進章，1-2a / 1-2b 免做、1-2d 的畫像原封不動 → 照常取得詞卡「右」', () => {
+    const cs = enter({ v: 2, cleared: ['1-1', '1-2'], current: '1-2', abilities: ['nib'], diary: [], scraps: [], endings: { A: false, B: false }, name: '舊' });
+    expect([cs.state.room, cs.state.door, cs.world.inv]).toEqual(['foyer', 'archS', { nib: 1 }]);
+    expect([get(cs, 'key').gone, get(cs, 'plate').used, get(cs, 'gate').used, get(cs, 'drawer').used]).toEqual([true, true, true, false]);
+    runScript(cs.world, R12_D);
+    expect(hasItem(cs.world, CARD)).toBe(true);
+  });
+
+  it('M1b 之前的章節快照 (人在衣帽間 S1、沒有詞卡、沒有 labels / moved 欄)：拉桿前按 E 指路 → 拉「左」→ 拱門回玄關解 1-2d → 回衣帽間寫「右」→ 拉桿轉回', () => {
+    let cs = enter({
+      v: 3, cleared: ['1-1', '1-2'], current: '1-2', abilities: ['nib'], diary: [], scraps: [], endings: { A: false, B: false }, name: '舊',
+      chapters: { 1: { cube: S1, rooms: {}, at: { room: 'closet', door: 'archN' }, items: { nib: 1 }, flags: [] } }
+    });
+    expect([cs.state.room, cs.state.cube, cs.state.labels, cs.state.moved, cs.world.inv]).toEqual(['closet', S1, {}, {}, { nib: 1 }]);
+    runScript(cs.world, [...AT_CLOSET_LEVER, { act: 'flip' }, { wait: 0.1 }, { act: 'interact' }]);
+    expect(cs.world.msg).toBe('手上少一張字卡。玄關後牆的畫像下面，好像有什麼。');
+    let r = play(cs, [{ act: 'flip' }, { wait: 0.1 }, { act: 'interact' }]);
+    expect([r.kinds, r.cs.state.cube]).toEqual([['turn'], S2]);
+    r = play(r.cs, CLOSET_ARCH);
+    expect([r.kinds, r.cs.state.room]).toEqual([['enter'], 'foyer']);
+    runScript(r.cs.world, R12_D);
+    expect(hasItem(r.cs.world, CARD)).toBe(true);
+    r = play(r.cs, BACK_TO_CLOSET);
+    expect([r.kinds, r.cs.state.room]).toEqual([['enter'], 'closet']);
+    r = play(r.cs, [...AT_CLOSET_LEVER, { act: 'flip' }, { wait: 0.1 }, { act: 'interact' }, write('lever:closet'), { act: 'flip' }, { wait: 0.1 }, { act: 'interact' }]);
+    expect([r.kinds, r.cs.state.cube, cardsOn(r.cs.world, 'lever:closet')]).toEqual([['labelOpen', 'card', 'turn'], S1, [CARD]]);
   });
 });
 

@@ -14,9 +14,10 @@ declare module '../core/types' {
   interface ObjBase {
     /**
      * 標籤 (只在 2D 看得到、寫得到)：id = 章節內唯一的標籤 id (存在 ChapterState.labels)；
-     * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有空的尺度卡槽 (只鋪陳)
+     * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有空的尺度卡槽 (只鋪陳)；
+     * noCardText = 這是謎題要寫的標籤：字卡匣空著時 2D 照樣提示「寫」，按 E 說缺什麼、去哪裡找 (沒有 → 空匣時 E 照舊「看得見，卻碰不到」)
      */
-    label?: { id: string; kind: 'dir' | 'noun'; textKey?: TextKey; scale?: boolean };
+    label?: { id: string; kind: 'dir' | 'noun'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey };
   }
 }
 
@@ -116,10 +117,31 @@ export function writableTarget(w: World): ObjState | null {
   return trayCards(w).length > 0 || cardsOn(w, t.def.label!.id).length > 0 ? t : null;
 }
 
-/** N22：2D 對標籤按 E → labelOpen (沒有筆尖：說明寫不上去)；貼卡 / 取卡指令 */
+/**
+ * 2D 範圍內、匣裡沒有卡可貼的謎題標籤 (有 noCardText)：HUD 照樣提示「寫」，按 E 說明缺卡
+ * (卡貼在別的標籤上 → 說卡在哪裡；否則 noCardText 指路)
+ */
+export function missingCardTarget(w: World): ObjState | null {
+  const t = labelTarget(w);
+  return t?.def.label?.noCardText && !writableTarget(w) ? t : null;
+}
+
+/** HUD 的「寫」提示對象：可寫的標籤，或缺卡的謎題標籤 */
+export const promptLabelTarget = (w: World): ObjState | null => writableTarget(w) ?? missingCardTarget(w);
+
+/** 缺卡時按 E 的說明 */
+function sayMissingCard(w: World, t: ObjState): void {
+  const away = Object.values(w.ext.labels ?? {}).flat().find(isCard);
+  if (away) say(w, 'msg.label.cardElsewhere', { card: w.rt.text(`term.${away}`) });
+  else say(w, t.def.label!.noCardText!);
+}
+
+/** N22：2D 對標籤按 E → labelOpen (沒有筆尖：說明寫不上去；謎題標籤缺卡：說明缺什麼)；貼卡 / 取卡指令 */
 export const labels: Mechanic = {
   id: 'labels',
   interactFallback: w => {
+    const miss = missingCardTarget(w);
+    if (miss) { sayMissingCard(w, miss); return true; }
     const t = writableTarget(w);
     if (!t) return false;
     if (!hasItem(w, WRITE_ABILITY)) { say(w, 'msg.label.noNib'); return true; }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
+import { closet } from '../../../src/puzzle/content/levels/ch1/closet';
 import { LEVELS } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
 import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
@@ -51,6 +52,13 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
     const bad = foyerWith({ crate: { labelKey: 'lvl.1-2.nope' } });
     expect(codes(validateLevel(bad, ctx))).toEqual([['text.missing', 'crate']]);
     expect(codes(validateLevel({ ...FOYER_V02, narrationKey: 'lvl.x.nope' }, ctx))).toEqual([['text.missing', null]]);
+  });
+
+  it('標籤的缺卡說明 (label.noCardText) 也要在文字表裡 → 否則 text.missing', () => {
+    const lever = closet.objects.find(o => o.id === 'lever')!;
+    const bad = { ...closet, objects: closet.objects.map(o => (o.id === 'lever' ? { ...o, label: { ...lever.label!, noCardText: 'lvl.1-3.nope' } } : o)) };
+    expect(codes(validateLevel(closet, ctx))).toEqual([]);
+    expect(codes(validateLevel(bad, ctx))).toEqual([['text.missing', 'lever']]);
   });
 
   it('opens 指向不存在的 id / 自己 → ref.opens', () => {

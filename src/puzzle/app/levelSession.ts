@@ -20,7 +20,7 @@ import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
 import { deriveCubeMap, previewFor } from './cubeMapModel';
-import { deriveCardTray, slotCommand, uncardCommand } from './cardTrayModel';
+import { closedTrayKey, deriveCardTray, slotCommand, uncardCommand } from './cardTrayModel';
 
 export interface SessionContext {
   renderer: THREE.WebGLRenderer;
@@ -73,6 +73,9 @@ export class LevelSession {
   private traySeq = 0;
   private commands: WorldCommand[] = [];
   private tapInteract = false;
+  /** 字卡匣關著時按了 1～3 / X (站在標籤前)：等匣打開後補做這一下 (n = 第幾格；0 = 取下)；E 沒打開匣 (缺卡 / 缺筆尖) → 0.25 秒後作廢 */
+  private pendingTray: number | null = null;
+  private pendingAge = 0;
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -104,6 +107,7 @@ export class LevelSession {
       onEvent: e => { this.events.push(e); this.loop.halt(); }
     });
     this.trayLabel = null;
+    this.pendingTray = null;
     this.commands = [];
     this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm });
     this.cams = new PuzzleCameras(w);
@@ -166,7 +170,11 @@ export class LevelSession {
     this.trayLabel = label;
     this.mapOpen = false;
     this.ctx.onTrayOpen?.();
+    const n = this.pendingTray;
+    this.pendingTray = null;
+    if (n === 0) this.trayRemove(); else if (n !== null) this.trayPick(n);
   }
+
 
   closeTray(): void { this.trayLabel = null; }
   /** 字卡匣：貼第 n 格的卡 (1 起算) / 取下標籤上的卡 (指令下一幀進世界) */
@@ -215,10 +223,17 @@ export class LevelSession {
         pressed = [];
         move = { moveX: 0, moveZ: 0, jump: false };
       }
-    } else if (input.pressed.includes('map')) this.toggleMap();
+    } else {
+      if (input.pressed.includes('map')) this.toggleMap();
+      // 字卡匣關著時按 1～3 / X：站在標籤前 = 按 E 打開並補做這一下；否則說明怎麼打開 (cardTrayModel.closedTrayKey)
+      const k = pressed.includes('interact') ? null : closedTrayKey(this.world, input.pressed);
+      if (k?.open) { this.pendingTray = k.n; this.pendingAge = 0; pressed = [...pressed, 'interact']; }
+      else if (k?.howto) say(this.world, 'msg.cards.howto');
+    }
     const commands = this.commands.splice(0);
     this.loop.frame(elapsedSec, { ...move, pressed, ...(commands.length ? { commands } : {}) });
     this.handleEvents();
+    if (this.pendingTray !== null && (this.pendingAge += elapsedSec) > 0.25) this.pendingTray = null;
   }
 
   /** 畫一幀：HUD 依目前狀態；玩家位置在上一步與目前之間內插 (高更新率螢幕不頓) */

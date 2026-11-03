@@ -2,7 +2,9 @@
 import type { ObjState, World } from '../core/types';
 import type { WorldCommand } from '../core/actions';
 import type { Text } from '../text/text';
-import { cardsOn, CARDS, TRAY_SLOTS, trayCards, writableTarget } from '../mechanics/labels';
+import { cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writableTarget } from '../mechanics/labels';
+import { findTarget } from '../core/interact';
+import type { InputAction } from '../input/types';
 import { WORD_KEYS } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 import type { CardTrayModel } from '../ui/cardTray';
@@ -57,7 +59,7 @@ export function deriveCardTray(w: World, text: Text, feedbackSeq: number): CardT
     feedbackSeq,
     text: {
       head: text('ui.cards.head', { title: labelTitle(w, text, t) }), close: text('ui.cards.close'),
-      remove: text('ui.cards.remove', { word: cardsOn(w, id)[0] ? cardGlyph(text, cardsOn(w, id)[0]) : '' }), hint: text('ui.cards.hint'), scale: text('ui.cards.scale')
+      remove: text('ui.cards.remove', { word: cardsOn(w, id)[0] ? cardGlyph(text, cardsOn(w, id)[0]) : '' }), howto: ['ui.cards.howto.paste', 'ui.cards.howto.remove', 'ui.cards.howto.close'].map(k => text(k)), scale: text('ui.cards.scale')
     }
   };
 }
@@ -72,4 +74,17 @@ export function slotCommand(m: CardTrayModel, n: number): WorldCommand | null {
 export function uncardCommand(m: CardTrayModel): WorldCommand | null {
   const a = m.attached[0];
   return a ? { t: 'uncard', label: m.label, card: a.card } : null;
+}
+
+/**
+ * 字卡匣關著時按了 1～3 / X (n = 第幾格；0 = 取下；沒按 → null)：
+ * open = 2D 站在標籤前、沒有別的互動目標 → 等同按 E 打開 (缺卡 / 缺筆尖照 E 的說明)，打開後補做這一下；
+ * howto = 不在標籤前、但房裡有標籤 → 說明怎麼打開 (房裡沒有標籤 = 這些鍵沒有用途，不出聲)
+ */
+export function closedTrayKey(w: World, pressed: readonly InputAction[]): { n: number; open: boolean; howto: boolean } | null {
+  const slot = (['slot1', 'slot2', 'slot3'] as const).findIndex(a => pressed.includes(a));
+  const n = slot >= 0 ? slot + 1 : pressed.includes('uncard') ? 0 : null;
+  if (n === null) return null;
+  const open = !!labelTarget(w) && !findTarget(w);
+  return { n, open, howto: !open && w.objs.some(o => !!o.def.label) };
 }

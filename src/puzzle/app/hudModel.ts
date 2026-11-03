@@ -5,7 +5,7 @@ import type { Bindings } from '../input/types';
 import { keyLabel } from '../input/bindings';
 import type { HelpRow } from '../ui/dom';
 import type { HudData } from '../ui/hud';
-import { leverWord, writableTarget } from '../mechanics/labels';
+import { leverWord, promptLabelTarget } from '../mechanics/labels';
 import { WORD_KEYS } from '../mechanics/cube';
 import { labelTitle } from './cardTrayModel';
 
@@ -26,8 +26,8 @@ export function deriveHud(w: World, text: Text, view: HudView): HudModel {
       : t.def.labelKey ? text(t.def.labelKey) : '';
     prompt = label ? text('ui.prompt.withLabel', { key, verb, label }) : text('ui.prompt', { key, verb });
   } else if (!view.locked && !w.cleared) {
-    // 2D 靠近可寫的標籤 (N22)：「寫　拉桿：左」
-    const l = writableTarget(w);
+    // 2D 靠近可寫的標籤 (N22)：「寫　拉桿：左」；謎題標籤缺卡也提示 (按 E 說明缺什麼)
+    const l = promptLabelTarget(w);
     if (l) prompt = text('ui.prompt.withLabel', { key, verb: text('obj.label.verb'), label: labelTitle(w, text, l) });
   }
   return {

@@ -11,6 +11,8 @@ export const lvl13 = {
   'lvl.1-3.chapterE': '章門',
   'lvl.1-3.chapterE.open': '銅鑰匙轉了半圈。門外是一條走廊，通往書房。',
   'lvl.1-3.lever': '拉桿',
+  // 1-3b：字卡匣空著 (還沒解 1-2d 的畫像) 時，在拉桿標籤前按 E
+  'lvl.1-3.lever.noCard': '手上少一張字卡。玄關後牆的畫像下面，好像有什麼。',
   'lvl.1-3.crate': '木箱',
   'lvl.1-3.coats': '衣架',
   'lvl.1-3.coats.word': '大衣',
