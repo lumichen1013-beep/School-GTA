@@ -24,7 +24,7 @@ describe('文字 key 齊全', () => {
   it('門廊所有文字 key 存在於 zh-Hant；字條 (1-1c L1) 為 story-bible 7.3 原文且 ≤ 24 字、不含數字', () => {
     expect(missingLevelKeys(porch, zhHant)).toEqual([]);
     const note = TEXT('lvl.1-1.note.1');
-    expect(note).toBe('玻璃這一邊太擠了。另一邊，我替你留了位子。');
+    expect(note).toBe('玻璃這一邊太擠了。另一邊，好像留了位子？');
     expect([...note].length).toBeLessThanOrEqual(24);
     expect(/[0-9０-９]|[一二兩三四五六七八九十幾][個次格步塊公尺米下]/.test(note)).toBe(false);
     expect(porch.objects.filter(o => o.type === 'note').length).toBe(1);

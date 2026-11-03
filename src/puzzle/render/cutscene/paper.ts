@@ -129,7 +129,7 @@ export function layer(s: SceneCtx, depth: number, fn: () => void, focus: Pt = [4
   g.restore();
 }
 
-/** 手寫字跡 (不可讀的波浪線)：用在信紙、字條上；文字本身在字幕帶 */
+/** 手寫字跡 (不可讀的波浪線)：用在筆記、字條上；文字本身在字幕帶 */
 export function scribble(g: CanvasRenderingContext2D, x: number, y: number, w: number, seed: number, color = '#4a3220', lw = 2.2): void {
   const r = rng(seed);
   g.beginPath();
@@ -166,46 +166,77 @@ export function serif(g: CanvasRenderingContext2D, text: string, x: number, y: n
 
 // ── 常用物件 ──
 
-/** 信封 (正面朝上、三角封蓋)；回傳封蓋尖端位置 (放火漆) */
-export function envelope(g: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, seed: number, paper: string): Pt {
-  const x = cx - w / 2, y = cy - h / 2;
-  cut(g, roughRect(x, y, w, h, seed), paper);
-  const tip: Pt = [cx, cy + h * 0.08];
-  g.beginPath();
-  g.moveTo(x + 6, y + 6); g.lineTo(tip[0], tip[1]); g.lineTo(x + w - 6, y + 6);
-  g.moveTo(x + 6, y + h - 6); g.lineTo(cx - w * 0.12, cy + h * 0.02);
-  g.moveTo(x + w - 6, y + h - 6); g.lineTo(cx + w * 0.12, cy + h * 0.02);
-  g.strokeStyle = 'rgba(58,38,24,0.55)';
-  g.lineWidth = 2;
-  g.stroke();
-  return tip;
-}
-
-/** 火漆封印 */
-export function waxSeal(g: CanvasRenderingContext2D, x: number, y: number, r: number, seed: number, label?: string): void {
-  const rr = rng(seed);
-  const pts: Pt[] = [];
-  for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; const k = r * (1 + (rr() - 0.5) * 0.18); pts.push([x + Math.cos(a) * k, y + Math.sin(a) * k]); }
-  cut(g, roughPoly(pts, seed, 1, 1e9), '#b8332e', { shadow: 4 });
-  g.beginPath();
-  g.arc(x, y, r * 0.68, 0, Math.PI * 2);
-  g.strokeStyle = '#7d1c1a';
-  g.lineWidth = 3;
-  g.stroke();
-  if (label) serif(g, label, x, y + 2, r * 0.9, '#6e1614', { weight: 700 });
-}
-
-/** 鑰匙 (環上一把)；angle 為擺動角 */
-export function key(g: CanvasRenderingContext2D, x: number, y: number, len: number, angle: number, color: string, seed: number): void {
+/** 圓角長條 (手指、紙條)：中心 x, y、長 len、粗 th、角度 a */
+export function capsule(g: CanvasRenderingContext2D, x: number, y: number, len: number, th: number, a: number, fill: string, seed: number, o: CutOpts = {}): void {
   g.save();
   g.translate(x, y);
-  g.rotate(angle);
-  const bow = len * 0.22;
-  cut(g, roughEllipse(0, bow, bow, bow, seed, 0.8), color, { shadow: 3 });
-  g.beginPath(); g.arc(0, bow, bow * 0.42, 0, Math.PI * 2); g.fillStyle = 'rgba(40,24,12,0.65)'; g.fill();
-  cut(g, roughRect(-len * 0.05, bow * 1.9, len * 0.1, len * 0.7, seed + 1, 0.6), color, { shadow: 3 });
-  cut(g, roughPoly([[len * 0.05, len * 0.72], [len * 0.2, len * 0.72], [len * 0.2, len * 0.8], [len * 0.12, len * 0.8], [len * 0.12, len * 0.88], [len * 0.05, len * 0.88]], seed + 2, 0.5), color, { shadow: 2 });
+  g.rotate(a);
+  const r = th / 2, h = len / 2 - r;
+  const pts: Pt[] = [];
+  for (let i = 0; i <= 8; i++) { const u = -Math.PI / 2 + (i / 8) * Math.PI; pts.push([h + Math.cos(u) * r, Math.sin(u) * r]); }
+  for (let i = 0; i <= 8; i++) { const u = Math.PI / 2 + (i / 8) * Math.PI; pts.push([-h + Math.cos(u) * r, Math.sin(u) * r]); }
+  cut(g, roughPoly(pts, seed, 0.4, 1e9), fill, o);
   g.restore();
+}
+
+/**
+ * 魔法陣 (以原點為中心、半徑 r)：外圈刻度、七芒星、頂點小圓、內圈方格與中心圓；
+ * 只描線，呼叫端決定顏色 / 粗細 / 透視 (例：scale(1, 0.32) = 地板上的透視)
+ */
+export function sigil(g: CanvasRenderingContext2D, r: number, stroke: string, lw: number): void {
+  const TAU = Math.PI * 2;
+  g.strokeStyle = stroke;
+  g.lineWidth = lw;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const ring = (k: number) => { g.beginPath(); g.arc(0, 0, r * k, 0, TAU); g.stroke(); };
+  ring(1); ring(0.9); ring(0.58); ring(0.14);
+  g.beginPath();
+  for (let i = 0; i < 84; i++) {
+    const a = (i / 84) * TAU, k = i % 12 === 0 ? 0.86 : i % 3 === 0 ? 0.93 : 0.96;
+    g.moveTo(Math.cos(a) * r * k, Math.sin(a) * r * k); g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.lineWidth = lw * 0.6; g.stroke(); g.lineWidth = lw;
+  // 七芒星 {7/3}
+  g.beginPath();
+  for (let i = 0; i <= 7; i++) {
+    const a = -Math.PI / 2 + (((i * 3) % 7) / 7) * TAU;
+    if (i) g.lineTo(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9); else g.moveTo(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9);
+  }
+  g.stroke();
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI / 2 + (i / 7) * TAU;
+    g.beginPath(); g.arc(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9, r * 0.055, 0, TAU); g.stroke();
+    // 內圈與七芒星之間的小記號 (像製圖符號，不是文字)
+    const b = a + Math.PI / 7, m = r * 0.72;
+    g.beginPath();
+    g.moveTo(Math.cos(b) * m - Math.sin(b) * r * 0.03, Math.sin(b) * m + Math.cos(b) * r * 0.03);
+    g.lineTo(Math.cos(b) * m + Math.sin(b) * r * 0.03, Math.sin(b) * m - Math.cos(b) * r * 0.03);
+    g.moveTo(Math.cos(b) * (m - r * 0.04), Math.sin(b) * (m - r * 0.04));
+    g.lineTo(Math.cos(b) * (m + r * 0.04), Math.sin(b) * (m + r * 0.04));
+    g.stroke();
+  }
+  // 內圈：兩個交錯的方格
+  for (const rot of [0, Math.PI / 4]) {
+    g.beginPath();
+    for (let i = 0; i <= 4; i++) { const a = rot + (i / 4) * TAU; const x = Math.cos(a) * r * 0.5, y = Math.sin(a) * r * 0.5; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+    g.stroke();
+  }
+  g.beginPath(); g.moveTo(-r * 0.14, 0); g.lineTo(r * 0.14, 0); g.moveTo(0, -r * 0.14); g.lineTo(0, r * 0.14); g.stroke();
+}
+
+/** 飄浮的灰塵 / 光點：在 (x, y, w, h) 範圍內，t 推動；減弱動態時靜止 */
+export function motes(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, n: number, t: number, seed: number, color: string, size = 2.2, reduce = false, rise = 0): void {
+  const r = rng(seed);
+  g.fillStyle = color;
+  for (let i = 0; i < n; i++) {
+    const px = r(), py = r(), ph = r() * 6.28, sz = size * (0.5 + r());
+    const tt = reduce ? 0 : t;
+    const yy = (((py * h - tt * rise * (0.6 + r() * 0.8)) % h) + h) % h;
+    g.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(ph + tt * 0.8));
+    g.beginPath(); g.arc(x + px * w + Math.sin(ph + tt * 0.5) * 8, y + yy + Math.cos(ph + tt * 0.4) * 5, sz, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
 }
 
 /** 鋼筆 (水平，筆尖朝右)；length = 全長 */

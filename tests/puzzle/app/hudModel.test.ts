@@ -16,7 +16,7 @@ describe('deriveHud (純函式)', () => {
     expect(m.mode).toBe('3d');
     expect(m.modeText).toBe('實景');
     expect(m.items).toEqual([]);
-    expect(m.prompt).toBe('[E] 閱讀　叔公的字條');
+    expect(m.prompt).toBe('[E] 閱讀　爸爸的筆記');
     expect(deriveHud(w, TEXT, { ...view, renderMode: '2d' }).modeText).toBe('藏寶圖');
   });
 
@@ -50,7 +50,7 @@ describe('deriveHud (純函式)', () => {
   it('提示的按鍵名跟著重綁', () => {
     const w = newWorld();
     place(w, -17, 0, -5.2);
-    expect(deriveHud(w, TEXT, { ...view, bindings: mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }) }).prompt).toBe('[G] 閱讀　叔公的字條');
+    expect(deriveHud(w, TEXT, { ...view, bindings: mergeBindings(DEFAULT_BINDINGS, { interact: ['KeyG'] }) }).prompt).toBe('[G] 閱讀　爸爸的筆記');
   });
 });
 

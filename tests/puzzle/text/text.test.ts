@@ -17,7 +17,7 @@ describe('createText', () => {
   });
 
   it('zh-Hant 組字與搬移前的字面值相同 (字串原樣)', () => {
-    expect(TEXT('ui.prompt.withLabel', { key: 'E', verb: TEXT('obj.note.verb'), label: TEXT('lvl.1-2.note') })).toBe('[E] 閱讀　叔公的字條');
+    expect(TEXT('ui.prompt.withLabel', { key: 'E', verb: TEXT('obj.note.verb'), label: TEXT('lvl.1-2.note') })).toBe('[E] 閱讀　爸爸的筆記');
     expect(TEXT('ui.prompt', { key: 'E', verb: TEXT('obj.default.verb') })).toBe('[E] 互動');
     expect(TEXT('ui.clear.title', { level: TEXT('lvl.1-2.title') })).toBe('玄關 · 機關解開了');
     expect(TEXT('ui.docTitle', { level: TEXT('lvl.1-2.title') })).toBe('圖紙之間 · 玄關');

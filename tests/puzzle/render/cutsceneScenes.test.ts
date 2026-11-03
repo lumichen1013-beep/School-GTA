@@ -29,7 +29,7 @@ beforeAll(() => {
 describe('過場剪紙分鏡 (render/cutscene)', () => {
   it('每個過場鏡頭的 sceneId 都有繪製函式；畫面字 (labels) 的 key 都在文字表', () => {
     const ids = CUTSCENES.flatMap(c => c.shots.map(s => s.art.sceneId));
-    expect(ids.length).toBe(11);
+    expect(ids.length).toBe(12);
     expect(ids.filter(id => !(id in PAPER_SCENES))).toEqual([]);
     const labels = CUTSCENES.flatMap(c => c.shots.flatMap(s => Object.values(s.art.labels ?? {})));
     expect(labels.filter(k => !(k in zhHant))).toEqual([]);
@@ -41,7 +41,7 @@ describe('過場剪紙分鏡 (render/cutscene)', () => {
         for (const reduce of [false, true]) {
           for (const view of [{ x0: -170, y0: 0, x1: 1070, y1: 900 }, { x0: 0, y0: -350, x1: 900, y1: 1600 }]) {
             const { g, calls } = fakeCtx();
-            const s: SceneCtx = { g, t, m: reduce ? 0 : 0.5, motion: { push: 0.05, panX: 0.05, parallax: 0.02 }, labels: { seal: 'x', title: 'x', engrave: 'x', firm: 'x', will: 'x' }, pal: FOYER_THEME.pal, room2d: FOYER_THEME.room2d, reduce, view };
+            const s: SceneCtx = { g, t, m: reduce ? 0 : 0.5, motion: { push: 0.05, panX: 0.05, parallax: 0.02 }, labels: { title: 'x', engrave: 'x' }, pal: FOYER_THEME.pal, room2d: FOYER_THEME.room2d, reduce, view };
             expect(() => draw(s), `${id} t=${t}`).not.toThrow();
             expect(calls()).toBeGreaterThan(10);
           }

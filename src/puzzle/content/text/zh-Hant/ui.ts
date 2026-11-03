@@ -27,7 +27,7 @@ export const ui = {
   'ui.menu.cleared': '已通關',
   'ui.menu.locked': '未解鎖',
   'ui.nickname.title': '你的名字',
-  'ui.nickname.hint': '老宅的遺囑上，只寫了這個名字。',
+  'ui.nickname.hint': '老宅會記得這個名字。',
   'ui.nickname.placeholder': '輸入暱稱',
   'ui.nickname.ok': '確定',
   'ui.menu.memories': '回憶',

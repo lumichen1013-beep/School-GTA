@@ -54,7 +54,7 @@ describe('LevelLoop：固定步長 1/60', () => {
     expect(w.msgSeq).toBe(seq);
     loop.frame(1 / 30, still);
     expect(w.msgSeq).toBe(seq + 1);
-    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的。');
+    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的？');
   });
 
   it('切換成功 → 過場鎖：期間不推進世界、丟棄按鍵；換畫面點呼叫 onSwap，結束後恢復', () => {

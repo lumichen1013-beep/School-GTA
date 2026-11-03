@@ -358,9 +358,9 @@ const PUZZLES: PuzzleMeta[] = [
   { id: '1-2d', difficulty: 3, area: [10.4, 20], keyObjects: ['valve', 'crate', 'plate'], ahaTerms: ['鎖', '踏板', '箱', '歸', '原處', '再用'], notes: [] }
 ];
 const STORY_BIBLE_L1: Record<string, string> = {
-  note: '缺口不寬。當年他們也是這樣走過去的。',
+  note: '缺口不寬。當年他們也是這樣走過去的？',
   note2: '想要高一點？我小時候都踩著朋友的肩膀。',
-  note3: '桌子底下，我從來不讓人看。'
+  note3: '桌子底下，好像有什麼不想讓人看？'
 };
 const notes = foyer.objects.filter(o => o.type === 'note');
 const noteText = (o: ObjDef) => TEXT(o.type === 'note' ? o.textKey ?? '' : '');

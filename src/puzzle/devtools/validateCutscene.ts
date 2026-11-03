@@ -36,9 +36,10 @@ export interface CutsceneContext {
   timeline?: readonly TimelineShot[];
 }
 
-/** 總長設計範圍 (cutscenes-v0.1 6.3)：序章 / 結局 60～90 秒、其他 20～45 秒 */
+/** 總長設計範圍 (cutscenes-v0.1 6.3)：序章 60～110 秒、結局 60～90 秒、其他 20～45 秒 */
 export function durationRange(def: CutsceneDef): [number, number] {
-  return def.trigger.beforeFirst !== undefined || def.trigger.ending !== undefined ? [60, 90] : [20, 45];
+  if (def.trigger.beforeFirst !== undefined) return [60, 110];
+  return def.trigger.ending !== undefined ? [60, 90] : [20, 45];
 }
 
 const SHOT_KEYS = new Set(['art', 'motion', 'transitionIn', 'lines', 'minVisualSec', 'audio']);

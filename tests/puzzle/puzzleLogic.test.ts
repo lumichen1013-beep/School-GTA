@@ -231,7 +231,7 @@ describe('狀態機、檢查點與掉落', () => {
     const w = newWorld();
     place(w, -17, 0, -5.2);
     interact(w);
-    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的。');
+    expect(w.msg).toBe('缺口不寬。當年他們也是這樣走過去的？');
   });
 
   it('閘門關著時可查看提示，打開後不再互動也不擋路', () => {

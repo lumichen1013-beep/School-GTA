@@ -9,12 +9,18 @@ import type { CutsceneDef } from '../../../src/puzzle/content/cutsceneTypes';
 import { NAME_MAX } from '../../../src/puzzle/meta/save';
 import { readingSeconds } from '../../../src/puzzle/text/readingTime';
 import { TEXT } from '../msgs';
+import { createText } from '../../../src/puzzle/text/text';
+import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 
 const DT = 1 / 60;
 const NAME12 = '一二三四五六七八九十一二';
 const prologue = cutsceneById(PROLOGUE_ID)!;
-const plan = (def: CutsceneDef = prologue, o: Partial<{ speed: 'normal' | 'slow'; reduceMotion: boolean; name: string }> = {}) =>
-  planCutscene(def, TEXT, { speed: 'normal', reduceMotion: false, name: '阿青', ...o });
+/** 新序章不含 {name}：插值測試用的文字表 (第 2 鏡第 2 段換成含 {name} 的句子) */
+const NAMED_TEXT = createText({ ...zhHant, 'cs.prologue.2.2': '「{name}。」' });
+const plan = (def: CutsceneDef = prologue, o: Partial<{ speed: 'normal' | 'slow'; reduceMotion: boolean; name: string; text: typeof TEXT }> = {}) => {
+  const { text = TEXT, ...rest } = o;
+  return planCutscene(def, text, { speed: 'normal', reduceMotion: false, name: '阿青', ...rest });
+};
 const player = (o: Partial<PlayerOptions> = {}, def: CutsceneDef = prologue) =>
   new CutscenePlayer(plan(def), { autoAdvance: false, skipConfirm: true, replay: false, seen: false, ...o });
 /** 以固定步長推進 sec 秒 */
@@ -25,22 +31,23 @@ const ends = (es: CutsceneEvent[]) => es.filter(e => e.type === 'end');
 const mini: CutsceneDef = {
   id: 'cs:ch1', titleKey: 'cs.prologue.title', trigger: {}, replayable: true,
   shots: [
-    { art: { kind: 'paper', sceneId: 'x' }, transitionIn: 'fade', lines: ['cs.prologue.5.1'], audio: [{ at: 'start', cue: 'a' }, { at: 'end', cue: 'b' }] },
-    { art: { kind: 'paper', sceneId: 'y' }, transitionIn: 'cut', lines: ['cs.prologue.7.1', 'cs.prologue.7.2'], audio: [{ at: 'line', line: 2, cue: 'c' }] }
+    { art: { kind: 'paper', sceneId: 'x' }, transitionIn: 'fade', lines: ['cs.prologue.2.1'], audio: [{ at: 'start', cue: 'a' }, { at: 'end', cue: 'b' }] },
+    { art: { kind: 'paper', sceneId: 'y' }, transitionIn: 'cut', lines: ['cs.prologue.10.1', 'cs.prologue.8.1'], audio: [{ at: 'line', line: 2, cue: 'c' }] }
   ]
 };
 
-describe('序章資料 (cutscenes-v0.1 4)', () => {
-  it('11 鏡；每段都有文字；總長 (自動播放、一般速度、暱稱 12 字) 與文件的 88 秒相符 (±1)', () => {
+describe('序章資料 (12 鏡新版)', () => {
+  it('12 鏡；每段都有文字；總長 (自動播放、一般速度、暱稱 12 字) 約 108.4 秒 (±1，在 60～110 內)', () => {
     expect(CUTSCENES.map(c => c.id)).toEqual(['cs:prologue']);
-    expect(prologue.shots.length).toBe(11);
+    expect(prologue.shots.length).toBe(12);
     const p = plan(prologue, { name: NAME12 });
-    expect(p.totalSec).toBeGreaterThan(87);
-    expect(p.totalSec).toBeLessThan(89);
+    expect(p.totalSec).toBeGreaterThan(107.4);
+    expect(p.totalSec).toBeLessThan(109.4);
     // 每鏡秒數與分鏡表 (四捨五入到 0.1 的值) 相差 < 0.15
-    const DOC = [5.4, 9.3, 9.8, 9.9, 7.7, 9.7, 7.6, 6.6, 7.8, 8.9, 5.0];
+    const DOC = [9.0, 7.7, 9.7, 11.0, 8.5, 8.5, 7.0, 8.0, 10.0, 12.0, 11.9, 5.0];
     p.shots.forEach((s, i) => expect(Math.abs(s.sec - DOC[i])).toBeLessThan(0.15));
-    expect(p.shots[1].segments[1].text).toBe(`「${NAME12}。」`);
+    // 新逐字稿沒有 {name}：以加了 {name} 段落的文字表確認 12 字暱稱的插值
+    expect(plan(prologue, { name: NAME12, text: NAMED_TEXT }).shots[1].segments[1].text).toBe(`「${NAME12}。」`);
   });
 
   it('秒數由公式算出：鏡頭秒數 = max(各段 T 和, 視覺最短秒) + 轉場；資料裡沒有秒數欄位', () => {
@@ -59,9 +66,9 @@ describe('序章資料 (cutscenes-v0.1 4)', () => {
   });
 
   it('暱稱插值：畫面字也解析', () => {
-    const p = plan(prologue, { name: '小桐' });
+    const p = plan(prologue, { name: '小桐', text: NAMED_TEXT });
     expect(p.shots[1].segments[1].lines).toEqual(['「小桐。」']);
-    expect(p.shots[0].labels.seal).toBe(TEXT('cs.prologue.art.seal'));
+    expect(p.shots[8].labels.engrave).toBe(TEXT('cs.prologue.art.engrave'));
     expect(NAME_MAX).toBe(12);
   });
 });
@@ -170,10 +177,11 @@ describe('時間軸：自動播放', () => {
     expect(p.advance()).toBe(true);
   });
 
-  it('視覺最短秒：標題卡 (一段 3 秒、視覺 4 秒) 自動播放時停滿 4 秒', () => {
+  it('視覺最短秒：標題卡 (一段約 3.2 秒、視覺 4 秒) 自動播放時停滿 4 秒', () => {
     const pl = plan();
-    const last = pl.shots[10];
-    expect([last.segments[0].sec, last.minVisualSec, last.sec]).toEqual([3, 4, 5]);
+    const last = pl.shots[11];
+    expect(last.segments[0].sec).toBeCloseTo(3.23, 2);
+    expect([last.minVisualSec, last.sec]).toEqual([4, 5]);
   });
 
   it('大步長 (分頁切回) 也照時間軸走，不跳過整段', () => {

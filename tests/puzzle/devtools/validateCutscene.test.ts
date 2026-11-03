@@ -16,7 +16,9 @@ const withShot = (i: number, patch: Partial<ShotDef> & Record<string, unknown>):
 describe('過場驗證器：序章', () => {
   it('所有過場零問題 (暱稱以 12 字計、一般速度)', () => {
     expect(CUTSCENES.flatMap(c => validateCutscene(c, ctx))).toEqual([]);
-    expect(durationRange(prologue)).toEqual([60, 90]);
+    expect(durationRange(prologue)).toEqual([60, 110]);
+    expect(durationRange({ ...prologue, trigger: { ending: 'A' } })).toEqual([60, 90]);
+    expect(durationRange({ ...prologue, trigger: { afterClear: '1-1' } })).toEqual([20, 45]);
   });
 
   it('播放器的實際計畫 (12 字暱稱) 也符合速度規則；慢速計畫以 4.5 字檢查也通過 (總長除外)', () => {
@@ -50,7 +52,7 @@ describe('過場驗證器：偵測', () => {
     const b2 = { ...zhHant, 'cs.prologue.5.1': '一條很長很長很長很長很長很長的山路' };
     expect(codes(validateCutscene(prologue, { ...ctx, bundle: b2 }))).toEqual([['cutscene.lineTooLong', 5, 1]]);
     const b3 = { ...zhHant, 'cs.prologue.5.1': '老宅在山上，山路很長很長很長很長，車子開了很久很久很久很久，訊號一格一格消失了。' };
-    // 這段太長也讓總長超過 90 秒 (另報 duration)
+    // 這段太長也可能讓總長超過 110 秒 (另報 duration)
     expect(codes(validateCutscene(prologue, { ...ctx, bundle: b3 })).filter(c => c[0] !== 'cutscene.duration')).toEqual([['cutscene.tooManyLines', 5, 1]]);
   });
 
@@ -62,9 +64,9 @@ describe('過場驗證器：偵測', () => {
   });
 
   it('缺 key：段落 / 標題 / 畫面字 → textMissing；段落 key 格式不符 → keyFormat', () => {
-    const { ['cs.prologue.3.2']: _drop, ['cs.prologue.title']: _t, ['cs.prologue.art.seal']: _s, ...rest } = zhHant;
+    const { ['cs.prologue.3.2']: _drop, ['cs.prologue.title']: _t, ['cs.prologue.art.engrave']: _s, ...rest } = zhHant;
     expect(codes(validateCutscene(prologue, { ...ctx, bundle: rest }))).toEqual([
-      ['cutscene.textMissing', null, null], ['cutscene.textMissing', 1, null], ['cutscene.textMissing', 3, 2]
+      ['cutscene.textMissing', null, null], ['cutscene.textMissing', 3, 2], ['cutscene.textMissing', 9, null]
     ]);
     expect(codes(validateCutscene(withShot(0, { lines: ['cs.prologue.5.1'] }), ctx))).toEqual([['cutscene.keyFormat', 1, 1]]);
   });
