@@ -317,6 +317,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   .pz-tray-cards { gap: 8px; }
   .pz-tray-card { min-width: 58px; }
 }
+/* 窄螢幕 (手機)：狀態列讓出右上角的說明小鈕、可換行 (模式字不被擠成直排；持有物多時換行而不是互相擠壓) */
+@media (max-width: 600px) {
+  #pz-status { right: 58px; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+  #pz-status span { padding: 4px 10px; height: auto; min-height: 22px; }
+  #pz-mode { white-space: nowrap; letter-spacing: .12em; }
+  #pz-inv { flex-wrap: wrap; row-gap: 2px; line-height: 1.4; white-space: nowrap; }
+}
 /* 窄螢幕 (手機)：小鈕只剩「？」圖示；展開的面板改成右上角的窄卡 (字小、可捲動)，仍會讓位給展開圖 / 字卡匣 */
 @media (max-width: 600px) {
   #pz-help-btn { width: 32px; padding: 0; justify-content: center; }
