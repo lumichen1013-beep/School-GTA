@@ -16,6 +16,7 @@ import { combineMech } from './combine';
 import { reading } from './reading';
 import { print } from './print';
 import { manuscripts } from './manuscripts';
+import { deep } from './deep';
 
 /** 預設機制表：陣列順序即執行順序 (afterPhysics：plates 必須在 links 之前) */
-export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts];
+export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts, deep];

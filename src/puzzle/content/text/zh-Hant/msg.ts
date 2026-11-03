@@ -57,6 +57,7 @@ export const msg = {
   'msg.combine.half': '手上只有一樣，湊不起來。',
   'msg.combine.none': '手上沒有能湊在一起的東西。',
   'msg.print.wheel': '字輪轉到「{glyph}」。',
+  'msg.list.sep': '、',
   // 謎題標籤前按 E、匣裡沒有卡：卡貼在別的標籤上 (關卡自己的缺卡指路見 label.noCardText)
   'msg.label.cardElsewhere': '{card}還貼在別的標籤上。先去把它取下來。',
   // 字卡匣關著時按 1～3 / X：說明怎麼打開

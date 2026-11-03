@@ -33,7 +33,7 @@ const decor = (seed: number): DecorItem[] => [
 ];
 
 const TITLE_KEYS: Readonly<Record<string, string>> = {
-  mezz: 'lvl.ch2.mezz.title', deep: 'lvl.ch2.deep.title'
+  mezz: 'lvl.ch2.mezz.title'
 };
 
 const room = (id: string, objects: ObjDef[], seed: number, extraDecor: DecorItem[] = []): LevelDef => ({
@@ -59,11 +59,5 @@ export { print } from './2-3-print';
 export const mezz = room('mezz', [door('W', { glyph: 'term.glyph.huo' }), holeN], 3, [floorPiece('mezz', 2.6, 2.4, 2.2)]);
 /** 2-4 手稿庫 (下列中格)：完整關卡 (2-4-manuscripts.ts)；沿用舊的匯入位置 */
 export { manuscripts } from './2-4-manuscripts';
-/** 2-5 書房深處 (下列右格)：西門；東章門 (往溫室；要房間的銅鑰匙，此版本取不到) */
-export const deep = room('deep', [
-  door('W', { glyph: 'term.glyph.shan' }), holeN,
-  { id: 'chapterE', type: 'cubeDoor', side: 'E', kind: 'chapter', key: 'key.study', openText: 'lvl.ch2.chapterE.open',
-    x: 5.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.chapterE' },
-  // 2-4b 的線索③ (只在藏寶圖的墨字；爸爸劃掉的誤推)
-  { id: 'clueWax', type: 'remark', textKey: 'lvl.2-4.clue.wax', ink: true, x: -3, y: 1.6, z: -4.4, w: 1.6, h: 0.5, d: 0.04, visible: '2d', solid: false, interactable: true, labelKey: 'lvl.2-4.clue' }
-], 5, [floorPiece('deep', 2.6, 2.4, 2.2)]);
+/** 2-5 書房深處 (下列右格)：完整關卡 (2-5-deep.ts)；沿用舊的匯入位置 */
+export { deep } from './2-5-deep';

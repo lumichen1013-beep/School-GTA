@@ -25,6 +25,8 @@ declare module '../core/types' {
       hole?: boolean;
       /** 門旁 (房內側) 的活字 (2-3c；文字 key；只在 3D 看得到) */
       glyph?: TextKey;
+      /** 門上刻的圖 (折線，外觀；2-5 章門 = 老宅立面圖) */
+      carving?: string;
     };
     /** 門牌 (只在 2D；label kind 'plate' 掛在這裡) */
     doorPlate: {};

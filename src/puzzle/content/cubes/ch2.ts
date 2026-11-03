@@ -132,3 +132,22 @@ export const CH2_ZONE24 = {
   start: 'shelf',
   finish: 'ch2.mid'
 };
+
+/**
+ * 2-5 區的抽象模型 (devtools/validateDial；規格 6「2-5 書房深處（細化）」)：兩列 + 三行；印房南拱門在 2-3a 之後讀作「間」。
+ * 題：2-1a / 2-3a (兩個鎖扣)；2-5.tray = 人在印房、南拱門此刻接到書房深處北牆的洞 (鉛字盤推得過去)；
+ * 2-5 = 人在書房深處、書房深處回到 [2,1] (章門只接這一格的東側屋框)、鉛字盤已推過去 (跟著房間走)；終點 2-5。三枚齒與柄以前三關完成抽象
+ */
+export const CH2_ZONE25 = {
+  cube: CH2_CUBE,
+  puzzles: [
+    { id: '2-1a', room: 'shelf', needs: [], teaching: true, goal: s => shelfCol(s) === 2 },
+    { id: '2-3a', room: 'print', needs: [], teaching: true },
+    { id: '2-5.tray', room: 'print', needs: ['2-3a'], goal: (_s, f, c) => f.has('2-3a') && linkedTo(c.links(), 'print', 'archS') === 'deep' },
+    // 2-5 = 帶著鉛字盤回到 [2,1] 的書房深處 (轉動的部分在 2-5.tray 與帶回；BFS 的起點常已在 [2,1] → 不計 D16 唯一解)
+    { id: '2-5', room: 'deep', needs: ['2-5.tray'], teaching: true, goal: (s, f) => f.has('2-5.tray') && s.pos.deep?.[0] === 2 && s.pos.deep?.[1] === 1 }
+  ] as readonly ZonePuzzle[],
+  plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  start: 'shelf',
+  finish: '2-5'
+};

@@ -48,5 +48,8 @@ export const term = {
   // 2-4 手稿庫：門牌「閉」、銅鑰匙的齒・三、爸爸的手稿
   'term.glyph.bi': '閉',
   'term.tooth.manuscripts': '銅鑰匙的齒・三',
-  'term.ms.father': '爸爸的手稿'
+  'term.ms.father': '爸爸的手稿',
+  // 2-5 書房深處：房間的銅鑰匙 (第二章章鑰匙)、許問津的手記第二頁
+  'term.key.study': '房間的銅鑰匙',
+  'term.diary.2': '手記第二頁'
 } as const;

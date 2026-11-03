@@ -4,6 +4,7 @@ import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
 import { glow, inscription } from '../textures';
+import { drawingTexture } from './manuscripts';
 import type { ModelCtx, PropModel } from './types';
 import { labelBadge } from './label';
 
@@ -75,6 +76,13 @@ export function cubeDoorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel 
       const lock = mesh(box(0.16, 0.3, 0.03), pal.brass, { metalness: 0.7, roughness: 0.35, outline: false });
       lock.position.set(across - 0.16, 0.8, 0.07);
       leaf.add(lock);
+    }
+    // 門上刻的圖 (2-5 章門 = 老宅立面圖)：門扇上半的淺色木牌
+    const carving = d.type === 'cubeDoor' ? d.carving : undefined;
+    if (carving) {
+      const pic = mesh(new THREE.PlaneGeometry(across * 0.66, across * 0.44), 0xffffff, { map: drawingTexture(carving, 0, 0, 3, 2, 256, '#d9c49a', '#3a2614'), flatMap: true, outline: false, shadow: false, unique: true });
+      pic.position.set(across / 2, h * 0.7, 0.075);
+      leaf.add(pic);
     }
     face.add(leaf);
   }

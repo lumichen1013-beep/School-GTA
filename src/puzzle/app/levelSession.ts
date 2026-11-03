@@ -352,7 +352,9 @@ export class LevelSession {
     const r = refreshUnlocks(cleared);
     if (r.cs !== this.cs) { this.cs = r.cs; this.saveChapter(); }
     if (r.added.length && !evs.some(e => e.t === 'done')) say(this.world, 'msg.dial.unlocked');
-    // 房間通關 (謎題可以在別的房完成：例 2-3c 在手稿庫 → 印房通關)；每個場景每間房只送一次 (外殼另以 save.cleared 去重)
+    // 房間通關 (謎題可以在別的房完成：例 2-3c 在手稿庫 → 印房通關)；每個場景每間房只送一次 (外殼另以 save.cleared 去重)。
+    // 章門打開 (world.cleared) = 整章通關，由迴圈的 onCleared 負責，不再另送房間通關 (2-5 的題就是章門)
+    if (this.world.cleared) return;
     for (const room of clearedRooms(this.cs.spec, this.cs.state, this.world)) {
       if (this.roomClearSent.has(room)) continue;
       this.roomClearSent.add(room);

@@ -30,5 +30,7 @@ export const obj = {
   'obj.patternCabinet.verb': '打開',
   'obj.smallCabinet.verb': '拉拉看',
   'obj.bundle.verb': '抽出',
+  'obj.keyBench.verb': '組裝',
+  'obj.diaryStand.verb': '拿起',
   'obj.default.verb': '互動'
 } as const;

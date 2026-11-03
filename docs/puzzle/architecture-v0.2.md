@@ -1212,6 +1212,10 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 
 > 實作註記 (2026-11-04)：**內容** `content/levels/ch2/2-4-manuscripts.ts` (關卡 id `2-4`、房間 id `manuscripts`；x∈[-6,10]、東門 9.8；2-3c 排字架移入)；`content/levels/ch2/drawing.ts` (老宅立面圖折線 `HOUSE_DRAWING`、目標排列 `HOUSE_TARGET`、`floorPiece()`；六間房各加一件 `floorPiece` 裝飾)；印房線索② / 書房深處線索③ (`remark`)；`CH2_ZONE24`。**機制** `mechanics/manuscripts.ts` (`patternCabinet` 讀 `ext.cube.layout` 比對目標、`smallCabinet`、`bundle` (沿用 `shelf.pullSpine`)、`bundleRack`)；`mechanics/labels` `kind:'strip'` (`part` 原本就貼著、取下 = 解開；`attachedCards`)。**外殼** `cubeMapModel` 的 `MapCell.piece` (房間裝飾裡的 floorPiece)；字卡匣的貼著的卡改用 `attachedCards`。**呈現** `render/models/manuscripts.ts` (`drawingTexture` 共用：櫃門上的整張圖、地板上的一角)、`render/decor` `floorPiece` (只在實景)、`ui/cubeMap` 格子裡的淡墨圖。**驗證** `validateLevel`：`label kind strip`、`bundle` 的鎖、新類型的文字 key。數字見規格 2-4 區。
 
+#### 7.4.6 M1 第二章：2-5 書房深處（逐關開發第五關、章末；規格 6「2-5 書房深處（細化）」）
+
+> 實作註記 (2026-11-04)：**內容** `content/levels/ch2/2-5-deep.ts` (關卡 id `2-5`、房間 id `deep`；章門在 2.0 高的平台上、`carving` = 老宅立面圖、`doneFlag` 2-5)；`rooms.ts` 只剩 H1 夾層占位；`CH2_ZONE25`；登錄表 2-5 (前置 2-4)、章節 2 五關齊。**機制** `mechanics/deep.ts` (`keyBench` 柄 + 三枚齒 → `key.study`、`diaryStand` (`diary.2`)、`landing`)；`cubeDoor.carving`。**外殼** `LevelSession`：`world.cleared` (章門打開 = 整章通關) 時不再送房間通關。第三章尚未製作：`nextAfterClear('2-5','chapter')` = null → 通關畫面沒有「前往」鈕，`nextKey` 是占位文字。**呈現** `render/models/deep.ts`、章門刻圖。**驗證**數字見規格 2-5 區；Playwright：印房推鉛字盤過「間」的洞、鑰匙台、墊腳上平台、手記、章門 (兩種解法：印房在正上方 / 在第 1 行推過去再帶回第 2 行)。
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |

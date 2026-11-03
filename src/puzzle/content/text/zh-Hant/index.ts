@@ -16,5 +16,6 @@ import { uiSound } from './ui-sound';
 import { lvl22 } from './lvl-2-2';
 import { lvl23 } from './lvl-2-3';
 import { lvl24 } from './lvl-2-4';
+import { lvl25 } from './lvl-2-5';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvlCh2, ...uiSound };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvl25, ...lvlCh2, ...uiSound };

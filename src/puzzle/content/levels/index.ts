@@ -7,6 +7,7 @@ import { shelf } from './ch2/2-1-shelf';
 import { reading } from './ch2/2-2-reading';
 import { print } from './ch2/2-3-print';
 import { manuscripts } from './ch2/2-4-manuscripts';
+import { deep } from './ch2/2-5-deep';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -40,7 +41,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 2-3 印房：第二章第三關 (同一章魔方)；2-2 通關後開放 (章內：上列轉一次就接得上)
   { id: '2-3', chapter: 2, titleKey: 'lvl.2-3.title', abilities: ['nib'], unlock: { after: ['2-2'] }, load: () => print },
   // 2-4 手稿庫：第二章第四關；2-3 通關後開放 (章內：開場就從閱覽室南門走得到)
-  { id: '2-4', chapter: 2, titleKey: 'lvl.2-4.title', abilities: ['nib'], unlock: { after: ['2-3'] }, load: () => manuscripts }
+  { id: '2-4', chapter: 2, titleKey: 'lvl.2-4.title', abilities: ['nib'], unlock: { after: ['2-3'] }, load: () => manuscripts },
+  // 2-5 書房深處：第二章章末；2-4 通關後開放；章門打開 = 第二章通關
+  { id: '2-5', chapter: 2, titleKey: 'lvl.2-5.title', abilities: ['nib'], unlock: { after: ['2-4'] }, load: () => deep }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

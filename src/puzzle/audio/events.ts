@@ -189,7 +189,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 2-3 印房：活字架 / 排字架打開、印刷機壓版、字輪換字 (used 來回切換：兩向都出聲)
   typeCase: 'sfx.drawer.open', typeLock: 'sfx.drawer.open', press: 'sfx.lever.pull', typeWheel: 'sfx.cord.pull',
   // 2-4 手稿庫：手稿櫃 / 閉櫃打開、抽出手稿捆
-  patternCabinet: 'sfx.drawer.open', smallCabinet: 'sfx.drawer.open', bundle: 'sfx.book.pull'
+  patternCabinet: 'sfx.drawer.open', smallCabinet: 'sfx.drawer.open', bundle: 'sfx.book.pull',
+  // 2-5 書房深處：鑰匙組好、拿起手記 (撿到的聲音另由道具欄決定)
+  keyBench: 'sfx.latch.open', diaryStand: 'sfx.note.read'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
