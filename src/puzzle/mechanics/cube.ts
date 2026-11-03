@@ -19,6 +19,8 @@ declare module '../core/types' {
 /** 方向字 → 滑動方向 (上 = 北 = 後牆方向) */
 export const WORD_SIDE: Readonly<Record<LeverWord, Side>> = { up: 'N', down: 'S', left: 'W', right: 'E' };
 export const LEVER_WORDS = Object.keys(WORD_SIDE) as readonly LeverWord[];
+/** 方向字的顯示文字 key (上 / 下 / 左 / 右) */
+export const WORD_KEYS: Readonly<Record<LeverWord, TextKey>> = { up: 'term.word.up', down: 'term.word.down', left: 'term.word.left', right: 'term.word.right' };
 
 /** 拉桿 → 轉動 (轉自己所在的房間) */
 export const leverOp = (room: string, word: LeverWord): CubeOp => ({ t: 'slide', room, dir: WORD_SIDE[word] });

@@ -25,7 +25,7 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   const toMenu = el('button', 'pz-tomenu', text('ui.clear.menu')) as HTMLButtonElement;
   toMenu.type = 'button';
   clear.append(el('h1', 'pz-clear-title'), el('p', 'pz-next'), replay, toMenu);
-  root.append(el('div', 'pz-canvas'), el('div', 'pz-fade'), hud, el('div', 'pz-narration'), clear);
+  root.append(el('div', 'pz-canvas'), el('div', 'pz-fade'), el('div', 'pz-veil'), hud, el('div', 'pz-narration'), clear);
 }
 
 /** 依說明列重建操作說明 (日後重綁按鍵後重新呼叫即可一致) */

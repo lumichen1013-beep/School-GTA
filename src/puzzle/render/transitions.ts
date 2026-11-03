@@ -65,3 +65,65 @@ export function cssFade(el: HTMLElement, spec: FadeSpec): Transition {
     }
   };
 }
+
+/** 章節過場 (轉動 / 換房)：不切換渲染模式；swapNow = 換畫面點 (換房時換場景、轉動時說明「房間滑了過去」) */
+export interface Fx {
+  readonly duration: number;
+  tick(dt: number): { done: boolean; swapNow: boolean };
+  cancel(): void;
+}
+
+/** 轉動短過場 (規格 5.4.1：≤ 1.2 秒；減弱動態 0.6 秒淡入淡出)；換房淡出淡入 */
+export const CUBE_FX = {
+  turn: 1.0,
+  reduced: 0.6,
+  door: 0.5,
+  /** 轉動時畫面往滑動方向位移的幅度 (畫面寬 / 高的比例) */
+  shift: 0.08,
+  /** 轉動中途的輕微晃動 (px) */
+  rumble: 3,
+  veil: 0.92
+} as const;
+
+/** 滑動方向 → 畫面位移方向 (上 = 北 = 往畫面上方) */
+const FX_DIR: Readonly<Record<string, [number, number]>> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
+
+const easeInOut = (k: number): number => (k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k));
+
+/**
+ * dir = 'N' / 'S' / 'E' / 'W'：轉動 — 畫面朝滑動方向滑出、紙色遮罩蓋上、從反方向滑回 (中段輕晃)；
+ * dir = null：換房 — 遮罩淡入淡出。reduce (減弱動態)：只有遮罩淡入淡出、不位移不晃動
+ */
+export function cssCubeFx(stage: HTMLElement, veil: HTMLElement, dir: string | null, reduce: boolean): Fx {
+  const duration = dir === null ? CUBE_FX.door : reduce ? CUBE_FX.reduced : CUBE_FX.turn;
+  const move = dir !== null && !reduce ? FX_DIR[dir] ?? null : null;
+  let t = 0;
+  let swapped = false;
+  const reset = (): void => {
+    stage.style.transform = '';
+    veil.style.opacity = '0';
+  };
+  return {
+    duration,
+    tick(dt) {
+      t = Math.min(t + dt, duration);
+      const k = t / duration;
+      const cover = 1 - Math.abs(2 * k - 1);
+      veil.style.opacity = String(easeInOut(cover) * CUBE_FX.veil);
+      if (move) {
+        // 前半往 dir 滑出，後半從反方向滑回原位
+        const off = k < 0.5 ? easeInOut(k * 2) : -easeInOut((1 - k) * 2);
+        const jit = Math.sin(t * 70) * CUBE_FX.rumble * cover;
+        const px = move[0] * off * CUBE_FX.shift * stage.clientWidth + (move[1] !== 0 ? jit : 0);
+        const py = move[1] * off * CUBE_FX.shift * stage.clientHeight + (move[0] !== 0 ? jit : 0);
+        stage.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px) scale(${(1 - 0.03 * cover).toFixed(3)})`;
+      }
+      const swapNow = !swapped && k >= 0.5;
+      if (swapNow) swapped = true;
+      const done = t >= duration;
+      if (done) reset();
+      return { done, swapNow };
+    },
+    cancel: reset
+  };
+}

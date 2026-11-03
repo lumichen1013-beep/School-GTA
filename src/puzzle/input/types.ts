@@ -1,7 +1,7 @@
 import type { WorldAction } from '../core/actions';
 
-/** 外殼動作 (不進世界模擬)；notes / menu 等於對應畫面實作時加入 */
-export type ShellAction = 'restart' | 'confirm' | 'cancel';
+/** 外殼動作 (不進世界模擬；map = 開關展開圖，v0.3)；notes / menu 等於對應畫面實作時加入 */
+export type ShellAction = 'restart' | 'confirm' | 'cancel' | 'map';
 export type InputAction = WorldAction | ShellAction;
 /** 持續軸 */
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';

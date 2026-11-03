@@ -15,10 +15,12 @@ import { memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/c
 import { seenCutscenes } from '../meta/save';
 import { cutsceneById, PROLOGUE_ID, type CutsceneId } from '../content/cutscenes';
 import { isUnlocked, levelState, recordClear, startAbilities } from '../meta/progress';
-import { cssFade, TRANSITIONS } from '../render/transitions';
+import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom } from '../ui/dom';
 import { PuzzleHud } from '../ui/hud';
+import { CubeMapOverlay } from '../ui/cubeMap';
+import { keyLabel } from '../input/bindings';
 import { showMenu } from '../ui/screens/menu';
 import { showNickname } from '../ui/screens/nickname';
 import { showRestartConfirm, showSkipConfirm } from '../ui/confirm';
@@ -57,6 +59,7 @@ export class PuzzleApp {
   private bindings: Bindings = mergeBindings(DEFAULT_BINDINGS, this.settings.keys);
   private renderer: THREE.WebGLRenderer;
   private hud: PuzzleHud;
+  private cubeMap: CubeMapOverlay;
   private input: InputSource;
   private session: LevelSession | null = null;
   private screen: Screen = { id: 'boot' };
@@ -71,8 +74,9 @@ export class PuzzleApp {
   private onAudioCue: (e: Extract<CutsceneEvent, { type: 'audio' }>) => void = () => { /* 音訊模組尚未實作 */ };
 
   constructor(root: HTMLElement) {
-    buildPuzzleDom(root, this.text, deriveHelp(this.bindings));
+    buildPuzzleDom(root, this.text, [...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' }]);
     this.hud = new PuzzleHud(this.text);
+    this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap());
     this.input = new KeyboardSource(this.bindings);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     document.getElementById('pz-canvas')!.appendChild(this.renderer.domElement);
@@ -197,7 +201,11 @@ export class PuzzleApp {
     const theme = resolveTheme(level.theme ?? CHAPTERS.find(ch => ch.id === e.chapter)?.theme);
     const spec = singleRoomSpec(level);
     this.session = new LevelSession(
-      { renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme },
+      {
+        renderer: this.renderer, text: this.text, hud: this.hud, bindings: this.bindings, transition: cssFade(document.getElementById('pz-fade')!, TRANSITIONS[theme.transition]), theme,
+        fx: dir => cssCubeFx(document.getElementById('pz-canvas')!, document.getElementById('pz-veil')!, dir, this.reduceMotion()),
+        map: this.cubeMap
+      },
       spec, newChapterState(spec, level.id, null),
       { abilities: startAbilities(e, this.save), onCleared: () => this.go({ id: 'clear', levelId }) }
     );
