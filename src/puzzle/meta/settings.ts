@@ -10,12 +10,19 @@ export interface Settings {
   noteScale: number;
   inkPalette: 'default' | 'blueOrange' | 'mono';
   reduceMotion: boolean;
+  /** 過場自動播放 (預設關：手動推進) */
+  autoAdvance: boolean;
+  /** 過場文字速度：一般每秒 6 字、慢 4.5 字 */
+  textSpeed: 'normal' | 'slow';
+  /** 跳過過場前確認 (預設開) */
+  skipConfirm: boolean;
   /** 按鍵覆寫：動作 / 軸名稱 → KeyboardEvent.code 清單 (由 input 的 mergeBindings 合併) */
   keys: Record<string, string[]>;
 }
 
 export const defaultSettings = (): Settings => ({
-  hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false, keys: {}
+  hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false,
+  autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}
 });
 
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts as readonly unknown[]).includes(v) ? v as T : d;
@@ -38,6 +45,9 @@ export function sanitizeSettings(v: unknown): Settings {
     noteScale: typeof v.noteScale === 'number' && v.noteScale >= 0.8 && v.noteScale <= 1.6 ? v.noteScale : d.noteScale,
     inkPalette: oneOf(v.inkPalette, ['default', 'blueOrange', 'mono'] as const, d.inkPalette),
     reduceMotion: bool(v.reduceMotion, d.reduceMotion),
+    autoAdvance: bool(v.autoAdvance, d.autoAdvance),
+    textSpeed: oneOf(v.textSpeed, ['normal', 'slow'] as const, d.textSpeed),
+    skipConfirm: bool(v.skipConfirm, d.skipConfirm),
     keys
   };
 }

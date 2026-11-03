@@ -19,6 +19,13 @@ export interface SaveV2 {
   endings: { A: boolean; B: boolean };
   /** 玩家暱稱；預設空字串 = 尚未輸入 (開場進暱稱畫面) */
   name: string;
+  /**
+   * 已看過 (看完或跳過) 的過場 id，例 'cs:prologue' (規格 8)；跳過的另記在 skippedCutscenes (回憶頁標示「未看完」)。
+   * 選填：M1C 之前的 v2 存檔沒有這兩欄，缺欄 = 空清單 (以 seenCutscenes() / skippedCutscenes() 讀取)，
+   * 不為了補空清單而改寫舊存檔；第一次記錄過場時才寫入。
+   */
+  seenCutscenes?: string[];
+  skippedCutscenes?: string[];
 }
 
 export const defaultSave = (): SaveV2 => ({ v: 2, cleared: [], current: '', abilities: [], diary: [], scraps: [], endings: { A: false, B: false }, name: '' });
@@ -47,9 +54,16 @@ export function sanitizeSave(v: unknown): SaveV2 | null {
     diary: ints(v.diary, 1, 5),
     scraps: ints(v.scraps, 1, 6),
     endings: { A: e.A === true, B: e.B === true },
-    name: typeof v.name === 'string' ? cleanName(v.name) : ''
+    name: typeof v.name === 'string' ? cleanName(v.name) : '',
+    ...('seenCutscenes' in v ? { seenCutscenes: strs(v.seenCutscenes) } : {}),
+    ...('skippedCutscenes' in v ? { skippedCutscenes: strs(v.skippedCutscenes) } : {})
   };
 }
+
+/** 已看過的過場 (缺欄 = 空) */
+export const seenCutscenes = (s: SaveV2): readonly string[] => s.seenCutscenes ?? [];
+/** 跳過 (未看完) 的過場 (缺欄 = 空) */
+export const skippedCutscenes = (s: SaveV2): readonly string[] => s.skippedCutscenes ?? [];
 
 /** 暱稱：去頭尾空白、最多 NAME_MAX 字 */
 export const cleanName = (n: string): string => [...n.trim()].slice(0, NAME_MAX).join('');
