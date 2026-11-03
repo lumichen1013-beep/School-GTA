@@ -1,10 +1,11 @@
-# 《圖紙之間》程式架構設計 v0.2
+# 《圖紙之間》程式架構設計 v0.2（含 v0.3 魔方增補）
 
 > **修訂紀錄**
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
+> | **v0.3 增補（魔方主軸）** | 2026-11-03 | 對應規格 v0.3：新增章節層級狀態 `core/cube.ts`、`core/chapter.ts`（4.16）；`mechanics/cube.ts`、`labels.ts`、`scale.ts` 與 N24～N31 各機制檔（4.17～4.19）；`ActionFrame.commands`、`AbilityId = nib｜scale`、新事件；展開圖與字卡匣 UI（`app/cubeMapModel.ts`、`ui/cubeMap.ts`、`ui/cardTray.ts`）；SaveV3；`devtools/validateCube`（BFS）；`pin.ts`、`section.ts`、`mark.ts`、`light.ts`、`seam.ts` 自計畫移除（N5 / N6 / N7 / N8 / N15 / N16 退役、N20 併入 N21）；依賴矩陣不新增層；6.6 第一章走查；7.4 M-Cube 步驟；決策 Q6～Q9 |
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
-> | v0.2（新劇情：老宅魔方・森林圖書館） | 2026-11-03 | 只改劇情名詞與指向：追逐者改稱守衛殘影；解答手稿改為許問津的解答手稿；`story.*` key 移除律師來信 `story.letter`、日記改為許問津的手記；新增 N20 接縫（`mechanics/seam.ts`，規格 5.4，架構細節待 Q-K 確認後補）；章節主題改為森林中的圖書館（`render/themes/<章>.ts`、`render/decor/`，規格 9.3） |
+> | v0.2（新劇情：老宅魔方・森林圖書館） | 2026-11-03 | 只改劇情名詞與指向：追逐者改稱守衛殘影；解答手稿改為許問津的解答手稿；`story.*` key 移除律師來信 `story.letter`、日記改為許問津的手記；新增 N20 接縫（`mechanics/seam.ts`，規格 5.4；**v0.3 已取消**，改由 4.16 魔方連接表）；章節主題改為森林中的圖書館（`render/themes/<章>.ts`、`render/decor/`，規格 9.3） |
 > | v0.2（劇情演出） | 2026-11-03 | 新增 4.15 過場系統（`text/readingTime.ts`、`app/cutscene.ts`、`ui/cutscene.ts`、`render/cutscene/`、`content/cutscenes/`）與畫面狀態 `cutscene`；設計見 `cutscenes-v0.1.md` |
 > | v0.2（手機觸控） | 2026-11-02 | 4.6 輸入層加入觸控（`input/touch.ts`、`touchLayout.ts`、`merge.ts`、`ui/touchOverlay.ts`）、純檔案 DOM 規則、文字 key、擴充劇本「新增一種輸入」；設計細節見 `mobile-controls-v0.1.md` |
 > | v0.2（老宅尋寶・單人詭異版） | 2026-11-02 | 劇情改為老宅尋寶（顯示名見 `story-bible-v0.2.md`）；4.13 改為全遊戲氛圍 / 驚嚇；新增 4.14 `mechanics/chase`（N19 追逐，確定性）與 `chase` 事件；`calmTension` 語意擴大（驚嚇平靜版、追逐自動通過） |
@@ -92,13 +93,15 @@ logic 內部：step → push, mechanisms, world, geometry；switchMode → place
 | 層 | 資料夾 | 職責（一句話） | 可 import |
 |----|--------|---------------|-----------|
 | L0 核心模擬 | `core/` | 世界狀態、幾何、步進、切換、推箱、互動分派、機制掛點、快照；確定性、無 I/O | 只有 `core/` |
-| L1 機制 | `mechanics/` | 每檔一個機制（壓板、連動、物品、定稿、燈影、剖面、墨記…），經掛點插入核心 | `core/`；其他 mechanics（須無環，見 4.2） |
+| L1 機制 | `mechanics/` | 每檔一個機制（壓板、連動、物品、魔方機關、標籤、尺度、管線、光路…；v0.3），經掛點插入核心 | `core/`；其他 mechanics（須無環，見 4.2） |
 | L2 內容 | `content/` | 關卡、章節、物品表、提示、文字表（純資料） | `core/`、`mechanics/` 的**型別**（`import type`） |
 | L2' 文字 | `text/` | `t(key, params)`、插值、詞彙表解析（純函式） | 無 |
 | L3 外圍規則 | `meta/` | 存檔 / 遷移、設定、統計、解鎖、提示策略（純函式＋注入 storage） | `core/`、`content/`、`text/` |
 | L4 呈現 | `render/`、`ui/`、`input/`、`audio/` | three 場景、DOM HUD / 選單、輸入來源 | `render`→`core`；`ui`→`text`；`input`→`core`（型別） |
 | L5 外殼 | `app/` | 主迴圈、畫面狀態機、把上述接起來 | 全部 |
 | 工具 | `devtools/` | 關卡驗證器、腳本回放、捷徑掃描（純函式，測試與開發用） | `core`、`mechanics`、`content`、`meta`、`text` |
+
+> v0.3：魔方不新增層。章節層級狀態（`core/cube.ts` 魔方運算、`core/chapter.ts` ChapterSession）屬 L0 核心：純函式、可 JSON 序列化、不 import mechanics（建立房間 `World` 時由呼叫方傳入機制表，比照 `createWorld`）；轉動機關、標籤、尺度屬 L1 機制；展開圖的資料推導屬 `app/`（純函式），繪製屬 `ui/`。2.2 矩陣不變。
 
 ### 2.2 依賴矩陣（列 = 匯入方，欄 = 被匯入方；✓ 可、T 僅 `import type`、✗ 禁止）
 
@@ -149,7 +152,9 @@ src/puzzle/
     world.ts                 createWorld、say、emit、respawn、updateCheckpoint、flags
     registry.ts              Mechanic / ObjTypeSpec 介面、compileMechanics（衝突檢查）
     snapshot.ts              snapshot / restore（JSON）
-    actions.ts               WorldAction、ActionFrame、ACTION_ORDER
+    actions.ts               WorldAction、ActionFrame、ACTION_ORDER（v0.3：`commands` 帶參數的指令，4.16）
+    cube.ts                  v0.3：CubeDef / CubeState、slide / rowTurn / colTurn / layerTurn / sliceTurn、links（連接表）（純函式，4.16）
+    chapter.ts               v0.3：ChapterSession（換房、房間快照、進房快照、跨房物件、章節道具 / 旗標 / 字卡；4.16）
   mechanics/                 L1 每檔一機制
     index.ts                 DEFAULT_MECHANICS（註冊順序即執行順序）
     basics.ts                floor/wall/rail/table/plinth/shelf/crate 類型宣告（無行為）
@@ -158,14 +163,17 @@ src/puzzle/
     plates.ts                C6/N2/N3/N4/N14：壓板計重
     notes.ts                 C14：字條
     exit.ts                  出口門 → cleared
-    pin.ts                   N5（N7 的定稿入口）
-    light.ts                 N6/N7/N15：燈、caster、影子推導與定稿
-    section.ts               N8：剖面
-    mark.ts                  N16：墨記、區域限制
-    chase.ts                 N19：追逐（守衛殘影路徑、2D 限定判定、檢查點、減弱模式自動通過；4.14）
-    seam.ts                  N20：接縫門（`seam.to`、`blind` 門在 3D 擋路、只在 3D 穿門；規格 5.4，暫定 Q-K）
+    （pin.ts / light.ts / section.ts / mark.ts：v0.3 自計畫移除，N5 / N6 / N7 / N8 / N15 / N16 退役；6.1～6.4 保留作設計紀錄）
+    cube.ts                  v0.3 N21：lever / dial / cubeDoor 類型、轉動請求、門後是牆、轉不動判定（4.16）
+    labels.ts                v0.3 N22：標籤、字卡貼取、詞典效果（方向字、門牌「間」、字謎）（4.17）
+    scale.ts                 v0.3 N23：尺度三檔、碰撞 / 支撐 / 重量重算、卡牆檢查（4.18）
+    reveal.ts、pipes.ts、lightpath.ts、locks.ts、combine.ts、balance.ts、mini.ts  v0.3 N24～N30（4.19）
+    chase.ts                 N19：追逐（守衛殘影路徑、2D 限定判定、檢查點、減弱模式自動通過；4.14）；v0.3 加 N31 跨房追逐（4.19）
   content/                   L2 純資料
-    items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap）
+    items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap；v0.3 加章節道具）
+    cards.ts                 v0.3：CARDS 字卡表（詞卡 / 部件卡 / 尺度卡）
+    lexicon.ts               v0.3：詞典（字 → 效果、同義字、無效字）（4.17）
+    cubes/ch<N>.ts           v0.3：各章 CubeDef（初始排列、屋框、轉動方式）
     chapters.ts              CHAPTERS（章、主題 id、旁白 key；主題 = 森林中的圖書館各章，規格 9.3）
     moodTypes.ts             MoodDef 純型別（零依賴，4.13）
     cutsceneTypes.ts         CutsceneDef / ShotDef 純型別（零依賴，4.15）
@@ -196,7 +204,7 @@ src/puzzle/
     materials.ts             Painter 沿用（2D/3D 雙材質）
     textures.ts              沿用
     transitions.ts           Transition 介面：inkFade、plainFade（減少動態）
-    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、印框、剖面斜線、字條浮現字跡與邊角發光）
+    markers.ts               P4 形狀符號裝飾（2D 專屬墨點、3D 專屬框、標籤墨框與尺度方槽、字條浮現字跡與邊角發光；v0.3）
     themes/index.ts          Theme 登錄表；palette.ts 拆成 base + ink 三組；各章主題（入口、書庫、溫室、根窖、觀星閣樓、林心草地；色板見 story-bible 8.2）
     models/index.ts          MODELS 登錄表（type → ModelFactory）、fallback 盒模型
     models/*.ts              沿用 props/devices/key/player/room；新類型一檔
@@ -208,6 +216,8 @@ src/puzzle/
     synth.ts                 PuzzleAudio：章節底音、分層音軌、脈動低音、鐘音、驚嚇音、限幅器、回饋音
   ui/                        L4 DOM
     hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
+    cubeMap.ts               v0.3：2D 展開圖與轉動預覽（DOM / Canvas 2D 疊層）
+    cardTray.ts              v0.3：字卡匣（卡片列、貼 / 取、無效字回饋；含觸控）
     icons.ts                 物品 id → SVG
     touchOverlay.ts          觸控疊層 DOM、Pointer Events、pointer capture、阻止瀏覽器手勢；事件經 TouchSink 交給 app
     screens/*.ts             nickname、menu、clear、ending、journal（日誌 / 元謎題）、notes（H：重看已出現的字條，唯讀）、guide（許問津的解答手稿頁，解答模式）
@@ -217,11 +227,13 @@ src/puzzle/
     loop.ts                  主迴圈（固定步長）、過場鎖
     cutscene.ts              過場時間軸狀態機（純邏輯：鏡 / 段 / 淡入停留淡出、minDwell、自動播放、跳過確認、暫停；4.15）
     hudModel.ts              deriveHud(world, text, …) 純函式
+    cubeMapModel.ts          v0.3：deriveCubeMap(session, previewOp?) 純函式（展開圖、接通線、預覽）
     services.ts              組裝 storage/save/settings/text/theme
   devtools/                  工具（純）
     validateLevel.ts         schema 與內容規則
     script.ts                通關腳本 → ActionFrame 序列（取代 tests helpers 的控制器）
     shortcutScan.ts          捷徑掃描器
+    validateCube.ts          v0.3：章節抽象模型 BFS（有解、卡死、最短步數、捷徑；規格 5.4.8）
 tests/puzzle/
   architecture.test.ts、core/*、mechanics/*、levels/<id>.test.ts（通關＋反例）、meta/*、content.test.ts（全關驗證）
 ```
@@ -258,7 +270,7 @@ export type Mode = '3d' | '2d';
 export type Visibility = 'both' | '2d' | '3d';
 export type ObjId = string;
 export type ItemId = string;                         // 'nib' | 'inkdrop' | 'seal' | 'diary:1' | 'scrap:4' …（content/items.ts 定義）
-export type AbilityId = 'nib' | 'pin' | 'section' | 'mark';   // 規格 8 save.abilities
+export type AbilityId = 'nib' | 'scale' | 'mini';   // v0.3：寫、量、縮影房內的主角縮小（規格 8 save.abilities；原 'pin' | 'section' | 'mark' 退役）
 export type TextKey = string;
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
@@ -292,8 +304,8 @@ export type GameEvent =
   | { t: 'chase'; id: string; s: 'start' | 'caught' | 'end' | 'autoPass' };   // N19（4.14）
 
 export interface ActionFrame { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[] }
-export type WorldAction = 'flip' | 'reset' | 'interact' | 'pin' | 'section' | 'mark';
-export const ACTION_ORDER: readonly WorldAction[] = ['flip', 'reset', 'interact', 'pin', 'section', 'mark'];
+export type WorldAction = 'flip' | 'reset' | 'interact';   // v0.3：pin / section / mark 退役；寫、量、轉動經 interact 與 ActionFrame.commands（4.16、4.17）
+export const ACTION_ORDER: readonly WorldAction[] = ['flip', 'reset', 'interact'];
 
 export function createWorld(level: LevelDef, opts: { mechanics: readonly Mechanic[]; abilities?: AbilityId[]; text?: Runtime['text'] }): World;
 /** 確定性：相同 (snapshot, frame 序列, dt 序列) → 相同結果；不讀時鐘 / 亂數 / DOM */
@@ -364,7 +376,7 @@ export interface CompiledMechanics {
 export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics;  // 重複類型 / 動作 / id → throw
 ```
 
-**註冊方式**：`mechanics/index.ts` 匯出 `DEFAULT_MECHANICS = [basics, items, links, plates, notes, exit, pin, section, light, mark]`。**陣列順序 = 執行順序**；`createWorld` 必須傳入機制表（核心不 import mechanics，測試可只傳子集）。不做全域副作用註冊（import 順序決定行為會讓測試不穩定）。
+**註冊方式**：`mechanics/index.ts` 匯出 `DEFAULT_MECHANICS = [basics, items, links, plates, notes, exit, cube, labels, scale, reveal, pipes, lightpath, locks, combine, balance, mini, chase]`（v0.3；原 `pin, section, light, mark` 移除）。**陣列順序 = 執行順序**；`createWorld` 必須傳入機制表（核心不 import mechanics，測試可只傳子集）。不做全域副作用註冊（import 順序決定行為會讓測試不穩定）。
 
 **衝突規則**
 
@@ -426,7 +438,7 @@ export interface ObjState {
   derivedBy?: MechanicId;       // 推導物件的擁有者
 }
 
-export interface Region { id: string; minX: number; maxX: number }              // Q-C 墨記區域（x 分區；2D 只有 x）
+export interface Region { id: string; minX: number; maxX: number }              // Q-C 墨記區域（x 分區；2D 只有 x）；v0.3 隨 N16 退役，不實作
 export interface Zone { id: string; min: V3; max: V3; flag: string }             // 走到某處即設旗標（1-1a「走到盡頭」）
 export interface DecorItem { kind: string; x: number; y: number; z: number; [k: string]: Json }
 
@@ -477,7 +489,7 @@ export function solidsFor(w: World, mode: Mode): ObjState[];               // is
 
 - 只有兩種模式（N11 已否決），所以 `MODES` 是兩筆常數表，不是插件點；它的價值是把 2D/3D 差異收在一處。
 - `trySwitchMode(w)` = `MODES[w.player.mode].other` 的 `enter`；**先記錄 `z3d` 再求解**（修 H10，失敗時還原），落點檢查合成 `canLand`（`noLand3d` 改由 `basics` 機制提供，現況行為不變）。
-- **剖面（N8）不是第三種模式**，是 `presence` 掛點：在 2D 依 `player.z3d` 過濾。因此 solids、壓板計數、互動、渲染全部自動吃到剖面。
+- （v0.3：N8 退役，本條僅作紀錄）**剖面（N8）不是第三種模式**，是 `presence` 掛點：在 2D 依 `player.z3d` 過濾。因此 solids、壓板計數、互動、渲染全部自動吃到剖面。
 - 投影：2D 渲染位置的 z 由 render 決定（`FRONT_2D`），邏輯層 2D 只是 `axes=2`，不做投影矩陣。
 
 ### 4.5 渲染層（`render/`）
@@ -510,18 +522,18 @@ export class PuzzleScene {
 
 - **同一份物件資料產生兩種外觀**：沿用 `Painter`（每個網格一組 3D 材質 + 一組 2D 扁平色＋描邊），模型工廠只寫一次；不另做 2D 模型。
 - 可見性一律 `isActiveIn(world, obj, renderMode)`（修 H7 的渲染那一處）；模型 `update` 讀 `obj.used/ext`，不讀全域旗標（修 H20：門讀自己的 `used`）。
-- **P4 形狀符號**（規格 7.2）由 `markers.ts` 依特性統一加：`visible:'2d'` → 墨點、`'3d'` → 實線框、`pinnable` → 印框、剖面中 → 斜線、影子 → 網點。新物件類型不必各自畫符號。
+- **P4 形狀符號**（規格 7.2）由 `markers.ts` 依特性統一加：`visible:'2d'` → 墨點、`'3d'` → 實線框、可寫標籤 → 墨框、可貼尺度卡 → 方槽、縮放中 → 大 / 小角標（v0.3；原印框、剖面斜線、影子網點隨 N5 / N8 / N6 退役）。新物件類型不必各自畫符號。
 - 主題切換 = 重建場景（只在設定變更或換關時發生，不影響切換視角的流暢度）。
 - 效能：切換視角只換材質與相機（現況做法）；derived 物件 id 穩定（`light:shadow:<casterId>`），對帳只在增減時建 / 拆模型，縮放走 `update`。數百物件不需 instancing〔推論〕。
 
 ### 4.6 輸入層（`input/`）
 
 ```ts
-export type ShellAction = 'restart' | 'notes' | 'menu';   // 'skip' 移到解答手稿頁內（只限擴充題）
+export type ShellAction = 'restart' | 'notes' | 'menu' | 'map' | 'cards';   // v0.3：map 展開圖、cards 字卡匣 / 道具欄   // 'skip' 移到解答手稿頁內（只限擴充題）
 export type InputAction = WorldAction | ShellAction;
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';
 export type Bindings = Record<InputAction | Axis, string[]>;   // KeyboardEvent.code
-export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact、T reset、R restart、G pin、C section、V mark、H notes（重看已出現的字條；規格 N5/N8/4.1/7.1）
+export const DEFAULT_BINDINGS: Bindings;  // F/Q flip、E interact（3D 拉機關、2D 對標籤開字卡匣）、T reset、R restart、M map（2D 展開圖，ShellAction）、H notes（重看已出現的字條；規格 7.1）。v0.3：G / C / V 退役
 
 export interface InputSource {
   /** 每幀取樣：持續軸 + 本幀新按下的動作（取走即清空） */
@@ -534,7 +546,7 @@ export class KeyboardSource implements InputSource { constructor(bindings: Bindi
 export function mergeSources(sources: InputSource[]): InputSource;   // input/merge.ts：軸取絕對值較大者、jump OR、pressed 依 INPUT_ACTIONS 聯集
 
 // input/touch.ts（純邏輯）
-export type TouchControlId = 'stick' | 'jump' | 'flip' | 'interact' | 'reset' | 'pause' | 'notes' | 'pin' | 'section' | 'mark';
+export type TouchControlId = 'stick' | 'jump' | 'flip' | 'interact' | 'reset' | 'pause' | 'notes' | 'map';   // v0.3：pin / section / mark 移除、加 map
 export class TouchSource implements InputSource {
   constructor(opts: { deadZone: number /* 0.15 */; full2d: number /* 0.6 */; holdMs: { reset: number /* 500 */ } });
   setContext(c: { mode: Mode; layout: TouchLayout; visible: readonly TouchControlId[] }): void;
@@ -610,6 +622,7 @@ export function startAbilities(e: LevelEntry, save: SaveV2): AbilityId[];   // d
 export interface KeyValueStorage { get(k: string): string | null; set(k: string, v: string): void; remove(k: string): void }
 export const memoryStorage: () => KeyValueStorage;      // 測試用；app 注入 localStorage 包裝
 
+/** v0.3：SaveV3 = SaveV2 + cards + chapters（ChapterState，4.16）、abilities 改 'nib' | 'scale'；MIGRATIONS[2] 丟棄 pin / section / mark、已通關 1-2 → 第一章快照預設 1-2a / 1-2b 旗標（規格 8） */
 export interface SaveV2 {                                // 規格 8
   v: 2; cleared: string[]; current: string; abilities: AbilityId[];
   diary: number[]; scraps: number[]; endings: { A: boolean; B: boolean }; name: string;
@@ -717,7 +730,7 @@ export function scanShortcuts(spec: ScanSpec, mechanics: readonly Mechanic[]): A
 
 ### 4.13 氛圍、緊張與驚嚇呈現（`render/tension/`、`audio/`；規格 9.1）
 
-全遊戲使用，強度逐章上升（規格 9.1 曲線）；**純呈現層**，核心與機制不知道它存在。四種詭異手法（只在藏寶圖出現的守衛殘影、不一致的影子、回到圖釘後的小變化、切換瞬間換位的裝飾）全部是 decor，不是 `ObjDef`。
+全遊戲使用，強度逐章上升（規格 9.1 曲線）；**純呈現層**，核心與機制不知道它存在。四種詭異手法（只在藏寶圖出現的守衛殘影、不一致的影子、魔方轉動後的小變化（v0.3）、切換瞬間換位的裝飾）全部是 decor，不是 `ObjDef`。
 
 - **資料位置**：放在 content 層 `LevelEntry`（4.8）的 `mood?: MoodDef` 欄位，**不放進 core 的 `LevelDef`**（否則核心型別得認識呈現資料）。型別在 `content/moodTypes.ts`（純型別、零依賴）。
 
@@ -764,7 +777,7 @@ export interface PuzzleAudio {
 }
 ```
 
-- **單向事件匯流**：core → `world.events`（`switch`、`flag`、`fall`、`cleared`、`chase`）→ `app/loop.ts` → `TensionDirector.update` / `PuzzleAudio`。director 只讀、不回寫 world；Boss 階段以旗標表示（`stages[].untilFlag`），與 4.3 的 `phases` 同一組旗標。「回到圖釘」由 `flag`（`mark:recalled`）事件表示。
+- **單向事件匯流**：core → `world.events`（`switch`、`flag`、`fall`、`cleared`、`chase`）→ `app/loop.ts` → `TensionDirector.update` / `PuzzleAudio`。director 只讀、不回寫 world；Boss 階段以旗標表示（`stages[].untilFlag`），與 4.3 的 `phases` 同一組旗標。（v0.2 的「回到圖釘」`mark:recalled` 隨 N16 退役；v0.3 手法 C 改由 `turnRequest` 成功後的 `flag:'cube:turned'` 觸發。）
 - **預算執行**（規格 9.1）：director 內部檢查同時類別 ≤ 2、事件最小間隔、驚嚇前後留白（前 ≥ 2 秒、後 ≥ 15 秒）、謎題開始 60 秒 / 重生 10 秒 / 字條浮現 5 秒靜默窗、事件不落在目前謎題 `area` 內。
 - **減弱緊張效果**（`Settings.calmTension`，預設 false）：`load(def, true)` 時暈影、色溫、鏡頭推近、脈動低音、環境漸變與詭異裝飾事件停用，驚嚇改 `gentle`；**追逐自動通過屬邏輯效果，由 4.14 的 `chase` 機制處理**（`createWorld` 的 `options.calmTension`），不靠呈現層。
 - **依賴規則**：`render/tension/`、`audio/` 可 `import type` `content/moodTypes.ts` 與 `core` 的 `GameEvent`；`core/`、`mechanics/`、`meta/`、`text/`、`devtools/` 不得 import `render/` 或 `audio/`；`content/moodTypes.ts` 不得 import 任何檔（2.3 測試加一條）。
@@ -784,7 +797,7 @@ export interface ChaseDef {
   speed: number;                     // 2.6（規格 Q-H 暫定）
   lead: number;                      // 起跑落後 ≥ 6
   assistAfterCaught: number;         // 3 → 速度 ×0.8
-  region: string;                    // 圖釘區域（Q-C）：走道自成一區，不能用圖釘跨出
+  region: string;                    // v0.2 為圖釘區域；v0.3 N16 退役，此欄移除（走道是獨立房間區段）
 }
 // 機制掛點（4.2）：
 //   init   ：每個 ChaseDef 生成一個 ObjState{ def:{ type:'chaser', visible:'2d', solid:false } }（不擋路、不算重量、不可蓋印、不投影）
@@ -814,6 +827,115 @@ export interface ChaseDef {
 - **驗證器**（`devtools/validate.ts`）：每段 ≤ 2 行 × 16 字（`{name}` 以 `NAME_MAX` 計）、每場總長在目標區間、key 齊全、`engine` 鏡頭的關卡已登錄或有 `paper` 替代、無驚嚇提示。
 - **文字 key**：`cs.<id>.title`、`cs.<id>.<鏡>.<段>`、`ui.cutscene.<skip|hold|replay|log|unfinished>`。
 
+### 4.16 魔方與章節層級狀態（v0.3；`core/cube.ts`、`core/chapter.ts`、`mechanics/cube.ts`；規格 5.4）
+
+**問題**：現況一次只載入一個關卡（`app/levelSession.ts` 持有一個 `World`）。魔方需要「同章多個房間同時存在、物件狀態保留、門接到哪隨魔方改變」。做法：**房間仍是一個 `LevelDef` / `World`**（物理、切換、互動全不改），上面加一層純資料的 `ChapterSession`。
+
+```ts
+// core/cube.ts（純函式、可 JSON 序列化）
+export type Side = 'N' | 'S' | 'E' | 'W' | 'U' | 'D';
+export type Cell = [number, number, number];                   // [x, y, layer]
+export interface CubeDef {                                      // content/cubes/ch<N>.ts
+  id: string; dims: Cell; ops: 'slide' | 'rowcol' | 'layer' | 'slice';
+  cells: Array<{ at: Cell; room: string | 'solid' | 'empty' }>;  // 初始排列 S0
+  frame: Array<{ at: Cell; side: Side; kind: 'porch' | 'chapterExit' | 'skylight'; to?: string }>;
+}
+export interface CubeState { pos: Record<string, Cell>; rot: Record<string, 0 | 1 | 2 | 3> }   // 房間 → 格、朝向
+export type CubeOp =
+  | { t: 'slide'; room: string; dir: Side }
+  | { t: 'row' | 'col'; index: number; step: 1 | -1 }
+  | { t: 'layer'; layer: number; cw: boolean }
+  | { t: 'slice'; axis: 'x' | 'y' | 'z'; index: number; cw: boolean };
+export function applyOp(def: CubeDef, s: CubeState, op: CubeOp): CubeState | { blocked: 'notEmpty' | 'outOfCube' };
+export interface DoorInfo { room: string; door: ObjId; side: Side; kind: 'door' | 'arch' | 'chapter'; label: string /* 門牌，預設「門」 */ }
+export interface Link { from: { room: string; door: ObjId }; to: { room: string; door: ObjId | null } | { frame: string }; kind: 'door' | 'arch' }
+/** 連接表：依格位與朝向算出每扇門此刻接到哪；門牌「間」可對無門的牆接通（規格 5.4.5） */
+export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[]): Link[];
+```
+
+```ts
+// core/chapter.ts（純資料 + 純函式；不 import mechanics，建 World 時由呼叫方傳入）
+export interface RoomSnapshot { objs: WorldSnapshot['objs']; flags: string[] }      // 重用 4.1 的 snapshot
+export interface ChapterState {
+  chapter: number; cube: CubeState;
+  room: string; door: ObjId | null;                     // 玩家所在房、從哪扇門進來
+  rooms: Record<string, RoomSnapshot>;                   // 已離開房間的物件快照
+  moved: Array<{ obj: ObjId; from: string; to: string }>;   // 跨房物件（拱門）的歸屬變更
+  labels: Record<string, string[]>;                      // labelId → 貼著的字卡
+  cards: Record<string, number>; items: Record<string, number>;
+  levers: Record<ObjId, { word: string; ink?: number }>; // 方向字（可被寫改）與墨量
+  flags: string[];
+}
+export interface ChapterSession {
+  state: ChapterState;
+  entry: ChapterState;                                  // R 用的「本次進房時」快照（深拷貝 JSON）
+  world: World;                                          // 當前房間
+}
+export function enterRoom(cs: ChapterSession, room: string, door: ObjId | null, opts: WorldOpts): ChapterSession;   // 存當前房快照 → 載入 / 復原目標房 → 記 entry
+export function turn(cs: ChapterSession, op: CubeOp): ChapterSession | { blocked: string };                          // 檢查跨界物件 / 卡榫 / 墨量 → applyOp → 重算連接表寫入 world.ext.cube
+export function restartRoom(cs: ChapterSession, opts: WorldOpts): ChapterSession;                                    // R：state ← entry
+export function transferObject(cs: ChapterSession, obj: ObjId, via: Link): ChapterSession;                         // 拱門跨房（規格 5.4.6）
+```
+
+- **房間內與章節層的界線**：`World` 只知道自己的門此刻是否接通（`world.ext.cube = { links: Record<doorId, 'open' | 'wall'> }`，由 session 每次換房 / 轉動後寫入）。玩家走進接通的門、拉機關、箱子越過拱門時，`mechanics/cube.ts` 只發事件，由 app 呼叫 session：
+
+```ts
+// core/types.ts GameEvent 新增（v0.3）
+| { t: 'door'; door: ObjId }                    // 穿過接通的門 → enterRoom
+| { t: 'turnRequest'; lever: ObjId }            // 3D 拉機關 → turn（機關的 word 決定 op）
+| { t: 'objCross'; obj: ObjId; door: ObjId }    // 可推物越過拱門 → transferObject
+| { t: 'card'; label: string; ok: boolean }     // 4.17 回饋
+```
+
+- **轉動時玩家的位置**：玩家永遠在被轉的那一組裡（「轉自己」原則，規格 5.4.1），房間本地座標不變，所以 `World` 不用動；只重算連接表並播短過場（`render/transitions.ts` 新增 `cubeTurn`，減弱動態用 `plain`）。
+- **轉不動**（規格 5.4.1）：`turn` 先查當前房間——玩家或可推物的盒子跨出房間邊界、`scale` 機制回報巨物伸進軌道（4.18）、墨量 0 → 回傳 `blocked`，app 用 `say` 顯示原因。
+- **存檔**：`ChapterState` 就是 SaveV3 的 `chapters[n]`（4.9）；寫入時機 = `enterRoom` 與 `turn` 成功後（規格 8）。
+- **確定性**：`applyOp`、`links`、`turn` 不讀時鐘 / 亂數；同一序列同結果（測試鎖定）；2.3 第 4 條的字串規則自動涵蓋 `core/`。
+- **mechanics/cube.ts** 擁有類型 `lever`、`dial`（`interactIn:'3d'`，互動 → emit `turnRequest`）、`cubeDoor`（`kind`；`passable` 掛點讀 `world.ext.cube.links`，接不通時 `say('msg.cube.wall')`）。
+
+### 4.17 標籤與字卡（寫；`mechanics/labels.ts`、`content/lexicon.ts`、`ui/cardTray.ts`；規格 N22）
+
+```ts
+// ObjBase 新增（declaration merging，比照 4.3）
+label?: { id: string; base: string /* 原字，例「左」「門」「閉」「大衣」 */; slots: ('word' | 'part' | 'scale')[] };
+// core/actions.ts：ActionFrame 新增帶參數的指令（可錄製、可回放）
+export type WorldCommand = { t: 'card'; label: string; card: string } | { t: 'uncard'; label: string; card: string };
+export interface ActionFrame { moveX: number; moveZ: number; jump: boolean; pressed: readonly WorldAction[]; commands?: readonly WorldCommand[] }
+// content/lexicon.ts
+export interface LexEntry { text: string; effect: LexEffect; alt?: string[] /* 同義字，規格 D14 */ }
+export type LexEffect = { dir: Side | 'cw' | 'ccw' } | { door: 'gate' /* 「間」 */ } | { open: true } | { answer: string /* 字謎 */ };
+export function resolveLabel(base: string, cards: readonly string[]): { text: string; entry: LexEntry | null };
+```
+
+- 只能在 2D、站穩、範圍內對有 `label` 的物件下指令（C9 同規則）；`labels.ts` 驗證卡片持有、槽型別、每張卡同時只貼一處 → 組字 → 查詞典：有效 → 改物件行為（方向字寫入 `ChapterState.levers`、門牌寫入 `DoorInfo.label`）；無效 → 不生效、卡片退回、emit `{t:'card', ok:false}`（ui 播字顫動 + 墨色變淡 + 輕音效，規格 D15）。
+- 字謎（P18）的判定也走詞典：`answer` 比對 `text` 或 `alt`。
+- UI：2D 靠近標籤時互動提示變「寫」；`ui/cardTray.ts` 顯示卡片列（詞卡 / 部件卡 / 尺度卡分組），選卡 → app 產生 `WorldCommand`。不在 ui 改 world（4.7 單向資料流）。
+
+### 4.18 尺度三檔（量；`mechanics/scale.ts`；規格 N23）
+
+- 尺度卡貼在標籤的 `scale` 槽，由 `labels.ts` 轉給 `scale.ts`：`tier: -1 | 0 | 1` 存在 `ObjState.ext.scale`。
+- 有效盒：以底部中心縮放 ×0.5 / ×1 / ×1.5；`presence` 不變，**改 `objBox`**（核心新增查詢掛點 `size?(w, o) → {w,h,d}`，`geometry` / `place` / `push` 一律經 `objBox`；render 白名單已含 `objBox`）。
+- 放大前卡牆檢查：新盒與 `solidsFor` 任一模式重疊、或超出房間 bounds → 拒絕（`msg.scale.noRoom`「這裡放不下。」）；與玩家重疊 → `resolvePlayerOverlap`；上面有東西時一律允許縮小、放大須上方淨空。
+- 重量：`ObjTypeSpec.mass` 預設改為 `[1, 2, 3][tier + 1]`（原尺寸 2），plates 的 `weight` 一律以此單位（規格 5.4.7）。
+- 卡榫（P3）：伸出房間邊界的部分若落在魔方軌道上（`turn` 檢查時查詢 `scale` 的 `blocksTrack(w)`）→ 轉不動。
+- 主角縮小只在 N30 縮影房（`LevelDef.abilities` 含 `'mini'` 時，玩家自己的標籤才出現 `scale` 槽）。
+- 測試：每個可縮放物 × 三檔 × 取樣位置跑捷徑掃描（4.12 `ScanSpec.movable` 加 `tiers`）。
+
+### 4.19 其他 v0.3 機制（各一檔，皆經 4.2 掛點，核心零修改）
+
+| 檔 | 機制 | 掛點與資料 |
+|----|------|-----------|
+| `reveal.ts` | N24 顯影（P14） | 類型 `inkveil`（`visible:'2d'`）；2D 互動 → `used=true`，顯出 `textKey` / 圖案；R 還原 |
+| `pipes.ts` | N25 墨流管線（P15） | 類型 `pipe`（房間邊界接口 `side`）；連通由 session 依連接表跨房計算（`core/chapter.ts` 提供 `pipeGraph`），結果寫入 `world.ext.pipes`；終點物件讀它決定開關 |
+| `lightpath.ts` | N26 光路（P6） | 類型 `window`（同側窗位）、`prism`、`sensor`；逐格傳播同上（`lightGraph`）；感光物讀結果 |
+| `locks.ts` | N27 符號 / 順序鎖（P11、P16） | 類型 `seqlock`（`expect: string[]`）與 `cord` / `glyphKey`；輸入序列存 `ObjState.ext`，錯了清空 |
+| `combine.ts` | N28 道具合成（P13） | `content/items.ts` 加配方表；合成在道具欄（ui → `WorldCommand {t:'combine'}`）；道具屬 `ChapterState.items` |
+| `balance.ts` | N29 天平（P17） | 兩盤是 3D 壓板（N3），重量差 → `ext.tilt`；跨房天平由 session 依拱門連接合併兩盤重量 |
+| `mini.ts` | N30 縮影遙控（P10） | 類型 `miniature`；玩家 `scale` 為小時互動 → app 載入縮影房（另一個 `LevelDef`）；縮影房的轉盤 emit `turnRequest`，作用於**真實**魔方 |
+| `chase.ts` | N31 跨房追逐（P8） | 在 4.14 之上：殘影的「所在房」存於 `ChapterState`；玩家換房後若兩房接通，殘影延遲固定秒數進房；轉動讓兩房斷開 → 殘影停留；`calmTension` 不生成 |
+
+- 跨房計算（管線、光路、天平）都放在 `core/chapter.ts` 的純函式，輸入 = 連接表 + 各房的接口資料，輸出寫回當前 `World.ext`；機制檔只讀，不跨房存取其他 `World`。
+
 ---
 
 ## 5. 擴充劇本
@@ -835,7 +957,7 @@ export interface ChaseDef {
 
 ## 6. 設計驗證
 
-### 6.1 N6 燈影（規格 4、3-1～3-4）
+### 6.1 N6 燈影（規格 4、3-1～3-4）——v0.3 退役，保留作設計紀錄
 
 - 資料：`lamp` 類型（`ObjKinds.lamp: { on?: boolean; wallZ?: number }`，燈的 z 即 `Lz`）；caster 用通用特性 `caster: true`。
 - 掛點：`derive` —— 對每盞 `on` 的燈與每個 caster 計算影子盒：`s = (Lz − wallZ) / (Lz − objZ)`，x、y 邊界以燈的 (x, y) 為中心縮放；產生 `ObjState{ id:'light:shadow:<casterId>', def:{ type:'shadow', visible:'2d', solid:true, z: wallZ+band/2, d: band }, derivedBy:'light' }`。`band`（貼牆厚度）讓 N8 能以「剖到牆面深度」判定（見 6.2）。
@@ -845,7 +967,7 @@ export interface ChaseDef {
 - 渲染：`MODELS.shadow` 畫 2D 網點剪影（P4），模型 `update` 依 def 尺寸縮放；scene 對帳負責出現 / 消失。
 - 需要的新介面：`derive`、`ObjState.derivedBy`、scene 對帳（都已在第 4 節）。**放得下。**
 
-### 6.2 N8 剖面（規格 4、4-1～4-4）
+### 6.2 N8 剖面（規格 4、4-1～4-4）——v0.3 退役，保留作設計紀錄
 
 - 狀態：`WorldExt.section = { on: boolean }`；`actions.section`（C，`ability:'section'`）。切換剖面限 3D（已確認，決策 Q5）；2D 按 C 只 `say('msg.section.only3d')`。
 - 掛點 `presence(w, o, '2d')`：`!on || isPinned(w, o) || zRangeContains(o, w.player.z3d)`；3D 恆 true。
@@ -856,7 +978,7 @@ export interface ChaseDef {
 - `trySwitchMode` 已改為先記 `z3d` 再求解（H10），所以「進紙深度決定紙上世界」成立。
 - HUD「剖面檢視」字樣與剖切線：`deriveHud` 讀 `w.ext.section`。**放得下。**
 
-### 6.3 N16 墨記（規格 4.1、Q-C）
+### 6.3 N16 墨記（規格 4.1、Q-C）——v0.3 退役，保留作設計紀錄
 
 - 狀態：`WorldExt.mark = { x: number; y: number; region: string } | null`；`LevelDef.regions`；`actions.mark`（V，`ability:'mark'`）。
 - 放置（2D、站穩）：記 `(x, y)` 與 `regions` 中涵蓋 x 的 region；已有墨記則覆蓋（同時只有一個）。
@@ -867,7 +989,7 @@ export interface ChaseDef {
 - 結局 B（劇情 6.2：在編輯桌放墨記不兌現）：`mark` 放置時若腳下支撐物有 `markFlag` 欄位 → `flags[markFlag]`；外殼依 `ending.B` 旗標 + `save.scraps` 齊全判定。
 - 渲染：`derive` 產生 `mark:marker`（visible both、solid false）；`MODELS['mark']` 3D 畫橫跨深度墨線、2D 畫墨點（規格 7.2）。**放得下（補一欄位）。**
 
-### 6.4 N5 火漆印章 / 定稿（規格 4、2-3～2-5）
+### 6.4 N5 火漆印章 / 定稿（規格 4、2-3～2-5）——v0.3 退役，保留作設計紀錄
 
 - 狀態：`WorldExt.pin = { target: ObjId | null }`；`actions.pin`（G，`ability:'pin'`）。
 - 有效可見性：`visibility(w, o)` → `o.def.id === pin.target ? 'both' : undefined`。所有讀可見性的地方都經 `isActiveIn`，一次生效。
@@ -888,6 +1010,14 @@ export interface ChaseDef {
 - **N2 / N3 / N4**：plates 參數 `weight`、`countsPlayer`、`latch`；N1、N10 已涵蓋於上。
 
 ---
+
+### 6.6 第一章魔方走查（v0.3；規格 6 第一章）
+
+- 資料：`content/cubes/ch1.ts` = 2×2，`cells` S0 = { A 空、B 樓梯間、C 衣帽間、D 玄關 }，`frame` = 大門（D 南，`porch`）、書房走廊（C 東，`chapterExit`）。玄關 `cubeDoor` S（arch）/ E（door）、樓梯間 W / S（door）、衣帽間 N（arch）/ E（chapter）；拉桿：玄關「上」、衣帽間「左」。
+- 1-2c：玩家在玄關（3D）互動拉桿 → `turnRequest` → `turn({t:'slide', room:'foyer', dir:'N'})` → 玄關到 A → `links` 重算 → 玄關 E 門 `open`。2D 預覽 = `deriveCubeMap(session, op)` 只算不寫。**放得下。**
+- 1-3a：衣帽間拉桿「左」→ 衣帽間到 D → 衣帽間 N 拱門 ↔ 玄關 S 拱門（arch-arch）；木箱越過邊界 → `objCross` → `transferObject` 把木箱移到玄關的 `rooms` 快照 / 當前 World。**需要 4.16 的 `transferObject`；放得下。**
+- 1-3b：2D 對拉桿標籤下 `WorldCommand {t:'card', label:'lever:closet', card:'word:右'}` → `labels` 改 `levers['lever:closet'].word = '右'` → 3D 拉 → 衣帽間回 C → 章門 ↔ 書房走廊。R：`restartRoom` → `state = entry`（本次進房時衣帽間在 D），不會回到 S1。**放得下。**
+- `validateCube` 對此模型：可達排列 3、抽象狀態 64、卡死 0、最短轉動 3（規格 5.4.8）。
 
 ## 7. 遷移計畫（行為不變，對應規格 M0）
 
@@ -930,6 +1060,19 @@ export interface ChaseDef {
 
 ---
 
+### 7.4 v0.3 實作步驟（M-Cube 原型與第一章；規格 10）
+
+| # | 目標 | 動到的檔案 | 驗證 | 停點 |
+|---|------|-----------|------|------|
+| C1 | `core/cube.ts`：CubeDef / CubeState、`applyOp`（先只有 slide）、`links` | core、tests/puzzle/core/cube.test.ts | 滑動 / 越界 / 非空格 / 連接表 / 確定性單元測試 | — |
+| C2 | `core/chapter.ts`：`enterRoom`、`turn`、`restartRoom`；房間快照往返 | core、app/levelSession.ts 改用 session | 換房往返後物件逐欄相同；R 回到進房時 | — |
+| C3 | `mechanics/cube.ts`：lever、cubeDoor、門後是牆、轉不動訊息 | mechanics、content/text | 1-2 現有測試全綠；門的兩狀態 | — |
+| C4 | 展開圖：`app/cubeMapModel.ts`（純）+ `ui/cubeMap.ts`；M 鍵與觸控 map 鍵；轉動短過場 | app、ui、render/transitions.ts、input | `deriveCubeMap` 單元測試；Playwright 截圖 | — |
+| C5 | `devtools/validateCube`（BFS）+ 第一章模型；SaveV3 骨架（只存 cube 與房間快照） | devtools、meta/save.ts | 規格 5.4.8 數字；v2 → v3 遷移測試 | — |
+| C6 | 內容：玄關加 S 拱門入口、E cubeDoor、拉桿「上」；樓梯間 / 衣帽間占位房 | content | 可玩到 1-2c；`validateLevel` 0 issue | **M-Cube 完成，停下等使用者確認** |
+| C7 | M1a：1-2 重做（規格 6 保留 / 改 / 廢表） | content、tests/puzzle/levels/1-2.test.ts | 通關 + 反例 + 捷徑掃描 | 停下等確認 |
+| C8 | M1b：1-3 衣帽間、拱門跨房、`labels.ts` 最小版 | core/chapter.ts、mechanics/labels.ts、content | 三房通關腳本；不寫字無解 | 停下等確認 |
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |
@@ -950,7 +1093,7 @@ export interface ChaseDef {
 
 ---
 
-## 9. 決策紀錄（已全部確認，2026-11-02，使用者回覆「全部照建議」）
+## 9. 決策紀錄（Q1～Q5 已全部確認，2026-11-02，使用者回覆「全部照建議」；Q6～Q9 為 v0.3 新增）
 
 | # | 問題 | 決定 |
 |---|------|---------|
@@ -958,4 +1101,8 @@ export interface ChaseDef {
 | Q2 | 規格內部矛盾（規格已改 H2，並列為規格 A2）：4-2b 說「物不在刀上，影還在」（caster 不受剖面影響），H2 說「只有剖到的花盆會投影」（caster 受剖面影響）。兩者需同一條規則 | **採 4-2b**（caster 不受剖面過濾、影子要剖到牆面帶才存在）；H2 改寫為「剖到牆面才看得到影子」的變奏。架構兩者都放得下（只差 light 的 caster 來源是否經 section 過濾）（**已確認**） |
 | Q3 | 謎題 id 格式：1-2 原本的圈號編號是否統一為 `1-2a`～`1-2d`（存檔 / 統計 key 用） | **是**；顯示用編號放文字表（**已確認**） |
 | Q4 | 瀏覽器主迴圈改為固定步長 1/60（與測試一致，可錄製試玩輸入回放 G1 問題），手感可能有極細微差異 | **採用**，於 S6 實作並手動確認（**已確認**） |
-| Q5 | 剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變 | **只能在 3D**；2D 按下提示「回到實景再調剖面尺」（**已確認**） |
+| Q5 | 剖面開關（C）是否只能在 3D 切換？在 2D 切換會讓腳下世界瞬間改變 | **只能在 3D**；2D 按下提示「回到實景再調剖面尺」（**已確認**；v0.3 隨 N8 退役） |
+| Q6 | v0.3 章節狀態放哪一層 | `core/cube.ts` + `core/chapter.ts`（L0，純）；不新增層、矩陣不變 | **暫定，待確認**（建議） |
+| Q7 | 帶參數的玩家指令（貼字卡、合成） | `ActionFrame.commands`（可錄製回放），不另開事件通道 | **暫定，待確認**（建議） |
+| Q8 | 縮放如何影響碰撞 | 核心加 `size` 掛點，所有幾何經 `objBox` | **暫定，待確認**（建議） |
+| Q9 | 退役機制的程式 | `pin / section / mark / light / seam` 不實作；6.1～6.4 保留作紀錄 | **暫定，待確認**（隨規格 Q-S） |
