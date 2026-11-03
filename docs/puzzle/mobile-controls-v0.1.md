@@ -118,6 +118,7 @@
 - 新文字 key：`ui.touch.btn.map`、`ui.prompt.touch.write`、`ui.prompt.touch.pull`、`ui.cards.*`（分頁名、關閉、取下）；v0.4：`ui.prompt.touch.activate`（「點一下 啟動 {label}」）、`ui.turn.tab`（轉）、`ui.turn.confirm`、`ui.turn.undo`、`ui.turn.exit`、`ui.turn.ink`（「墨 {n} / {max}」）、`ui.turn.header.<row|col|cell|layer|slice>`（標頭 aria-label，含序號與方向）、`msg.dial.*`（轉不動原因）。
 - 測試補充（第 8 節）：字卡匣開關時 `releaseAll`；點卡 = 一個 `WorldCommand`（架構 4.17）；預覽點擊不改狀態；直屏時展開圖不遮住互動鍵；v0.4 轉動模式測試見第 8 節。
 - 實作現況（C8，最小版；觸控搖桿 / 按鈕屬 M1T 尚未做）：互動提示可點（= 按 E），2D 靠近標籤時提示「寫　拉桿：左」，點了開字卡匣；字卡匣從底部升起，卡片 ≥ 56 px、點卡 = 貼上、「取下「右」」鈕、「關閉」或點卡匣外 = 關；開匣時 `releaseAll`。分頁（詞卡 / 部件卡 / 尺度卡）未做（第一章只有一張詞卡；字卡匣三格、其餘空著）。桌機：E 開 / 關、1～3 貼、X / Backspace 取下、Esc 關。
+- 實作現況（M-Dial D5；觸控搖桿 / 切換鍵仍屬 M1T 尚未做，所以手機上切到藏寶圖還要靠鍵盤）：展開圖標題列的「轉」頁籤（控制盤章節才有；不能進時虛線反灰、`title` 說明原因）、墨點（實心 / 空心，剩 1 滴外框加粗）；標頭箭頭為卡片內的 DOM 按鈕 44×44、相鄰間距 ≥ 8；離開 44 / 回退 48 / 確認 56 px 直列（直屏與 `max-aspect-ratio: 1/1` 改為卡片底部橫列）；確認在進入轉動模式 300 ms 內無效；橫屏矮螢幕（高 ≤ 520 px）轉動模式卡片拉高到狀態列以下、收起圖例。390×844 直屏與 844×390 橫屏實測：按鈕不重疊、不出畫面。鍵盤：Tab 進出、方向鍵選標頭（↑↓ 換組、←→ 列選方向 / 行換相鄰）、Enter 確認、Z 回退、Esc 離開、M 關圖。
 
 ---
 
