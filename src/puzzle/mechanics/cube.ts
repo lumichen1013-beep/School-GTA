@@ -17,7 +17,17 @@ declare module '../core/types' {
      * 章門：key = 開門要的鑰匙 (房間的銅鑰匙，章節道具)；openText = 打開時的訊息 (開了 = 本章通關)；
      * frameText = 這扇門接到屋框的入口 (來時的走廊) 時的說明 (第二章起；沒有 = 大門「來時的門廊」)
      */
-    cubeDoor: { side: Side; kind: DoorKind; key?: ItemId; openText?: TextKey; frameText?: TextKey };
+    cubeDoor: {
+      side: Side; kind: DoorKind; key?: ItemId; openText?: TextKey; frameText?: TextKey;
+      /** v0.4 門牌：這扇門的門牌標籤 id (標籤掛在 2D 的 doorPlate 物件上)；貼著部件卡「日」= 「間」(規格「門牌「間」」) */
+      plate?: string;
+      /** v0.4 洞位：平常不在場；對面讀作「間」的門正對這一面時才接上 (兩邊都能穿過) */
+      hole?: boolean;
+      /** 門旁 (房內側) 的活字 (2-3c；文字 key；只在 3D 看得到) */
+      glyph?: TextKey;
+    };
+    /** 門牌 (只在 2D；label kind 'plate' 掛在這裡) */
+    doorPlate: {};
   }
 }
 
@@ -27,6 +37,9 @@ export const LEVER_WORDS = Object.keys(WORD_SIDE) as readonly LeverWord[];
 /** 方向字的顯示文字 key (上 / 下 / 左 / 右) */
 export const WORD_KEYS: Readonly<Record<LeverWord, TextKey>> = { up: 'term.word.up', down: 'term.word.down', left: 'term.word.left', right: 'term.word.right' };
 
+/** 門牌讀作「間」要貼的部件卡 */
+export const PLATE_CARD: ItemId = 'card.ri';
+
 /** 拉桿 → 轉動 (轉自己所在的房間) */
 export const leverOp = (room: string, word: LeverWord): CubeOp => ({ t: 'slide', room, dir: WORD_SIDE[word] });
 
@@ -34,7 +47,13 @@ export const leverOp = (room: string, word: LeverWord): CubeOp => ({ t: 'slide',
 export function chapterDoors(rooms: Readonly<Record<string, LevelDef>>): DoorInfo[] {
   const out: DoorInfo[] = [];
   for (const [room, level] of Object.entries(rooms)) {
-    for (const o of level.objects) if (o.type === 'cubeDoor') out.push({ room, door: o.id, side: o.side, kind: o.kind });
+    for (const o of level.objects) {
+      if (o.type !== 'cubeDoor') continue;
+      out.push({
+        room, door: o.id, side: o.side, kind: o.kind,
+        ...(o.plate ? { plate: { label: o.plate, card: PLATE_CARD } } : {}), ...(o.hole ? { hole: true } : {}), ...(o.glyph ? { glyph: o.glyph } : {})
+      });
+    }
   }
   return out;
 }
@@ -105,12 +124,16 @@ export const cube: Mechanic = {
     cubeDoor: {
       verbKey: 'obj.cubeDoor.verb',
       interact: (w, o) => {
+        if (o.def.type === 'cubeDoor' && o.def.hole) { if (doorLink(w, o).to === 'room') w.events.push({ t: 'door', door: o.def.id }); return; }
         const l = doorLink(w, o);
         if (l.to === 'room') w.events.push({ t: 'door', door: o.def.id });
         else if (l.to === 'frame') frameDoor(w, o, l.frame);
         else say(w, 'msg.cube.wall');
       }
-    }
+    },
+    doorPlate: {}
   },
-  afterPhysics: archCrossing
+  afterPhysics: archCrossing,
+  // 洞位：對面的「間」接上時才在場
+  hidden: (w, o) => o.def.type === 'cubeDoor' && !!o.def.hole && doorLink(w, o).to !== 'room'
 };

@@ -114,28 +114,57 @@ export function doorSpawn(level: LevelDef, door: ObjId, side: Side): { x: number
   return { x: clamp(x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW), y: o.y, z: clamp(z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW) };
 }
 
-/** 當前房間每扇門此刻的接法 (寫入 World.ext.cube；沒接通 = wall) */
-export function roomLinks(spec: ChapterSpec, state: ChapterState): Record<ObjId, DoorLinkState> {
+/** 此刻讀作「間」的門 (`room.door`；門牌標籤上貼著指定的部件卡)；labels 未給 = 章節狀態的標籤 */
+export function activePlates(spec: ChapterSpec, labels: Readonly<Record<string, readonly string[]>>): Set<string> {
+  const out = new Set<string>();
+  for (const d of spec.doors) if (d.plate && (labels[d.plate.label] ?? []).includes(d.plate.card)) out.add(`${d.room}.${d.door}`);
+  return out;
+}
+
+/** 此刻的連接表 (含門牌「間」)：labels = 即時標籤 (當前房間的 World.ext.labels；未給 = 章節狀態) */
+export function chapterLinks(spec: ChapterSpec, cube: CubeState, labels: Readonly<Record<string, readonly string[]>>) {
+  return spec.cube ? links(spec.cube, cube, spec.doors, activePlates(spec, labels)) : [];
+}
+
+/** 當前房間每扇門此刻的接法 (寫入 World.ext.cube；沒接通 = wall；洞位沒接通 = 不列出) */
+export function roomLinks(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record<string, readonly string[]>> = state.labels): Record<ObjId, DoorLinkState> {
   const out: Record<ObjId, DoorLinkState> = {};
-  const mine = spec.doors.filter(d => d.room === state.room);
+  const mine = spec.doors.filter(d => d.room === state.room && !d.hole);
   for (const d of mine) out[d.door] = { to: 'wall' };
   if (!spec.cube || !state.cube) return out;
-  for (const l of links(spec.cube, state.cube, spec.doors)) {
+  for (const l of chapterLinks(spec, state.cube, labels)) {
     if (l.from.room !== state.room) continue;
     out[l.from.door] = 'frame' in l.to ? { to: 'frame', frame: l.to.frame } : { to: 'room', room: l.to.room, door: l.to.door, kind: l.kind };
   }
   return out;
 }
 
-/** World.ext.cube：門的接法 + 這間房此刻的格位 */
-function cubeExt(spec: ChapterSpec, state: ChapterState): NonNullable<World['ext']['cube']> {
+/**
+ * World.ext.cube：門的接法 + 這間房此刻的格位；控制盤章節另寫全章的房 ↔ 房接通 (graph，含門旁的活字) 與各房格位 (layout)
+ * (跨房的計算結果，機制只讀：2-3c 字輪、2-4a 拼圖)
+ */
+function cubeExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record<string, readonly string[]>> = state.labels): NonNullable<World['ext']['cube']> {
   const at = state.cube?.pos[state.room];
-  return { links: roomLinks(spec, state), ...(at ? { at: [at[0], at[1], at[2]] as const } : {}) };
+  const base = { links: roomLinks(spec, state, labels), ...(at ? { at: [at[0], at[1], at[2]] as const } : {}) };
+  if (!isDialChapter(spec) || !state.cube) return base;
+  const graph = chapterLinks(spec, state.cube, labels).flatMap(l => {
+    if (!('room' in l.to)) return [];
+    const d = spec.doors.find(x => x.room === l.from.room && x.door === l.from.door);
+    return [{ room: l.from.room, door: l.from.door, to: l.to.room, ...(d?.glyph ? { glyph: d.glyph } : {}) }];
+  });
+  const layout = Object.fromEntries(Object.entries(state.cube.pos).map(([r, c]) => [r, [c[0], c[1], c[2]] as const]));
+  return { ...base, graph, layout };
 }
 
-/** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫) */
+/** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫；門牌以即時標籤算) */
 function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
-  if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state) };
+  if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state, w.ext.labels ?? state.labels) };
+}
+
+/** 標籤改了 (門牌貼上 / 取下「日」) → 重算當前房間的門接法 (World 只更新 ext) */
+export function syncLinks(cs: ChapterSession): ChapterSession {
+  writeLinks(cs.spec, cs.state, cs.world);
+  return cs;
 }
 
 /** 進房時寫入 World.ext：門的接法、標籤、旗標；控制盤章節另寫魔方儀是否已啟動 (單房關卡不寫，ext 維持空物件) */
@@ -233,7 +262,7 @@ export function transferObject(cs: ChapterSession, obj: ObjId, door: ObjId, opts
   const { spec, state, world } = cs;
   const o = world.byId.get(obj);
   const src = world.byId.get(door);
-  const link = roomLinks(spec, state)[door];
+  const link = roomLinks(spec, state, world.ext.labels ?? state.labels)[door];
   if (!o || !src || !link || link.to !== 'room' || link.kind !== 'arch') return { blocked: 'notArch' };
   const target = spec.rooms[link.room];
   const dst = target?.objects.find(d => d.id === link.door);
@@ -324,6 +353,16 @@ export function roomCleared(spec: ChapterSpec, state: ChapterState, world?: Worl
   return puzzles.every(p => done.has(p.id));
 }
 
+/**
+ * 此刻通關的房間 (本章每間有列謎題的房；謎題可以在別的房完成，例：2-3c 的排字架在手稿庫)：當前房間優先、其餘依 spec.rooms 順序
+ */
+export function clearedRooms(spec: ChapterSpec, state: ChapterState, world?: World): string[] {
+  if (!isDialChapter(spec)) return [];
+  const done = doneFlags(spec, state, world);
+  const rooms = [state.room, ...Object.keys(spec.rooms).filter(r => r !== state.room)];
+  return rooms.filter(r => { const ps = spec.rooms[r]?.puzzles ?? []; return ps.length > 0 && ps.every(p => done.has(p.id)); });
+}
+
 /** 這間房此刻的墨量上限 (LevelDef.turnBudget；目前謎題是有 P4 預算、尚未完成的題 → 用 P4 預算；沒有設定 = 0) */
 export function turnBudgetFor(spec: ChapterSpec, state: ChapterState, world?: World): number {
   const level = spec.rooms[state.room];
@@ -375,7 +414,8 @@ export function activateDial(cs: ChapterSession): ChapterSession {
 
 /** 一間房此刻的可推物 / 門的盒子 (當前房 = 即時 World；其他房 = 關卡初值 + 跨房物件 + 快照) */
 function roomBoxes(spec: ChapterSpec, state: ChapterState, world: World, room: string): { pushables: Box[]; doors: Box[] } {
-  const doorIds = new Set(spec.doors.filter(d => d.room === room).map(d => d.door));
+  // 洞位不算門口 (洞不是實體；規格「門牌「間」」)
+  const doorIds = new Set(spec.doors.filter(d => d.room === room && !d.hole).map(d => d.door));
   if (room === state.room) {
     return {
       pushables: world.objs.filter(o => o.def.pushable && !o.gone).map(objBox),

@@ -24,5 +24,8 @@ export const obj = {
   'obj.smallPrint.verb': '細看',
   'obj.coupletCabinet.verb': '看',
   'obj.cardCatalog.verb': '拉開',
+  'obj.typeCase.verb': '翻找',
+  'obj.press.verb': '壓版',
+  'obj.typeWheel.verb': '轉動',
   'obj.default.verb': '互動'
 } as const;

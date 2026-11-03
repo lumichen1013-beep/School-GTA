@@ -159,15 +159,16 @@ describe('validateDial：2-1 + 2-2 區 (兩列；三行的解鎖在 2-3 區)', (
   const m = dialModelOf(CH2_ZONE22.cube, CH2.rooms, CH2_ZONE22.puzzles, CH2_ZONE22.start, CH2_ZONE22.finish);
   const r = validateDial(m);
 
-  it('可達排列 9、抽象狀態 18,676、有解、卡死 0 (含 R)；沒有任何問題 (預算繞過、鎖扣、入口、前置繞過)', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([9, 18676, true, []]);
+  it('可達排列 9、抽象狀態 18,788、有解、卡死 0 (含 R)；沒有任何問題 (預算繞過、鎖扣、入口、前置繞過)', () => {
+    // 2-3 起印房多了南拱門 (印房在第 1 行時接手稿庫北門)：狀態 18,676 → 18,788、needsRestart 576 → 464
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([9, 18788, true, []]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
-    expect(r.needsRestart).toBe(576);
+    expect(r.needsRestart).toBe(464);
   });
 
   it('每題最短 / 次短 / 解法數：2-2a / 2-2b 不需轉動；2-2c 拿鏡片最短 1 轉 (▶ 或 ◀ 兩種，P1 真的需要轉)；2-1 區數字不變；確定性', () => {
     expect(r.perPuzzle.map(p => [p.id, p.shortest, p.second, p.solutions, p.distinct, p.budget, p.issues])).toEqual([
-      ['2-1a', 1, 2, 3, 3, 6, []], ['2-1b', 0, null, 1, 1, 6, []], ['2-1c.1', 1, 2, 119, 35, 6, []], ['2-1c.2', 1, 2, 148, 48, 6, []], ['2-1c', 1, 2, 164, 36, 6, []],
+      ['2-1a', 1, 2, 3, 3, 6, []], ['2-1b', 0, null, 1, 1, 6, []], ['2-1c.1', 1, 2, 110, 41, 6, []], ['2-1c.2', 1, 2, 131, 43, 6, []], ['2-1c', 1, 2, 110, 41, 6, []],
       ['2-2a', 0, null, 1, 1, 6, []], ['2-2b', 0, null, 1, 1, 6, []], ['2-2c.lens', 1, 1, 2, 2, 6, []], ['2-2c', 1, 1, 2, 2, 6, []], ['ch2.top', 0, null, 1, 1, 6, []]
     ]);
     expect(validateDial(m)).toEqual(r);

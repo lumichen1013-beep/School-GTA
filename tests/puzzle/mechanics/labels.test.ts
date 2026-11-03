@@ -23,7 +23,8 @@ describe('詞典 (最小版)', () => {
   it('詞卡 = 每個方向字一張 (card.<方向字>)；方向字標籤 + 詞卡 = 新方向；名詞 (大衣) + 詞卡 = 不成字', () => {
     // 方向詞卡 = 每個方向字一張；v0.4 另有第二章字謎的詞卡 (卡面字 glyph，沒有方向)
     expect(Object.keys(CARDS).filter(c => CARDS[c].dir !== undefined).sort()).toEqual(LEVER_WORDS.map(w => `card.${w}`).sort());
-    expect(Object.keys(CARDS).filter(c => CARDS[c].dir === undefined).sort()).toEqual(['card.bian', 'card.li', 'card.nei', 'card.qian', 'card.wai']);
+    expect(Object.keys(CARDS).filter(c => CARDS[c].dir === undefined && CARDS[c].slot === 'word').sort()).toEqual(['card.bian', 'card.li', 'card.nei', 'card.qian', 'card.wai']);
+    expect(Object.keys(CARDS).filter(c => CARDS[c].slot === 'part').sort()).toEqual(['card.cai', 'card.ri']); // v0.4 部件卡 (2-3a 日、2-4c 才)
     const w = world();
     expect(accepts(w.byId.get('lv')!, 'card.right')).toBe(true);
     expect(accepts(w.byId.get('co')!, 'card.right')).toBe(false);

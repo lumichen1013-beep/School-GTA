@@ -39,7 +39,8 @@ export type IssueCode =
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
   | 'entry.unlock'        // 解鎖前置引用不存在的關卡
-  | 'entry.chapter';      // 章節不存在或章節 levels 未列入本關
+  | 'entry.chapter'       // 章節不存在或章節 levels 未列入本關
+  | 'layout.depth';       // 擺設：可互動物件的 z 沒有同時落在後 / 中 / 前三帶 (layoutDepthIssues；2-3 起的擺設規則)
 
 export interface LevelIssue { level: string; obj?: ObjId; code: IssueCode; message: string }
 
@@ -64,7 +65,7 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'note') return [o.textKey, label];
   if (o.type === 'portrait') return [o.carved, o.ink, label];
   if (o.type === 'drawer') return [o.openText, label];
-  if (o.type === 'cubeDoor') return [o.openText, o.frameText, label];
+  if (o.type === 'cubeDoor') return [o.openText, o.frameText, o.glyph, label];
   if (o.type === 'coatRack') return [o.fallText, label];
   if (o.type === 'bookend') return [o.readText, o.plateText, label];
   if (o.type === 'spine') return [o.title, o.drawnText, label];
@@ -77,6 +78,10 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'smallPrint') return [o.readText, o.firstText, label];
   if (o.type === 'coupletCabinet') return [o.upper, o.lockedRead, o.openRead, label];
   if (o.type === 'cardCatalog') return [o.emptyText, label];
+  if (o.type === 'typeCase') return [o.emptyText, label];
+  if (o.type === 'press') return [o.okText, o.looseText, o.readText, o.side, label];
+  if (o.type === 'typeLock') return [...o.glyphs, o.openText, o.doneText, o.needText, label];
+  if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.noCardText, ...Object.values(o.label?.forms ?? {})];
   return [label, o.label?.solvedText];
 }
 
@@ -185,7 +190,8 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     if (l.kind === 'dir' && o.type !== 'lever') add('label.field', 'direction labels belong on levers', o.id);
     else if (l.kind === 'noun' && !l.textKey) add('label.field', 'noun labels need a textKey', o.id);
     else if (l.kind === 'blank' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => c in CARDS))) add('label.field', 'blank labels need a textKey and answers that are word cards', o.id);
-    else if (l.kind !== 'dir' && l.kind !== 'noun' && l.kind !== 'blank') add('label.field', `label kind "${String(l.kind)}" is not dir|noun|blank`, o.id);
+    else if (l.kind === 'plate' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => CARDS[c]?.slot === 'part') || !def.objects.some(d => d.type === 'cubeDoor' && d.plate === l.id))) add('label.field', 'plate labels need a textKey, part-card answers and a cubeDoor whose plate is this label', o.id);
+    else if (l.kind !== 'dir' && l.kind !== 'noun' && l.kind !== 'blank' && l.kind !== 'plate') add('label.field', `label kind "${String(l.kind)}" is not dir|noun|blank|plate`, o.id);
   }
 
   // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)：抽屜 + 拉繩 (1-2d)、燈座 + 燈書 (2-1c)
@@ -257,4 +263,18 @@ export function validateEntry(entry: LevelEntry, ctx: Omit<ValidateContext, 'abi
   if (!ch) add('entry.chapter', `chapter ${entry.chapter} does not exist`);
   else if (!ch.levels.includes(entry.id)) add('entry.chapter', `chapter ${entry.chapter} does not list level "${entry.id}"`);
   return [...issues, ...validateLevel(def, { mechanics: ctx.mechanics, bundle: ctx.bundle, abilities: entry.abilities })];
+}
+
+/** 擺設的深度帶：後 z < −2、中 −2 ≤ z ≤ 2、前 z > 2 (規格 6「第二章 2-3～2-5 共用規則」擺設規則 ②) */
+export const DEPTH_BANDS = ['back', 'mid', 'front'] as const;
+export const depthBand = (z: number): typeof DEPTH_BANDS[number] => (z < -2 ? 'back' : z > 2 ? 'front' : 'mid');
+
+/**
+ * 擺設自檢：房內可互動的物件 (interactable 或有標籤；不含地板與洞位) 必須同時落在後 / 中 / 前三帶——
+ * 不能全部沿後牆排成一列。回傳缺的帶 (layout.depth)；不併入 validateLevel (舊關卡重排後才納入)
+ */
+export function layoutDepthIssues(def: LevelDef): LevelIssue[] {
+  const objs = def.objects.filter(o => (o.interactable || o.label) && !(o.type === 'cubeDoor' && o.hole));
+  const have = new Set(objs.map(o => depthBand(o.z)));
+  return DEPTH_BANDS.filter(b => !have.has(b)).map(b => ({ level: def.id, code: 'layout.depth' as const, message: `no interactable object in the ${b} band (z ${b === 'back' ? '< -2' : b === 'front' ? '> 2' : 'in [-2, 2]'})` }));
 }

@@ -31,5 +31,18 @@ export const term = {
   'term.frame': '空鏡框',
   'term.lens': '鏡片',
   'term.magnifier': '放大鏡',
-  'term.tooth.reading': '銅鑰匙的齒・二'
+  'term.tooth.reading': '銅鑰匙的齒・二',
+  // 2-3 印房：部件卡 (物品 id card.<部件>)、門牌的字、門旁的活字 (2-3c)、校樣、銅鑰匙的柄
+  'term.card.ri': '部件卡「日」',
+  'term.card.cai': '部件卡「才」',
+  'term.glyph.ri': '日',
+  'term.glyph.cai': '才',
+  'term.glyph.men': '門',
+  'term.glyph.jian': '間',
+  'term.glyph.shan': '山',
+  'term.glyph.shui': '水',
+  'term.glyph.mu': '木',
+  'term.glyph.huo': '火',
+  'term.proof': '校樣',
+  'term.key.bow': '銅鑰匙的柄'
 } as const;

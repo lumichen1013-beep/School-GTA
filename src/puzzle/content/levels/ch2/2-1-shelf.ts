@@ -38,8 +38,8 @@ const bay = (n: number, gaps: number[]): ObjDef => ({
 
 const objects: ObjDef[] = [
   { id: 'floor', type: 'floor', x: 0, y: -1, z: 0, w: 20, h: 1, d: 10, visible: 'both', solid: true },
-  { id: 'doorW', type: 'cubeDoor', side: 'W', kind: 'door', frameText: 'lvl.2-1.doorW.frame', x: -9.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-1.doorW' },
-  { id: 'doorE', type: 'cubeDoor', side: 'E', kind: 'door', x: 9.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-1.doorE' },
+  { id: 'doorW', type: 'cubeDoor', side: 'W', kind: 'door', glyph: 'term.glyph.mu', frameText: 'lvl.2-1.doorW.frame', x: -9.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-1.doorW' },
+  { id: 'doorE', type: 'cubeDoor', side: 'E', kind: 'door', glyph: 'term.glyph.shan', x: 9.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-1.doorE' },
   // 黃銅魔方儀 (閱讀架上；3D 啟動，不計題)
   { id: 'dial', type: 'dial', chapter: 2, x: -6.5, y: 0, z: -3.4, w: 1, h: 1.4, d: 0.9, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-1.dial' },
   // 屋框書牆的三段 (frameBay；gaps：第 0 段燈書、第 1 段燈書 + 殘片、第 2 段燈書 + 書擋)

@@ -17,11 +17,13 @@ declare module '../core/types' {
      * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有空的尺度卡槽 (只鋪陳)；
      * noCardText = 這是謎題要寫的標籤：字卡匣空著時 2D 照樣提示「寫」，按 E 說缺什麼、去哪裡找 (沒有 → 空匣時 E 照舊「看得見，卻碰不到」)；
      * v0.4 'blank' = 字謎的空格 (P18；2-2b 下聯)：textKey 含 {c} (空格處)；answers = 詞典 (收的詞卡，D14 列同義字)；
-     * 貼上收的卡 → 物件 used (doneFlag 成立 → done 事件)、opens 指向的物件 used、取得 reward、說 solvedText (只在第一次)
+     * 貼上收的卡 → 物件 used (doneFlag 成立 → done 事件)、opens 指向的物件 used、取得 reward、說 solvedText (只在第一次)；
+     * v0.4 'plate' = 門牌 (規格「門牌「間」」)：textKey = 原字「門」；answers = 收的部件卡；forms[卡] = 貼上後的字 (「間」)；
+     * 寫成 = 同 blank (第一次 used / done / solvedText)；門接到哪由章節層依標籤上的卡決定 (core/chapter activePlates)
      */
     label?: {
-      id: string; kind: 'dir' | 'noun' | 'blank'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
-      answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey;
+      id: string; kind: 'dir' | 'noun' | 'blank' | 'plate'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
+      answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey; forms?: Readonly<Record<ItemId, TextKey>>;
     };
   }
 }
@@ -36,14 +38,18 @@ export const canWrite = (w: World): boolean => hasItem(w, WRITE_ABILITY) || w.ab
  * 字卡 (詞典最小版)：物品 id `card.<字>` = 詞卡；dir = 貼在方向字標籤上時的新方向 (第一章)；
  * glyph = 卡面的字 (文字 key；v0.4 第二章的字謎詞卡，例「內」)
  */
-export interface CardDef { slot: 'word'; dir?: LeverWord; glyph?: TextKey }
+export interface CardDef { slot: 'word' | 'part'; dir?: LeverWord; glyph?: TextKey }
 /** 第二章字謎的詞卡 (2-2b：外 / 內 / 前；裡 / 邊 = 詞典先列的同義字，本章目前沒有卡) */
 const WORD_CARDS: Readonly<Record<string, TextKey>> = {
   wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
 };
+/** 部件卡 (門牌「門」+「日」=「間」；「才」=「閉」) */
+const PART_CARDS: Readonly<Record<string, TextKey>> = { ri: 'term.glyph.ri', cai: 'term.glyph.cai' };
 export const CARDS: Readonly<Record<ItemId, CardDef>> = Object.fromEntries([
   ...LEVER_WORDS.map(w => [`card.${w}`, { slot: 'word', dir: w } as CardDef]),
-  ...Object.entries(WORD_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'word', glyph } as CardDef])
+  ...Object.entries(WORD_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'word', glyph } as CardDef]),
+  // v0.4 部件卡 (活字的一個部件；2-3a 日、2-4c 才)
+  ...Object.entries(PART_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'part', glyph } as CardDef])
 ]);
 export const isCard = (id: string): boolean => id in CARDS;
 /** 字卡匣的格數 (第一章：詞卡一格、第三格空著，鋪陳尺度卡) */
@@ -56,15 +62,16 @@ export const cardsOn = (w: World, label: string): readonly string[] => w.ext.lab
 export function accepts(o: ObjState, card: string): boolean {
   const c = CARDS[card];
   const l = o.def.label;
-  if (!c || !l || c.slot !== 'word') return false;
-  if (l.kind === 'blank') return (l.answers ?? []).includes(card);
+  if (!c || !l) return false;
+  if (l.kind === 'blank' || l.kind === 'plate') return (l.answers ?? []).includes(card);
+  if (c.slot !== 'word') return false;
   return l.kind === 'dir' && c.dir !== undefined;
 }
 
 /** 字謎空格寫對了：物件 used (doneFlag → done)、opens 指向的物件 used、reward、solvedText (已解開過 → 只換卡，不再給) */
 function solveBlank(w: World, o: ObjState): boolean {
   const l = o.def.label;
-  if (l?.kind !== 'blank' || o.used) return false;
+  if ((l?.kind !== 'blank' && l?.kind !== 'plate') || o.used) return false;
   o.used = true;
   const target = o.def.opens ? w.byId.get(o.def.opens) : undefined;
   if (target) target.used = true;

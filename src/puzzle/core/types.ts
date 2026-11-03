@@ -145,7 +145,12 @@ export type DoorLinkState =
  */
 export interface WorldExt {
   /** at = 這間房此刻在魔方上的格位 [行, 列, 層] (v0.4；房內依位置改變的東西用，例：屋框書牆的哪一段在背後) */
-  cube?: { links: Record<ObjId, DoorLinkState>; at?: readonly [number, number, number] };
+  cube?: {
+    links: Record<ObjId, DoorLinkState>; at?: readonly [number, number, number];
+    /** 控制盤章節：全章此刻的房 ↔ 房接通 (glyph = 出門那一側門旁的活字) 與各房格位 */
+    graph?: ReadonlyArray<{ room: string; door: ObjId; to: string; glyph?: string }>;
+    layout?: Readonly<Record<string, readonly [number, number, number]>>;
+  };
   labels?: Record<string, string[]>;
   /** 章節旗標 (唯讀；例：演出過的驚嚇 scare:*) */
   flags?: readonly string[];

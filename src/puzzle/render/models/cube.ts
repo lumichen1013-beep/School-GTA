@@ -3,7 +3,7 @@ import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
-import { glow } from '../textures';
+import { glow, inscription } from '../textures';
 import type { ModelCtx, PropModel } from './types';
 import { labelBadge } from './label';
 
@@ -78,7 +78,20 @@ export function cubeDoorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel 
     }
     face.add(leaf);
   }
+  // 門旁 (房內側) 的活字 (2-3c；只在實景看得到)：木牌刻字，掛在門框右柱旁
+  const glyph = d.type === 'cubeDoor' ? d.glyph : undefined;
+  let tag: THREE.Group | null = null;
   const update = (c: ModelCtx) => {
+    if (glyph && !tag) {
+      tag = new THREE.Group();
+      tag.position.set(across / 2 + fw + 0.3, 1.45, 0.08);
+      const board = mesh(box(0.42, 0.42, 0.04), pal.shelfDark, { outline: false });
+      const face2 = mesh(new THREE.PlaneGeometry(0.34, 0.34), 0xffffff, { map: inscription(pal, c.world.rt.text(glyph), 'carved', 96), flatMap: true, outline: false, shadow: false, unique: true });
+      face2.position.z = 0.025;
+      tag.add(board, face2);
+      face.add(tag);
+    }
+    if (tag) tag.visible = c.mode === '3d';
     const open = c.world.ext.cube?.links[c.obj.def.id]?.to === 'room';
     // 前緣的門在鏡頭前：門縫光淡一些，不罩住門內側的玩家
     light.material.opacity = approach(light.material.opacity, open && c.mode === '3d' ? (front ? 0.2 : 0.55) : 0, c.dt * 4);

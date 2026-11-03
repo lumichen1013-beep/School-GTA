@@ -129,15 +129,18 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
     expect(CH2_CUBE.cells.map(c => [c.at[0], c.at[1], c.room])).toEqual([[0, 0, 'shelf'], [1, 0, 'reading'], [2, 0, 'print'], [0, 1, 'mezz'], [1, 1, 'manuscripts'], [2, 1, 'deep']]);
     expect(CH2_CUBE.dial!.entry).toEqual({ room: 'shelf', obj: 'dial' });
     expect(CH2_CUBE.dial!.locks.map(l => `${l.group}<-${l.until}`)).toEqual(['row1<-2-1a', 'col0<-2-3a', 'col1<-2-3a', 'col2<-2-3a']);
-    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading' });
+    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading', '2-3': 'print' });
     expect(CH2.start).toEqual({ room: 'shelf', door: 'doorW' });
     expect(cubeChapterOf('2-1')).toBe(CH2);
   });
 
   it('門位 (本地) 與 S0 的接法：入口 → 2-1 西門；2-1 東 ↔ 2-2 西；2-2 南 ↔ 2-4 北；2-4 東 ↔ 2-5 西；2-3、H1 孤立', () => {
     expect(SPEC.doors.map(d => `${d.room}.${d.side}:${d.kind}`)).toEqual([
-      'shelf.W:door', 'shelf.E:door', 'reading.W:door', 'reading.S:door', 'print.E:door', 'mezz.W:door', 'manuscripts.N:door', 'manuscripts.E:door', 'deep.W:door', 'deep.E:chapter'
+      'shelf.W:door', 'shelf.E:door', 'reading.W:door', 'reading.S:door', 'reading.N:arch', 'print.E:door', 'print.S:arch', 'mezz.W:door', 'mezz.N:arch', 'manuscripts.N:door', 'manuscripts.E:door', 'deep.W:door', 'deep.N:arch', 'deep.E:chapter'
     ]);
+    // 2-3 起：北牆的 N:arch 是洞位 (平常不在場；上方印房的門牌讀作「間」時才接上)；印房南拱門有門牌
+    expect(SPEC.doors.filter(d => d.hole).map(d => d.room)).toEqual(['reading', 'mezz', 'deep']);
+    expect(SPEC.doors.filter(d => d.plate).map(d => `${d.room}.${d.door}`)).toEqual(['print.archS']);
     const ls = links(CH2_CUBE, initialCube(CH2_CUBE), SPEC.doors).map(l => `${l.from.room}.${l.from.door}→${'frame' in l.to ? `frame:${l.to.frame}` : `${l.to.room}.${l.to.door}`}`);
     expect(ls).toEqual([
       'shelf.doorW→frame:hall', 'shelf.doorE→reading.doorW', 'reading.doorW→shelf.doorE', 'reading.doorS→manuscripts.doorN',
@@ -171,9 +174,10 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
   });
 
   it('占位房：只有門 (validateLevel 0 issue)、不計題、每房預算 6；2-5 東章門要的鑰匙本章取不到 (此版本一律鎖著)', () => {
-    // 2-2 閱覽室已是完整關卡 (levels/2-2.test.ts)；印房多了 2-2c 的活字桌與鏡片 (不計題)
-    const extra: Readonly<Record<string, readonly string[]>> = { print: ['typeDesk', 'lens'] };
-    for (const r of [print, mezz, manuscripts, deep]) {
+    // 2-2 閱覽室、2-3 印房已是完整關卡 (levels/2-2.test.ts、2-3.test.ts)；手稿庫多了 2-3c 的排字架與字輪 (2-3 的題，不計在手稿庫)
+    const extra: Readonly<Record<string, readonly string[]>> = { manuscripts: ['typeLock', 'wheel0', 'wheel1', 'wheel2'] };
+    expect([print.id, print.turnBudget]).toEqual(['2-3', { base: 6, puzzles: { '2-3b': 3 } }]);
+    for (const r of [mezz, manuscripts, deep]) {
       expect([r.id, validateLevel(r, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })]).toEqual([r.id, []]);
       expect([r.id, r.puzzles, r.turnBudget, r.objects.every(o => o.type === 'floor' || o.type === 'cubeDoor' || (extra[r.id] ?? []).includes(o.id))]).toEqual([r.id, undefined, { base: 6 }, true]);
     }
@@ -190,7 +194,7 @@ describe('2-1 書架迴廊：資料與驗證器', () => {
     expect(shelf.puzzles!.map(q => TEXT(q.titleKey))).toEqual(['2-1a 整列一起走', '2-1b 那年的推測', '2-1c 書名的順序']);
     const e = levelById('2-1')!;
     expect([e.chapter, e.unlock.after, e.abilities]).toEqual([2, ['1-3'], ['nib']]);
-    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2'] });
+    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3'] });
     expect([TEXT('ch.2.title'), shelf.theme, shelf.turnBudget]).toEqual(['第二章　書房', 'study', { base: 6 }]);
   });
 
@@ -215,10 +219,11 @@ describe('validateDial：2-1 區 (兩列；三行的解鎖在 2-3 區，規格 5
   const m = dialModelOf(CH2_ZONE21.cube, CH2.rooms, CH2_ZONE21.puzzles, CH2_ZONE21.start, CH2_ZONE21.finish);
   const r = validateDial(m);
 
-  it('可達排列 9、抽象狀態 2,086、有解、卡死 0 (含 R)；沒有任何問題 (預算繞過、鎖扣、入口)', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([9, 2086, true, []]);
+  it('可達排列 9、抽象狀態 2,098、有解、卡死 0 (含 R)；沒有任何問題 (預算繞過、鎖扣、入口)', () => {
+    // 2-3 起印房多了南拱門 (印房在第 1 行時正對手稿庫北門 → 接通)：狀態 2,086 → 2,098、needsRestart 64 → 52
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([9, 2098, true, []]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
-    expect(r.needsRestart).toBe(64); // 墨用完困在房裡：R 回到進房快照、或穿門補墨即可再解
+    expect(r.needsRestart).toBe(52); // 墨用完困在房裡：R 回到進房快照、或穿門補墨即可再解
   });
 
   it('每題最短 / 次短 / 預算：2-1a 教學 1 + 3 ≤ 6；2-1c 三步各最短 1、本質不同的解 ≥ 2 (往左或往右都行，D16)', () => {
@@ -226,7 +231,7 @@ describe('validateDial：2-1 區 (兩列；三行的解鎖在 2-3 區，規格 5
       ['2-1a', 1, 2, 6, []], ['2-1b', 0, null, 6, []], ['2-1c.1', 1, 2, 6, []], ['2-1c.2', 1, 2, 6, []], ['2-1c', 1, 2, 6, []]
     ]);
     expect(r.perPuzzle.map(p => [p.id, p.solutions, p.distinct, p.sampled])).toEqual([
-      ['2-1a', 3, 3, false], ['2-1b', 1, 1, false], ['2-1c.1', 119, 35, false], ['2-1c.2', 148, 48, false], ['2-1c', 164, 36, false]
+      ['2-1a', 3, 3, false], ['2-1b', 1, 1, false], ['2-1c.1', 110, 41, false], ['2-1c.2', 131, 43, false], ['2-1c', 110, 41, false]
     ]);
     expect(validateDial(m)).toEqual(r); // 確定性
   });

@@ -3,7 +3,7 @@ import type { AbilityId, GameEvent, Mode, World } from '../core/types';
 import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
 import type { Side } from '../core/cube';
-import { applyChapterCommand, captureState, clearUndo, isDialChapter, openChapter, refreshUnlocks, restartRoom, roomCleared, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { applyChapterCommand, captureState, clearUndo, clearedRooms, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
@@ -93,7 +93,7 @@ export class LevelSession {
   /** 魔方儀剛啟動：下一次能進轉動模式時 (切到藏寶圖、站穩) 自動打開展開圖的轉動模式 (規格 5.4.2) */
   private autoTurn = false;
   /** 房間通關已通知 (每個場景一次；外殼另以存檔判斷是否顯示通關畫面) */
-  private roomClearSent = false;
+  private roomClearSent = new Set<string>();
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -131,7 +131,7 @@ export class LevelSession {
     this.turnMode = false;
     this.turnSel = null;
     this.chapterQueue = [];
-    this.roomClearSent = false;
+    this.roomClearSent = new Set<string>();
     this.trayLabel = null;
     this.pendingTray = null;
     this.commands = [];
@@ -171,7 +171,7 @@ export class LevelSession {
     const all = this.events.splice(0);
     for (const e of all) {
       if (e.t === 'labelOpen') { this.openTray(e.label); continue; }
-      if (e.t === 'card') { if (!e.ok) this.traySeq++; continue; }
+      if (e.t === 'card' && !e.ok) { this.traySeq++; continue; }
       const r = applyChapterEvent(this.cs, e, this.opts);
       if (r.kind === 'state' || r.kind === 'dial') { this.cs = r.cs; this.saveChapter(); if (r.kind === 'dial') this.autoTurn = true; continue; }
       if (r.kind === 'enter') {
@@ -352,9 +352,12 @@ export class LevelSession {
     const r = refreshUnlocks(cleared);
     if (r.cs !== this.cs) { this.cs = r.cs; this.saveChapter(); }
     if (r.added.length && !evs.some(e => e.t === 'done')) say(this.world, 'msg.dial.unlocked');
-    if (!this.roomClearSent && roomCleared(this.cs.spec, this.cs.state, this.world)) {
-      this.roomClearSent = true;
-      this.hooks.onRoomCleared?.(this.cs.state.room);
+    // 房間通關 (謎題可以在別的房完成：例 2-3c 在手稿庫 → 印房通關)；每個場景每間房只送一次 (外殼另以 save.cleared 去重)
+    for (const room of clearedRooms(this.cs.spec, this.cs.state, this.world)) {
+      if (this.roomClearSent.has(room)) continue;
+      this.roomClearSent.add(room);
+      this.hooks.onRoomCleared?.(room);
+      break;
     }
   }
 

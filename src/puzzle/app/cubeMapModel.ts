@@ -3,8 +3,8 @@ import type { ObjState, World } from '../core/types';
 import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
-import { applyOp, applyTurn, cellContent, isBlocked, links, turnDirs, type Cell, type CubeOp, type CubeState, type FrameKind, type Turn } from '../core/cube';
-import { dialBlocked, isDialChapter, isLocked, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { applyOp, applyTurn, cellContent, isBlocked, turnDirs, type Cell, type CubeOp, type CubeState, type FrameKind, type Turn } from '../core/cube';
+import { chapterLinks, dialBlocked, isDialChapter, isLocked, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
@@ -88,9 +88,9 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
       cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : 'ui.map.solid'), current: c === state.room });
     }
   }
-  const ls = links(def, cube, spec.doors);
+  const ls = chapterLinks(spec, cube, cs.world.ext.labels ?? state.labels);
   const doors: MapDoor[] = spec.doors
-    .filter(d => cube.pos[d.room]?.[2] === layer)
+    .filter(d => cube.pos[d.room]?.[2] === layer && (!d.hole || ls.some(k => k.from.room === d.room && k.from.door === d.door)))
     .map(d => {
       const l = ls.find(k => k.from.door === d.door && k.from.room === d.room);
       const base = { room: d.room, door: d.door, x: cube.pos[d.room][0], y: cube.pos[d.room][1], side: d.side, kind: d.kind };

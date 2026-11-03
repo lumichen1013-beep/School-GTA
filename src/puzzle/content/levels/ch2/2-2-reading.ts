@@ -14,8 +14,10 @@ const noteBase = { type: 'note', y: 1.0, z: NOTE_Z, w: 0.7, h: 0.9, d: 0.1, visi
 
 const objects: ObjDef[] = [
   { id: 'floor', type: 'floor', x: 4, y: -1, z: 0, w: 20, h: 1, d: 10, visible: 'both', solid: true },
-  { id: 'doorW', type: 'cubeDoor', side: 'W', kind: 'door', frameText: 'lvl.ch2.doorW.frame', x: -5.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.doorW' },
-  { id: 'doorS', type: 'cubeDoor', side: 'S', kind: 'door', x: -1.5, y: 0, z: 4.8, w: 1.6, h: 2.4, d: 0.4, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.doorS' },
+  { id: 'doorW', type: 'cubeDoor', side: 'W', kind: 'door', glyph: 'term.glyph.shui', frameText: 'lvl.ch2.doorW.frame', x: -5.8, y: 0, z: 0, w: 0.4, h: 2.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.doorW' },
+  { id: 'doorS', type: 'cubeDoor', side: 'S', kind: 'door', glyph: 'term.glyph.huo', x: -1.5, y: 0, z: 4.8, w: 1.6, h: 2.4, d: 0.4, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.doorS' },
+  // 北牆的洞位 (2-3：印房南拱門的門牌讀作「間」、正對這面牆時才開；書檯與閱覽桌之間)
+  { id: 'holeN', type: 'cubeDoor', side: 'N', kind: 'arch', hole: true, x: 1, y: 0, z: -4.8, w: 1.6, h: 2.4, d: 0.4, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch2.hole' },
   // ── 2-2a 塗過才看得見：書檯、只寫了開頭的書 (3D 翻頁)、空白頁上的淡墨 (只在藏寶圖；翻頁後才在場) ──
   { id: 'lectern', type: 'lectern', x: -1, y: 0, z: -3.8, w: 1.2, h: 1.0, d: 0.8, visible: 'both', solid: false, labelKey: 'lvl.2-2.lectern' },
   { id: 'book', type: 'openBook', useText: 'lvl.2-2.book.turn', readText: 'lvl.2-2.book.read', x: -1, y: 1.0, z: -3.7, w: 0.9, h: 0.5, d: 0.4,

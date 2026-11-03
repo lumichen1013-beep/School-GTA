@@ -53,7 +53,15 @@ export type CubeBlock = 'notEmpty' | 'outOfCube' | 'noRoom';
 /** 門的型別：門 (人)、拱門 (人 + 可推物)、章門 (只通屋框的走廊) */
 export type DoorKind = 'door' | 'arch' | 'chapter';
 /** 房間的一個門位 (由房間 LevelDef 的 cubeDoor 物件整理而來，見 mechanics/cube chapterDoors) */
-export interface DoorInfo { room: string; door: ObjId; side: Side; kind: DoorKind }
+export interface DoorInfo {
+  room: string; door: ObjId; side: Side; kind: DoorKind;
+  /** v0.4 門牌 (規格「門牌「間」」)：label = 門牌標籤 id；那個標籤上貼著 card (部件卡「日」) 時，這扇門讀作「間」 */
+  plate?: { label: string; card: string };
+  /** v0.4 洞位 (一般不在場)：只有對面的門讀作「間」、這一面又沒有門時才接上 (同一面已有門的不算) */
+  hole?: boolean;
+  /** 門旁 (房內側) 的活字 (2-3c 路線密碼；文字 key) */
+  glyph?: string;
+}
 /** 一條接通：門 ↔ 鄰房的門 (kind = 兩側較窄者)，或門 ↔ 屋框 (frame = 屋框的 to ?? kind) */
 export interface Link {
   from: { room: string; door: ObjId };
@@ -109,10 +117,13 @@ export const isBlocked = <B extends string>(r: CubeState | { blocked: B }): r is
 /**
  * 連接表 (規格 5.4.1 接通規則)：依格位與朝向算出每扇門此刻接到哪 (依 doors 順序；接不通的門不列出 = 門後是牆)。
  * 門 ↔ 鄰房相反門位的門 (章門不接房間)；門 ↔ 屋框 (章門只接 chapterExit)；兩側型別取較窄者 (都是拱門才是 arch)。
+ * v0.4 門牌「間」：plates = 此刻讀作「間」的門 (`room.door`)；鄰房那一面沒有任何門、但有洞位 → 接到洞位 (洞位也回接這扇門，列在最後)
  */
-export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[]): Link[] {
+export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[], plates?: ReadonlySet<string>): Link[] {
   const out: Link[] = [];
+  const back: Link[] = [];
   for (const d of doors) {
+    if (d.hole) continue;
     const at = s.pos[d.room];
     if (!at) continue;
     const side = rotateSide(d.side, s.rot[d.room] ?? 0);
@@ -125,11 +136,20 @@ export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[]): L
     if (d.kind === 'chapter') continue;
     const other = cellContent(def, s, addSide(at, side));
     if (other === 'empty' || other === 'solid') continue;
-    const e = doors.find(x => x.room === other && x.kind !== 'chapter' && rotateSide(x.side, s.rot[other] ?? 0) === OPPOSITE[side]);
-    if (!e) continue;
-    out.push({ from: { room: d.room, door: d.door }, to: { room: other, door: e.door }, kind: d.kind === 'arch' && e.kind === 'arch' ? 'arch' : 'door' });
+    const facing = (x: DoorInfo): boolean => x.room === other && rotateSide(x.side, s.rot[other] ?? 0) === OPPOSITE[side];
+    const e = doors.find(x => facing(x) && !x.hole && x.kind !== 'chapter');
+    if (e) {
+      out.push({ from: { room: d.room, door: d.door }, to: { room: other, door: e.door }, kind: d.kind === 'arch' && e.kind === 'arch' ? 'arch' : 'door' });
+      continue;
+    }
+    if (!plates?.has(`${d.room}.${d.door}`) || doors.some(x => facing(x) && !x.hole)) continue;
+    const h = doors.find(x => facing(x) && x.hole);
+    if (!h) continue;
+    const kind = d.kind === 'arch' && h.kind === 'arch' ? 'arch' : 'door';
+    out.push({ from: { room: d.room, door: d.door }, to: { room: other, door: h.door }, kind });
+    back.push({ from: { room: other, door: h.door }, to: { room: d.room, door: d.door }, kind });
   }
-  return out;
+  return [...out, ...back];
 }
 
 // ── v0.4 控制盤的轉動 (architecture 4.16.1；第一章拉桿的 applyOp 不經過這裡) ──

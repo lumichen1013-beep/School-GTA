@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cubeKey, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Turn } from '../core/cube';
+import { applyOp, applyTurn, cubeKey, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Turn } from '../core/cube';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
 import type { CH1_MODEL } from '../content/cubes/ch1';
@@ -143,12 +143,15 @@ export function chapterOneModel(def: CubeDef, data: typeof CH1_MODEL): ChapterMo
 
 // ── v0.4 控制盤章節：validateDial (規格 5.4.8 ⑥～⑪、D16；architecture 4.16.1；決策 Q13：回退不另建模) ──
 
+/** 題目條件可用的跨房資訊：此刻的連接表 (含此組旗標下讀作「間」的門) */
+export interface GoalCtx { links(): readonly Link[] }
+
 /** 一題 (抽象)：在 room 完成；needs = 設計上的前置題 (多解列舉從「前置剛湊齊」的狀態出發)；goal = 魔方排列的條件 (沒給 = 走到那間房即可完成) */
 export interface DialPuzzle {
   id: string;
   room: string;
   needs: readonly string[];
-  goal?: (s: CubeState, flags: ReadonlySet<string>) => boolean;
+  goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: GoalCtx) => boolean;
   /** 教學題 (範式 / 新操作首次)：允許唯一解 (D16 ③) */
   teaching?: boolean;
   /** 刻意排除的較長策略 (例：不縮小要 5 步)：其步數必須 > 預算 */
@@ -169,6 +172,13 @@ export interface DialModel {
   maxStates?: number;
   /** 多解列舉：每題最多記錄的解法數 (超過 = 依深度分層取樣；規格 5.4.8 ⑦ 10⁴) */
   maxSolutions?: number;
+  /** v0.4 門牌「間」：when 這一題完成之後，room.door 讀作「間」(對面沒有門也接到洞位；規格「門牌「間」」) */
+  plates?: ReadonlyArray<{ room: string; door: string; when: string }>;
+}
+
+/** 這組旗標下讀作「間」的門 (`room.door`) */
+function platesFor(m: DialModel, flags: ReadonlySet<string>): Set<string> {
+  return new Set((m.plates ?? []).filter(p => flags.has(p.when)).map(p => `${p.room}.${p.door}`));
 }
 
 export interface DialPuzzleReport {
@@ -265,19 +275,24 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const K = maxInk + 1;
   const enc = (a: number, r: number, f: number, d: number, k: number): number => (((a * R + r) * F + f) * 2 + d) * K + k;
   const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k }; };
-  // 每個排列：各房穿門可到的房 (只算房 ↔ 房的接通)
+  // 每個排列 (× 讀作「間」的門)：各房穿門可到的房 (只算房 ↔ 房的接通)
+  const plateIdx = (m.plates ?? []).map(p => pid.get(p.when) ?? -1);
+  const plateMask = (f: number): number => plateIdx.reduce((acc, i, j) => (i >= 0 && f & (1 << i) ? acc | (1 << j) : acc), 0);
   const walkMemo = new Map<number, number[][]>();
-  const walks = (a: number): number[][] => {
-    let w = walkMemo.get(a);
+  const walks = (a: number, f: number): number[][] => {
+    const pm = plateMask(f);
+    const key = a * (1 << plateIdx.length) + pm;
+    let w = walkMemo.get(key);
     if (!w) {
       w = rooms.map(() => [] as number[]);
-      for (const l of links(def, arr.states[a], m.doors)) {
+      const plates = new Set((m.plates ?? []).filter((_, j) => pm & (1 << j)).map(p => `${p.room}.${p.door}`));
+      for (const l of links(def, arr.states[a], m.doors, plates)) {
         if (!('room' in l.to)) continue;
         const from = rooms.indexOf(l.from.room);
         const to = rooms.indexOf(l.to.room);
         if (from >= 0 && to >= 0 && !w[from].includes(to)) w[from].push(to);
       }
-      walkMemo.set(a, w);
+      walkMemo.set(key, w);
     }
     return w;
   };
@@ -315,12 +330,12 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     succStart.push(succ.length);
     if (finish >= 0 && f & (1 << finish)) continue;
     const add = (x: number, isEntry = false) => { const i = visit(x, isEntry); if (i >= 0) succ.push(i); };
-    for (const r2 of walks(a)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f)), true);
+    for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f)), true);
     if (!d && r === dialRoom) add(enc(a, r, f, 1, budgetOf(rooms[r], f)), entry[n] === 1);
     const flags = flagSet(f);
     m.puzzles.forEach((p, i) => {
       if (f & (1 << i) || rooms[r] !== p.room) return;
-      if (p.goal && !p.goal(arr.states[a], flags)) return;
+      if (p.goal && !p.goal(arr.states[a], flags, { links: () => links(def, arr.states[a], m.doors, platesFor(m, flags)) })) return;
       if (!p.needs.every(q => flags.has(q))) early.add(p.id);
       add(enc(a, r, f | (1 << i), d, k));
     });
@@ -361,14 +376,15 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
   const def = m.cube;
   const locks = def.dial?.locks ?? [];
   const usable = arr.opts.map(o => { const ls = locks.filter(l => l.group === o.group); return ls.length === 0 || ls.some(l => flags.has(l.until)); });
+  const plates = platesFor(m, flags);
   const reach = (a: number, from: readonly string[]): string[] => {
-    const ls = links(def, arr.states[a], m.doors);
+    const ls = links(def, arr.states[a], m.doors, plates);
     const seen = new Set(from);
     const q = [...from];
     while (q.length) { const r = q.shift()!; for (const l of ls) if (l.from.room === r && 'room' in l.to && !seen.has(l.to.room)) { seen.add(l.to.room); q.push(l.to.room); } }
     return [...seen].sort();
   };
-  const solved = (a: number, rs: readonly string[]) => rs.includes(p.room) && (!p.goal || p.goal(arr.states[a], flags));
+  const solved = (a: number, rs: readonly string[]) => rs.includes(p.room) && (!p.goal || p.goal(arr.states[a], flags, { links: () => links(def, arr.states[a], m.doors, plates) }));
   const perDepth = Math.max(1, Math.floor(cap / Math.max(1, budget)));
   const lengths: number[] = [];
   const multisets = new Map<string, number>();

@@ -185,9 +185,11 @@ export const LAND_VY = -4;
 /** 物件 used 變成 true / false 時的音效 (依類型) */
 const USED_ON: Readonly<Record<string, string>> = {
   bookend: 'sfx.bookend.fall', lampBook: 'sfx.lamp.on', cord: 'sfx.cord.pull', plate: 'sfx.plate.press', spine: 'sfx.book.pull',
-  bookLock: 'sfx.drawer.open', drawer: 'sfx.drawer.open', latch: 'sfx.latch.open', door: 'sfx.door.unseal', valve: 'sfx.lever.pull'
+  bookLock: 'sfx.drawer.open', drawer: 'sfx.drawer.open', latch: 'sfx.latch.open', door: 'sfx.door.unseal', valve: 'sfx.lever.pull',
+  // 2-3 印房：活字架 / 排字架打開、印刷機壓版、字輪換字 (used 來回切換：兩向都出聲)
+  typeCase: 'sfx.drawer.open', typeLock: 'sfx.drawer.open', press: 'sfx.lever.pull', typeWheel: 'sfx.cord.pull'
 };
-const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset' };
+const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
 /** 燈書依序點亮的音高 (半音)：一 → 三本往上 */
 const LAMP_STEPS = [0, 4, 7, 12];
@@ -247,7 +249,7 @@ export class LevelObserver {
       }
       if (q.used && !o.used && USED_OFF[o.type]) out.push(sfx(USED_OFF[o.type]));
       if (!q.gone && o.gone && GONE_ON[o.type]) out.push(sfx(GONE_ON[o.type]));
-      if (o.type === 'crate' && !o.gone && (Math.abs(o.x - q.x) > 1e-3 || Math.abs(o.z - q.z) > 1e-3)) pushed = true;
+      if ((o.type === 'crate' || o.type === 'typeTray') && !o.gone && (Math.abs(o.x - q.x) > 1e-3 || Math.abs(o.z - q.z) > 1e-3)) pushed = true;
     }
     // 推箱：持續推的時候每 0.35 單位一聲 (引擎另有 gap 限流)
     if (pushed) { this.pushAcc += 1; if (this.pushAcc >= 8) { this.pushAcc = 0; out.push(sfx('sfx.crate.push')); } } else this.pushAcc = 7;

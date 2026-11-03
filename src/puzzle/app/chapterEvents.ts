@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, transferObject, turn, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 
@@ -54,5 +54,7 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     return { kind: 'dial', cs: activateDial(cs) };
   }
   if (e.t === 'done') return { kind: 'state', cs: refreshUnlocks(clearUndo(cs, [e])).cs };
+  // 貼卡 / 取卡 (門牌貼上「日」= 「間」)：重算當前房間的門接法 (World 只更新 ext)
+  if (e.t === 'card' && e.ok && cs.spec.cube) return { kind: 'state', cs: syncLinks(cs) };
   return { kind: 'none' };
 }

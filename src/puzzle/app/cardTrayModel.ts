@@ -30,6 +30,11 @@ export function labelGlyph(w: World, text: Text, o: ObjState): { now: string; ba
     return { now: fill(card ? cardGlyph(text, card) : text('ui.label.blank')), base: fill(text('ui.label.blank')) };
   }
   const t = l.textKey ? text(l.textKey) : '';
+  if (l.kind === 'plate') {
+    // 門牌 (2-3a)：原字「門」；貼了收的部件卡 = forms 裡的字 (「間」)
+    const form = cardsOn(w, l.id).map(c => l.forms?.[c]).find(k => k !== undefined);
+    return { now: form ? text(form) : t, base: t };
+  }
   return { now: t, base: t };
 }
 
