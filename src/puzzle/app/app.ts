@@ -87,6 +87,7 @@ export class PuzzleApp {
       ...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' },
       { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
       { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' },
+      { keys: this.bindings.combine.map(keyLabel), labelKey: 'ui.help.combine' },
       { keys: this.bindings.help.map(keyLabel), labelKey: 'ui.help.toggle' }
     ]);
     this.hud = new PuzzleHud(this.text);
@@ -110,6 +111,7 @@ export class PuzzleApp {
     this.hud.onMenu(() => this.go({ id: 'menu' }));
     this.hud.onContinue(() => this.continueAfterClear());
     this.hud.onHelp(() => this.toggleHelp());
+    this.hud.onCombine(() => this.session?.combine());
     window.addEventListener('resize', () => this.resize());
     // 失焦 / 切到背景：暫停過場時間軸
     const pause = (): void => { this.cs?.player.pause(); this.input.releaseAll(); };
@@ -259,6 +261,7 @@ export class PuzzleApp {
         map: this.cubeMap,
         tray: this.tray,
         calm: this.settings.calmTension,
+        still: this.reduceMotion(),
         onTrayOpen: () => this.input.releaseAll(),
         releaseInput: () => this.input.releaseAll(),
         onWorldEvent: e => this.audioBridge.worldEvent(e)

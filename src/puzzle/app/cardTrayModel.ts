@@ -15,7 +15,7 @@ export type { CardTrayModel } from '../ui/cardTray';
 const LABEL_MSGS: ReadonlySet<string> = new Set(['msg.label.written', 'msg.label.removed', 'msg.label.invalid', 'msg.label.noNib']);
 
 /** 詞卡的字 (卡面大字) 與名稱 (例：右 / 詞卡「右」) */
-const cardGlyph = (text: Text, card: string): string => { const d = CARDS[card]?.dir; return d ? text(WORD_KEYS[d]) : card; };
+const cardGlyph = (text: Text, card: string): string => { const c = CARDS[card]; return c?.dir ? text(WORD_KEYS[c.dir]) : c?.glyph ? text(c.glyph) : card; };
 const cardName = (text: Text, card: string): string => text(`term.${card}`);
 
 /** 標籤此刻的字 (拉桿：方向字 / 名詞：textKey) 與原字 */
@@ -23,6 +23,12 @@ export function labelGlyph(w: World, text: Text, o: ObjState): { now: string; ba
   const l = o.def.label;
   if (!l) return { now: '', base: '' };
   if (l.kind === 'dir' && o.def.type === 'lever') return { now: text(WORD_KEYS[leverWord(w, o)]), base: text(WORD_KEYS[o.def.word]) };
+  if (l.kind === 'blank') {
+    // 字謎空格 (2-2b)：原字 = 空格「＿」；貼了詞卡 = 卡面的字填進去
+    const card = cardsOn(w, l.id)[0];
+    const fill = (c: string) => (l.textKey ? text(l.textKey, { c }) : c);
+    return { now: fill(card ? cardGlyph(text, card) : text('ui.label.blank')), base: fill(text('ui.label.blank')) };
+  }
   const t = l.textKey ? text(l.textKey) : '';
   return { now: t, base: t };
 }

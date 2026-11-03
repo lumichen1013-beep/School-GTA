@@ -1,8 +1,8 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 import type { Side } from '../../../core/cube';
 
-// 第二章的占位房 (規格 6「第二章魔方與門位（v0.4 細化）」)：2-2 閱覽室、2-3 印房、H1 夾層、2-4 手稿庫、2-5 書房深處。
-// 只有門 (可進出、不計題；謎題 2-2a 起另做)；2-5 的東章門此版本一律鎖著 (三枚銅鑰匙的齒在 2-5 組裝，尚未實作)。
+// 第二章的占位房 (規格 6「第二章魔方與門位（v0.4 細化）」)：2-3 印房、H1 夾層、2-4 手稿庫、2-5 書房深處 (2-2 閱覽室已是完整關卡，見 2-2-reading.ts，這裡轉出)。
+// 只有門 (可進出、不計題；謎題另做；印房多一張活字桌與 2-2c 的鏡片)；2-5 的東章門此版本一律鎖著 (三枚銅鑰匙的齒在 2-5 組裝，尚未實作)。
 // 門位 (本地)：閱覽室 西 / 南、印房 東、夾層 西、手稿庫 北 / 東、書房深處 西 / 東章門。文字 = content/text/zh-Hant/lvl-ch2.ts
 // 座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -5
 const DOOR: Readonly<Record<'E' | 'W' | 'N' | 'S', { x: number; z: number; w: number; d: number; visible: 'both' | '3d' }>> = {
@@ -29,7 +29,7 @@ const decor = (seed: number): DecorItem[] => [
 ];
 
 const TITLE_KEYS: Readonly<Record<string, string>> = {
-  reading: 'lvl.ch2.reading.title', print: 'lvl.ch2.print.title', mezz: 'lvl.ch2.mezz.title', manuscripts: 'lvl.ch2.manuscripts.title', deep: 'lvl.ch2.deep.title'
+  print: 'lvl.ch2.print.title', mezz: 'lvl.ch2.mezz.title', manuscripts: 'lvl.ch2.manuscripts.title', deep: 'lvl.ch2.deep.title'
 };
 
 const room = (id: string, objects: ObjDef[], seed: number): LevelDef => ({
@@ -47,10 +47,15 @@ const room = (id: string, objects: ObjDef[], seed: number): LevelDef => ({
   objects: [floor, ...objects]
 });
 
-/** 2-2 閱覽室 (上列中格)：西門接 2-1 東門；南門接 2-4 北門；上列 −1 時西門面對入口屋框 */
-export const reading = room('reading', [door('W', { frameText: 'lvl.ch2.doorW.frame' }), door('S')], 1);
-/** 2-3 印房 (上列右格)：只有東門 (S0 面對屋外；任一次上列轉動後接 2-1 西門) */
-export const print = room('print', [door('E')], 2);
+/** 2-2 閱覽室 (上列中格)：完整關卡 (2-2-reading.ts)；沿用舊的匯入位置 */
+export { reading } from './2-2-reading';
+/** 2-3 印房 (上列右格)：只有東門 (S0 面對屋外；任一次上列轉動後接 2-1 西門)；活字桌上是 2-2c 的鏡片 (3D 拿) */
+export const print = room('print', [
+  door('E'),
+  { id: 'typeDesk', type: 'readingTable', x: 2.5, y: 0, z: -3.6, w: 1.6, h: 0.85, d: 0.8, visible: 'both', solid: false, labelKey: 'lvl.2-2.typeDesk' },
+  { id: 'lens', type: 'lens', grants: 'lens', useText: 'lvl.2-2.lens.got', x: 2.5, y: 0.85, z: -3.6, w: 0.3, h: 0.12, d: 0.3,
+    visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.2-2.lens' }
+], 2);
 /** H1 夾層 (下列左格；隱藏房)：只有西門，只用列轉時接不上任何房 */
 export const mezz = room('mezz', [door('W')], 3);
 /** 2-4 手稿庫 (下列中格)：北門接 2-2 南門；東門接 2-5 西門 */

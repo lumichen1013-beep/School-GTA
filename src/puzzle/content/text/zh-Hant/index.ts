@@ -13,5 +13,6 @@ import { lvlProto } from './lvl-proto';
 import { lvl21 } from './lvl-2-1';
 import { lvlCh2 } from './lvl-ch2';
 import { uiSound } from './ui-sound';
+import { lvl22 } from './lvl-2-2';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...lvlProto, ...lvl21, ...lvlCh2, ...uiSound };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...lvlProto, ...lvl21, ...lvl22, ...lvlCh2, ...uiSound };

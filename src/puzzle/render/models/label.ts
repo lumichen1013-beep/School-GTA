@@ -13,6 +13,10 @@ const WORD_KEYS: Readonly<Record<string, string>> = { up: 'term.word.up', down: 
 const WORD_KEY = (w: string): string => WORD_KEYS[w] ?? WORD_KEYS.up;
 /** 詞卡 id `card.<方向字>` → 方向字 (mechanics/labels 的命名慣例) */
 const cardWord = (card: string): string | null => /^card\.(\w+)$/.exec(card)?.[1] ?? null;
+/** 字謎詞卡的卡面字 key (與 mechanics/labels CARDS 的 glyph 相同；render 只能 import type) */
+const GLYPH_KEYS: Readonly<Record<string, string>> = {
+  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
+};
 
 /** 標籤此刻顯示的字與是否被詞卡蓋住 (方向字 = 拉桿原字或詞卡的字；名詞 = textKey) */
 export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: boolean } {
@@ -23,6 +27,11 @@ export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: bool
   if (l.kind === 'dir') {
     const base = d.type === 'lever' ? d.word : 'up';
     return { text: c.world.rt.text(WORD_KEY(w ?? base)), covered: w !== undefined };
+  }
+  if (l.kind === 'blank') {
+    // 字謎空格 (2-2b)：空著 = 「＿」；貼了詞卡 = 卡面的字 (term.glyph.<字>，mechanics/labels 的命名慣例)
+    const glyph = c.world.rt.text(w !== undefined && GLYPH_KEYS[w] ? GLYPH_KEYS[w] : 'ui.label.blank');
+    return { text: l.textKey ? c.world.rt.text(l.textKey, { c: glyph }) : '', covered: w !== undefined };
   }
   return { text: l.textKey ? c.world.rt.text(l.textKey) : '', covered: false };
 }

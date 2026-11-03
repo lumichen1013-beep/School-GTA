@@ -23,6 +23,8 @@ export interface HudData {
   toast: { seq: number; text: string };
   /** v0.4 控制盤章節 2D 的墨量小計 (「墨 ●●●○○○」)；沒有 = 不顯示 */
   ink?: string;
+  /** v0.4 N28：手上有一組配方時的「合成」鈕文字；沒有 = 不顯示 */
+  combine?: string;
 }
 
 /** HUD：依 HudData 做 diff 後寫 DOM；旁白、通關畫面 (DOM 由 ui/dom.ts 建立) */
@@ -42,6 +44,8 @@ export class PuzzleHud {
   private invCount = 0;
   private prompt: string | null = null;
   private toastSeq = 0;
+  private combineBtn = $('pz-combine');
+  private combineText = '';
   private helpBtn = $('pz-help-btn');
   private helpEl = $('pz-help');
   private tipEl = $('pz-tip');
@@ -63,6 +67,11 @@ export class PuzzleHud {
     this.setItems(m.items);
     this.setPrompt(m.prompt);
     if ((m.ink ?? '') !== this.ink) { this.ink = m.ink ?? ''; this.inkEl.textContent = this.ink; }
+    if ((m.combine ?? '') !== this.combineText) {
+      this.combineText = m.combine ?? '';
+      this.combineBtn.textContent = this.combineText;
+      this.combineBtn.classList.toggle('show', !!this.combineText);
+    }
   }
 
   private setMode(m: Mode, label: string): void {
@@ -126,6 +135,8 @@ export class PuzzleHud {
     this.helpBtn.setAttribute('aria-expanded', String(v.expanded));
     this.helpEl.classList.toggle('show', v.expanded);
   }
+  /** 「合成」鈕 (觸控 / 滑鼠；鍵盤 = C) */
+  onCombine(fn: () => void): void { this.combineBtn.addEventListener('click', e => { e.preventDefault(); fn(); this.combineBtn.blur(); }); }
   onHelp(fn: () => void): void { this.helpBtn.addEventListener('click', e => { e.preventDefault(); fn(); this.helpBtn.blur(); }); }
   /** 一次性操作小提示 (畫面上方一行；ms 後自動消失；null = 立刻收起) */
   showTip(text: string | null, nowMs: number, ms: number): void {

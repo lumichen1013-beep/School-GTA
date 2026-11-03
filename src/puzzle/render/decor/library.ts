@@ -72,9 +72,9 @@ export const stainedGlassDecor: DecorFactory = (p, item, { theme: { pal } }) => 
 };
 
 /**
- * floatBooks：半浮在空中的書與羊皮紙 (2～4 cm 緩慢上下浮動；只在實景、不擋路)；欄位 x、y、z (中心)、w (散布寬)、seed
+ * floatBooks：半浮在空中的書與羊皮紙 (2～4 cm 緩慢上下浮動；只在實景、不擋路；減弱動態時靜止，story-bible 8.3)；欄位 x、y、z (中心)、w (散布寬)、seed
  */
-export const floatBooksDecor: DecorFactory = (p, item, { theme: { pal } }) => {
+export const floatBooksDecor: DecorFactory = (p, item, { theme: { pal }, still }) => {
   const g = new THREE.Group();
   const r = rng(num(item, 'seed', 3));
   const cx = num(item, 'x'), cy = num(item, 'y'), cz = num(item, 'z'), w = num(item, 'w', 6);
@@ -90,6 +90,7 @@ export const floatBooksDecor: DecorFactory = (p, item, { theme: { pal } }) => {
     g.add(m);
     items.push({ m, y, ph: r() * Math.PI * 2 });
   }
+  if (still) return { root: g, only3d: [g] };
   return { root: g, only3d: [g], update: t => { for (const it of items) it.m.position.y = it.y + 0.03 * Math.sin(t * 0.8 + it.ph); } };
 };
 

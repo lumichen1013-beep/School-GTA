@@ -16,5 +16,20 @@ export const term = {
   'term.diary.1': '手記第一頁',
   // 第二章：銅鑰匙的齒 (三條鏈各一枚，2-5 組裝)、老宅圖殘片 (收集物，通關時寫進 save.scraps)
   'term.tooth.shelf': '銅鑰匙的齒・一',
-  'term.scrap.1': '老宅圖殘片'
+  'term.scrap.1': '老宅圖殘片',
+  // 2-2 閱覽室：字謎的詞卡 (物品 id card.<字>；卡面的字 = term.glyph.<字>)、合成的道具 (空鏡框 + 鏡片 = 放大鏡)、銅鑰匙的齒・二
+  'term.card.wai': '詞卡「外」',
+  'term.card.nei': '詞卡「內」',
+  'term.card.qian': '詞卡「前」',
+  'term.card.li': '詞卡「裡」',
+  'term.card.bian': '詞卡「邊」',
+  'term.glyph.wai': '外',
+  'term.glyph.nei': '內',
+  'term.glyph.qian': '前',
+  'term.glyph.li': '裡',
+  'term.glyph.bian': '邊',
+  'term.frame': '空鏡框',
+  'term.lens': '鏡片',
+  'term.magnifier': '放大鏡',
+  'term.tooth.reading': '銅鑰匙的齒・二'
 } as const;

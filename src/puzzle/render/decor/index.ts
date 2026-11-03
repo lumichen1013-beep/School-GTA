@@ -22,7 +22,7 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
 export interface Decor { root: THREE.Group; only3d: THREE.Object3D[]; occluders: THREE.Mesh[]; update(t: number, is2d: boolean): void }
 
 /** 依 level.decor 的順序建出全部裝飾 (未登錄的 kind 略過並警告) */
-export function buildDecor(p: Painter, level: LevelDef, theme: Theme): Decor {
+export function buildDecor(p: Painter, level: LevelDef, theme: Theme, opts: { still?: boolean } = {}): Decor {
   const root = new THREE.Group();
   const only3d: THREE.Object3D[] = [];
   const occluders: THREE.Mesh[] = [];
@@ -33,7 +33,7 @@ export function buildDecor(p: Painter, level: LevelDef, theme: Theme): Decor {
     if (!make) { console.warn(`[puzzle] unknown decor kind: ${item.kind}`); continue; }
     const nth = counts.get(item.kind) ?? 0;
     counts.set(item.kind, nth + 1);
-    const part = make(p, item, { level, theme, nth });
+    const part = make(p, item, { level, theme, nth, still: !!opts.still });
     root.add(part.root);
     if (part.only3d) only3d.push(...part.only3d);
     if (part.occluders) occluders.push(...part.occluders);

@@ -39,6 +39,8 @@ export interface SessionContext {
   tray?: CardTray;
   /** 減弱緊張效果 (驚嚇改平靜版；規格 9.1) */
   calm?: boolean;
+  /** 減弱動態 (純裝飾的浮動改為靜止；規格 7.2、story-bible 8.3) */
+  still?: boolean;
   /** 字卡匣打開時：按著的鍵一律視為放開 (mobile-controls 2.5 releaseAll) */
   onTrayOpen?(): void;
   /** 進入轉動模式時：按著的鍵一律視為放開 (v0.4；mobile-controls 2.5) */
@@ -133,7 +135,7 @@ export class LevelSession {
     this.trayLabel = null;
     this.pendingTray = null;
     this.commands = [];
-    this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm });
+    this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm, still: this.ctx.still });
     this.cams = new PuzzleCameras(w);
     this.cams.resize(this.aspect);
     this.ctx.transition.cancel();
@@ -265,6 +267,8 @@ export class LevelSession {
   trayRemove(): void { const m = this.trayModel(); const c = m && uncardCommand(m); if (c) this.commands.push(c); }
   /** 點互動提示 (觸控)：等同下一幀按 E */
   tap(): void { this.tapInteract = true; }
+  /** C / 「合成」鈕：把手上的道具依配方合成 (N28；指令下一幀進世界) */
+  combine(): void { if (!this.fx && !this.turnMode) this.commands.push({ t: 'combine' }); }
 
   private trayModel() {
     if (this.trayLabel === null) return null;
@@ -324,6 +328,7 @@ export class LevelSession {
     } else {
       if (input.pressed.includes('map')) this.toggleMap();
       if (input.pressed.includes('turnMode')) this.toggleTurnMode();
+      if (input.pressed.includes('combine')) this.combine();
       // 字卡匣關著時按 1～3 / X：站在標籤前 = 按 E 打開並補做這一下；否則說明怎麼打開 (cardTrayModel.closedTrayKey)
       const k = pressed.includes('interact') ? null : closedTrayKey(this.world, input.pressed);
       if (k?.open) { this.pendingTray = k.n; this.pendingAge = 0; pressed = [...pressed, 'interact']; }

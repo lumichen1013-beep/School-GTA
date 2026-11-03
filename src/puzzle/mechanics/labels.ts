@@ -15,18 +15,36 @@ declare module '../core/types' {
     /**
      * 標籤 (只在 2D 看得到、寫得到)：id = 章節內唯一的標籤 id (存在 ChapterState.labels)；
      * kind 'dir' = 方向字 (原字 = 拉桿的 word)；'noun' = 名詞 (原字 = textKey，例「大衣」)；scale = 旁邊有空的尺度卡槽 (只鋪陳)；
-     * noCardText = 這是謎題要寫的標籤：字卡匣空著時 2D 照樣提示「寫」，按 E 說缺什麼、去哪裡找 (沒有 → 空匣時 E 照舊「看得見，卻碰不到」)
+     * noCardText = 這是謎題要寫的標籤：字卡匣空著時 2D 照樣提示「寫」，按 E 說缺什麼、去哪裡找 (沒有 → 空匣時 E 照舊「看得見，卻碰不到」)；
+     * v0.4 'blank' = 字謎的空格 (P18；2-2b 下聯)：textKey 含 {c} (空格處)；answers = 詞典 (收的詞卡，D14 列同義字)；
+     * 貼上收的卡 → 物件 used (doneFlag 成立 → done 事件)、opens 指向的物件 used、取得 reward、說 solvedText (只在第一次)
      */
-    label?: { id: string; kind: 'dir' | 'noun'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey };
+    label?: {
+      id: string; kind: 'dir' | 'noun' | 'blank'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
+      answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey;
+    };
   }
 }
 
 /** 寫的能力 (1-2a 筆尖) */
 export const WRITE_ABILITY: ItemId = 'nib';
 
-/** 字卡 (詞典最小版)：物品 id `card.<方向字>` = 詞卡；dir = 貼在方向字標籤上時的新方向 */
-export interface CardDef { slot: 'word'; dir?: LeverWord }
-export const CARDS: Readonly<Record<ItemId, CardDef>> = Object.fromEntries(LEVER_WORDS.map(w => [`card.${w}`, { slot: 'word', dir: w }]));
+/** 能不能寫字：持有筆尖 (第一章道具)，或開場能力有筆尖 (第二章起：章節道具欄從空的開始，筆尖是存檔的能力) */
+export const canWrite = (w: World): boolean => hasItem(w, WRITE_ABILITY) || w.abilities.includes('nib');
+
+/**
+ * 字卡 (詞典最小版)：物品 id `card.<字>` = 詞卡；dir = 貼在方向字標籤上時的新方向 (第一章)；
+ * glyph = 卡面的字 (文字 key；v0.4 第二章的字謎詞卡，例「內」)
+ */
+export interface CardDef { slot: 'word'; dir?: LeverWord; glyph?: TextKey }
+/** 第二章字謎的詞卡 (2-2b：外 / 內 / 前；裡 / 邊 = 詞典先列的同義字，本章目前沒有卡) */
+const WORD_CARDS: Readonly<Record<string, TextKey>> = {
+  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
+};
+export const CARDS: Readonly<Record<ItemId, CardDef>> = Object.fromEntries([
+  ...LEVER_WORDS.map(w => [`card.${w}`, { slot: 'word', dir: w } as CardDef]),
+  ...Object.entries(WORD_CARDS).map(([w, glyph]) => [`card.${w}`, { slot: 'word', glyph } as CardDef])
+]);
 export const isCard = (id: string): boolean => id in CARDS;
 /** 字卡匣的格數 (第一章：詞卡一格、第三格空著，鋪陳尺度卡) */
 export const TRAY_SLOTS = 3;
@@ -34,10 +52,26 @@ export const TRAY_SLOTS = 3;
 /** 標籤上貼著的字卡 */
 export const cardsOn = (w: World, label: string): readonly string[] => w.ext.labels?.[label] ?? [];
 
-/** 詞典：這張卡貼在這個標籤上是否成立 (方向字 + 詞卡 = 新方向；名詞配詞卡 = 不成字) */
+/** 詞典：這張卡貼在這個標籤上是否成立 (方向字 + 方向詞卡 = 新方向；字謎空格 + 詞典收的卡 = 成字；名詞配詞卡 = 不成字) */
 export function accepts(o: ObjState, card: string): boolean {
   const c = CARDS[card];
-  return !!c && o.def.label?.kind === 'dir' && c.slot === 'word' && c.dir !== undefined;
+  const l = o.def.label;
+  if (!c || !l || c.slot !== 'word') return false;
+  if (l.kind === 'blank') return (l.answers ?? []).includes(card);
+  return l.kind === 'dir' && c.dir !== undefined;
+}
+
+/** 字謎空格寫對了：物件 used (doneFlag → done)、opens 指向的物件 used、reward、solvedText (已解開過 → 只換卡，不再給) */
+function solveBlank(w: World, o: ObjState): boolean {
+  const l = o.def.label;
+  if (l?.kind !== 'blank' || o.used) return false;
+  o.used = true;
+  const target = o.def.opens ? w.byId.get(o.def.opens) : undefined;
+  if (target) target.used = true;
+  if (l.reward) addItem(w, l.reward, 1);
+  if (l.solvedText) say(w, l.solvedText);
+  if (o.def.doneFlag) w.events.push({ t: 'done', flag: o.def.doneFlag });
+  return true;
 }
 
 /** 拉桿此刻的方向字：標籤上貼了詞卡 → 詞卡的字；否則原字 (規格 5.4.5「用詞卡蓋掉原字即改變轉向；取下原字恢復」) */
@@ -81,7 +115,7 @@ function targetFor(w: World, label: string): ObjState | null {
 function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
   const o = targetFor(w, cmd.label);
   if (!o) return;
-  if (!hasItem(w, WRITE_ABILITY)) { say(w, 'msg.label.noNib'); return; }
+  if (!canWrite(w)) { say(w, 'msg.label.noNib'); return; }
   if (!hasItem(w, cmd.card)) return;
   if (!accepts(o, cmd.card)) {
     // 無效字：不生效、卡片留在匣裡 (規格 D15：字顫動、墨色變淡、輕音效由 UI / 呈現層播)
@@ -93,7 +127,7 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
   for (const old of cardsOn(w, cmd.label)) addItem(w, old, 1);
   addItem(w, cmd.card, -1);
   setCards(w, cmd.label, [cmd.card]);
-  say(w, 'msg.label.written');
+  if (!solveBlank(w, o)) say(w, 'msg.label.written');
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
 
@@ -144,12 +178,14 @@ export const labels: Mechanic = {
     if (miss) { sayMissingCard(w, miss); return true; }
     const t = writableTarget(w);
     if (!t) return false;
-    if (!hasItem(w, WRITE_ABILITY)) { say(w, 'msg.label.noNib'); return true; }
+    if (!canWrite(w)) { say(w, 'msg.label.noNib'); return true; }
     w.events.push({ t: 'labelOpen', label: t.def.label!.id, obj: t.def.id });
     return true;
   },
   command: (w, cmd) => {
-    if (cmd.t === 'card') card(w, cmd); else uncard(w, cmd);
+    if (cmd.t === 'card') card(w, cmd);
+    else if (cmd.t === 'uncard') uncard(w, cmd);
+    else return false;
     return true;
   }
 };

@@ -8,6 +8,7 @@ import type { HudData } from '../ui/hud';
 import { leverWord, promptLabelTarget } from '../mechanics/labels';
 import { WORD_KEYS } from '../mechanics/cube';
 import { labelTitle } from './cardTrayModel';
+import { readyRecipe } from '../mechanics/combine';
 
 /** HUD 要顯示的一切 (純資料；ui/hud.ts 只做 diff 後寫 DOM)：模式、物品、[E] 提示 (過場中 / 通關後為 null)、最後訊息 */
 export type HudModel = HudData;
@@ -31,13 +32,17 @@ export function deriveHud(w: World, text: Text, view: HudView): HudModel {
     const l = promptLabelTarget(w);
     if (l) prompt = text('ui.prompt.withLabel', { key, verb: text('obj.label.verb'), label: labelTitle(w, text, l) });
   }
+  // 手上有一組配方 (N28)：HUD 出現「合成」鈕 (C / 點一下)
+  const r = view.locked || w.cleared ? null : readyRecipe(w);
+  const combine = r ? text('ui.combine', { key: keyLabel(view.bindings.combine?.[0] ?? ''), a: text(`term.${r.parts[0]}`), b: text(`term.${r.parts[1]}`) }) : null;
   return {
     mode: view.renderMode,
     modeText: text(view.renderMode === '3d' ? 'term.mode3d' : 'term.mode2d'),
     items: Object.entries(w.inv).map(([id, n]) => ({ id, n, name: text(`term.${id}`) })),
     prompt,
     toast: { seq: w.msgSeq, text: w.msg },
-    ...(view.ink ? { ink: view.ink } : {})
+    ...(view.ink ? { ink: view.ink } : {}),
+    ...(combine ? { combine } : {})
   };
 }
 

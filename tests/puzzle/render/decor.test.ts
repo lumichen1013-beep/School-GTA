@@ -76,4 +76,18 @@ describe('渲染：關卡裝飾 (LevelDef.decor)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
+
+  it('浮書 (floatBooks) 平常緩慢上下浮動；減弱動態 (still) 時靜止 (story-bible 8.3)', () => {
+    const level: LevelDef = { ...foyer, decor: [{ kind: 'floatBooks', x: 0, y: 3, z: 0, w: 4, seed: 2 }] };
+    const ys = (still: boolean) => {
+      const d = buildDecor(paint(), level, DEFAULT_THEME, { still });
+      const g = d.root.children[0];
+      const at = (t: number) => { d.update(t, false); return g.children.map(c => c.position.y); };
+      return [at(0), at(1.7)];
+    };
+    const [a0, a1] = ys(false);
+    expect(a0).not.toEqual(a1);
+    const [b0, b1] = ys(true);
+    expect(b0).toEqual(b1);
+  });
 });

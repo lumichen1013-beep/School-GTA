@@ -39,6 +39,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 7;
 }
 #pz-tip.show { opacity: 1; }
+/* 道具合成鈕 (N28)：左下、互動提示之上；手上有一組配方才出現 (≥ 44 px 高) */
+#pz-combine {
+  position: absolute; left: 18px; bottom: 22%; min-height: 44px; padding: 0 16px; display: none; pointer-events: auto; cursor: pointer; z-index: 6;
+  font: 700 15px/1 inherit; color: var(--paper); background: #a8640f; border: 2px solid var(--ink); border-radius: 999px; box-shadow: 3px 3px 0 rgba(58,38,24,.3);
+}
+#pz-combine.show { display: block; }
 #pz-help b { display: block; margin-bottom: 2px; letter-spacing: .2em; }
 #pz-help kbd {
   display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; font: 12px/1.5 inherit;

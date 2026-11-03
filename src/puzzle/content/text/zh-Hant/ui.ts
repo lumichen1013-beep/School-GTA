@@ -7,6 +7,9 @@ export const ui = {
   'ui.prompt.withLabel': '[{key}] {verb}　{label}',
   'ui.help.title': '操作',
   // 操作說明面板 (預設收合成小鈕；H / 點小鈕開合) 與一次性操作小提示 (3 秒內自動消失)
+  'ui.label.blank': '＿',
+  'ui.combine': '[{key}] 合成：{a} ＋ {b}',
+  'ui.help.combine': '合成手上的道具',
   'ui.help.toggle': '收起 / 打開這份說明',
   'ui.help.show': '{key}　操作說明',
   'ui.help.hide': '{key}　收起說明',

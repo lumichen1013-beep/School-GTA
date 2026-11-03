@@ -7,7 +7,7 @@ import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
-import { deep, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
+import { deep, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { THEMES } from '../../../src/puzzle/render/themes';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
@@ -262,5 +262,33 @@ describe('渲染：深度打架 (共面)：2-1 書架迴廊 (第二章；森林�
       expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
       view.dispose();
     }
+  });
+});
+
+describe('渲染：深度打架 (共面)：2-2 閱覽室與印房的活字桌 (第二章)', () => {
+  beforeAll(stubCanvas);
+
+  it('2-2 開場與全部完成後 (書翻頁、淡墨塗開、對聯櫃打開、目錄櫃拉出、書脊讀過) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出淡墨與下聯', () => {
+    for (const done of [false, true]) {
+      const w = newWorld(reading);
+      if (done) for (const id of ['book', 'veil', 'lower', 'cabinet', 'catalog', 'spine']) w.byId.get(id)!.used = true;
+      const view = new PuzzleScene(w, THEMES.study);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 120; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([done, zFightPairs(view.scene, [reading.bounds.minX + 3, reading.bounds.maxX - 3])]).toEqual([done, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 3, cams.active('2d'));
+      expect([view.modelRoot('veil')!.visible, view.modelRoot('lower')!.visible]).toEqual([done, true]);
+      view.dispose();
+    }
+  });
+
+  it('印房 (活字桌與鏡片) 的 3D 場景沒有共面', () => {
+    const w = newWorld(print);
+    const view = new PuzzleScene(w, THEMES.study);
+    const cams = new PuzzleCameras(w);
+    view.update('3d', 1 / 60, 0, cams.active('3d'));
+    expect(zFightPairs(view.scene, [print.bounds.minX + 3, print.bounds.maxX - 3])).toEqual([]);
+    view.dispose();
   });
 });

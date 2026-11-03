@@ -41,7 +41,7 @@ export class PuzzleScene {
   private lastZ = 0;
 
   /** theme：配色 / 燈光 / 過場 (主題切換 = 重建場景)；未給 = 預設主題；calm = 減弱緊張效果 (驚嚇改平靜版) */
-  constructor(private world: World, private theme: Theme = DEFAULT_THEME, private opts: { calm?: boolean } = {}) {
+  constructor(private world: World, private theme: Theme = DEFAULT_THEME, private opts: { calm?: boolean; still?: boolean } = {}) {
     const L = theme.lights;
     this.paint = new Painter(theme.pal.outline);
     this.sun = new THREE.DirectionalLight(L.sun, L.sunIntensity);
@@ -60,7 +60,7 @@ export class PuzzleScene {
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target);
 
-    this.decor = buildDecor(this.paint, world.level, theme);
+    this.decor = buildDecor(this.paint, world.level, theme, { still: opts.still });
     this.scene.add(this.decor.root);
     this.occluders.push(...this.decor.occluders);
     this.nearFaders = new Set(this.decor.occluders);

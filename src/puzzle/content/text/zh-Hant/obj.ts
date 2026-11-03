@@ -17,5 +17,12 @@ export const obj = {
   'obj.remark.verb': '讀',
   'obj.scrap.verb': '拿',
   'obj.lampBook.verb': '點亮',
+  // 2-2 閱覽室
+  'obj.openBook.verb': '翻',
+  'obj.inkveil.verb': '塗',
+  'obj.lens.verb': '拿起',
+  'obj.smallPrint.verb': '細看',
+  'obj.coupletCabinet.verb': '看',
+  'obj.cardCatalog.verb': '拉開',
   'obj.default.verb': '互動'
 } as const;

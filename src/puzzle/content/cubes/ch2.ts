@@ -53,3 +53,22 @@ export const CH2_ZONE21 = {
   start: 'shelf',
   finish: '2-1c'
 };
+
+/**
+ * 2-1 + 2-2 區的抽象模型 (devtools/validateDial；規格 6「2-2 閱覽室（細化）」)：同樣只有兩列 (三行的解鎖在 2-3 區)。
+ * 題：2-1 區五題 + 2-2a / 2-2b (閱覽室，不需轉動)；2-2c.lens = 在印房拿到鏡片 (要先顯影 2-2a 才知道去哪；S0 印房孤立，要轉一次上列)；
+ * 2-2c = 回到閱覽室、已有空鏡框 (2-2b) 與鏡片 → 合成、讀書脊；終點 ch2.top = 2-1、2-2 兩間都通關、人在閱覽室
+ */
+export const CH2_ZONE22 = {
+  cube: CH2_ZONE21.cube,
+  puzzles: [
+    ...CH2_ZONE21.puzzles,
+    { id: '2-2a', room: 'reading', needs: [], teaching: true },
+    { id: '2-2b', room: 'reading', needs: [], teaching: true },
+    { id: '2-2c.lens', room: 'print', needs: ['2-2a'], teaching: true, goal: (_s, f) => f.has('2-2a') },
+    { id: '2-2c', room: 'reading', needs: ['2-2b', '2-2c.lens'], teaching: true, goal: (_s, f) => f.has('2-2b') && f.has('2-2c.lens') },
+    { id: 'ch2.top', room: 'reading', needs: ['2-1c', '2-2c'], teaching: true, goal: (_s, f) => f.has('2-1c') && f.has('2-2c') }
+  ] as readonly ZonePuzzle[],
+  start: 'shelf',
+  finish: 'ch2.top'
+};

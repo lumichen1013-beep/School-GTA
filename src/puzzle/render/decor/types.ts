@@ -3,8 +3,8 @@ import type { DecorItem, LevelDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 
-/** 建一件裝飾時可用的環境：nth = 這件是同 kind 的第幾件 (0 起；例：吊燈光暈錯開閃爍相位) */
-export interface DecorCtx { level: LevelDef; theme: Theme; nth: number }
+/** 建一件裝飾時可用的環境：nth = 這件是同 kind 的第幾件 (0 起；例：吊燈光暈錯開閃爍相位)；still = 減弱動態 (純裝飾的浮動 / 晃動改為靜止) */
+export interface DecorCtx { level: LevelDef; theme: Theme; nth: number; still?: boolean }
 
 /** 一件裝飾的外觀 */
 export interface DecorPart {

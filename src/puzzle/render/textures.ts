@@ -297,7 +297,8 @@ export const labelTag = (pal: Palette, text: string, covered: boolean, scale: bo
     g.fillStyle = shade(pal.brass, 0.7); g.beginPath(); g.moveTo(w - 24, 16); g.lineTo(w - 40, 16); g.lineTo(w - 24, 32); g.closePath(); g.fill();
   }
   g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = `bold ${text.length > 1 ? 54 : 66}px "PingFang TC", "Noto Sans TC", "Songti TC", serif`;
+  // 長的字 (2-2b 下聯五個字) 縮小字級放進框裡；一兩個字照舊
+  g.font = `bold ${text.length > 1 ? Math.min(54, Math.floor((w - 28) / text.length)) : 66}px "PingFang TC", "Noto Sans TC", "Songti TC", serif`;
   g.fillText(text, w / 2, 60);
   if (scale) {
     g.setLineDash([10, 8]); g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(w + 6, 22, 64, 68); g.setLineDash([]);

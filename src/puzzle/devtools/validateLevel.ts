@@ -13,6 +13,8 @@ import type { ChapterDef } from '../content/chapters';
 import { ABILITY_IDS } from '../meta/save';
 import { SIDES } from '../core/cube';
 import { LEVER_WORDS } from '../mechanics/cube';
+import { CARDS } from '../mechanics/labels';
+import { RECIPES } from '../mechanics/combine';
 
 /** 問題代碼 (測試以代碼斷言，訊息僅供人讀) */
 export type IssueCode =
@@ -32,7 +34,7 @@ export type IssueCode =
   | 'ref.exitLocked'      // 出口門沒有任何物件 opens 它、也不是 unsealed (永遠解不開)
   | 'cube.field'          // 魔方門的 side / kind、拉桿的方向字不合法
   | 'ref.sequence'        // 順序鎖 (N27)：order 少於 3 條、重複、不是指向本鎖的拉繩；或拉繩的 lock 不是順序鎖 / 不在其 order 裡
-  | 'label.field'         // 標籤 (N22)：id 空白 / 重複；方向字標籤不在拉桿上；名詞標籤沒有 textKey
+  | 'label.field'         // 標籤 (N22)：id 空白 / 重複；方向字標籤不在拉桿上；名詞標籤沒有 textKey；字謎空格沒有 textKey / 詞典空 / 收的卡不是詞卡
   | 'text.missing'        // 文字 key 不存在於文字表
   | 'entry.mismatch'      // 登錄表 id / titleKey 與 LevelDef 不一致
   | 'entry.ability'       // 能力白名單含未知能力
@@ -70,7 +72,12 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'remark') return [o.textKey, label];
   if (o.type === 'lampBook') return [o.title, label];
   if (o.type === 'lampLock') return [o.openText, o.stepText, o.resetText, label];
-  return [label];
+  if (o.type === 'openBook') return [o.readText, label];
+  if (o.type === 'inkveil') return [o.revealText, o.sketch, label];
+  if (o.type === 'smallPrint') return [o.readText, o.firstText, label];
+  if (o.type === 'coupletCabinet') return [o.upper, o.lockedRead, o.openRead, label];
+  if (o.type === 'cardCatalog') return [o.emptyText, label];
+  return [label, o.label?.solvedText];
 }
 
 /** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
@@ -147,7 +154,12 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
 
   // 引用
   const byId = new Map(def.objects.map(o => [o.id, o]));
-  const granted = new Set(def.objects.flatMap(o => [o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' ? o.reward : undefined, ...(o.type === 'hook' ? o.also ?? [] : [])]).filter((g): g is string => typeof g === 'string'));
+  const granted = new Set(def.objects.flatMap(o => [
+    o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' || o.type === 'smallPrint' ? o.reward : undefined, o.label?.reward,
+    ...(o.type === 'hook' ? o.also ?? [] : []), ...(o.type === 'cardCatalog' ? o.cards : [])
+  ]).filter((g): g is string => typeof g === 'string'));
+  // 合成的產物 (N28)：配方的兩件都是章節道具 (可能在別的房間)，所以產物視為取得得到 (配料的來源由章節模型 validateDial 驗)
+  for (const r of RECIPES) granted.add(r.out);
   const start = new Set<string>(ctx.abilities ?? []);
   for (const o of def.objects) {
     if (o.opens !== undefined && (o.opens === o.id || !byId.has(o.opens))) add('ref.opens', `opens "${o.opens}" does not name another object`, o.id);
@@ -172,7 +184,8 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     labelIds.add(l.id);
     if (l.kind === 'dir' && o.type !== 'lever') add('label.field', 'direction labels belong on levers', o.id);
     else if (l.kind === 'noun' && !l.textKey) add('label.field', 'noun labels need a textKey', o.id);
-    else if (l.kind !== 'dir' && l.kind !== 'noun') add('label.field', `label kind "${String(l.kind)}" is not dir|noun`, o.id);
+    else if (l.kind === 'blank' && (!l.textKey || !(l.answers ?? []).length || !(l.answers ?? []).every(c => c in CARDS))) add('label.field', 'blank labels need a textKey and answers that are word cards', o.id);
+    else if (l.kind !== 'dir' && l.kind !== 'noun' && l.kind !== 'blank') add('label.field', `label kind "${String(l.kind)}" is not dir|noun|blank`, o.id);
   }
 
   // 順序鎖 (N27：順序長度 ≥ 3、選項 ≥ 3)：抽屜 + 拉繩 (1-2d)、燈座 + 燈書 (2-1c)

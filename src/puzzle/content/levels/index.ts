@@ -4,6 +4,7 @@ import { foyer } from './ch1/1-2-foyer';
 import { closet } from './ch1/closet';
 import { protoA } from './proto/dial';
 import { shelf } from './ch2/2-1-shelf';
+import { reading } from './ch2/2-2-reading';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -31,7 +32,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 1-3 衣帽間：同一章魔方 (從選單進 = 接著第一章存檔玩)；前置 1-2
   { id: '1-3', chapter: 1, titleKey: 'lvl.1-3.title', abilities: [], unlock: { after: ['1-2'] }, load: () => closet },
   // 2-1 書架迴廊：第二章第一關 (魔方 2×3、控制盤)；第一章章門打開 (1-3 通關) 後開放；前置能力 = 筆尖
-  { id: '2-1', chapter: 2, titleKey: 'lvl.2-1.title', abilities: ['nib'], unlock: { after: ['1-3'] }, load: () => shelf }
+  { id: '2-1', chapter: 2, titleKey: 'lvl.2-1.title', abilities: ['nib'], unlock: { after: ['1-3'] }, load: () => shelf },
+  // 2-2 閱覽室：第二章第二關 (同一章魔方；從選單進 = 接著第二章存檔玩)；2-1 通關後開放 (章內開場就走得到，選單照線性解鎖)
+  { id: '2-2', chapter: 2, titleKey: 'lvl.2-2.title', abilities: ['nib'], unlock: { after: ['2-1'] }, load: () => reading }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

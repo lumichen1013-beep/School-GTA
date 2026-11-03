@@ -10,6 +10,7 @@ import { cordModel, drawerModel, portraitModel } from './sequence';
 import { coatRackModel, hookModel } from './closet';
 import { dialModel, latchModel } from './dial';
 import { bayShelfModel, bookendModel, bookLockModel, lampBookModel, lampLockModel, libraryStepModel, lowShelfModel, remarkModel, scrapModel, spineModel } from './shelf';
+import { cardCatalogModel, coupletCabinetModel, coupletModel, inkveilModel, lecternModel, lensModel, openBookModel, readingTableModel, smallPrintModel } from './reading';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
@@ -36,7 +37,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   coatRack: coatRackModel, hook: hookModel,
   dial: dialModel, latch: latchModel,
   bayShelf: bayShelfModel, lowShelf: lowShelfModel, libraryStep: libraryStepModel, spine: spineModel, bookLock: bookLockModel, remark: remarkModel,
-  lampBook: lampBookModel, lampLock: lampLockModel, bookend: bookendModel, scrap: scrapModel
+  lampBook: lampBookModel, lampLock: lampLockModel, bookend: bookendModel, scrap: scrapModel,
+  lectern: lecternModel, openBook: openBookModel, inkveil: inkveilModel, readingTable: readingTableModel, smallPrint: smallPrintModel,
+  coupletCabinet: coupletCabinetModel, couplet: coupletModel, cardCatalog: cardCatalogModel, lens: lensModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

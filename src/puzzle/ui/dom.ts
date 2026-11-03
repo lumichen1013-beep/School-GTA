@@ -23,7 +23,11 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   helpBtn.type = 'button';
   helpBtn.tabIndex = -1;
   helpBtn.append(el('i', undefined, '?'), el('span'));
-  hud.append(status, helpBtn, helpEl, el('div', 'pz-tip'), el('div', 'pz-prompt'), el('div', 'pz-toast'));
+  // 道具合成 (N28)：手上有一組配方時才出現的鈕 (C 鍵同)
+  const combine = el('button', 'pz-combine') as HTMLButtonElement;
+  combine.type = 'button';
+  combine.tabIndex = -1;
+  hud.append(status, helpBtn, helpEl, el('div', 'pz-tip'), el('div', 'pz-prompt'), combine, el('div', 'pz-toast'));
   const clear = el('div', 'pz-clear');
   const replay = el('button', 'pz-replay', text('ui.clear.replay')) as HTMLButtonElement;
   replay.type = 'button';
