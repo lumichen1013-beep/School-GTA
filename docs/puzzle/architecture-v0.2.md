@@ -3,6 +3,7 @@
 > **修訂紀錄**
 > | 版本 | 日期 | 內容 |
 > |------|------|------|
+> | **v0.4 增補（混合轉動方案）** | 2026-11-03 | 對應規格 v0.4：第一章拉桿不變；第二章起控制盤（N32）——`core/cube.ts` 新增 `applyTurn`（列 / 行 / 滑動格 / 層 / 切片）與 `inverseTurn`；`core/chapter.ts` 的 `ChapterSession` 新增步數預算（每次進房補滿）、回退堆疊、魔方儀啟動與鎖扣（純函式、確定性、可存檔）；新增 `mechanics/dial.ts`（魔方儀入口物件）；`app/cubeMapModel.ts` 轉動模式與預覽、`ui/cubeMap.ts` 選列互動；`ChapterCommand`（轉動 / 回退指令，與 `WorldCommand` 分開）；SaveV3 增補 `dial / unlocked / turns`（缺欄補預設、校正）；`validateCube` 多解 / 預算 / 鎖定 / 入口 / 狀態量檢查；7.4 新增 D1～D7（M-Dial）；決策 Q10～Q13 |
 > | **v0.3 增補（魔方主軸）** | 2026-11-03 | 對應規格 v0.3：新增章節層級狀態 `core/cube.ts`、`core/chapter.ts`（4.16）；`mechanics/cube.ts`、`labels.ts`、`scale.ts` 與 N24～N31 各機制檔（4.17～4.19）；`ActionFrame.commands`、`AbilityId = nib｜scale`、新事件；展開圖與字卡匣 UI（`app/cubeMapModel.ts`、`ui/cubeMap.ts`、`ui/cardTray.ts`）；SaveV3；`devtools/validateCube`（BFS）；`pin.ts`、`section.ts`、`mark.ts`、`light.ts`、`seam.ts` 自計畫移除（N5 / N6 / N7 / N8 / N15 / N16 退役、N20 併入 N21）；依賴矩陣不新增層；6.6 第一章走查；7.4 M-Cube 步驟；決策 Q6～Q9 |
 > | v0.1 | 2026-11-02 | 初版架構（commit `97bc79c`） |
 > | v0.2（新劇情：老宅魔方・森林圖書館） | 2026-11-03 | 只改劇情名詞與指向：追逐者改稱守衛殘影；解答手稿改為許問津的解答手稿；`story.*` key 移除律師來信 `story.letter`、日記改為許問津的手記；新增 N20 接縫（`mechanics/seam.ts`，規格 5.4；**v0.3 已取消**，改由 4.16 魔方連接表）；章節主題改為森林中的圖書館（`render/themes/<章>.ts`、`render/decor/`，規格 9.3） |
@@ -153,8 +154,8 @@ src/puzzle/
     registry.ts              Mechanic / ObjTypeSpec 介面、compileMechanics（衝突檢查）
     snapshot.ts              snapshot / restore（JSON）
     actions.ts               WorldAction、ActionFrame、ACTION_ORDER（v0.3：`commands` 帶參數的指令，4.16）
-    cube.ts                  v0.3：CubeDef / CubeState、slide / rowTurn / colTurn / layerTurn / sliceTurn、links（連接表）（純函式，4.16）
-    chapter.ts               v0.3：ChapterSession（換房、房間快照、進房快照、跨房物件、章節道具 / 旗標 / 字卡；4.16）
+    cube.ts                  v0.3：CubeDef / CubeState、applyOp（拉桿的 slide）、links（連接表）；v0.4：TurnGroup / Turn、applyTurn（row / col / slideCell / layer / slice）、inverseTurn（純函式，4.16）
+    chapter.ts               v0.3：ChapterSession（換房、房間快照、進房快照、跨房物件、章節道具 / 旗標 / 字卡；4.16）；v0.4：dialTurn / undoTurn / activateDial / turnBudgetFor / unlockedGroups、回退堆疊清空規則
   mechanics/                 L1 每檔一機制
     index.ts                 DEFAULT_MECHANICS（註冊順序即執行順序）
     basics.ts                floor/wall/rail/table/plinth/shelf/crate 類型宣告（無行為）
@@ -164,7 +165,8 @@ src/puzzle/
     notes.ts                 C14：字條
     exit.ts                  出口門 → cleared
     （pin.ts / light.ts / section.ts / mark.ts：v0.3 自計畫移除，N5 / N6 / N7 / N8 / N15 / N16 退役；6.1～6.4 保留作設計紀錄）
-    cube.ts                  v0.3 N21：lever / dial / cubeDoor 類型、轉動請求、門後是牆、轉不動判定（4.16）
+    cube.ts                  v0.3 N21：lever / cubeDoor 類型、轉動請求、門後是牆、轉不動判定（4.16）
+    dial.ts                  v0.4 N32：魔方儀（dial 類型，3D 啟動 → dialActivate 事件）、轉動模式的進入條件查詢（2D、站穩）（4.16）
     labels.ts                v0.3 N22：標籤、字卡貼取、詞典效果（方向字、門牌「間」、字謎）（4.17）
     scale.ts                 v0.3 N23：尺度三檔、碰撞 / 支撐 / 重量重算、卡牆檢查（4.18）
     reveal.ts、pipes.ts、lightpath.ts、locks.ts、combine.ts、balance.ts、mini.ts  v0.3 N24～N30（4.19）
@@ -173,7 +175,7 @@ src/puzzle/
     items.ts                 ITEMS 物品表（nib/inkdrop/seal/diary/scrap；v0.3 加章節道具）
     cards.ts                 v0.3：CARDS 字卡表（詞卡 / 部件卡 / 尺度卡）
     lexicon.ts               v0.3：詞典（字 → 效果、同義字、無效字）（4.17）
-    cubes/ch<N>.ts           v0.3：各章 CubeDef（初始排列、屋框、轉動方式）
+    cubes/ch<N>.ts           v0.3：各章 CubeDef（初始排列、屋框、轉動方式）；v0.4：control（lever / dial）、dial.groups / locks / miniOnly
     chapters.ts              CHAPTERS（章、主題 id、旁白 key；主題 = 森林中的圖書館各章，規格 9.3）
     moodTypes.ts             MoodDef 純型別（零依賴，4.13）
     cutsceneTypes.ts         CutsceneDef / ShotDef 純型別（零依賴，4.15）
@@ -216,7 +218,7 @@ src/puzzle/
     synth.ts                 PuzzleAudio：章節底音、分層音軌、脈動低音、鐘音、驚嚇音、限幅器、回饋音
   ui/                        L4 DOM
     hud.ts                   依 HudModel 繪製（模式、物品列、互動提示、吐司）
-    cubeMap.ts               v0.3：2D 展開圖與轉動預覽（DOM / Canvas 2D 疊層）
+    cubeMap.ts               v0.3：2D 展開圖與轉動預覽（DOM / Canvas 2D 疊層）；v0.4：轉動模式（標頭箭頭、確認 / 回退 / 離開鈕、墨點、鎖扣、卡榫；鍵盤與觸控）
     cardTray.ts              v0.3：字卡匣（卡片列、貼 / 取、無效字回饋；含觸控）
     icons.ts                 物品 id → SVG
     touchOverlay.ts          觸控疊層 DOM、Pointer Events、pointer capture、阻止瀏覽器手勢；事件經 TouchSink 交給 app
@@ -227,13 +229,13 @@ src/puzzle/
     loop.ts                  主迴圈（固定步長）、過場鎖
     cutscene.ts              過場時間軸狀態機（純邏輯：鏡 / 段 / 淡入停留淡出、minDwell、自動播放、跳過確認、暫停；4.15）
     hudModel.ts              deriveHud(world, text, …) 純函式
-    cubeMapModel.ts          v0.3：deriveCubeMap(session, previewOp?) 純函式（展開圖、接通線、預覽）
+    cubeMapModel.ts          v0.3：deriveCubeMap(session, previewOp?) 純函式（展開圖、接通線、預覽）；v0.4：deriveTurnMode、reduceTurnMode（轉動模式的選取狀態機，純）
     services.ts              組裝 storage/save/settings/text/theme
   devtools/                  工具（純）
     validateLevel.ts         schema 與內容規則
     script.ts                通關腳本 → ActionFrame 序列（取代 tests helpers 的控制器）
     shortcutScan.ts          捷徑掃描器
-    validateCube.ts          v0.3：章節抽象模型 BFS（有解、卡死、最短步數、捷徑；規格 5.4.8）
+    validateCube.ts          v0.3：章節抽象模型 BFS（有解、卡死、最短步數、捷徑；規格 5.4.8）；v0.4：控制盤模型（預算、鎖扣、魔方儀）、多解列舉、預算繞過、鎖定可達、入口可達、狀態量上限（規格 5.4.8 ⑥～⑪）
 tests/puzzle/
   architecture.test.ts、core/*、mechanics/*、levels/<id>.test.ts（通關＋反例）、meta/*、content.test.ts（全關驗證）
 ```
@@ -376,7 +378,7 @@ export interface CompiledMechanics {
 export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics;  // 重複類型 / 動作 / id → throw
 ```
 
-**註冊方式**：`mechanics/index.ts` 匯出 `DEFAULT_MECHANICS = [basics, items, links, plates, notes, exit, cube, labels, scale, reveal, pipes, lightpath, locks, combine, balance, mini, chase]`（v0.3；原 `pin, section, light, mark` 移除）。**陣列順序 = 執行順序**；`createWorld` 必須傳入機制表（核心不 import mechanics，測試可只傳子集）。不做全域副作用註冊（import 順序決定行為會讓測試不穩定）。
+**註冊方式**：`mechanics/index.ts` 匯出 `DEFAULT_MECHANICS = [basics, items, links, plates, notes, exit, cube, dial, labels, scale, reveal, pipes, lightpath, locks, combine, balance, mini, chase]`（v0.3；原 `pin, section, light, mark` 移除；v0.4 加 `dial`）。**陣列順序 = 執行順序**；`createWorld` 必須傳入機制表（核心不 import mechanics，測試可只傳子集）。不做全域副作用註冊（import 順序決定行為會讓測試不穩定）。
 
 **衝突規則**
 
@@ -529,7 +531,7 @@ export class PuzzleScene {
 ### 4.6 輸入層（`input/`）
 
 ```ts
-export type ShellAction = 'restart' | 'notes' | 'menu' | 'map' | 'cards';   // v0.3：map 展開圖、cards 字卡匣 / 道具欄   // 'skip' 移到解答手稿頁內（只限擴充題）
+export type ShellAction = 'restart' | 'notes' | 'menu' | 'map' | 'cards' | 'turnMode' | 'undo';   // v0.3：map 展開圖、cards 字卡匣 / 道具欄；v0.4：turnMode（展開圖開著時進出轉動模式）、undo（回退一步）   // 'skip' 移到解答手稿頁內（只限擴充題）
 export type InputAction = WorldAction | ShellAction;
 export type Axis = 'left' | 'right' | 'up' | 'down' | 'jump';
 export type Bindings = Record<InputAction | Axis, string[]>;   // KeyboardEvent.code
@@ -546,7 +548,7 @@ export class KeyboardSource implements InputSource { constructor(bindings: Bindi
 export function mergeSources(sources: InputSource[]): InputSource;   // input/merge.ts：軸取絕對值較大者、jump OR、pressed 依 INPUT_ACTIONS 聯集
 
 // input/touch.ts（純邏輯）
-export type TouchControlId = 'stick' | 'jump' | 'flip' | 'interact' | 'reset' | 'pause' | 'notes' | 'map';   // v0.3：pin / section / mark 移除、加 map
+export type TouchControlId = 'stick' | 'jump' | 'flip' | 'interact' | 'reset' | 'pause' | 'notes' | 'map';   // v0.3：pin / section / mark 移除、加 map；v0.4：轉動模式的標頭 / 確認 / 回退 / 離開鈕屬 ui/cubeMap 的 DOM 按鈕，不是疊層控制元件（mobile-controls 2.5）
 export class TouchSource implements InputSource {
   constructor(opts: { deadZone: number /* 0.15 */; full2d: number /* 0.6 */; holdMs: { reset: number /* 500 */ } });
   setContext(c: { mode: Mode; layout: TouchLayout; visible: readonly TouchControlId[] }): void;
@@ -563,6 +565,7 @@ export interface TouchSink { down(id: number, x: number, y: number, tMs: number)
 ```
 
 - 重綁：`settings.keys` 覆蓋 `DEFAULT_BINDINGS`；操作說明由 `ui` 依 bindings 產生（修 H17）。
+- v0.4 轉動模式鍵位（`DEFAULT_BINDINGS` 新增）：`turnMode` = Tab（展開圖開著、2D、站穩、本章魔方儀已啟動時才有效）；轉動模式中 app 把方向軸改讀為「選標頭」（←→ 換列 / 層 / 片、↑↓ 換行；WASD 同），`confirm` = Enter、`undo` = Z / Backspace、`cancel` = Esc（離開轉動模式）；移動輸入在轉動模式中不送進 `step`（`releaseAll`）。字卡匣與轉動模式互斥（同時只開一個疊層）。
 - 新增輸入方式：新增一個 `InputSource` 並在 `app` 以 `mergeSources` 合併（觸控見 `mobile-controls-v0.1.md` 第 5 節；偵測 `(pointer: coarse)` / `ontouchstart` 與 `Settings.touchLayout`）。
 - 觸控模式下 `deriveHud` 的互動提示改用 `ui.prompt.touch`，操作說明改由 `deriveTouchHelp(layout)` 產生；暱稱、確認窗、通關畫面時隱藏觸控疊層並 `releaseAll`。
 
@@ -622,7 +625,8 @@ export function startAbilities(e: LevelEntry, save: SaveV2): AbilityId[];   // d
 export interface KeyValueStorage { get(k: string): string | null; set(k: string, v: string): void; remove(k: string): void }
 export const memoryStorage: () => KeyValueStorage;      // 測試用；app 注入 localStorage 包裝
 
-/** v0.3：SaveV3 = SaveV2 + cards + chapters（ChapterState，4.16）、abilities 改 'nib' | 'scale'；MIGRATIONS[2] 丟棄 pin / section / mark、已通關 1-2 → 第一章快照預設 1-2a / 1-2b 旗標（規格 8） */
+/** v0.3：SaveV3 = SaveV2 + cards + chapters（ChapterState，4.16）、abilities 改 'nib' | 'scale'；MIGRATIONS[2] 丟棄 pin / section / mark、已通關 1-2 → 第一章快照預設 1-2a / 1-2b 旗標（規格 8）
+ *  v0.4：chapters[n] 增補選填 dial / unlocked / turns（4.16.1）；不升版號、不加 MIGRATIONS 項，由校正函式補預設（dial:false、unlocked:[]、turns = 該房基礎預算 + 空堆疊）；turns 不合法（left 超出 0～預算、undo 過長或組 id 不存在）→ 只丟棄該章 turns */
 export interface SaveV2 {                                // 規格 8
   v: 2; cleared: string[]; current: string; abilities: AbilityId[];
   diary: number[]; scraps: number[]; endings: { A: boolean; B: boolean }; name: string;
@@ -887,12 +891,96 @@ export function transferObject(cs: ChapterSession, obj: ObjId, via: Link): Chapt
 | { t: 'card'; label: string; ok: boolean }     // 4.17 回饋
 ```
 
-- **轉動時玩家的位置**：玩家永遠在被轉的那一組裡（「轉自己」原則，規格 5.4.1），房間本地座標不變，所以 `World` 不用動；只重算連接表並播短過場（`render/transitions.ts` 新增 `cubeTurn`，減弱動態用 `plain`）。
+- **轉動時玩家的位置**：第一章的拉桿只推自己所在的房間（「轉自己」原則，規格 5.4.1），玩家永遠在被轉的那一組裡；第二章起控制盤可以轉不含玩家的組，玩家所在房若不在組內就不動。兩種情況房間本地座標都不變，所以 `World` 不用動；只重算連接表並播短過場（`render/transitions.ts` 新增 `cubeTurn`，減弱動態用 `plain`）。
 - **轉不動**（規格 5.4.1）：`turn` 先查當前房間——玩家或可推物的盒子跨出房間邊界、`scale` 機制回報巨物伸進軌道（4.18）、墨量 0 → 回傳 `blocked`，app 用 `say` 顯示原因。
 - **存檔**：`ChapterState` 就是 SaveV3 的 `chapters[n]`（4.9）；寫入時機 = `enterRoom` 與 `turn` 成功後（規格 8）。
 - **確定性**：`applyOp`、`links`、`turn` 不讀時鐘 / 亂數；同一序列同結果（測試鎖定）；2.3 第 4 條的字串規則自動涵蓋 `core/`。
-- **mechanics/cube.ts** 擁有類型 `lever`、`dial`（`interactIn:'3d'`，互動 → emit `turnRequest`）、`cubeDoor`（`kind`；`passable` 掛點讀 `world.ext.cube.links`，接不通時 `say('msg.cube.wall')`）。
+- **mechanics/cube.ts** 擁有類型 `lever`（`interactIn:'3d'`，互動 → emit `turnRequest`）、`cubeDoor`（`kind`；`passable` 掛點讀 `world.ext.cube.links`，接不通時 `say('msg.cube.wall')`）。v0.4：類型 `dial`（魔方儀）移到 `mechanics/dial.ts`（4.16.1）。
 - 實作現況（C8）：`ChapterState` 實際欄位 = `chapter / cube / room / door / rooms / items / flags / labels / moved`（`moved` 為 `Record<obj, {room,x,y,z}>`，取代上方草案的陣列；方向字不另存 `levers`，由 `labels` 上的詞卡推得）；`transferObject(cs, obj, door, opts)` 以門 id 查連接表；另有 `noteFlag(cs, flag)`（演出旗標，R 不還原）。詳見 7.4 C8 註記。
+
+#### 4.16.1 控制盤（v0.4；規格 5.4.1、5.4.9、N32）
+
+**界線**：第一章的拉桿路徑（`turnRequest` → `turn(cs, op)` → `applyOp`）**一行不改**；控制盤是平行的新路徑，只在 `CubeDef.control === 'dial'` 的章節啟用。轉動、回退是**章節層指令**（作用在 `ChapterSession`，不進 `World.step`），所以不放進 `WorldCommand`，另立 `ChapterCommand`，由 app 在固定步之間套用（與 `WorldCommand` 一樣「只送進下一個固定步」，可錄製回放）。
+
+```ts
+// core/cube.ts（v0.4 新增；純函式、確定性）
+export type TurnKind = 'row' | 'col' | 'slideCell' | 'layer' | 'slice';
+export interface TurnGroup { id: string; kind: TurnKind; index: number; axis?: 'x' | 'y' | 'z' }   // 'slideCell'：index = 格號，dir 由目標空格決定
+export interface Turn { group: string; dir: 1 | -1 | Side }              // row / col / layer / slice：±1（col 對調時 dir 無意義，固定 1）；slideCell：滑向的邊
+export type TurnBlockCube = CubeBlock | 'noGroup';
+/** 列：一列循環平移；行：一行兩格對調（2×3）；slideCell：鄰格為空才滑；layer：繞層中心 90°、朝向 ±1；slice：三軸切片，中心格只在原地轉 */
+export function applyTurn(def: CubeDef, s: CubeState, t: Turn): CubeState | { blocked: TurnBlockCube };
+export function inverseTurn(def: CubeDef, before: CubeState, t: Turn): Turn;   // 列 ±1 互反、行自反、滑動反向、層 / 切片 cw ↔ ccw
+export function cellsOf(def: CubeDef, s: CubeState, group: string): Cell[];      // 這一組此刻包含的格（卡榫、預覽、玩家是否隨轉用）
+```
+
+```ts
+// core/chapter.ts（v0.4 新增；ChapterState 加三個選填欄位，缺欄 = 預設）
+export interface TurnRec { group: string; dir: Turn['dir'] }
+export interface ChapterState {
+  // …v0.3 / C8 欄位不變…
+  dial?: boolean;                                  // 本章魔方儀已啟動（R 不還原：同 noteFlag，寫進 state 與 entry）
+  unlocked?: string[];                             // 已解開的鎖扣（組 id）；R 會還原（解鎖旗標若是本次進房才拿到，一併退回）
+  turns?: { left: number; undo: TurnRec[] };       // 剩餘墨、本段回退堆疊（長度 ≤ 該房預算）
+}
+export type DialBlock = TurnBlockCube | 'noDial' | 'locked' | 'jammed' | 'noInk' | 'doorway' | 'nothingToUndo';
+export type ChapterCommand = { t: 'turn'; turn: Turn } | { t: 'undo' };
+
+export function turnBudgetFor(spec: ChapterSpec, state: ChapterState, world: World): number;   // 房間 LevelDef.turnBudget：目前謎題是 P4 題時用 puzzles[id]，否則 base
+export function unlockedGroups(spec: ChapterSpec, state: ChapterState, world: World): string[]; // CubeDef.dial.locks 依旗標 / 能力推得；與 state.unlocked 比對，新解開的寫回並發 { t:'flag', flag:'unlock:<group>' }
+export function activateDial(cs: ChapterSession): ChapterSession;                              // dial = true（state 與 entry 都寫）、turns = 滿額
+export function dialTurn(cs: ChapterSession, t: Turn): ChapterSession | { blocked: DialBlock }; // 檢查順序：noDial → noGroup / locked → jammed（scale.blocksTrack）→ doorway（玩家或可推物跨在組內房間的邊界）→ noInk → applyTurn；成功：left−1、undo.push、重算連接表
+export function undoTurn(cs: ChapterSession): ChapterSession | { blocked: DialBlock };          // 堆疊空 → nothingToUndo；inverseTurn 照 dialTurn 的阻擋檢查（不含 noInk）；成功：left+1、undo.pop
+export function clearUndo(cs: ChapterSession, events: readonly GameEvent[]): ChapterSession;   // 本幀有 flag / item / card / objCross 事件 → undo = []（規格 5.4.1「本段」）
+// enterRoom：turns = { left: 新房預算, undo: [] }；restartRoom：state ← entry（turns 隨之回到進房時的滿額）；transferObject：undo = []
+```
+
+- **純度與確定性**：`dialTurn / undoTurn / clearUndo / turnBudgetFor` 不讀時鐘與亂數、只回傳新 session（比照 `turn`）；同一串 `ChapterCommand` 永遠得到同一個 `ChapterState`（單元測試鎖定）。`ChapterState` 仍可 JSON 序列化，就是 SaveV3 的 `chapters[n]`。
+- **回退與狀態等價**（規格 5.4.8）：`undoTurn` 只能退回本段（上次 `clearUndo` 之後）的轉動，所以「轉 t 再回退」與「沒轉 t」的 `ChapterState` 逐欄相同（`turns.undo` 除外）；測試以 JSON 比對鎖定。
+- **轉動模式的進入條件**（`mechanics/dial.ts` 提供查詢 `canEnterTurnMode(w)`）：2D、雙腳站穩、`dial:<章>` 已啟動、不在過場鎖、字卡匣沒開。條件不成立時 app 不進入並 `say('msg.dial.notNow')`。
+- **世界不暫停**：轉動模式中 app 停止把移動軸送進 `step`（`releaseAll`），但 `step` 照常推進（追逐中的殘影會動；規格 Q-AF）。
+- **跨房計算**：轉動後與拉桿相同，重算 `links`、管線、光路、天平（4.19），寫回當前 `World.ext`。
+
+```ts
+// mechanics/dial.ts（v0.4；經 4.2 掛點，核心零修改）
+declare module '../core/types' { interface ObjKinds { dial: { chapter: number } } }
+// types.dial：interactIn '3d'、站穩；interact → emit { t:'dialActivate', chapter }（已啟動 → say('msg.dial.ready')）
+// GameEvent 新增：| { t: 'dialActivate'; chapter: number }      // app → activateDial(cs)
+export function canEnterTurnMode(w: World): boolean;
+```
+
+```ts
+// app/cubeMapModel.ts（v0.4 新增；純函式，可在 Node 測）
+export interface TurnHeader { group: string; kind: TurnKind; dirs: Turn['dir'][]; state: 'ok' | 'locked' | 'jammed'; at: { side: 'top' | 'bottom' | 'left' | 'right' | 'ring'; i: number } }
+export interface TurnModeModel {
+  headers: TurnHeader[]; selected: { group: string; dir: Turn['dir'] } | null;
+  preview: MapPreview | null;                    // 只算不寫：applyTurn 的結果畫成半透明
+  ink: { left: number; max: number }; canUndo: boolean;
+  blocked: DialBlock | null;                     // 選到的轉動若會被擋，預覽時就顯示原因（不必按確認才知道）
+}
+export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected']): TurnModeModel;
+export type TurnModeInput = { t: 'pick'; group: string; dir: Turn['dir'] } | { t: 'step'; axis: 'h' | 'v'; d: 1 | -1 } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeInput, m: TurnModeModel): { sel: TurnModeModel['selected']; command: ChapterCommand | null; exit: boolean };
+```
+
+- **ui/cubeMap.ts**（DOM）：轉動模式在展開圖周圍畫標頭箭頭（列 ◀▶、行 ⇅、層 / 切片 ↻↺）、確認 / 回退 / 離開三顆鈕、墨點、鎖扣與卡榫記號；點擊只把 `TurnModeInput` 交給 app（ui 不改 session，4.7 單向資料流）；`reduceTurnMode` 產生的 `ChapterCommand` 由 app 排進下一個固定步。觸控操作見 `mobile-controls-v0.1.md` 2.5。
+- **HUD**：`deriveHud` 在第二章起的 2D 顯示墨量小計（「墨 ●●●○○○」，形狀區分），3D 不顯示。
+- **存檔**：SaveV3 `chapters[n]` 的 `dial / unlocked / turns` 為選填，`loadSave` 校正補預設；`turns.left` 夾在 0～該房預算，`undo` 長度 ≤ 預算且組 id 存在，否則丟棄 `turns`（4.9）。寫入時機加「轉動 / 回退完成」「啟動魔方儀」「解開鎖扣」。
+- **驗證器**（`devtools/validateCube`）：
+
+```ts
+export interface DialModel {                     // 由 content/cubes/ch<N>.ts 與各房 LevelDef 的 turnBudget / puzzles 抽象而來
+  cube: CubeDef; rooms: Record<string, { budget: number; p4?: Record<string, number> }>;
+  puzzles: Array<{ id: string; room: string; needs: string[]; goal: (s: CubeState, flags: ReadonlySet<string>) => boolean; teaching?: boolean; excluded?: { name: string; minSteps: number } }>;
+  maxStates?: number;                             // 預設 2e6（規格 5.4.9）
+}
+export interface DialReport {
+  states: number; arrangements: number; deadlocks: string[];
+  perPuzzle: Array<{ id: string; shortest: number; second: number | null; solutions: number; distinct: number; sampled: boolean; budget: number; issues: string[] }>;
+  budgetBypass: string[]; lockIssues: string[]; entryIssues: string[];
+}
+export function validateDial(model: DialModel): DialReport;   // 同檔 devtools/validateCube.ts，即規格的「validateCube 擴充」；既有第一章拉桿模型的檢查不改
+```
 
 ### 4.17 標籤與字卡（寫；`mechanics/labels.ts`、`content/lexicon.ts`、`ui/cardTray.ts`；規格 N22）
 
@@ -932,7 +1020,7 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 | `locks.ts` | N27 符號 / 順序鎖（P11、P16） | 類型 `seqlock`（`expect: string[]`）與 `cord` / `glyphKey`；輸入序列存 `ObjState.ext`，錯了清空 |
 | `combine.ts` | N28 道具合成（P13） | `content/items.ts` 加配方表；合成在道具欄（ui → `WorldCommand {t:'combine'}`）；道具屬 `ChapterState.items` |
 | `balance.ts` | N29 天平（P17） | 兩盤是 3D 壓板（N3），重量差 → `ext.tilt`；跨房天平由 session 依拱門連接合併兩盤重量 |
-| `mini.ts` | N30 縮影遙控（P10） | 類型 `miniature`；玩家 `scale` 為小時互動 → app 載入縮影房（另一個 `LevelDef`）；縮影房的轉盤 emit `turnRequest`，作用於**真實**魔方 |
+| `mini.ts` | N30 縮影遙控（P10） | 類型 `miniature`；玩家 `scale` 為小時互動 → app 載入縮影房（另一個 `LevelDef`）；縮影房裡的轉動走同一條 `ChapterCommand` 路徑、作用於**真實**魔方，但只允許 `CubeDef.dial.miniOnly` 的組（v0.4：第五章水平層外圈，觀星儀轉不到） |
 | `chase.ts` | N31 跨房追逐（P8） | 在 4.14 之上：殘影的「所在房」存於 `ChapterState`；玩家換房後若兩房接通，殘影延遲固定秒數進房；轉動讓兩房斷開 → 殘影停留；`calmTension` 不生成 |
 
 - 跨房計算（管線、光路、天平）都放在 `core/chapter.ts` 的純函式，輸入 = 連接表 + 各房的接口資料，輸出寫回當前 `World.ext`；機制檔只讀，不跨房存取其他 `World`。
@@ -1020,6 +1108,15 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 - 1-3b：2D 對拉桿標籤下 `WorldCommand {t:'card', label:'lever:closet', card:'word:右'}` → `labels` 改 `levers['lever:closet'].word = '右'` → 3D 拉 → 衣帽間回 C → 章門 ↔ 書房走廊。R：`restartRoom` → `state = entry`（本次進房時衣帽間在 D），不會回到 S1。**放得下。**
 - `validateCube` 對此模型：可達排列 3、抽象狀態 **96**（狀態 = 魔方排列 × 玩家所在房 × 詞卡（沒有 / 在手上 / 貼在衣帽間拉桿 / 貼在玄關拉桿）× 木箱所在房 × 有無鑰匙 × 是否已出章門，只計 BFS 可達者；非終點 90 + 終點 6）、卡死 0、最短轉動 3（規格 5.4.8）。C8 起詞卡也可貼在玄關拉桿上（規格 1-3b 列的錯誤嘗試，實作允許），比 C5～C7 只許貼衣帽間的模型（69 = 非終點 65 + 終點 4）多 27 個狀態；停用「玄關寫字」即回到 69，兩者的排列數、卡死、最短解相同。
 
+### 6.7 控制盤走查（v0.4；M-Dial 的 2×3 測試魔方與規格第二章）
+
+- 資料：`content/cubes/test-dial.ts`（M-Dial 專用，不進登錄表）= 2×3、`control:'dial'`、`groups` = row0 / row1 / col0～col2、`locks` = row1 ← `flag:test.a`、col* ← `flag:test.b`；六間占位房各有門 / 拱門，入口房放 `dial` 物件。
+- 啟動：3D 站穩對魔方儀 E → `dialActivate` → `activateDial`（`dial:true` 寫進 state 與 entry）→ app 打開展開圖並進入轉動模式。**放得下**（新事件 + 新 session 函式，核心零修改）。
+- 列轉：轉動模式點 row0 的 ▶ → `reduceTurnMode` 產生 `{t:'turn', turn:{group:'row0', dir:1}}` → 下一固定步 `dialTurn` → `applyTurn` → `links` 重算 → 玩家所在房若在 row0 就隨列移動、否則不動。**放得下**。
+- 鎖扣：點 col1 的 ⇅ → `deriveTurnMode` 已把 col1 標 `locked`，預覽顯示「這一排鎖著。」、確認無效；拿到 `flag:test.b` → `unlockedGroups` 回報 col*、發 `unlock:col*` 旗標事件 → `clearUndo` 清空堆疊。**放得下**。
+- 回退：轉兩次 → 回退一次 → `ChapterState` 與「只轉第一次」逐欄相同（除 `turns.undo`）；穿門 → `enterRoom` 補滿墨、清空堆疊。**放得下**。
+- 預算：墨 0 → `dialTurn` 回 `noInk`、回退仍可用；R → `restartRoom` 回到進房時（墨滿額）。`validateDial` 對測試魔方：排列 720、卡死 0、刻意做一個「換房補墨即可繞過」的 P4 反例模型 → `budgetBypass` 非空。**放得下**。
+
 ## 7. 遷移計畫（行為不變，對應規格 M0）
 
 ### 7.1 驗收基準（每步都要）
@@ -1080,6 +1177,23 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 >
 > 實作註記 (C8)：**衣帽間** = 關卡 id `1-3`、房間 id `closet` (`content/levels/ch1/closet.ts`；登錄表 1-3 前置 1-2，從選單進 = 接著第一章存檔)：北拱門 x=-1、東章門 (`key:'key.brass'`)、拉桿「左」(x=2.5，標籤 `lever:closet`)、木箱 `closetCrate` (x=-1.6, z=1.2；id 與玄關的 `crate` 不同)、衣架 `coatRack` (標籤「大衣」+ 空尺度卡槽)、三張字條。玄關加掛鉤 `hook` (x=-14.8、y=2.3、2D；`grants:'key.brass'`、`also:['diary.1']`)，裝飾掛畫移到掛鉤上方；玄關拉桿也有標籤 `lever:foyer`。**拱門跨房**：`mechanics/cube` 的 afterPhysics 在可推物「剛壓上」拱門門位時發 `objCross` (拱門對拱門) 或說明 (對面是門 `msg.cube.doorOnly` / 牆)；`core/chapter.transferObject(cs, obj, door, opts)` 把物件放到對面拱門內側 (門內緣 + 1.3 + 半深，沿門橫向保留偏移)、被占住或沒地板 → `blocked:'occupied'`；`ChapterState.moved[obj] = { room, x, y, z }` (回到原房即刪除)，`roomObjects` 依此組房間物件 (跨房物件的定義取自原房、初值 = 到達點，所以 T 物歸原處 = 回到它進房時的拱門內側，規格 5.4.7)。R = entry，跨房也一併還原。**標籤 N22 最小版** (`mechanics/labels.ts`)：`ObjBase.label = { id, kind:'dir'|'noun', textKey?, scale? }`；詞典最小版放在機制檔 (`CARDS`：`card.<方向字>`；方向字標籤 + 詞卡 = 新方向、名詞 + 詞卡 = 無效)，因為 mechanics 不能 import content 的值 (第二章擴充時改為 `WorldOptions` 注入 `content/lexicon`)。核心新增兩個掛點：`Mechanic.interactFallback` (E 沒有一般目標時：2D 範圍內有標籤、且字卡匣有卡或標籤上有卡 → `labelOpen`；否則照舊「看得見，卻碰不到」) 與 `Mechanic.command` (`ActionFrame.commands` 的 `WorldCommand`，`step` 在動作之後處理；`LevelLoop` 與動作一樣只送進下一個固定步)。標籤上的卡存在 `World.ext.labels` (章節層載入 / `captureState` 收回 → `ChapterState.labels` → SaveV3 `chapters[n].labels`)；寫字需持有筆尖 `nib`；每張卡同時只貼一處 (貼上即離開字卡匣、換卡則舊卡回匣)；拉桿方向 = `leverWord(w, o)` (章節事件、展開圖預覽、HUD、3D 牌子箭頭都跟著它)。UI：`app/cardTrayModel.ts` (純) + `ui/cardTray.ts`；鍵位 E 開 / 關、1～3 貼第 n 格、X / Backspace 取下、Esc 關；觸控 = 點互動提示開匣、點卡片貼、點「關閉」或卡匣外關 (卡片 ≥ 56 px)；無效字 = 標籤字顫動 + 墨色變淡 0.6 秒 (不閃爍)。**章門**：`cubeDoor.key` 持有 → `w.cleared` (本章通關；外殼以玩家所在房對應的關卡 1-3 顯示通關畫面，`recordClear(…, also = 本章各關)` 記 1-2、1-3，並把持有的 `diary.<n>` 寫進 `save.diary`)；「第一夜」過場的觸發留待後續。**驚嚇** (規格 9.1)：`mechanics/coats.ts` 的 `coatRack`：持有 `fallWhen` (銅鑰匙) 進衣帽間、安靜 2.5 秒後 used (滑落) 並發 `{t:'flag', flag:'scare:coats'}`；`core/chapter.noteFlag` 同時寫進 state 與 entry (R 不重演；旗標只影響呈現)；之後進房 / R → 1 秒內安靜倒下。呈現：一般 0.45 秒同時落下、`calmTension` = 1.8 秒緩緩滑落；亮度不變；目前沒有音訊模組 (規格 9.1 音訊屬 M1)，所以沒有驚嚇音。**提示 L2**：`note.revealAfter` (秒，房間 `World.time`)：之前讀到「紙上還是空白的。」、模型是白紙，之後浮現字跡 + 邊角微光；設定「提示：計時 / 隨時 / 關閉」與卡關偵測尚未接 (M1 提示系統)。**BFS**：`CH1_MODEL.card.levers = ['foyer','closet']` → 抽象狀態 96 (見 6.6)；`write:closet` 停用 → 無解、`write:foyer` 停用 → 仍有解 (錯誤嘗試不是必要步驟)。南拱門 (前緣) 的模型改為專屬材質並登記為遮擋物 (擋在鏡頭與玩家之間時淡出)。順帶修正：`PuzzleScene` 遮擋物淡出切換 `transparent` 時補 `needsUpdate` (首次編譯為不透明的材質原本淡不掉)；窄螢幕 (≤ 600 px) 收起鍵盤操作說明 (原本蓋住狀態列與展開圖)。
 
+#### 7.4.1 v0.4 實作步驟（M-Dial 控制盤原型；規格 10，排在 M1 第二章之前）
+
+驗收基準（每步都要）：`npx vitest run` 全綠（含第一章 `levels/1-1～1-3.test.ts`、`validateCube` 第一章 96 / 卡死 0 / 最短 3 不變）、`npm run build` 通過；第一章的拉桿路徑（`turnRequest` → `turn` → `applyOp`）**不得改動行為**。
+
+| # | 目標 | 動到的檔案 | 驗證 | 停點 |
+|---|------|-----------|------|------|
+| D1 | `core/cube.ts`：`TurnGroup / Turn`、`applyTurn`（row / col 完整；slideCell / layer / slice 先實作並單元測試，內容留到各章）、`inverseTurn`、`cellsOf` | core、tests/puzzle/core/cubeTurn.test.ts | 2×3：列 ±1、行對調、`applyTurn(inverseTurn(t))` = 原狀；BFS 列 + 行 = 720 排列、直徑 7，只開上列 = 3、兩列 = 9（規格 5.4.9）；3×3 兩空格實心格固定 = 2,520；層轉四次 = 原狀、兩層 = 16；確定性（同序列同結果） | — |
+| D2 | `core/chapter.ts`：`ChapterState.dial / unlocked / turns`、`activateDial`、`dialTurn`、`undoTurn`、`clearUndo`、`turnBudgetFor`、`unlockedGroups`；`enterRoom` 補滿墨、`restartRoom` 回到進房時、`transferObject` 清空堆疊 | core、tests/puzzle/core/chapterDial.test.ts | 阻擋順序（noDial / locked / jammed / doorway / noInk）各一例；穿門補滿；R 回滿額；「轉 t 再回退」與「沒轉 t」的 state JSON 相同（除 `turns.undo`）；旗標 / 道具 / 字卡 / 跨房事件清空堆疊；`dial` 寫進 entry（R 不還原）、`unlocked` 隨 R 還原；第一章 `turn` 測試全綠 | — |
+| D3 | `mechanics/dial.ts`（`dial` 類型、`dialActivate` 事件、`canEnterTurnMode`）；`content/cubes/test-dial.ts` 2×3 測試魔方與六間占位房（只有門 / 拱門 + 一座魔方儀 + 兩個解鎖旗標的開關）；文字 `msg.dial.*`、`obj.dial.*` | mechanics、content、content/text | 3D 才能啟動、2D 互動不啟動；已啟動再按 → `msg.dial.ready`；`validateLevel` 0 issue；`canEnterTurnMode` 四個條件（2D、站穩、已啟動、無疊層）各一例反例 | — |
+| D4 | `app/cubeMapModel.ts`：`deriveTurnMode`、`reduceTurnMode`；`ChapterCommand` 佇列接進 `LevelLoop`（只送進下一個固定步）；`deriveHud` 墨量小計；`DEFAULT_BINDINGS` 加 `turnMode` / `undo` | app、input/bindings.ts、tests/puzzle/app/turnMode.test.ts | 預覽只算不寫（session JSON 不變）；鎖住 / 卡住 / 沒墨的標頭在預覽時就帶 `blocked`；方向鍵選標頭循環；確認 → 恰好一個 `ChapterCommand`；轉動模式中移動軸不進 `step`、世界照常推進（殘影位置逐幀與不開圖時相同） | — |
+| D5 | `ui/cubeMap.ts` 轉動模式 DOM（標頭箭頭、確認 / 回退 / 離開、墨點、鎖扣、卡榫）；觸控（`mobile-controls-v0.1.md` 2.5）；轉動短過場沿用 `cubeTurn` | ui、render/transitions.ts | Playwright：桌機鍵盤一輪「啟動 → 列轉 → 解鎖 → 行轉 → 回退 → 墨用完 → R」；手機模擬（`hasTouch`、橫 / 直屏）點標頭與三顆鈕；按鈕 ≥ 44 CSS px、不與 D-pad / 動作鍵重疊；截圖兩模式各一張 | — |
+| D6 | `meta/save.ts`：SaveV3 `chapters[n].dial / unlocked / turns` 寫入時機與校正 | meta、tests/puzzle/meta/saveV3.test.ts | 缺欄補預設（v3 第一章存檔原樣可讀）；`turns.left` 越界 / `undo` 過長 / 組 id 不存在 → 只丟棄 `turns`；房內讀檔不補墨；寫入 → 讀回 JSON 相同 | — |
+| D7 | `devtools/validateCube.ts`：`validateDial`（預算、鎖扣、魔方儀、多解列舉與取樣、預算繞過、鎖定可達、入口可達、狀態上限 2×10⁶；規格 5.4.8 ⑥～⑪） | devtools、tests/puzzle/devtools/validateDial.test.ts | 測試魔方：排列 720、卡死 0、每題回報最短 / 次短 / 解法數；三個刻意的反例模型各觸發一種錯誤（預算繞過、鎖互相等待、入口需要轉動）；超過 `maxStates` 報錯而不是卡住；第一章 `validateCube` 數字不變 | **M-Dial 完成，停下等使用者確認**（再進 M1 第二章） |
+
+- **必須序列**：D1 → D2 → D3；D4 依賴 D2；D5 依賴 D4；D6 依賴 D2；D7 依賴 D1、D2。D6 與 D4 / D5 可平行。
+- **不做**（留到各章）：第二章真正的六間房與謎題、`slideCell / layer / slice` 的內容與展開圖畫法（介面與單元測試在 D1 已有）、縮影（N30）的 `miniOnly` 路徑。
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |
@@ -1097,10 +1211,11 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 | T11 | 風險：`w.msg` 同時存 key 與解析字串，是為相容現有測試的過渡設計 | 新測試一律斷言 `msgKey`；未來文案大改時再把舊測試改為 key 斷言（屆時劇情 4 節也要求同步改測試） |
 | T12 | 風險：捷徑掃描給人「已證明無捷徑」的錯覺 | 文件與測試名稱明寫「取樣」；N16 依規格對每個可留記號高度 × 深度取樣 |
 | T13 | **刻意不做**：關卡編輯器、遠端存檔、音效系統、本地化工具鏈、內容熱重載 | 規格未要求 |
+| T14 | 風險（v0.4）：控制盤讓魔方從「拉桿的 3 種排列」變成「玩家自選的數百～上萬種」，BFS 與玩家都可能迷路 | 規格 5.4.9 的鎖定 / 分區 / 預算把每章壓在 2×10⁶ 內；`validateDial` 超量即報錯；`ChapterCommand` 與第一章拉桿路徑分開，第一章行為與測試不受影響 |
 
 ---
 
-## 9. 決策紀錄（Q1～Q5 已全部確認，2026-11-02，使用者回覆「全部照建議」；Q6～Q9 為 v0.3 新增）
+## 9. 決策紀錄（Q1～Q5 已全部確認，2026-11-02，使用者回覆「全部照建議」；Q6～Q9 為 v0.3 新增；Q10～Q13 為 v0.4 新增）
 
 | # | 問題 | 決定 |
 |---|------|---------|
@@ -1113,3 +1228,7 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 | Q7 | 帶參數的玩家指令（貼字卡、合成） | `ActionFrame.commands`（可錄製回放），不另開事件通道 | **暫定，待確認**（建議） |
 | Q8 | 縮放如何影響碰撞 | 核心加 `size` 掛點，所有幾何經 `objBox` | **暫定，待確認**（建議） |
 | Q9 | 退役機制的程式 | `pin / section / mark / light / seam` 不實作；6.1～6.4 保留作紀錄 | **暫定，待確認**（隨規格 Q-S） |
+| Q10 | v0.4 轉動 / 回退指令放哪 | 另立 `ChapterCommand`（作用在 `ChapterSession`），不併入 `WorldCommand`：轉動改的是章節狀態，不是房內 `World`；同樣只送進下一個固定步、可錄製回放 | **暫定，待確認**（建議） |
+| Q11 | v0.4 控制盤與第一章拉桿是否共用 `turn` | 不共用：新增 `dialTurn / undoTurn`，`turn` / `applyOp` 保持原樣（第一章已實作、測試全綠，不冒回歸風險）；兩者共用 `links` 與跨房計算 | **暫定，待確認**（建議） |
+| Q12 | v0.4 SaveV3 增補欄位是否升版號 | 不升（v:3）；選填欄位 + 校正補預設（同 C8 的 `labels / moved`）；不合法只丟 `turns` | **暫定，待確認**（建議） |
+| Q13 | v0.4 驗證器的回退建模 | 不展開回退邊（可達集合不變，規格 5.4.8）；卡死檢查不計回退（保守）；回退的正確性改由 D2 的「轉了再退 = 沒轉」等價測試保證 | **暫定，待確認**（建議） |
