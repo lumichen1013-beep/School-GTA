@@ -36,7 +36,7 @@ import { LevelSession } from './levelSession';
 import { newChapterState, singleRoomSpec, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { cubeChapterOf } from '../content/cubes';
 import { chapterDoors } from '../mechanics/cube';
-import { chapterStart, withChapter } from '../meta/chapters';
+import { chapterStart, entryNarrationKey, withChapter } from '../meta/chapters';
 import { browserStorage } from './services';
 
 /**
@@ -294,9 +294,11 @@ export class PuzzleApp {
     this.input.releaseAll();
   }
 
+  /** 進關旁白：開章後實際所在房間的旁白 (章節從別的房開始時不顯示選單那一關的旁白) */
   private showNarration(e: LevelEntry): void {
     this.narrationUntil = performance.now() + NARRATION_MS;
-    this.hud.showNarration(this.text(e.load().narrationKey));
+    const cs = this.session?.chapter;
+    this.hud.showNarration(this.text(cs ? entryNarrationKey(cs.spec, cs.state) : e.load().narrationKey));
   }
 
   private skipNarration(): void {

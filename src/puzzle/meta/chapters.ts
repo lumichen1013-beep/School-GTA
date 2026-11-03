@@ -49,3 +49,9 @@ export function chapterStart(save: Save, spec: ChapterSpec, start: { room: strin
   }
   return state;
 }
+
+/**
+ * 進關時要顯示的旁白 = 開章後實際所在房間的旁白 (選單選 1-3、但沒有章節存檔 → 從玄關開始 → 玄關的旁白，不是衣帽間的)；
+ * 不在魔方上的單房關卡 = 該關的旁白
+ */
+export const entryNarrationKey = (spec: ChapterSpec, state: ChapterState): string => spec.rooms[state.room].narrationKey;

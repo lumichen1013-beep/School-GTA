@@ -2,7 +2,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { memoryStorage } from '../../../src/puzzle/meta/storage';
 import { defaultSave, loadSave, SAVE_KEY, writeSave, type Save } from '../../../src/puzzle/meta/save';
-import { chapterSave, chapterStart, withChapter } from '../../../src/puzzle/meta/chapters';
+import { chapterSave, chapterStart, entryNarrationKey, withChapter } from '../../../src/puzzle/meta/chapters';
+import { CUBE_CHAPTERS } from '../../../src/puzzle/content/cubes';
+import { chapterDoors } from '../../../src/puzzle/mechanics/cube';
+import { singleRoomSpec, newChapterState } from '../../../src/puzzle/core/chapter';
+import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { captureState, enterRoom, openChapter, turn, type ChapterSession, type ChapterSpec } from '../../../src/puzzle/core/chapter';
 import { CH1_CUBE, CH1_LEGACY } from '../../../src/puzzle/content/cubes/ch1';
 import { foyer } from '../../../src/puzzle/content/levels/ch1/1-2-foyer';
@@ -85,5 +89,26 @@ describe('chapterStart：開章', () => {
     expect(chapterStart(save, SPEC, START).room).toBe('foyer');
     const broken = { ...save, chapters: { 1: { ...save.chapters!['1'], cube: { pos: { foyer: [0, 1, 0] as [number, number, number] }, rot: {} } } } };
     expect(chapterStart(broken, SPEC, START).cube).toEqual(chapterStart(defaultSave(), SPEC, START).cube);
+  });
+});
+
+describe('進關旁白 (選單選 1-3、沒有章節存檔的舊存檔)', () => {
+  const ch1 = CUBE_CHAPTERS[0];
+  const spec: ChapterSpec = { chapter: 1, cube: ch1.cube, rooms: ch1.rooms, doors: chapterDoors(ch1.rooms) };
+
+  it('沒有章節存檔 → 從玄關開始 → 顯示玄關 (1-2) 的旁白，不是衣帽間 (1-3) 的', () => {
+    const old = { ...defaultSave(), cleared: ['1-1', '1-2'] };
+    const st = chapterStart(old, spec, ch1.start, ch1.legacy);
+    expect(st.room).toBe('foyer');
+    expect(entryNarrationKey(spec, st)).toBe('lvl.1-2.narration');
+    expect(TEXT(entryNarrationKey(spec, st))).not.toBe(TEXT('lvl.1-3.narration'));
+  });
+
+  it('章節存檔在衣帽間 → 衣帽間的旁白；單房關卡 → 該關的旁白', () => {
+    const st = chapterStart(defaultSave(), spec, ch1.start, ch1.legacy);
+    const save = withChapter({ ...defaultSave(), cleared: ['1-1', '1-2'] }, { ...st, room: 'closet', door: 'archN' });
+    expect(entryNarrationKey(spec, chapterStart(save, spec, ch1.start, ch1.legacy))).toBe('lvl.1-3.narration');
+    const single = singleRoomSpec(porch);
+    expect(entryNarrationKey(single, newChapterState(single, porch.id, null))).toBe('lvl.1-1.narration');
   });
 });
