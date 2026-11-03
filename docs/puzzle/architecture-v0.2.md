@@ -1224,6 +1224,10 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 
 > 實作註記 (2026-11-04，1-3 重排)：1-3 衣帽間的可互動物件原本全在後牆與中段 (`layoutDepthIssues` 缺前景)：字條 B (x=5) z -4.95 → 2.4、`mount:'post'`；裝飾加扶手椅與落地燈 (前景西側)。測試 `levels/1-3` 字條站位 `-4.4` → `o.z + 0.5`、加 `layoutDepthIssues = []`。1-1 (全深的鐵柵 / 墨牆 / 台階 / 玻璃牆) 與 1-2 (全深長桌、書架平台與木欄、牆上的畫像與拉繩、掛鉤) 的位置由謎題幾何與路線測試 (`foyerSolution`、`ch1Routes`) 決定，不重排。
 
+#### 7.4.7 M1 第三章：溫室（規格 6「第三章魔方與門位（v0.4 細化）」「第三章共用規則」；逐關開發）
+
+> 設計註記 (2026-11-04，第三章設計)：**內容** `content/cubes/ch3.ts`（3×3、`ops:'slide'`、`control:'dial'`；九個 `slideCell` 組、無鎖扣；屋框：入口 [0,1] W、天窗 [0,0] / [1,0] N、章門出口 [2,2] S）、`content/levels/ch3/*`（苗圃 / 長廊 / 夜溫室 / 深處 + 溫床占位）。**機制**（皆經 4.2 掛點）：`mechanics/scale.ts`（N23；尺度卡貼名詞標籤的方槽 → 改寫 `ObjState.def` 的 w / h / d 與重量；`jam` 物件伸出房間 → `blocksTrack`）、`mechanics/balance.ts`（N29；秤盤上固定的陶盆、閂住的 `want`；跨房半座天平讀 `World.ext.balance`）、`mechanics/light.ts`（N26；`sensor` 讀 `World.ext.light`）。**章節層**（`core/chapter.ts`，純函式）：`lightPaths`（天窗 → 逐格玻璃 / 稜鏡傳播）、跨房天平合成、`ChapterSpec.jammed(room, state)`（非當前房的卡榫；由 app 注入機制表的純函式，核心不 import mechanics）、`World.ext.protrude`（3-3c 伸進隔壁的盆）。**外殼**：轉動模式的滑動箭頭（`app/cubeMapModel` 的 slideCell 標頭 = 每間鄰接空格的房 × 方向）、光路圖層、卡榫楔形；存檔能力 `scale` 進第二章時另發尺度卡（H1）。**驗證**：`validateDial` 加 `jams`；各區模型 `CH3_ZONE31`…。第二章 → 第三章：`cs:ch2`（三鏡剪紙）、2-5 通關畫面「前往溫室」。
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |
