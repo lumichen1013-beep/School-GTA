@@ -83,12 +83,16 @@ export function snapshotRoom(w: World): RoomSnapshot {
   return { objs: w.objs.map(o => ({ id: o.def.id, x: o.x, y: o.y, z: o.z, gone: o.gone, used: o.used, touched: o.touched })), flags: [] };
 }
 
-/** 把快照寫回世界 (快照裡不存在於關卡的 id 忽略) */
+/**
+ * 把快照寫回世界 (快照裡不存在於關卡的 id 忽略)。位置只覆寫可推物 (只有它們會在遊戲中移動)；
+ * 其餘物件的位置一律以關卡資料為準——舊存檔的快照 (例：閱覽室還是占位房時的地板 x=0) 不能把改版後的地形搬走
+ */
 export function restoreRoom(w: World, snap: RoomSnapshot): void {
   for (const s of snap.objs) {
     const o = w.byId.get(s.id);
     if (!o) continue;
-    o.x = s.x; o.y = s.y; o.z = s.z; o.gone = s.gone; o.used = s.used; o.touched = s.touched;
+    if (o.def.pushable) { o.x = s.x; o.y = s.y; o.z = s.z; }
+    o.gone = s.gone; o.used = s.used; o.touched = s.touched;
   }
 }
 
