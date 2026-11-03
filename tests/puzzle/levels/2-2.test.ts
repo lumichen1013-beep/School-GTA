@@ -32,7 +32,7 @@ import { defaultSave, loadSave, writeSave } from '../../../src/puzzle/meta/save'
 import { memoryStorage } from '../../../src/puzzle/meta/storage';
 import { isUnlocked, levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
-import { validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
+import { layoutDepthIssues, validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
 import { dialModelOf, validateDial } from '../../../src/puzzle/devtools/validateCube';
 import { TEXT } from '../msgs';
 
@@ -80,13 +80,13 @@ const col = (cs: ChapterSession, room: string) => cs.state.cube!.pos[room][0];
 const ACTIVATE: Cmd[] = [{ wait: 0.1 }, { walkTo: [-6.5, -2.4] }, { expect: w => expect(findTarget(w)?.def.id).toBe('dial'), label: '魔方儀' }, { act: 'interact' }];
 const DOOR = (x: number): Cmd[] => [{ wait: 0.1 }, { walkTo: [null, 0] }, { walkTo: [x, null] }, { act: 'interact' }];
 const at = (x: number, z: number, target: string): Cmd[] => [{ wait: 0.1 }, { walkTo: [null, -2.2] }, { walkTo: [x, null] }, { walkTo: [null, z] }, { expect: w => expect(findTarget(w)?.def.id).toBe(target), label: target }];
-const TURN_PAGE: Cmd[] = [...at(-1, -2.9, 'book'), { act: 'interact' }];
+const TURN_PAGE: Cmd[] = [...at(-1, -0.7, 'book'), { act: 'interact' }];
 const BRUSH: Cmd[] = [{ act: 'flip' }, { wait: 0.15 }, { expect: w => expect(findTarget(w)?.def.id).toBe('veil'), label: '淡墨' }, { act: 'interact' }, { act: 'flip' }, { wait: 0.15 }];
-const CATALOG: Cmd[] = [...at(12.6, -3.2, 'catalog'), { act: 'interact' }];
+const CATALOG: Cmd[] = [...at(12.6, 0.0, 'catalog'), { act: 'interact' }];
 const write = (card: string): Cmd[] => [{ wait: 0.1 }, { walkTo: [null, -2.2] }, { walkTo: [9, null] }, { act: 'flip' }, { wait: 0.15 }, { act: 'interact' },
   { hold: { commands: [{ t: 'card', label: LABEL, card }] }, seconds: 1 / 60 }, { act: 'flip' }, { wait: 0.15 }];
 const COMBINE: Cmd[] = [{ hold: { commands: [{ t: 'combine' }] }, seconds: 1 / 60 }];
-const SPINE: Cmd[] = [...at(3.4, -2.4, 'spine'), { act: 'interact' }];
+const SPINE: Cmd[] = [...at(3.4, 1.6, 'spine'), { act: 'interact' }];
 const LENS: Cmd[] = [...at(2.5, -2.8, 'lens'), { act: 'interact' }];
 
 /** 開章 → 啟動魔方儀 → 2-1 東門 → 閱覽室 */
@@ -132,6 +132,13 @@ function solveC(cs: ChapterSession, dirs: Array<1 | -1>, back: Array<1 | -1> = [
 }
 
 describe('2-2 閱覽室：資料與驗證器', () => {
+  it('擺設規則：可互動物件同時落在後 / 中 / 前三帶 (layoutDepthIssues)；書檯 / 閱覽桌 / 目錄櫃離開後牆 (中景)', () => {
+    expect(layoutDepthIssues(reading)).toEqual([]);
+    const z = (id: string) => reading.objects.find(o => o.id === id)!.z;
+    expect(['lectern', 'book', 'table', 'spine', 'catalog', 'noteC'].map(id => z(id) >= -2 && z(id) <= 2)).toEqual(Array(6).fill(true));
+    expect([z('cabinet') < -2, z('doorS') > 2]).toEqual([true, true]);
+  });
+
   it('validateLevel / validateEntry 0 issue (2-2、印房)；謎題 2-2a～2-2c；登錄表 2-2 前置 2-1、第二章、能力白名單 = 筆尖；預算 6', () => {
     expect(validateLevel(reading, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, abilities: ['nib'] })).toEqual([]);
     expect(validateLevel(print, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })).toEqual([]);
@@ -221,7 +228,7 @@ describe('2-2a 塗過才看得見 (P14)：反例', () => {
   it('翻頁前淡墨兩模式都不在場 (只用 2D：書在藏寶圖翻不了 → 無解)', () => {
     const cs = inReading();
     for (const mode of ['3d', '2d'] as const) expect([mode, isActiveIn(cs.world, get(cs, 'veil'), mode)]).toEqual([mode, false]);
-    runScript(cs.world, [...at(-1, -2.9, 'book'), { act: 'flip' }, { wait: 0.15 }]);
+    runScript(cs.world, [...at(-1, -0.7, 'book'), { act: 'flip' }, { wait: 0.15 }]);
     expect(findTarget(cs.world)).toBe(null); // 藏寶圖裡：書不能翻、淡墨還不在
     runScript(cs.world, [{ act: 'interact' }]);
     expect([get(cs, 'book').used, get(cs, 'veil').used]).toEqual([false, false]);
@@ -441,7 +448,7 @@ describe('2-2 字條：量表 H1～H4、H9、H10 與預算', () => {
     for (const x0 of xs) expect(xs.filter(x => x >= x0 && x <= x0 + 16).length).toBeLessThanOrEqual(3);
     for (const o of notes) for (const mode of ['3d', '2d'] as const) {
       const cs = openChapter(SPEC, chapterStart(defaultSave(), SPEC, { room: 'reading', door: 'doorW' }), OPTS);
-      runScript(cs.world, [{ place: [o.x, 0, -3.9], mode }]);
+      runScript(cs.world, [{ place: [o.x, 0, o.z + 0.5], mode }]);
       expect([o.id, mode, findTarget(cs.world)?.def.id]).toEqual([o.id, mode, o.id]);
       interact(cs.world);
       expect(cs.world.msg).toBe(noteText(o));

@@ -2,7 +2,7 @@
 // 魔方與門位、2-1 區 validateDial、通關腳本 (runScript，從章門入口打到三題全完成)、兩種不同解法、每題反例 (規格列的錯誤嘗試)、
 // 屋框書牆的段 (frameBay)、跨房快照往返、補墨、R、存檔 v3 往返、舊存檔、選單解鎖、字條量表與預算
 import { describe, it, expect } from 'vitest';
-import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
+import { ISLAND_Z, shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
 import { deep, manuscripts, mezz, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { LEVELS, levelById } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
@@ -28,7 +28,7 @@ import { defaultSave, loadSave, writeSave } from '../../../src/puzzle/meta/save'
 import { memoryStorage } from '../../../src/puzzle/meta/storage';
 import { isUnlocked, levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
-import { validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
+import { layoutDepthIssues, validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
 import { dialModelOf, validateDial } from '../../../src/puzzle/devtools/validateCube';
 import { TEXT } from '../msgs';
 import { CH1, SPEC as CH1_SPEC } from './ch1Routes';
@@ -85,7 +85,8 @@ const goTo = (x: number, z: number, target: string): Cmd[] => [
   { expect: w => expect(findTarget(w)?.def.id).toBe(target), label: target }
 ];
 const BOOKEND: Cmd[] = [...goTo(8.7, -3.6, 'bookend'), { act: 'interact' }];
-const PULL = (id: string, x: number): Cmd[] => [...goTo(x, -3.0, id), { act: 'interact' }];
+/** 抽書：站在前景書架島正面 (書架島中心 z = ISLAND_Z，站在 +1.0) */
+const PULL = (id: string, x: number): Cmd[] => [...goTo(x, ISLAND_Z + 1.0, id), { act: 'interact' }];
 const LAMP = (id: string): Cmd[] => [...goTo(3.5, -3.3, id), { act: 'interact' }];
 
 /** 開章 → 啟動魔方儀 */
@@ -187,6 +188,13 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
 });
 
 describe('2-1 書架迴廊：資料與驗證器', () => {
+  it('擺設規則：可互動物件同時落在後 / 中 / 前三帶 (layoutDepthIssues)；2-1b 的書架島在前景、書牆的東西在後景', () => {
+    expect(layoutDepthIssues(shelf)).toEqual([]);
+    const band = (id: string) => (def(id).z < -2 ? 'back' : def(id).z > 2 ? 'front' : 'mid');
+    expect(['lowShelf', 'bookA', 'bookD', 'bookLock', 'remark2', 'noteB'].map(band)).toEqual(Array(6).fill('front'));
+    expect(['dial', 'lampLock', 'lampLin', 'bookend', 'scrap', 'step', 'noteA', 'noteC'].map(band)).toEqual(Array(8).fill('back'));
+  });
+
   it('validateLevel / validateEntry 0 issue；謎題 2-1a～2-1c；登錄表 2-1 前置 1-3、第二章、能力白名單 = 筆尖；預算 6', () => {
     expect(validateLevel(shelf, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })).toEqual([]);
     expect(validateEntry(levelById('2-1')!, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
@@ -439,7 +447,7 @@ describe('2-1b 那年的推測 (P12 首次 / P9)：規格列的錯誤嘗試', ()
 
   it('照眉批三去抽「影」：實景那一格是空的 (3D 不在場)；藏寶圖按 E = 「這本只畫在圖上。手指碰到的是紙。」(抽不出來)', () => {
     const cs = start();
-    runScript(cs.world, [...goTo(1, -3.0, 'bookE').slice(0, 3)]);
+    runScript(cs.world, [...goTo(1, ISLAND_Z + 1.0, 'bookE').slice(0, 3)]);
     expect(isActiveIn(cs.world, get(cs, 'bookYing'), '3d')).toBe(false);
     runScript(cs.world, [{ act: 'flip' }, { wait: 0.15 }, { walkTo: [1, null] }, { expect: w => expect(findTarget(w)?.def.id).toBe('bookYing') }, { act: 'interact' }]);
     expect([cs.world.msg, get(cs, 'bookLock').used]).toEqual(['這本只畫在圖上。手指碰到的是紙。', false]);
@@ -456,7 +464,7 @@ describe('2-1b 那年的推測 (P12 首次 / P9)：規格列的錯誤嘗試', ()
     expect(cs.world.msg).toBe('是最高的那本。');
     runScript(cs.world, [{ walkTo: [2.8, null] }, { act: 'interact' }]);
     expect(cs.world.msg).toBe('那年我~~很確定~~猜：是書名寫著「影」的那本。');
-    runScript(cs.world, [{ act: 'flip' }, { wait: 0.15 }, { walkTo: [2.0, null] }, { walkTo: [null, -3.3] }, { act: 'interact' }]);
+    runScript(cs.world, [{ act: 'flip' }, { wait: 0.15 }, { walkTo: [2.0, null] }, { walkTo: [null, ISLAND_Z + 1.0] }, { act: 'interact' }]);
     expect(cs.world.msg).toBe('它不肯和旁邊的書站齊。');
   });
 
@@ -464,7 +472,7 @@ describe('2-1b 那年的推測 (P12 首次 / P9)：規格列的錯誤嘗試', ()
     const real = shelf.objects.filter(o => o.type === 'spine' && o.visible === 'both');
     const tallest = Math.max(...shelf.objects.filter(o => o.type === 'spine').map(o => o.h));
     const tall = shelf.objects.filter(o => o.type === 'spine' && o.h === tallest).map(o => o.id);
-    const out = real.filter(o => o.z > -4).map(o => o.id);
+    const out = real.filter(o => o.z > ISLAND_Z).map(o => o.id);
     expect([tall, out]).toEqual([['bookB', 'bookD', 'bookYing'], ['bookA', 'bookD']]);
     expect(tall.filter(id => out.includes(id))).toEqual(['bookD']);
     expect(def('bookLock').type === 'bookLock' && def('bookLock')).toMatchObject({ answer: 'bookD', reward: TOOTH });
@@ -472,7 +480,7 @@ describe('2-1b 那年的推測 (P12 首次 / P9)：規格列的錯誤嘗試', ()
 
   it('2D 抽不動實書 (只在 3D)；暗格開了之後再抽任何一本 → 暗格已經空了', () => {
     let cs = start();
-    runScript(cs.world, [...goTo(-1, -3.0, 'bookD'), { act: 'flip' }, { wait: 0.15 }]);
+    runScript(cs.world, [...goTo(-1, ISLAND_Z + 1.0, 'bookD'), { act: 'flip' }, { wait: 0.15 }]);
     expect(findTarget(cs.world)?.def.type).not.toBe('spine'); // 藏寶圖裡這一帶的 E 是讀眉批一
     runScript(cs.world, [{ act: 'interact' }]);
     expect([hasItem(cs.world, TOOTH), get(cs, 'bookLock').used, cs.world.msg]).toEqual([false, false, '是最高的那本。']);
@@ -685,7 +693,7 @@ describe('2-1 字條：量表 H1～H4、H9、H10 與預算', () => {
     for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(3);
     for (const o of notes) for (const mode of ['3d', '2d'] as const) {
       const cs = start();
-      runScript(cs.world, [{ place: [o.x, 0, -3.9], mode }]);
+      runScript(cs.world, [{ place: [o.x, 0, o.z + 0.5], mode }]);
       expect([o.id, mode, findTarget(cs.world)?.def.id]).toEqual([o.id, mode, o.id]);
       interact(cs.world);
       expect(cs.world.msg).toBe(noteText(o));
