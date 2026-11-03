@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import type { AbilityId, Mode, World } from '../core/types';
+import type { AbilityId, GameEvent, Mode, World } from '../core/types';
+import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
-import { openChapter, restartRoom, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { captureState, openChapter, restartRoom, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
 import type { Bindings, InputFrame } from '../input/types';
@@ -13,6 +14,7 @@ import type { Theme } from '../render/themes';
 import type { PuzzleHud } from '../ui/hud';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
+import { applyChapterEvent } from './chapterEvents';
 
 export interface SessionContext {
   renderer: THREE.WebGLRenderer;
@@ -27,6 +29,8 @@ export interface SessionContext {
 export interface SessionHooks {
   abilities: readonly AbilityId[];
   onCleared(): void;
+  /** 章節狀態寫入時機 (規格 8：換房、轉動完成、重進房間)；單房關卡不呼叫 */
+  onChapterSave?(state: ChapterState): void;
 }
 
 const isWorldAction = (a: string): a is WorldAction => a === 'flip' || a === 'reset' || a === 'interact';
@@ -43,6 +47,8 @@ export class LevelSession {
   private renderMode: Mode = '3d';
   private aspect = 1;
   private readonly opts: WorldOptions;
+  /** 本幀世界送出的章節事件 (迴圈步進完才處理：換房會換掉 World) */
+  private events: GameEvent[] = [];
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
     this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
@@ -63,7 +69,8 @@ export class LevelSession {
         this.renderMode = this.world.player.mode;
         this.cams.follow(1, this.renderMode);
       },
-      onCleared: this.hooks.onCleared
+      onCleared: this.hooks.onCleared,
+      onEvent: e => { this.events.push(e); this.loop.halt(); }
     });
     this.view = new PuzzleScene(w, this.ctx.theme);
     this.cams = new PuzzleCameras(w);
@@ -76,6 +83,27 @@ export class LevelSession {
   restartRoom(): void {
     this.cs = restartRoom(this.cs, this.opts);
     this.mount();
+    this.saveChapter();
+  }
+
+  private saveChapter(): void {
+    if (this.cs.spec.cube) this.hooks.onChapterSave?.(captureState(this.cs));
+  }
+
+  /** 換房 / 轉動：交給章節層，依結果重建場景或只更新連接表 */
+  private handleEvents(): void {
+    for (const e of this.events.splice(0)) {
+      const r = applyChapterEvent(this.cs, e, this.opts);
+      if (r.kind === 'enter') {
+        this.cs = r.next;
+        this.mount();
+        this.saveChapter();
+      } else if (r.kind === 'turn') {
+        this.cs = r.cs;
+        say(this.world, 'msg.cube.turned');
+        this.saveChapter();
+      }
+    }
   }
 
   resize(aspect: number): void {
@@ -86,6 +114,7 @@ export class LevelSession {
   /** 推進世界 (固定步長)；input.pressed 中的外殼動作由 app 處理 */
   update(elapsedSec: number, input: InputFrame): void {
     this.loop.frame(elapsedSec, { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump, pressed: input.pressed.filter(isWorldAction) });
+    this.handleEvents();
   }
 
   /** 畫一幀：HUD 依目前狀態；玩家位置在上一步與目前之間內插 (高更新率螢幕不頓) */

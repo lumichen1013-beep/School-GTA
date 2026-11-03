@@ -5,5 +5,7 @@ export const obj = {
   'obj.valve.verb': '轉動',
   'obj.door.verb': '開門',
   'obj.gate.verb': '查看',
+  'obj.lever.verb': '拉',
+  'obj.cubeDoor.verb': '開門',
   'obj.default.verb': '互動'
 } as const;

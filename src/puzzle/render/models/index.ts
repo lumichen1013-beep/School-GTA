@@ -5,6 +5,7 @@ import { NibKeyModel } from './key';
 import { crateModel, noteModel, plinthModel, railModel, shelfModel, tableModel } from './props';
 import { doorModel, gateModel, plateModel, valveModel, wallModel } from './devices';
 import { floorModel } from './room';
+import { cubeDoorModel, leverModel } from './cube';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
@@ -25,7 +26,8 @@ export const keyModel: ModelFactory = (p, _d, theme) => {
 export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   floor: floorModel, shelf: shelfModel, crate: crateModel, plinth: plinthModel, rail: railModel, table: tableModel,
   note: noteModel, wall: wallModel, gate: gateModel, door: doorModel, valve: valveModel, plate: plateModel, key: keyModel,
-  bars: barsModel, inkwall: inkwallModel, glass: glassModel, plank: plankModel, stone: stoneModel
+  bars: barsModel, inkwall: inkwallModel, glass: glassModel, plank: plankModel, stone: stoneModel,
+  cubeDoor: cubeDoorModel, lever: leverModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */
