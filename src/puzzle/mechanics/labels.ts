@@ -30,6 +30,8 @@ declare module '../core/types' {
       id: string; kind: 'dir' | 'noun' | 'blank' | 'plate' | 'strip'; textKey?: TextKey; scale?: boolean; noCardText?: TextKey;
       answers?: readonly ItemId[]; reward?: ItemId; solvedText?: TextKey; forms?: Readonly<Record<ItemId, TextKey>>;
       part?: ItemId; stripped?: TextKey; after?: ObjId;
+      /** v0.4 純呈現：2D 標籤徽章往上抬的高度 (世界單位；3-3 苗圃的 potS 與 3-1 東盆在藏寶圖裡只隔 0.5，徽章錯開) */
+      tagLift?: number;
     };
   }
 }

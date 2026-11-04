@@ -1,4 +1,5 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
+import { HALF_TEXT } from './3-3-night';
 
 // 3-1 苗圃 (第三章魔方的中列第 0 行；房間 id 'nursery'，關卡 id '3-1'；規格 6「3-1 苗圃（細化）」)
 //   x∈[-6, 8]、z∈[-5, 5]；西門 (入口：S0 接來時的走廊)、東拱門 (S0 接夜溫室西拱門)、南拱門 (前緣、只在實景；S0 面對水塔 = 牆)；屋頂是木棚
@@ -13,8 +14,8 @@ import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 // 文字 = content/text/zh-Hant/lvl-3-1.ts、lvl-ch3.ts；座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -5
 const PAN_Y = 0.72;
 const noteBase = { type: 'note', y: 1.0, w: 0.7, h: 0.9, d: 0.1, visible: 'both', solid: false, interactable: true, labelKey: 'lvl.3-1.note' } as const;
-const pot = (id: string, x: number): ObjDef => ({
-  id, type: 'pot', fixedText: 'lvl.3-1.pot.fixed', x, y: PAN_Y, z: -0.6, w: 0.56, h: 0.5, d: 0.56,
+const pot = (id: string, x: number, z = -0.6): ObjDef => ({
+  id, type: 'pot', fixedText: 'lvl.3-1.pot.fixed', x, y: PAN_Y, z, w: 0.56, h: 0.5, d: 0.56,
   visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.3-1.pot',
   label: { id: `scale:${id}`, kind: 'noun', textKey: 'lvl.3-1.pot', scale: true, noCardText: 'lvl.3-1.slot.empty' }
 });
@@ -37,12 +38,16 @@ const objects: ObjDef[] = [
   // ── 樹根角 (東北)：花架門 (西側；兩個視角都擋)、高育苗架 (南側；只在實景)、樹根 (卡榫)、根前的花窗玻璃片 ──
   { id: 'trellis', type: 'trellis', lockedRead: 'lvl.3-1.trellis.closed', x: 4.6, y: 0, z: -3.65, w: 0.2, h: 2.0, d: 2.7, visible: 'both', solid: true, interactable: true, interactIn: '3d', labelKey: 'lvl.3-1.trellis' },
   { id: 'shelfS', type: 'pottingShelf', x: 6.28, y: 0, z: -2.3, w: 3.44, h: 1.6, d: 0.5, visible: '3d', solid: true, labelKey: 'lvl.3-1.shelf' },
-  { id: 'root', type: 'root', jam: true, home: [0, 1], doneFlag: '3-1b',
+  { id: 'root', type: 'root', jam: true, stayShrunk: true, home: [0, 1], doneFlag: '3-1b',
     jamText: 'lvl.3-1.root.jam', freeText: 'lvl.3-1.root.free', doneText: 'lvl.3-1.root.done', freedText: 'lvl.3-1.root.freed',
     x: 7.2, y: 0, z: -4.4, w: 1.0, h: 1.4, d: 1.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.3-1.root',
     label: { id: 'scale:root', kind: 'noun', textKey: 'lvl.3-1.root', scale: true, noCardText: 'lvl.3-1.slot.empty', after: 'trellis' } },
   { id: 'pane1', type: 'pane', under: 'root', grants: 'pane.1', useText: 'lvl.3-1.pane.take',
     x: 7.2, y: 0, z: -3.3, w: 0.5, h: 0.6, d: 0.12, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.3-1.pane' },
+  // ── 南拱門內側的半座天平 (3-3a；規格「3-3 夜溫室（細化）」)：苗圃在夜溫室正上方時，秤桿穿過南拱門接上夜溫室北拱門的另一半 ──
+  { id: 'halfS', type: 'balanceHalf', door: 'archS', pans: ['potS'], pair: 'halfN', ...HALF_TEXT,
+    x: 3.3, y: 0, z: 2.9, w: 0.9, h: 1.1, d: 1.0, visible: 'both', solid: false, labelKey: 'lvl.3-3.half' },
+  { ...pot('potS', 3.3, 2.9), label: { id: 'scale:potS', kind: 'noun', textKey: 'lvl.3-1.pot', scale: true, noCardText: 'lvl.3-1.slot.empty', tagLift: 0.7 } },
   // ── 字條 (父親的筆記；story-bible 7.3)：比例尺旁的劇情字條、3-1a L1 (前景)、3-1b L1 (花架門外的前景) ──
   { ...noteBase, id: 'noteStory', mount: 'post', x: -5.3, z: -3.2, textKey: 'lvl.3-1.note.story' },
   { ...noteBase, id: 'noteA', mount: 'post', x: -2.3, z: 2.8, textKey: 'lvl.3-1.note.a' },

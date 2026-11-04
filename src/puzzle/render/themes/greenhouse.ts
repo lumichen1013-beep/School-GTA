@@ -30,3 +30,18 @@ export const GREENHOUSE_THEME: Theme = {
   },
   transition: 'ink'
 };
+
+/**
+ * 夜溫室 (3-3；規格「3-3 夜溫室（細化）」：燈熄了，只剩螢光)：溫室配色的夜版——牆與背景更暗、燈光降到約 0.55 倍、天光偏藍；
+ * 2D 紙底與描邊不變 (藏寶圖照樣好讀)
+ */
+export const GREENHOUSE_NIGHT_THEME: Theme = {
+  ...GREENHOUSE_THEME,
+  id: 'greenhouseNight',
+  pal: { ...GREENHOUSE_PAL, wallpaper: 0x47604a, wallStripe: 0x3f5842, wainscot: 0x7e4a34, bg3d: 0x0b1416, lampBulb: 0x8a8f7a, lampLight: 0x6a7060 },
+  lights: {
+    hemiSky: 0x9fb8d8, hemiGround: 0x1e2a22, hemiIntensity: 0.5,
+    ambient: 0xb8d0e8, ambientIntensity: 0.16,
+    sun: 0xc8d8ff, sunIntensity: 0.55
+  }
+};

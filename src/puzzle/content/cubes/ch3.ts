@@ -82,3 +82,40 @@ export const CH3_ZONE32 = {
   start: 'nursery',
   finish: 'ch3.gallery'
 };
+
+/** 苗圃此刻在夜溫室正上方 (苗圃南拱門對夜溫室北拱門 = 兩座半座天平合成一座；3-3a) */
+const nurseryAboveNight = (s: CubeState): boolean => !!s.pos.nursery && !!s.pos.night && s.pos.nursery[0] === s.pos.night[0] && s.pos.nursery[1] === s.pos.night[1] - 1;
+/** 夜溫室此刻四面的門都不接任何房 (月下美人：沒人經過) */
+const nightAlone = (ls: readonly { from: { room: string }; to: object }[]): boolean => !ls.some(l => l.from.room === 'night' && 'room' in l.to);
+/** 夜溫室南拱門此刻拱門對拱門接溫室深處 (3-3c：陶槽從南拱門伸進深處) */
+const nightOnDepths = (ls: readonly { from: { room: string; door: string }; to: object; kind?: string }[]): boolean =>
+  ls.some(l => l.from.room === 'night' && l.from.door === 'archS' && 'room' in l.to && (l.to as { room: string }).room === 'depths' && l.kind === 'arch');
+
+/**
+ * 3-3 區的抽象模型 (devtools/validateDial；規格 6「3-3 夜溫室（細化）」)：九格滑動、預算各房 8、夜溫室 3-3b 未完成時 4。
+ * 題：3-1b.shrink / 3-1b (苗圃；教學，同 3-1 區：樹根縮回土裡之後「小」可以拿去別處)；3-3a = 苗圃在夜溫室正上方 (需 3-1b)；
+ * 3-3b.shrink = 巨盆貼「小」(不需轉動；需 3-3a：巨盆在 3-3a 之後才被推進軌道)；3-3b = 夜溫室有從北邊照進來的光、四面不接房 (P4 預算 4；不縮 = 無解)；
+ * 3-3c.grow = 夜溫室南拱門接深處時陶槽「大」(需比例尺 = 3-1b.shrink)；3-3c = 走進深處拿高台上的筆記一頁；終點 ch3.night = 三題都完成、人在夜溫室。
+ * 卡榫：苗圃 until 3-1b.shrink、深處一直卡著、夜溫室 from 3-3a until 3-3b.shrink (巨盆)、夜溫室 from 3-3c.grow until 3-3c (陶槽)。
+ * 尺度卡的階段旗標近似：3-3b.shrink 之後「小」一直在巨盆上；3-3c 用「大」(3-3a 若用了「大」，閂住之後取回)
+ */
+export const CH3_ZONE33 = {
+  cube: CH3_CUBE,
+  puzzles: [
+    { id: '3-1b.shrink', room: 'nursery', needs: [], teaching: true },
+    { id: '3-1b', room: 'nursery', needs: ['3-1b.shrink'], teaching: true, goal: (s, f) => f.has('3-1b.shrink') && nurseryAway(s) },
+    { id: '3-3a', room: 'night', needs: ['3-1b'], goal: (s, f) => f.has('3-1b') && nurseryAboveNight(s) },
+    { id: '3-3b.shrink', room: 'night', needs: ['3-3a'], teaching: true, goal: (_s, f) => f.has('3-3a') },
+    { id: '3-3b', room: 'night', needs: ['3-3b.shrink'], light: { from: 'N', via: 0 }, excluded: { name: 'no-shrink (bigPot)', minSteps: Infinity },
+      goal: (_s, f, ctx) => f.has('3-3b.shrink') && nightAlone(ctx.links()) },
+    { id: '3-3c.grow', room: 'night', needs: ['3-1b.shrink'], goal: (_s, f, ctx) => f.has('3-1b.shrink') && nightOnDepths(ctx.links()) },
+    { id: '3-3c', room: 'depths', needs: ['3-3c.grow'], teaching: true, goal: (_s, f) => f.has('3-3c.grow') },
+    { id: 'ch3.night', room: 'night', needs: ['3-3a', '3-3b', '3-3c'], teaching: true, goal: (_s, f) => f.has('3-3a') && f.has('3-3b') && f.has('3-3c') }
+  ] as readonly ZonePuzzle[],
+  jams: [
+    { room: 'nursery', until: '3-1b.shrink' }, { room: 'depths' },
+    { room: 'night', from: '3-3a', until: '3-3b.shrink' }, { room: 'night', from: '3-3c.grow', until: '3-3c' }
+  ] as ReadonlyArray<{ room: string; until?: string; from?: string }>,
+  start: 'nursery',
+  finish: 'ch3.night'
+};

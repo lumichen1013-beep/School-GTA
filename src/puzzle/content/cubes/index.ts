@@ -31,8 +31,8 @@ export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY },
   // 第二章 書房 (v0.4 控制盤)：2-1～2-5 為完整關卡，H1 夾層為占位房 (隱藏房，要第三章的比例尺)；從衣帽間章門外的走廊進 2-1 西門
   { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep' } },
-  // 第三章 溫室 (v0.4 控制盤、滑動)：3-1 苗圃、3-2 玻璃長廊為完整關卡，夜溫室 / 深處 / 溫床為占位房 (溫床沒有門)；從書房深處章門外的走廊進 3-1 苗圃西門
-  { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery', '3-2': 'gallery' } }
+  // 第三章 溫室 (v0.4 控制盤、滑動)：3-1 苗圃、3-2 玻璃長廊、3-3 夜溫室為完整關卡，深處 / 溫床為占位房 (溫床沒有門)；從書房深處章門外的走廊進 3-1 苗圃西門
+  { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night' } }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

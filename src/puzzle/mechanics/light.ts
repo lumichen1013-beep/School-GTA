@@ -23,19 +23,29 @@ declare module '../core/types' {
      */
     sensor: {
       from: Side; via: number; closedText: TextKey; whiteText: TextKey; weakText: TextKey; solvedText: TextKey; openText: TextKey;
-      beam?: readonly [number, number, number]; mount?: 'floor' | 'stand';
+      beam?: readonly [number, number, number]; mount?: 'floor' | 'stand' | 'planter';
+      /** v0.4 3-3b 月下美人：光夠了還要四面的門都不接任何房才算 (沒人經過)；crowdText = 光夠、門還接著房時 */
+      alone?: boolean; crowdText?: TextKey;
     };
   }
 }
 
-/** 感光物此刻的光 (沒有光路資訊 = dark) */
-export function sensorLight(w: World, o: ObjState): LightState {
+/** 這間房此刻有門接著別的房 (ext.cube.links) */
+export const roomConnected = (w: World): boolean => Object.values(w.ext.cube?.links ?? {}).some(l => l.to === 'room');
+
+/** 感光物此刻的光 (沒有光路資訊 = dark)；alone 的感光物光夠但門還接著房 = crowd */
+export function sensorLight(w: World, o: ObjState): LightState | 'crowd' {
   if (o.def.type !== 'sensor') return 'dark';
-  return lightState(w.ext.light?.hits ?? [], o.def.from, o.def.via);
+  const s = lightState(w.ext.light?.hits ?? [], o.def.from, o.def.via);
+  return s === 'lit' && o.def.alone && roomConnected(w) ? 'crowd' : s;
 }
 
 /** 上一步的光 (只用來決定要不要說話；換房 / R = 新的 World、重新記) */
-const last = new WeakMap<ObjState, LightState>();
+const last = new WeakMap<ObjState, LightState | 'crowd'>();
+const textFor = (o: ObjState, s: LightState | 'crowd'): TextKey | null => {
+  if (o.def.type !== 'sensor') return null;
+  return s === 'white' ? o.def.whiteText : s === 'weak' ? o.def.weakText : s === 'crowd' ? o.def.crowdText ?? o.def.closedText : null;
+};
 
 function update(w: World): void {
   for (const o of w.objs) {
@@ -48,7 +58,7 @@ function update(w: World): void {
       o.used = true;
       say(w, o.def.solvedText);
       if (o.def.doneFlag) w.events.push({ t: 'done', flag: o.def.doneFlag });
-    } else if (prev !== undefined && s !== prev && (s === 'white' || s === 'weak')) say(w, s === 'white' ? o.def.whiteText : o.def.weakText);
+    } else if (prev !== undefined && s !== prev) { const t = textFor(o, s); if (t) say(w, t); }
   }
 }
 
@@ -61,7 +71,7 @@ export const light: Mechanic = {
       interact: (w, o) => {
         if (o.def.type !== 'sensor') return;
         const s = sensorLight(w, o);
-        say(w, o.used ? o.def.openText : s === 'white' ? o.def.whiteText : s === 'weak' ? o.def.weakText : o.def.closedText);
+        say(w, o.used ? o.def.openText : textFor(o, s) ?? o.def.closedText);
       }
     }
   },

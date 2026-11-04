@@ -1,6 +1,6 @@
 // 章節層級狀態 (v0.3；規格 5.4、architecture 4.16)：ChapterSession = 魔方狀態 + 各房快照 + 當前房間的 World。
 // 純資料 + 純函式 (World 本身照舊就地修改)；不 import mechanics (建 World 時由呼叫方傳入機制表，比照 createWorld)
-import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World } from './types';
+import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World, WorldExt } from './types';
 import { createWorld, type WorldOptions } from './world';
 import {
   addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, OPPOSITE, rotateSide, sameCell,
@@ -27,6 +27,11 @@ export interface ChapterSpec {
    * 由 app 以機制表的純函式注入 (mechanics/index chapterSpecOf)；核心不 import mechanics。沒給 = 不在場的房一律不卡
    */
   jammed?(room: string, state: ChapterState): boolean;
+  /**
+   * v0.4 第三章 跨房的推導結果 (3-3：半座天平的對面重量 / 已閂住 = ext.balance、伸進這一房的那一截 = ext.protrude)：
+   * 由 app 以機制表的純函式注入 (mechanics/index chapterSpecOf)；writeExt / writeLinks 寫入當前房。labels = 即時標籤
+   */
+  derive?(room: string, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>): Partial<WorldExt>;
 }
 
 /** 章節狀態 (可 JSON 序列化；SaveV3 的 chapters[n] 由此而來) */
@@ -85,7 +90,8 @@ const ARRIVE_GAP = 1.3;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 export function snapshotRoom(w: World): RoomSnapshot {
-  return { objs: w.objs.map(o => ({ id: o.def.id, x: o.x, y: o.y, z: o.z, gone: o.gone, used: o.used, touched: o.touched })), flags: [] };
+  // 推導物件 (def.derived：例 3-3c 伸進隔壁的那一截) 由章節層每次重算，不進快照
+  return { objs: w.objs.filter(o => !o.def.derived).map(o => ({ id: o.def.id, x: o.x, y: o.y, z: o.z, gone: o.gone, used: o.used, touched: o.touched })), flags: [] };
 }
 
 /**
@@ -166,6 +172,13 @@ function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state, w.ext.labels ?? state.labels) };
   const light = lightExt(spec, state);
   if (light) w.ext = { ...w.ext, light };
+  writeDerived(spec, state, w, w.ext.labels ?? state.labels);
+}
+
+/** 跨房推導 (ChapterSpec.derive；第三章 3-3)：結果的每個欄位覆寫 ext (沒給的欄位維持) */
+function writeDerived(spec: ChapterSpec, state: ChapterState, w: World, labels: Readonly<Record<string, readonly string[]>>): void {
+  if (!spec.derive || !state.cube) return;
+  w.ext = { ...w.ext, ...spec.derive(state.room, state, labels) };
 }
 
 /** 標籤改了 (門牌貼上 / 取下「日」) → 重算當前房間的門接法 (World 只更新 ext) */
@@ -181,6 +194,7 @@ function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial } };
   const light = lightExt(spec, state);
   if (light) w.ext = { ...w.ext, light };
+  writeDerived(spec, state, w, state.labels);
 }
 
 /** 物件原本屬於哪間房 (第一個在關卡資料裡列出它的房間) */
@@ -449,7 +463,9 @@ function dialCheck(cs: ChapterSession, t: Turn): DialBlock | null {
   const mine = rooms.includes(state.room);
   // 卡榫：組內每一間房 (玩家所在房 = 即時 World 的機制掛點；其他房 = ChapterSpec.jammed，規格「第三章共用規則」卡榫)
   if (mine && world.rt.mechanics.blocksTrack.some(m => m.blocksTrack!(world))) return 'jammed';
-  if (spec.jammed && rooms.some(r => r !== state.room && spec.rooms[r] && spec.jammed!(r, state))) return 'jammed';
+  // 其他房用即時標籤 (3-3c：玩家剛在本房放大、伸進隔壁的陶槽，隔壁房立刻卡住)
+  const live = world.ext.labels ? { ...state, labels: world.ext.labels } : state;
+  if (spec.jammed && rooms.some(r => r !== state.room && spec.rooms[r] && spec.jammed!(r, live))) return 'jammed';
   for (const room of rooms) {
     if (!spec.rooms[room]) continue;
     const { pushables, doors } = roomBoxes(spec, state, world, room);

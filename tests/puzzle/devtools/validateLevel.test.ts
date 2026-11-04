@@ -35,7 +35,7 @@ describe('validateLevel：門廊 1-1', () => {
     expect(validateEntry(LEVELS.find(e => e.id === '1-2')!, reg)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '1-3')!, reg)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '2-1')!, reg)).toEqual([]);
-    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5', '3-1', '3-2']);
+    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5', '3-1', '3-2', '3-3']);
   });
 
   it('沒有封印的門 (unsealed) 不需要打開它的物件；拿掉 unsealed 就回報 ref.exitLocked', () => {

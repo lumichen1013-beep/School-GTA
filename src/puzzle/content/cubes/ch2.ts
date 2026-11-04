@@ -31,13 +31,15 @@ export const CH2_CUBE: CubeDef = {
 };
 
 /** 題目條件可用的跨房資訊 (devtools/validateCube 的 GoalCtx 同形)：此刻的連接表 (含讀作「間」的門) */
-interface ZoneLink { from: { room: string; door: string }; to: { room: string; door: string } | { frame: string } }
+interface ZoneLink { from: { room: string; door: string }; to: { room: string; door: string } | { frame: string }; kind?: 'door' | 'arch' }
 /** 抽象模型的一題 (devtools/validateCube 的 DialPuzzle 同形；content 不 import devtools) */
 /** 區模型的一題 (devtools DialPuzzle 的內容版)；light = 第三章光路條件 (這間房要有從 from 進來、穿過至少 via 間房的光；validateDial 以 core/chapter lightPaths 判定) */
 export interface ZonePuzzle {
   id: string; room: string; needs: readonly string[]; teaching?: boolean;
   goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[] }) => boolean;
   light?: { from: Side; via: number };
+  /** 刻意排除的較長策略 (validateDial 同名欄位；minSteps 可為 Infinity = 不這樣做就無解) */
+  excluded?: { name: string; minSteps: number };
 }
 
 /** 2-1 在上列的第幾行 (不在上列 = -1) */

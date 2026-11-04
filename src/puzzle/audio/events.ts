@@ -40,7 +40,7 @@ export function worldEventActions(e: GameEvent): AudioAction[] {
 }
 
 /** 驚嚇旗標 → 一般版音效 (沒列的旗標用預設) */
-export const SCARE_SFX: Readonly<Record<string, string>> = { 'scare:coats': 'sfx.scare.coats' };
+export const SCARE_SFX: Readonly<Record<string, string>> = { 'scare:coats': 'sfx.scare.coats', 'scare:handprint': 'sfx.scare.coats' };
 export const SCARE_DEFAULT = 'sfx.scare.coats';
 export const SCARE_GENTLE = 'sfx.scare.gentle';
 
@@ -197,14 +197,16 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 3-1 苗圃：花秤倒向一邊閂住 (秤盤落下)、花架門被拉起、樹根從軌道鬆開 (木頭摩擦聲)
   balance: 'sfx.plate.press', trellis: 'sfx.gate.open', root: 'sfx.crate.push',
   // 3-2 玻璃長廊：感光花開 (光路接上；溫和的亮燈聲)
-  sensor: 'sfx.lamp.on'
+  sensor: 'sfx.lamp.on',
+  // 3-3 夜溫室：半座天平停在正中間 (秤盤落定)、巨盆被推進軌道 (拖過石板；驚嚇聲另由 scare:handprint 播)、拿到筆記一頁 (撿到的紙聲另由道具欄決定)
+  balanceHalf: 'sfx.plate.press', bigPot: 'sfx.crate.push', page: 'sfx.note.read'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
 /** 燈書依序點亮的音高 (半音)：一 → 三本往上 */
 const LAMP_STEPS = [0, 4, 7, 12];
 
-const pickupSfx = (item: string): string => (item.startsWith('key') ? 'sfx.pickup.key' : /^(scrap|diary|card|note)/.test(item) ? 'sfx.pickup.paper' : 'sfx.pickup');
+const pickupSfx = (item: string): string => (item.startsWith('key') ? 'sfx.pickup.key' : /^(scrap|diary|card|note|page)/.test(item) ? 'sfx.pickup.paper' : 'sfx.pickup');
 
 /**
  * 每幀比較前後狀態 → 音訊動作 (純邏輯，只讀)。換了 World (換房 / R) → 重新取基準，不比較物件 (R 同房 = 重來的紙聲)。

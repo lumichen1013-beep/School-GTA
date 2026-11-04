@@ -63,6 +63,9 @@ export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: bool
 
 const SHAKE_SEC = 0.6;
 
+/** 標籤徽章 / 尺度角標往上抬的高度 (label.tagLift；純呈現：相鄰物件的標籤在 2D 錯開，不影響互動) */
+export const tagLift = (d: ObjDef): number => d.label?.tagLift ?? 0;
+
 /**
  * 標籤徽章：每種顯示字建一次網格 (之後切換可見性)；at = 相對物件原點的位置。
  * 只在 2D 顯示；寫錯的回饋：玩家附近的標籤在 msg.label.invalid 出現時顫動、墨色變淡
@@ -70,6 +73,7 @@ const SHAKE_SEC = 0.6;
 export function labelBadge(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Group, at: THREE.Vector3, size = 0.55): (c: ModelCtx) => void {
   const scale = !!d.label?.scale;
   const holder = new THREE.Group();
+  at = at.clone().setY(at.y + tagLift(d));
   holder.position.copy(at);
   root.add(holder);
   const meshes = new Map<string, THREE.Mesh>();
@@ -108,6 +112,7 @@ export function labelBadge(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Gr
  * 每個字建一次網格、之後只切可見性
  */
 export function scaleCorner(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Group, size = 0.3): (c: ModelCtx, at: THREE.Vector3) => void {
+  const lift = tagLift(d);
   const holder = new THREE.Group();
   root.add(holder);
   const meshes = new Map<string, THREE.Mesh>();
@@ -123,5 +128,6 @@ export function scaleCorner(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.G
     }
     for (const [k, m] of meshes) m.visible = k === glyph;
     holder.position.copy(at);
+    holder.position.y += lift;
   };
 }

@@ -28,6 +28,8 @@ export interface ObjBase {
   /** 只在此模式可互動 (預設同 visible) */
   interactIn?: Visibility;
   pushable?: boolean;
+  /** v0.4 推導物件 (不在關卡資料：機制依章節層寫入的 ext 生成，例 3-3c 伸進隔壁的那一截)；不進房間快照 */
+  derived?: boolean;
   /** 顯示名稱的文字 key */
   labelKey?: TextKey;
   /** 切回 3D 時不可落在其範圍內 (3D 下被圍住、走不出去的區域)；會改落到最近可站處 */

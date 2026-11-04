@@ -2,6 +2,7 @@
 // 曾發生：閘門門柱 vs 隔牆端面 (壁紙 / 護牆板 / 腰線 / 踢腳線同深度)、出口門門把座板 vs 嵌板、書架飾條 vs 頂板、側牆飾條端面、紙條 vs 護牆板
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
+import type { ObjDef } from '../../../src/puzzle/core/types';
 import { FOYER_V02, newWorld } from '../helpers';
 import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
@@ -304,6 +305,33 @@ describe('渲染：深度打架 (共面)：第三章溫室的五間占位房 (�
       const view = new PuzzleScene(w, THEMES.greenhouse);
       const cams = new PuzzleCameras(w);
       for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
+  });
+  it('3-3 的各種狀態 (半座天平接上 / 閂住、巨盆被推進軌道與手印、陶槽放大、溫室深處伸過來的那一截) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const layout = { nursery: [1, 0, 0], night: [1, 1, 0], gallery: [2, 1, 0], bed: [1, 2, 0], depths: [2, 2, 0] } as const;
+    for (const [room, prep] of [
+      [night, (w: ReturnType<typeof newWorld>) => {
+        w.ext = { ...w.ext, balance: { halfN: { other: 2 } } };
+        const pot = w.byId.get('bigPot')!; pot.used = true; pot.z = -4.6;
+        const tr = w.byId.get('trough')!; tr.def = { ...tr.def, w: 1.2, h: 0.9, d: 4.8 };
+      }],
+      [night, (w: ReturnType<typeof newWorld>) => { w.byId.get('halfN')!.used = true; }],
+      [depths, (w: ReturnType<typeof newWorld>) => {
+        const def = { id: 'protrude:trough', type: 'protrudeStep', source: 'trough', from: 'night', x: 0, y: 0, z: -4.6, w: 1.2, h: 0.9, d: 0.8, visible: 'both', solid: true, derived: true } as unknown as ObjDef;
+        const o = { def, x: 0, y: 0, z: -4.6, gone: false, used: false, touched: false };
+        w.objs.push(o); w.byId.set(def.id, o);
+      }]
+    ] as const) {
+      const w = newWorld(room);
+      w.ext = { cube: { links: {}, at: [1, 1, 0], layout }, dial: { active: true } };
+      prep(w);
+      const view = new PuzzleScene(w, THEMES.greenhouseNight);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 240; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
       expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
       w.player.mode = '2d';
       view.update('2d', 1 / 60, 1, cams.active('2d'));

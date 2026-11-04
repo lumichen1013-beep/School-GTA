@@ -64,12 +64,12 @@ const through = (cs: ChapterSession, door: string): ChapterSession => {
 
 describe('第三章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第三章 (溫室主題、levels 3-1)；LevelEntry 3-1 (筆尖、前置 2-5)；CUBE_CHAPTERS chapter 3 (五間房、從苗圃西門進)', () => {
-    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2'] }); // 3-2 登錄
+    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2', '3-3'] }); // 3-2 / 3-3 登錄
     expect([TEXT('ch.3.title'), THEMES.greenhouse.id]).toEqual(['第三章　溫室', 'greenhouse']);
     const e = levelById('3-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([3, ['nib'], ['2-5'], nursery, '苗圃']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
-    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery', '3-2': 'gallery' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
+    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
   });
 
   it('CH3_CUBE：3×3 滑動、控制盤；S0 (北列 空｜空｜工具間、中列 苗圃｜夜溫室｜長廊、南列 水塔｜溫床｜深處)；屋框；九個 slideCell 組、沒有鎖扣', () => {
@@ -103,7 +103,7 @@ describe('第三章骨架：五間占位房', () => {
     const S = depths.objects.find(o => o.id === 'chapterS')!;
     expect(S.type === 'cubeDoor' && S.key).toBe('key.greenhouse');
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX, l.turnBudget, l.theme])).toEqual([
-      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8 }, 'greenhouse'], [-8, 8, { base: 8 }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
+      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8, puzzles: { '3-3b': 4 } }, 'greenhouseNight'], [-8, 8, { base: 8 }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
     ]);
   });
 

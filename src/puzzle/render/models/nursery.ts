@@ -4,7 +4,7 @@ import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { crateWood } from '../textures';
 import { mergeParts, placed } from '../geometry';
-import { labelBadge, scaleCorner, scaleRatio } from './label';
+import { labelBadge, scaleCorner, scaleRatio, tagLift } from './label';
 import type { ModelCtx, PropModel } from './types';
 
 // 3-1 苗圃 (彩繪玻璃溫室；規格 6「3-1 苗圃（細化）」、物件外觀規則) 的物件外觀：
@@ -26,7 +26,7 @@ const LIFT = 1.3;
 const TILT = 0.16;
 
 /** 固定種子亂數 (外觀一致) */
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
   let s = (seed * 2654435761) >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
@@ -34,7 +34,7 @@ function rng(seed: number): () => number {
 /**
  * 盤上物件此刻的重量 (render 不能 import mechanics 的值：以有效尺寸換算，同 mechanics/scale weightOf——大 3 / 原 2 / 小 1)
  */
-function weightIn(world: World, id: string): number {
+export function weightIn(world: World, id: string): number {
   const o = world.byId.get(id);
   if (!o || o.gone) return 0;
   const base = world.level.objects.find(d => d.id === id);
@@ -44,13 +44,20 @@ function weightIn(world: World, id: string): number {
 
 /** 秤桿此刻的傾角 (西重 = 正：西端往下)；balance 模型每幀更新，陶盆讀它跟著秤盤上下 */
 const angles = new WeakMap<ObjState, number>();
-/** 陶盆 → 它所在的天平與哪一側 (第一次找到後記住) */
-const panOf = new WeakMap<ObjState, { balance: ObjState; side: -1 | 1; arm: number }>();
+/** 半座天平 (3-3a；models/night balanceHalfModel) 的秤盤此刻的高低：盤上的物件讀它跟著上下 */
+export const halfPanDrop = new WeakMap<ObjState, number>();
+/** 陶盆 → 它所在的天平與哪一側 (第一次找到後記住)；side 0 = 半座天平的那一盤 */
+const panOf = new WeakMap<ObjState, { balance: ObjState; side: -1 | 0 | 1; arm: number }>();
 
-function findPan(world: World, pot: ObjState): { balance: ObjState; side: -1 | 1; arm: number } | null {
+function findPan(world: World, pot: ObjState): { balance: ObjState; side: -1 | 0 | 1; arm: number } | null {
   const hit = panOf.get(pot);
   if (hit) return hit;
   for (const o of world.objs) {
+    if (o.def.type === 'balanceHalf' && o.def.pans.includes(pot.def.id)) {
+      const v = { balance: o, side: 0 as const, arm: 0 };
+      panOf.set(pot, v);
+      return v;
+    }
     if (o.def.type !== 'balance') continue;
     const side = o.def.pans.W.includes(pot.def.id) ? -1 : o.def.pans.E.includes(pot.def.id) ? 1 : 0;
     if (!side) continue;
@@ -63,6 +70,9 @@ function findPan(world: World, pot: ObjState): { balance: ObjState; side: -1 | 1
 
 /** 秤盤此刻的高低 (相對水平時)：side = -1 西 / 1 東 */
 const panDrop = (angle: number, side: -1 | 1, arm: number): number => side * arm * Math.sin(angle);
+/** 盤上物件此刻相對水平時的高低 (兩種天平) */
+const dropOf = (pan: { balance: ObjState; side: -1 | 0 | 1; arm: number }): number =>
+  pan.side === 0 ? halfPanDrop.get(pan.balance) ?? 0 : panDrop(angles.get(pan.balance) ?? 0, pan.side, pan.arm);
 
 /**
  * 花秤：蜂蜜木底座 (踢腳 + 黃銅包角) + 黃銅立柱與支點 + 秤桿 (依兩盤的重量傾斜，平滑轉過去) + 兩個秤盤 (三根吊桿)；
@@ -135,13 +145,50 @@ export function balanceModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
 
 /**
  * 陶盆 (釘在秤盤上)：赤陶盆身 + 盆口 + 土 + 一株苗；本體依有效尺寸縮放 (底部中心；標籤不跟著縮)、跟著秤盤上下。
- * 藏寶圖：標籤「陶盆」+ 方槽、縮放角標「大 / 小」、盆上方三個重量點 (實心 = 此刻的重量；規格 7.2 天平顯示重量)
+ * shape 'can' = 澆水壺 (錫色壺身 + 斜上的壺嘴 + 蓮蓬頭 + 弓形把手；3-3a 釘在半座天平的盤上)；'trough' = 長陶槽 (沿 z 的長方槽 + 槽內一排苗；3-3c)。
+ * 藏寶圖：標籤 + 方槽 (有 label 才畫)、縮放角標「大 / 小」、在秤盤上時盆上方三個重量點 (實心 = 此刻的重量；規格 7.2 天平顯示重量)
  */
 export function potModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
   const { pal } = theme;
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
+  const shape = d.type === 'pot' ? d.shape : undefined;
+  if (shape === 'can') canBody(p, d, body);
+  else if (shape === 'trough') troughBody(p, d, theme, body);
+  else potBody(p, d, theme, body);
+  const badge = d.label ? labelBadge(p, d, theme, g, new THREE.Vector3(0, d.h + (shape === 'trough' ? 0.8 : 1.1), shape === 'trough' ? d.d / 2 : 0.12), 0.42) : null;
+  const corner = scaleCorner(p, d, theme, g, 0.26);
+  // 重量點 (只在藏寶圖、只在秤盤上)：三格，前 n 格實心、其餘空心；每種重量 (1～3) 一個合併網格，只切可見性
+  const dots = new THREE.Group();
+  g.add(dots);
+  const rows = [1, 2, 3].map(n => {
+    const m = p.mesh(mergeParts([0, 1, 2].map(i => placed(i < n ? new THREE.CircleGeometry(0.055, 14) : new THREE.RingGeometry(0.035, 0.055, 14), (i - 1) * 0.16, 0, 0))), pal.inkBlue, { outline: false, shadow: false });
+    dots.add(m);
+    return m;
+  });
+  const at = new THREE.Vector3();
+  const update = (c: ModelCtx) => {
+    const k = scaleRatio(c);
+    body.scale.setScalar(k);
+    const pan = findPan(c.world, c.obj);
+    const dy = pan ? dropOf(pan) : 0;
+    body.position.y = dy;
+    badge?.(c);
+    const top = d.h * k + dy;
+    corner(c, at.set(d.w * k * 0.5 + 0.12, top - 0.05, d.d * k * 0.5 + 0.02));
+    dots.visible = c.mode === '2d' && !!pan;
+    if (dots.visible) {
+      const n = weightIn(c.world, c.obj.def.id);
+      rows.forEach((m, i) => { m.visible = i + 1 === n; });
+      dots.position.set(0, top + 0.5 + tagLift(d), d.d * k * 0.5 + 0.05);
+    }
+  };
+  return { root: g, update };
+}
+
+/** 陶盆的本體 (原尺寸；potModel 依有效尺寸縮放) */
+function potBody(p: Painter, d: ObjDef, { pal }: Theme, body: THREE.Group): void {
   const r = rng(Math.round(d.x * 31 + 7));
   const H = d.h * 0.82;
   const shell = p.mesh(new THREE.CylinderGeometry(d.w / 2, d.w * 0.36, H, 16), pal.crate, { roughness: 0.9 });
@@ -158,34 +205,61 @@ export function potModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
   }
   const plant = p.mesh(mergeParts(leaves), LEAF, { roughness: 0.9, outline: false });
   body.add(shell, rim, soil, plant);
-  const badge = labelBadge(p, d, theme, g, new THREE.Vector3(0, d.h + 1.1, 0.12), 0.42);
-  const corner = scaleCorner(p, d, theme, g, 0.26);
-  // 重量點 (只在藏寶圖)：三格，前 n 格實心、其餘空心；每種重量 (1～3) 一個合併網格，只切可見性
-  const dots = new THREE.Group();
-  g.add(dots);
-  const rows = [1, 2, 3].map(n => {
-    const m = p.mesh(mergeParts([0, 1, 2].map(i => placed(i < n ? new THREE.CircleGeometry(0.055, 14) : new THREE.RingGeometry(0.035, 0.055, 14), (i - 1) * 0.16, 0, 0))), pal.inkBlue, { outline: false, shadow: false });
-    dots.add(m);
-    return m;
-  });
-  const at = new THREE.Vector3();
-  const update = (c: ModelCtx) => {
-    const k = scaleRatio(c);
-    body.scale.setScalar(k);
-    const pan = findPan(c.world, c.obj);
-    const dy = pan ? panDrop(angles.get(pan.balance) ?? 0, pan.side, pan.arm) : 0;
-    body.position.y = dy;
-    badge(c);
-    const top = d.h * k + dy;
-    corner(c, at.set(d.w * k * 0.5 + 0.12, top - 0.05, d.w * k * 0.5 + 0.02));
-    dots.visible = c.mode === '2d';
-    if (dots.visible) {
-      const n = weightIn(c.world, c.obj.def.id);
-      rows.forEach((m, i) => { m.visible = i + 1 === n; });
-      dots.position.set(0, top + 0.5, d.w * k * 0.5 + 0.05);
+}
+
+/** 澆水壺的錫色 */
+const PEWTER = 0x8d9592;
+/** 澆水壺：壺身 (略收口的圓筒) + 頂蓋 + 從壺身往 +x 斜上的壺嘴與蓮蓬頭 + 往 -x 的弓形把手；一個網格 (同材質) */
+function canBody(p: Painter, d: ObjDef, body: THREE.Group): void {
+  const R = Math.min(d.d / 2, d.w * 0.3), H = d.h * 0.7;
+  const spout = new THREE.CylinderGeometry(0.022, 0.03, d.w * 0.5, 8);
+  const rose = new THREE.CylinderGeometry(0.06, 0.03, 0.06, 10);
+  const parts = [
+    placed(new THREE.CylinderGeometry(R * 0.92, R, H, 16), -d.w * 0.12, H / 2, 0),
+    placed(new THREE.CylinderGeometry(R * 0.5, R * 0.92, 0.06, 16), -d.w * 0.12, H + 0.03, 0),
+    placed(spout, -d.w * 0.12 + R * 0.6 + d.w * 0.18, H * 0.55 + d.w * 0.16, 0, 0, 0, -0.95),
+    placed(rose, d.w * 0.5 - 0.05, H * 0.55 + d.w * 0.34, 0, 0, 0, -0.95),
+    placed(new THREE.TorusGeometry(H * 0.42, 0.018, 6, 14, Math.PI), -d.w * 0.12 - R * 0.35, H * 0.62, 0, 0, 0, Math.PI / 2 + 0.5)
+  ];
+  body.add(p.mesh(mergeParts(parts), PEWTER, { metalness: 0.5, roughness: 0.45 }));
+}
+
+/** 長陶槽：沿 z 的長方槽 (底 + 四壁；赤陶) + 土 + 槽內一排苗 */
+function troughBody(p: Painter, d: ObjDef, { pal }: Theme, body: THREE.Group): void {
+  const r = rng(Math.round(d.z * 29 + 11));
+  const t = 0.07, W = d.w, H = d.h, D = d.d;
+  const shell = [
+    placed(box(W, 0.08, D), 0, 0.04, 0),
+    placed(box(t, H - 0.08, D), -W / 2 + t / 2, 0.08 + (H - 0.08) / 2, 0), placed(box(t, H - 0.08, D), W / 2 - t / 2, 0.08 + (H - 0.08) / 2, 0),
+    placed(box(W - t * 2, H - 0.08, t), 0, 0.08 + (H - 0.08) / 2, -D / 2 + t / 2), placed(box(W - t * 2, H - 0.08, t), 0, 0.08 + (H - 0.08) / 2, D / 2 - t / 2)
+  ];
+  body.add(p.mesh(mergeParts(shell), pal.crate, { roughness: 0.9 }));
+  // 上緣一圈深色口沿 (比壁寬 1 cm、高出 1 cm：不與壁頂共面)
+  const lip = [
+    placed(box(t + 0.02, 0.04, D + 0.02), -W / 2 + t / 2, H - 0.01, 0), placed(box(t + 0.02, 0.04, D + 0.02), W / 2 - t / 2, H - 0.01, 0),
+    placed(box(W - t * 2 - 0.004, 0.04, t + 0.02), 0, H - 0.01, -D / 2 + t / 2), placed(box(W - t * 2 - 0.004, 0.04, t + 0.02), 0, H - 0.01, D / 2 - t / 2)
+  ];
+  body.add(p.mesh(mergeParts(lip), pal.crateDark, { roughness: 0.9, outline: false }));
+  const soil = p.mesh(box(W - t * 2 - 0.01, 0.04, D - t * 2 - 0.01), SOIL, { outline: false, shadow: false });
+  soil.position.y = H - 0.1;
+  body.add(soil);
+  body.add(p.mesh(mergeParts(sprouts(r, D - 0.3, H - 0.08)), LEAF, { roughness: 0.9, outline: false }));
+}
+
+/** 沿 z 一排幼苗 (槽內；長度 len、土面高 y) */
+export function sprouts(r: () => number, len: number, y: number): THREE.BufferGeometry[] {
+  const out: THREE.BufferGeometry[] = [];
+  const n = Math.max(2, Math.round(len / 0.4));
+  for (let i = 0; i < n; i++) {
+    const z = -len / 2 + (len * (i + 0.5)) / n;
+    out.push(placed(new THREE.CylinderGeometry(0.012, 0.016, 0.18, 4), 0, y + 0.09, z));
+    for (let k = 0; k < 2; k++) {
+      const lf = new THREE.SphereGeometry(0.08, 6, 4);
+      lf.scale(1, 0.45, 0.7);
+      out.push(placed(lf, (r() - 0.5) * 0.14, y + 0.17 + r() * 0.06, z + (r() - 0.5) * 0.1, 0, r() * Math.PI, 0));
     }
-  };
-  return { root: g, update };
+  }
+  return out;
 }
 
 /**

@@ -8,7 +8,8 @@ import { mergeParts, placed } from '../geometry';
 import type { ModelCtx, PropModel } from './types';
 
 // 光路 (N26；規格 6「3-2 玻璃長廊（細化）」、7.2、9.1) 的物件外觀：感光花 (sensor)
-// - 本體：赤陶盆 + 花莖與葉 + 花苞 (歪向它要的那扇窗) ↔ 開花 (六片花瓣平滑張開)；mount 'stand' = 立在窗下與窗台同高的木花架上 (花架是模型的一部分，2D 不浮空)
+// - 本體：赤陶盆 + 花莖與葉 + 花苞 (歪向它要的那扇窗) ↔ 開花 (六片花瓣平滑張開)；mount 'stand' = 立在窗下與窗台同高的木花架上 (花架是模型的一部分，2D 不浮空)；
+//   mount 'planter' = 種在圓形石砌花台裡的月下美人 (3-3b：花苞朝天窗 = 向上、開花 = 大白花、光柱為偏藍的月光；alone 而拱門還接著房 = 2D 畫虛線圓：光到了、花還不開)
 // - 3D：光照進來時，從那扇窗 (def.beam) 斜射到花上的一道淡光柱 (加色混合、不寫深度；亮度約 1 秒緩入緩出，不閃爍——規格 9.1 光敏)；
 //   白光淡白、穿過玻璃的光淡金綠；花在光裡有一圈淡光
 // - 2D：只在花上畫光點，形狀區分 (規格 7.2)：穿過玻璃的光 = 實心八角星、白光 = 虛線空心圓、光不夠 = 細實線空心圓
@@ -23,6 +24,13 @@ const HEART = 0xd9a441;
 /** 光柱的色：白光 / 穿過彩繪玻璃的光 */
 const WHITE_LIGHT = 0xfff8e6;
 const STAINED_LIGHT = 0xd8f0a0;
+/** 月光 (夜溫室的天光偏藍白；mount 'planter' 的月下美人) 與月下美人的白花 */
+const MOON_LIGHT = 0xcfe0ff;
+const MOON_PETAL = 0xf7f5ee;
+const MOON_HEART = 0xe8e0a8;
+/** 圓形花台 (mount 'planter')：半徑、高 */
+const PLANTER_R = 0.56;
+const PLANTER_H = 0.45;
 /** 2D 光點的色 */
 const SPOT_LIT = 0xd9a441;
 const SPOT_DIM = 0x8a7a5a;
@@ -64,6 +72,7 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   if (d.type !== 'sensor') return { root: g };
   const stand = d.mount === 'stand';
+  const planter = d.mount === 'planter';
   const [lx, lz] = SIDE_DIR[d.from] ?? [0, -1];
   // 窗台花架 (mount 'stand')：台面與窗台同高的木花架 (1.9 × 1.6，四腳 + 一圈橫撐)，以花為中心 (殘片 2 放在架上另一端)
   if (stand) {
@@ -73,16 +82,25 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     for (const sz of [-1, 1]) parts.push(placed(new THREE.BoxGeometry(top - 0.2, 0.05, 0.04), 0, -legH * 0.7, sz * (deep / 2 - 0.08)));
     g.add(p.mesh(mergeParts(parts), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark }));
   }
-  // 陶盆 (落地大盆 / 花架上的小盆) + 土
-  const R = stand ? 0.2 : 0.32;
-  const PH = stand ? 0.3 : 0.5;
-  const pot = p.mesh(mergeParts([placed(new THREE.CylinderGeometry(R, R * 0.75, PH, 16), 0, PH / 2, 0), placed(new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, 16), 0, PH - 0.02, 0)]), pal.crate, { roughness: 0.9 });
-  const soil = p.mesh(new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.03, 14), SOIL, { outline: false, shadow: false });
+  // 陶盆 (落地大盆 / 花架上的小盆) 或圓形花台 (石砌台身 + 陶磚壓頂) + 土
+  const R = planter ? PLANTER_R : stand ? 0.2 : 0.32;
+  const PH = planter ? PLANTER_H : stand ? 0.3 : 0.5;
+  const pot = planter
+    ? p.mesh(new THREE.CylinderGeometry(R, R + 0.04, PH - 0.06, 24), 0x8c8470, { roughness: 0.95 })
+    : p.mesh(mergeParts([placed(new THREE.CylinderGeometry(R, R * 0.75, PH, 16), 0, PH / 2, 0), placed(new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, 16), 0, PH - 0.02, 0)]), pal.crate, { roughness: 0.9 });
+  if (planter) {
+    pot.position.y = (PH - 0.06) / 2;
+    const cap = p.mesh(new THREE.TorusGeometry(R - 0.02, 0.05, 6, 24), pal.crateDark, { roughness: 0.9, outline: false });
+    cap.rotation.x = Math.PI / 2;
+    cap.position.y = PH - 0.05;
+    g.add(cap);
+  }
+  const soil = p.mesh(new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.03, planter ? 20 : 14), SOIL, { outline: false, shadow: false });
   soil.position.y = PH - 0.03;
   g.add(pot, soil);
-  // 花莖 (從土裡長出、歪向窗) + 兩片葉
+  // 花莖 (從土裡長出、歪向窗；花台 = 朝天窗直直往上) + 兩片葉
   const top = d.h - 0.12;
-  const lean = stand ? 0.16 : 0.22;
+  const lean = planter ? 0 : stand ? 0.16 : 0.22;
   const tip = new THREE.Vector3(lx * lean, top, lz * lean);
   const stemCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, PH - 0.03, 0), new THREE.Vector3(lx * lean * 0.2, PH + (top - PH) * 0.5, lz * lean * 0.2), tip]);
   const leafA = new THREE.SphereGeometry(0.12, 7, 5); leafA.scale(1.4, 0.35, 0.7);
@@ -96,8 +114,8 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   // 花苞 (閉著)：水滴形，尖端帶紫；開花：六片花瓣 + 花心 (兩種剪影都畫，依開合程度切換 / 縮放)
   const head = new THREE.Group();
   head.position.copy(tip);
-  head.rotation.set(lz * 0.5, 0, -lx * 0.5);
-  head.scale.setScalar(1.5);
+  if (!planter) head.rotation.set(lz * 0.5, 0, -lx * 0.5);
+  head.scale.setScalar(planter ? 1.9 : 1.5);
   g.add(head);
   const budGeo = new THREE.SphereGeometry(0.11, 10, 8); budGeo.scale(1, 1.7, 1);
   const bud = p.mesh(placed(budGeo, 0, 0.12, 0), BUD, { roughness: 0.8 });
@@ -106,11 +124,11 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const petals = new THREE.Group();
   head.add(petals);
   const petalGeo = new THREE.SphereGeometry(0.12, 8, 6); petalGeo.scale(0.55, 0.12, 1.3); petalGeo.translate(0, 0, 0.15);
-  const petalMesh = p.mesh(mergeParts(Array.from({ length: 6 }, (_, i) => placed(petalGeo.clone(), 0, 0.06, 0, 0, (i / 6) * Math.PI * 2, 0))), PETAL, { roughness: 0.7, emissive: PETAL, emissiveIntensity: 0.15 });
-  const heart = p.mesh(placed(new THREE.SphereGeometry(0.07, 10, 8), 0, 0.08, 0), HEART, { roughness: 0.7, outline: false });
+  const petalMesh = p.mesh(mergeParts(Array.from({ length: 6 }, (_, i) => placed(petalGeo.clone(), 0, 0.06, 0, 0, (i / 6) * Math.PI * 2, 0))), planter ? MOON_PETAL : PETAL, { roughness: 0.7, emissive: planter ? MOON_PETAL : PETAL, emissiveIntensity: planter ? 0.3 : 0.15 });
+  const heart = p.mesh(placed(new THREE.SphereGeometry(0.07, 10, 8), 0, 0.08, 0), planter ? MOON_HEART : HEART, { roughness: 0.7, outline: false });
   petals.add(petalMesh, heart);
   // 3D：花在光裡的一圈淡光；從窗斜射到花上的光柱 (兩模式材質不同：只在實景顯示)
-  const halo = glowSprite(glow(), STAINED_LIGHT, 0.9, 0, true);
+  const halo = glowSprite(glow(), planter ? MOON_LIGHT : STAINED_LIGHT, 0.9, 0, true);
   halo.position.copy(tip).add(new THREE.Vector3(0, 0.18, 0));
   g.add(halo);
   let shaft: THREE.Mesh | null = null;
@@ -139,6 +157,8 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   let alpha = 0;
   const update = (c: ModelCtx) => {
     const s = lightOf(c, d);
+    // alone 的感光物 (月下美人)：光到了但拱門還接著房 = 2D 畫虛線圓 (光到了、花還不開；同 mechanics/light sensorLight 的 crowd)
+    const crowd = s === 'lit' && d.type === 'sensor' && !!d.alone && Object.values(c.world.ext.cube?.links ?? {}).some(l => l.to === 'room');
     // 開合 (平滑；第一次 = 直接到位，讀檔 / 換房不重播)
     const goal = c.obj.used ? 1 : 0;
     open = open < 0 ? goal : open + (goal - open) * Math.min(1, c.dt * (c.calm ? 1.5 : 3));
@@ -155,11 +175,12 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
       shaftMat.color.setHex(s === 'white' ? WHITE_LIGHT : STAINED_LIGHT);
       shaftMat.opacity = SHAFT_ALPHA * alpha * (s === 'white' ? 0.7 : 1);
     }
-    halo.visible = is3d && alpha > 0.01 && s !== 'white';
+    if (planter) shaftMat?.color.setHex(MOON_LIGHT);
+    halo.visible = is3d && alpha > 0.01 && (s !== 'white' || planter);
     halo.material.opacity = 0.35 * alpha;
     spot.visible = !is3d && s !== 'dark';
-    spotLit.visible = s === 'lit';
-    spotWhite.visible = s === 'white';
+    spotLit.visible = s === 'lit' && !crowd;
+    spotWhite.visible = s === 'white' || crowd;
     spotWeak.visible = s === 'weak';
   };
   return { root: g, update };

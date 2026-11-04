@@ -118,7 +118,7 @@ describe('3-1 苗圃：資料與驗證器', () => {
     const band = (z: number) => (z < -2 ? 'back' : z > 2 ? 'front' : 'mid');
     const objs = nursery.objects.filter(o => o.interactable || o.label);
     expect(Object.fromEntries(['back', 'mid', 'front'].map(b => [b, objs.filter(o => band(o.z) === b).map(o => o.id)]))).toEqual({
-      back: ['dial', 'trellis', 'root', 'pane1', 'noteStory'], mid: ['doorW', 'archE', 'ruler', 'potW', 'potE'], front: ['archS', 'noteA', 'noteB']
+      back: ['dial', 'trellis', 'root', 'pane1', 'noteStory'], mid: ['doorW', 'archE', 'ruler', 'potW', 'potE'], front: ['archS', 'potS', 'noteA', 'noteB'] // 3-3a：南拱門內側半座天平上的陶盆
     });
   });
 
@@ -286,7 +286,7 @@ describe('3-1b 卡住的軌道 (P3)：卡榫、錯誤嘗試與反例', () => {
   it('只用 2D / 繞路：花架門沒開時藏寶圖走不過、樹根的標籤被花架蓋住 (實景走東側走道到樹根的 x 再切藏寶圖也貼不到)；花窗玻璃片只在實景拿', () => {
     const cs = withRuler();
     runScript(cs.world, [...AT_POT(0.4), ...WALK2D(7.2)]);
-    expect([cs.world.player.x < 4.3, labelTarget(cs.world)?.def.id]).toEqual([true, 'potE']); // 最近的標籤是東盆，不是樹根
+    expect([cs.world.player.x < 4.3, labelTarget(cs.world)?.def.id]).toEqual([true, 'potS']); // 最近的標籤是南拱門半座天平的陶盆 (3-3a；原為東盆)，不是樹根
     const around = withRuler();
     runScript(around.world, [{ walkTo: [null, 0] }, { walkTo: [7.2, null] }, ...FLIP, { act: 'interact' }]);
     expect([around.world.player.x > 7, labelTarget(around.world), around.world.events.some(e => e.t === 'labelOpen')]).toEqual([true, null, false]);

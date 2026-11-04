@@ -53,24 +53,8 @@ export { nursery } from './3-1-nursery';
 /** 3-2 玻璃長廊 (中列右格)：完整檔在 3-2-gallery.ts */
 export { gallery } from './3-2-gallery';
 
-/**
- * 3-3 夜溫室 (中心格)：四個拱門 (北 / 西 / 東 / 南)；彩繪玻璃 N / S (玻璃屋頂，光直穿)。燈熄了，只剩螢光植物。
- * 後景北拱門兩側的螢光蕨架 ｜ 中景中央圓形花台與兩張長椅 ｜ 前景南拱門旁的盆栽
- */
-export const night = room('night', -12, 12, [
-  door('N', 'arch', -3.0), door('W', 'arch', -11.8), door('E', 'arch', 11.8), door('S', 'arch', 3.0)
-], [
-  { kind: 'glassPane', side: 'N', at: 5.0, y: 3.4, w: 5.2, h: 2.6, cols: 5, rows: 3, seed: 61 },
-  { kind: 'glowPlants', x: -6.6, z: -4.0, n: 7, seed: 63 },
-  { kind: 'glowPlants', x: 0.6, z: -4.1, n: 5, seed: 65 },
-  { kind: 'planter', x: 0, z: 0, w: 2.8, d: 2.8, rot: 0.785, seed: 67 },
-  { kind: 'glowPlants', x: 0, z: 0, n: 5, seed: 69 },
-  { kind: 'bench', x: -5.0, z: 0.6, w: 1.8, rot: -0.4 },
-  { kind: 'bench', x: 5.4, z: 0.4, w: 1.8, rot: 0.4 },
-  { kind: 'pots', x: 6.2, z: 3.6, n: 4, seed: 71 },
-  { kind: 'pots', x: -7.4, z: 3.4, n: 3, seed: 73, fern: 1 },
-  { kind: 'roots', x: -11.9, side: 'W', seed: 75 }
-], 'lvl.ch3.night.narration');
+/** 3-3 夜溫室 (中心格)：完整檔在 3-3-night.ts */
+export { night } from './3-3-night';
 
 /**
  * 3-4 溫室深處 (南列右格；章門格)：北拱門 (S0 接長廊南門)、南章門 (只接 [2,2] 南側屋框：往地下室；要房間的銅鑰匙 key.greenhouse，本版鎖著)。
@@ -79,7 +63,11 @@ export const night = room('night', -12, 12, [
 export const depths = room('depths', -8, 8, [
   door('N', 'arch', 0),
   door('S', 'chapter', 3.0, { key: 'key.greenhouse' }),
-  plaque('plaqueRoot', 'lvl.ch3.depths.plaqueRoot', -5.4, 0.75, -0.2, '3d')
+  plaque('plaqueRoot', 'lvl.ch3.depths.plaqueRoot', -5.4, 0.75, -0.2, '3d'),
+  // 3-3c (規格「3-3 夜溫室（細化）」)：北牆花窗下的高台 (1.9：徒手上不去) 與台上爸爸的園藝筆記一頁；墊腳 = 夜溫室在 [2,1] 時從北拱門伸進來的陶槽
+  { id: 'ledge', type: 'ledge', readText: 'lvl.3-3.ledge.read', x: 1.85, y: 0, z: -4.55, w: 2.0, h: 1.9, d: 0.9, visible: 'both', solid: true, interactable: true, interactIn: '3d', labelKey: 'lvl.3-3.ledge' },
+  { id: 'pageGarden', type: 'page', grants: 'page.garden', useText: 'lvl.3-3.page.take', doneFlag: '3-3c',
+    x: 1.85, y: 1.9, z: -4.55, w: 0.4, h: 0.08, d: 0.3, visible: 'both', solid: false, interactable: true, labelKey: 'lvl.3-3.page' }
 ], [
   { kind: 'glassPane', side: 'N', at: 3.6, y: 3.2, w: 3.0, h: 3.0, cols: 3, rows: 3, missing: '0,1;2,0;1,2', seed: 81 },
   { kind: 'glassPane', side: 'W', at: 0.6, y: 2.6, w: 2.4, h: 2.2, cols: 2, rows: 2, seed: 83 },
