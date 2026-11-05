@@ -32,6 +32,11 @@ export interface ChapterSpec {
    * 由 app 以機制表的純函式注入 (mechanics/index chapterSpecOf)；writeExt / writeLinks 寫入當前房。labels = 即時標籤
    */
   derive?(room: string, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>): Partial<WorldExt>;
+  /**
+   * v0.4 第三章 此刻露出來的被蓋住的玻璃 (`room.side`，本地門位；3-4b：巨根是「小」→ 'depths.W')：由 app 以機制表的純函式注入
+   * (mechanics/index chapterSpecOf)；lightExt、展開圖 mapLight、validateDial 都以同一個結果呼叫 lightPaths。沒給 = 一律蓋著
+   */
+  uncovered?(state: ChapterState, labels: Readonly<Record<string, readonly string[]>>): readonly string[];
 }
 
 /** 章節狀態 (可 JSON 序列化；SaveV3 的 chapters[n] 由此而來) */
@@ -170,7 +175,7 @@ function cubeExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record
 /** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫；門牌以即時標籤算) */
 function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state, w.ext.labels ?? state.labels) };
-  const light = lightExt(spec, state);
+  const light = lightExt(spec, state, w.ext.labels ?? state.labels, w);
   if (light) w.ext = { ...w.ext, light };
   writeDerived(spec, state, w, w.ext.labels ?? state.labels);
 }
@@ -192,7 +197,7 @@ function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (!spec.cube || !state.cube) return;
   w.ext = { ...w.ext, cube: cubeExt(spec, state), labels: clone(state.labels), flags: [...state.flags] };
   if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial } };
-  const light = lightExt(spec, state);
+  const light = lightExt(spec, state, state.labels, w);
   if (light) w.ext = { ...w.ext, light };
   writeDerived(spec, state, w, state.labels);
 }
@@ -623,10 +628,22 @@ export function lightState(hits: ReadonlyArray<Pick<LightHit, 'from' | 'via'>>, 
   return mine.some(h => h.via > 0) ? 'weak' : 'white';
 }
 
-/** 當前房間此刻的光 (章節沒有光路 = undefined；寫入 World.ext.light) */
-function lightExt(spec: ChapterSpec, state: ChapterState): WorldExtLight | undefined {
+/**
+ * 此刻露出來的被蓋住的玻璃 (ChapterSpec.uncovered；沒給 = 空)：world 給定時當前房取即時快照 (房內剛閂住的物件 used)、labels 取即時標籤
+ */
+export function uncoveredGlass(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record<string, readonly string[]>> = state.labels, world?: World): Set<string> {
+  if (!spec.uncovered) return new Set();
+  const live = world ? { ...state, rooms: { ...state.rooms, [state.room]: snapshotRoom(world) } } : state;
+  return new Set(spec.uncovered(live, labels));
+}
+
+/** 展開圖 / 機制用：這個 session 此刻露出來的玻璃 (當前房的即時狀態與標籤) */
+export const sessionUncovered = (cs: ChapterSession): Set<string> => uncoveredGlass(cs.spec, cs.state, cs.world.ext.labels ?? cs.state.labels, cs.world);
+
+/** 當前房間此刻的光 (章節沒有光路 = undefined；寫入 World.ext.light)；被蓋住的玻璃以 uncoveredGlass 計 */
+function lightExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>, w?: World): WorldExtLight | undefined {
   if (!spec.cube?.glass || !state.cube) return undefined;
-  return { hits: lightPaths(spec.cube, state.cube).hits[state.room] ?? [] };
+  return { hits: lightPaths(spec.cube, state.cube, uncoveredGlass(spec, state, labels, w)).hits[state.room] ?? [] };
 }
 type WorldExtLight = NonNullable<World['ext']['light']>;
 

@@ -265,3 +265,88 @@ export const toolBoardDecor: DecorFactory = (p, item, { level, theme: { pal } })
   g.position.set(level.bounds.minX + 0.075, y, num(item, 'z'));
   return { root: g, only3d: [g] };
 };
+
+/** stonePath：石板小徑 (3-4 前景；由西往東通到長廊柵門)；欄位 x0、x1、z (小徑中線)、seed。石板頂 0.03、彼此錯開不相接；合成一個網格 */
+export const stonePathDecor: DecorFactory = (p, item, { theme: { pal } }) => {
+  const g = new THREE.Group();
+  const x0 = num(item, 'x0'), x1 = num(item, 'x1'), z = num(item, 'z');
+  const r = rng(num(item, 'seed', 1));
+  const stones: THREE.BufferGeometry[] = [];
+  for (let x = x0; x < x1 - 0.3;) {
+    const w = 0.55 + r() * 0.35;
+    const d = 0.6 + r() * 0.3;
+    stones.push(part(new THREE.CylinderGeometry(w / 2, w / 2 + 0.02, 0.03 + r() * 0.004, 7), x + w / 2, 0.016, z + (r() - 0.5) * 0.3, 0, r() * Math.PI, 0));
+    stones[stones.length - 1].scale(1, 1, d / w);
+    x += w + 0.14 + r() * 0.1;
+  }
+  g.add(p.mesh(merge(stones), pal.stoneTop, { roughness: 0.95, outline: false }));
+  return { root: g, only3d: [g] };
+};
+
+/**
+ * chaseHall：追逐長廊的裝飾 (3-4；x0～x1)：兩側沿 z ±4.2 的矮花槽 (木框 + 土 + 幼苗)、北牆一排玻璃窗 (鐵框合成一個網格、玻璃格 InstancedMesh)、
+ * 熄掉的吊燈、地上沿長廊的粗虛線邊框 (9.1 危險區域：與光路的細虛線以粗細區分；兩個視角都畫)、盡頭章門外往下的石階。欄位 x0、x1、seed
+ */
+export const chaseHallDecor: DecorFactory = (p, item, { level, theme: { pal } }) => {
+  const g = new THREE.Group();
+  const real = new THREE.Group();
+  g.add(real);
+  const x0 = num(item, 'x0'), x1 = num(item, 'x1');
+  const r = rng(num(item, 'seed', 1));
+  const b = level.bounds;
+  // 矮花槽：每段 5、間隔 2 (讓出墨牆 / 鐵柵的位置)；兩側
+  const wood: THREE.BufferGeometry[] = [];
+  const soil: THREE.BufferGeometry[] = [];
+  const leaves: THREE.BufferGeometry[] = [];
+  const H = 0.4, D = 0.6;
+  for (let x = x0 + 1.5; x + 4 < x1; x += 7) {
+    for (const zc of [-4.2, 4.2]) {
+      const w = 4.6;
+      wood.push(part(box(w, H, 0.06), x + w / 2, H / 2, zc - D / 2 + 0.03), part(box(w, H, 0.06), x + w / 2, H / 2, zc + D / 2 - 0.03),
+        part(box(0.06, H, D - 0.12), x + 0.03, H / 2, zc), part(box(0.06, H, D - 0.12), x + w - 0.03, H / 2, zc));
+      soil.push(part(box(w - 0.13, 0.05, D - 0.13), x + w / 2, H - 0.06, zc));
+      for (let i = 0; i < 7; i++) {
+        const s = new THREE.SphereGeometry(0.12 + r() * 0.06, 6, 4);
+        s.scale(1, 0.6, 1);
+        leaves.push(part(s, x + 0.35 + i * 0.65 + r() * 0.1, H + 0.04, zc + (r() - 0.5) * 0.2));
+      }
+    }
+  }
+  real.add(p.mesh(merge(wood), pal.shelf, { map: crateWood(pal), flat: pal.shelf, outline: false }));
+  real.add(p.mesh(merge(soil), SOIL, { outline: false, shadow: false }));
+  real.add(p.mesh(merge(leaves), LEAF_DARK, { roughness: 0.9, outline: false }));
+  // 北牆的一排玻璃窗：鐵框 (一個網格) + 玻璃格 (InstancedMesh：同一個平面 × N)
+  const frames: THREE.BufferGeometry[] = [];
+  const paneW = 1.6, paneH = 1.8, wy = 3.3, wz = b.minZ + 0.06;
+  const xs: number[] = [];
+  for (let x = x0 + 2.6; x < x1 - 1.5; x += 3.5) xs.push(x);
+  for (const x of xs) {
+    frames.push(part(box(paneW + 0.08, 0.07, 0.07), x, wy + paneH / 2, wz), part(box(paneW + 0.08, 0.07, 0.07), x, wy - paneH / 2, wz),
+      part(box(0.07, paneH, 0.07), x - paneW / 2, wy, wz), part(box(0.07, paneH, 0.07), x + paneW / 2, wy, wz), part(box(0.05, paneH - 0.07, 0.06), x, wy, wz + 0.005));
+  }
+  real.add(p.mesh(merge(frames), pal.trim, { metalness: 0.4, roughness: 0.6, outline: false }));
+  const glassMesh = p.mesh(new THREE.PlaneGeometry(paneW - 0.08, paneH - 0.08), GLASS[0], { opacity: 0.55, emissive: GLASS[0], emissiveIntensity: 0.35, outline: false, shadow: false });
+  const inst = new THREE.InstancedMesh(glassMesh.geometry, glassMesh.material, xs.length);
+  const m = new THREE.Matrix4();
+  xs.forEach((x, i) => inst.setMatrixAt(i, m.makeTranslation(x, wy, b.minZ + 0.03)));
+  inst.instanceMatrix.needsUpdate = true;
+  real.add(inst);
+  // 熄掉的吊燈 (燈罩 + 吊線各一個網格)
+  const shades: THREE.BufferGeometry[] = [];
+  const cords: THREE.BufferGeometry[] = [];
+  for (let x = x0 + 5; x < x1 - 2; x += 10) {
+    shades.push(part(new THREE.ConeGeometry(0.36, 0.32, 14, 1, true), x, 4.3, 0));
+    cords.push(part(new THREE.CylinderGeometry(0.012, 0.012, 1.4, 5), x, 5.15, 0));
+  }
+  real.add(p.mesh(merge(shades), pal.lampShade, { outline: false, side: THREE.DoubleSide, shadow: false }));
+  real.add(p.mesh(merge(cords), pal.cord, { outline: false, shadow: false }));
+  // 盡頭章門外往下的石階 (南側前緣外)
+  const steps: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 4; i++) steps.push(part(box(2.0, 0.2, 0.5), x1 - 0.8, -0.1 - i * 0.2, b.maxZ + 0.25 + i * 0.5));
+  real.add(p.mesh(merge(steps), pal.stone, { roughness: 0.95, outline: false }));
+  // 地上的粗虛線邊框 (沿南北兩側；兩個視角都畫：藏寶圖裡是地面上一條粗虛線)
+  const dashes: THREE.BufferGeometry[] = [];
+  for (let x = x0 + 0.37; x < x1 - 0.5; x += 0.9) for (const zc of [-3.6, 3.6]) dashes.push(part(box(0.5, 0.02, 0.14), x + 0.25, 0.011, zc));
+  g.add(p.mesh(merge(dashes), pal.inkBlue, { outline: false, shadow: false }));
+  return { root: g, only3d: [real] };
+};

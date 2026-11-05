@@ -81,9 +81,10 @@ export interface LevelDef {
   objects: ObjDef[];
   /**
    * v0.4 控制盤的步數預算 (墨量；規格 5.4.1、5.4.9)：每次穿門進房補滿到 base；
-   * puzzles[id] = P4 題的預算 (該題的 doneFlag 尚未成立、且是本房 puzzles 中第一個列出預算的題時採用)
+   * puzzles[id] = P4 題的預算 (該題的 doneFlag 尚未成立、且是本房 puzzles 中第一個列出預算的題時採用)；
+   * v0.4 refillOn = 這幾題完成 (done 事件) 的那一刻本房墨補滿 (3-4b；app/chapterEvents)、refillText = 補滿時接在當下訊息後面說的話 ({msg} = 當下的訊息)
    */
-  turnBudget?: { base: number; puzzles?: Readonly<Record<string, number>> };
+  turnBudget?: { base: number; puzzles?: Readonly<Record<string, number>>; refillOn?: readonly string[]; refillText?: TextKey };
 }
 
 /** 裝飾欄位值 (純資料，可 JSON 序列化) */

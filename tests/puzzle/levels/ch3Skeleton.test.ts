@@ -64,12 +64,12 @@ const through = (cs: ChapterSession, door: string): ChapterSession => {
 
 describe('第三章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第三章 (溫室主題、levels 3-1)；LevelEntry 3-1 (筆尖、前置 2-5)；CUBE_CHAPTERS chapter 3 (五間房、從苗圃西門進)', () => {
-    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2', '3-3'] }); // 3-2 / 3-3 登錄
+    expect(CHAPTERS.find(c => c.id === 3)).toEqual({ id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2', '3-3', '3-4'] }); // 3-2 / 3-3 / 3-4 登錄
     expect([TEXT('ch.3.title'), THEMES.greenhouse.id]).toEqual(['第三章　溫室', 'greenhouse']);
     const e = levelById('3-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([3, ['nib'], ['2-5'], nursery, '苗圃']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
-    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
+    expect([cubeChapterOf('3-1'), CH3.cube, CH3.start, CH3.levels, Object.keys(CH3.rooms).sort()]).toEqual([CH3, CH3_CUBE, { room: 'nursery', door: 'doorW' }, { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night', '3-4': 'depths' }, ['bed', 'depths', 'gallery', 'night', 'nursery']]);
   });
 
   it('CH3_CUBE：3×3 滑動、控制盤；S0 (北列 空｜空｜工具間、中列 苗圃｜夜溫室｜長廊、南列 水塔｜溫床｜深處)；屋框；九個 slideCell 組、沒有鎖扣', () => {
@@ -98,12 +98,12 @@ describe('第三章骨架：五間占位房', () => {
     expect(doors(nursery)).toEqual([['doorW', 'W', 'door', -5.8, 0, 'both'], ['archE', 'E', 'arch', 7.8, 0, 'both'], ['archS', 'S', 'arch', 3, 4.8, '3d']]);
     expect(doors(gallery)).toEqual([['doorW', 'W', 'door', -9.8, 0, 'both'], ['doorS', 'S', 'door', -2.4, 4.8, '3d']]); // 3-2 細化：長廊加寬到 [-10, 10]，西門貼西牆
     expect(doors(night)).toEqual([['archN', 'N', 'arch', -3, -4.8, 'both'], ['archW', 'W', 'arch', -11.8, 0, 'both'], ['archE', 'E', 'arch', 11.8, 0, 'both'], ['archS', 'S', 'arch', 3, 4.8, '3d']]);
-    expect(doors(depths)).toEqual([['archN', 'N', 'arch', 0, -4.8, 'both'], ['chapterS', 'S', 'chapter', 3, 4.8, '3d']]);
+    expect(doors(depths)).toEqual([['archN', 'N', 'arch', 0, -4.8, 'both'], ['chapterS', 'S', 'chapter', 61, 4.8, '3d']]); // 3-4 細化：章門移到長廊盡頭 (x 61.0)
     expect(doors(bed)).toEqual([]);
     const S = depths.objects.find(o => o.id === 'chapterS')!;
     expect(S.type === 'cubeDoor' && S.key).toBe('key.greenhouse');
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX, l.turnBudget, l.theme])).toEqual([
-      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8, puzzles: { '3-3b': 4 } }, 'greenhouseNight'], [-8, 8, { base: 8 }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
+      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8, puzzles: { '3-3b': 4 } }, 'greenhouseNight'], [-10, 62, { base: 8, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
     ]);
   });
 
@@ -138,7 +138,7 @@ describe('第三章骨架：S0 連接表', () => {
     expect([cs.state.room, cs.state.door]).toEqual(['night', 'archW']);
     cs = through(through(cs, 'archE'), 'doorS');
     expect([cs.state.room, cs.state.door, cs.state.turns!.left]).toEqual(['depths', 'archN', 8]);
-    cs = play(cs, [{ wait: 0.1 }, { walkTo: [3.0, 4.0] }, { act: 'interact' }]);
+    cs = play(cs, [{ wait: 0.1 }, { place: [61.0, 0, 4.0] }, { wait: 0.1 }, { act: 'interact' }]); // 3-4 細化：章門在長廊盡頭 (x 61.0)
     expect([cs.state.room, cs.world.cleared, cs.world.msgKey]).toEqual(['depths', false, 'msg.cube.chapterLocked']);
     const back = play(start(), [{ wait: 0.1 }, { walkTo: [-5.3, 0] }, { act: 'interact' }]);
     expect([back.state.room, back.world.msg]).toEqual(['nursery', '門外是來時的走廊。這一趟，只能往溫室裡走。']);

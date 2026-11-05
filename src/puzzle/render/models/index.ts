@@ -17,6 +17,7 @@ import { diaryStandModel, keyBenchModel, landingModel } from './deep';
 import { balanceModel, paneModel, potModel, pottingShelfModel, rootModel, rulerModel, trellisModel } from './nursery';
 import { sensorModel } from './light';
 import { balanceHalfModel, bigPotModel, ledgeModel, pageModel, protrudeStepModel } from './night';
+import { chaseGateModel, giantRootModel, latticeBoxModel, latticeModel, oldCompassModel, paneFrameModel } from './depths';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
@@ -54,7 +55,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 3-2 玻璃長廊：感光花 (光路 N26)
   sensor: sensorModel,
   // 3-3 夜溫室：半座天平、巨盆 (含手印)、伸過來的那一截陶槽、溫室深處的高台與筆記一頁 (陶盆的 shape 在 potModel)
-  balanceHalf: balanceHalfModel, bigPot: bigPotModel, protrudeStep: protrudeStepModel, ledge: ledgeModel, page: pageModel
+  balanceHalf: balanceHalfModel, bigPot: bigPotModel, protrudeStep: protrudeStepModel, ledge: ledgeModel, page: pageModel,
+  // 3-4 溫室深處：九格花窗、花窗架、抽屜裡的鑰匙與手記、巨根、舊羅盤架、長廊柵門 (苔窗 = sensorModel 的 mount 'wall')
+  lattice: latticeModel, paneFrame: paneFrameModel, latticeBox: latticeBoxModel, giantRoot: giantRootModel, oldCompass: oldCompassModel, chaseGate: chaseGateModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

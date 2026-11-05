@@ -145,7 +145,7 @@ describe('3-3 夜溫室：資料與驗證器', () => {
       front: ['archS', 'trough', 'noteB2', 'noteA2', 'noteA', 'noteC', 'noteB', 'noteC2']
     });
     expect(night.objects.filter(o => o.solid).map(o => o.id)).toEqual(['floor']);
-    expect(depths.objects.filter(o => o.solid && o.type !== 'floor').map(o => o.id)).toEqual(['ledge']);
+    expect(depths.objects.filter(o => o.solid && o.type !== 'floor').map(o => o.id)).toEqual(['ledge', 'chaseGate', 'inkA', 'barsA', 'inkB', 'barsB', 'inkC', 'barsC']); // 3-4 細化：長廊的柵門與六道障礙
   });
 
   it('高度與距離 (D10)：高台 1.9 > 藏寶圖跳 1.6 + 0.15 / 實景 1.25；陶槽放大 = 0.9 (地板 → 槽頂、槽頂 → 高台都跳得上)；字條與標籤不搶 E；苗圃 potS 與 3-1 東盆分得開', () => {

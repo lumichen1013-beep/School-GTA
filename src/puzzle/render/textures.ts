@@ -175,6 +175,16 @@ export const glow = (): THREE.Texture => cached('glow', () => canvas(64, 64, g =
   g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
 }));
 
+/** 發光的單字 (透明底；3-4a 花窗上亮起的「許」字)：字由呼叫方從文字表取 */
+export const glyphGlow = (text: string, color: number): THREE.Texture => cached(`glyph|${text}|${color}`, () => canvas(128, 128, g => {
+  g.clearRect(0, 0, 128, 128);
+  g.fillStyle = toCss(color);
+  g.font = 'bold 104px serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 64, 70);
+}));
+
 /** 2D 背景：奶油色紙張漸層 + 細顆粒 + 淡淡的水彩暈染 */
 export const paperBackground = (pal: Palette): THREE.Texture => cachedFor(pal, 'bg2d', () => canvas(512, 512, g => {
   const grad = g.createLinearGradient(0, 0, 0, 512);

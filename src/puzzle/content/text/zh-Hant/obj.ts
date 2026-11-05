@@ -41,5 +41,6 @@ export const obj = {
   'obj.sensor.verb': '查看',
   'obj.balance.verb': '查看',
   'obj.bigPot.verb': '推',
+  'obj.paneFrame.verb': '嵌上',
   'obj.default.verb': '互動'
 } as const;

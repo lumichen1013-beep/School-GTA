@@ -5,7 +5,7 @@ import type { Theme } from '../themes';
 import { paintingDecor, pendantDecor, pitsDecor, rugDecor, wallShelfDecor, wallsDecor } from './room';
 import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor } from './library';
 import { armchairDecor, bookPileDecor, floorLampDecor, ladderDecor } from './furniture';
-import { benchDecor, glassPaneDecor, glowPlantsDecor, planterDecor, potsDecor, pottingRackDecor, prismDecor, stakeDecor, toolBoardDecor } from './greenhouse';
+import { benchDecor, chaseHallDecor, glassPaneDecor, glowPlantsDecor, planterDecor, potsDecor, pottingRackDecor, prismDecor, stakeDecor, stonePathDecor, toolBoardDecor } from './greenhouse';
 import type { DecorFactory } from './types';
 
 export type { DecorCtx, DecorFactory, DecorPart } from './types';
@@ -23,7 +23,9 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   // 家具 (擺設規則 ①：椅子、落地燈、書堆、書梯；只在實景)
   armchair: armchairDecor, floorLamp: floorLampDecor, bookPile: bookPileDecor, ladder: ladderDecor,
   // 彩繪玻璃溫室 (第三章；只在實景)
-  glassPane: glassPaneDecor, planter: planterDecor, pots: potsDecor, pottingRack: pottingRackDecor, glowPlants: glowPlantsDecor, bench: benchDecor, prism: prismDecor, stake: stakeDecor, toolBoard: toolBoardDecor
+  glassPane: glassPaneDecor, planter: planterDecor, pots: potsDecor, pottingRack: pottingRackDecor, glowPlants: glowPlantsDecor, bench: benchDecor, prism: prismDecor, stake: stakeDecor, toolBoard: toolBoardDecor,
+  // 3-4 溫室深處：前景的石板小徑、追逐長廊 (花槽、玻璃窗、吊燈、虛線邊框、石階)
+  stonePath: stonePathDecor, chaseHall: chaseHallDecor
 };
 
 /** 整個房間的裝飾：root = 全部；only3d = 僅現實顯示；occluders = 擋視線時淡出 */

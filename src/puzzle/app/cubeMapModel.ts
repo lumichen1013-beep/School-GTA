@@ -4,7 +4,7 @@ import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
 import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, rotateSide, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
-import { chapterLinks, dialBlocked, isDialChapter, isLocked, lightPaths, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { chapterLinks, dialBlocked, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
@@ -65,7 +65,7 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
       pv = { caption: text('ui.map.preview', { word }), blocked: null, moved: { room: preview.op.room, name: name(preview.op.room), from: [from[0], from[1]], to: [to[0], to[1]] }, doors: changed };
     }
   }
-  const light = mapLight(def, cube, layer);
+  const light = mapLight(def, cube, layer, sessionUncovered(cs));
   return {
     title: text('ui.map.title'),
     cols: def.dims[0], rows: def.dims[1], cells, doors,
@@ -87,9 +87,10 @@ const SIDE_VEC: Readonly<Record<Side, readonly [number, number]>> = { N: [0, -1]
 /**
  * 展開圖的光路圖層 (第三章；魔方沒有彩繪玻璃 = undefined)：core/chapter lightPaths 的結果換成格座標的折線——
  * 每扇天窗：屋框外 → 第一格的邊 (白光) → 格內車道點 (白光：還沒穿過任何房) → 出去的那一側的邊 (穿過玻璃的光) → 下一格…；
- * 停在牆外 = 撞上的那一格那一側的邊 (短橫槓)，停在房內 = 最後那格的車道點 (圓點)。窗記號 = 每間房有玻璃 (沒被蓋住) 的那幾側，稜鏡 = 兩側
+ * 停在牆外 = 撞上的那一格那一側的邊 (短橫槓)，停在房內 = 最後那格的車道點 (圓點)。窗記號 = 每間房有玻璃 (沒被蓋住) 的那幾側，稜鏡 = 兩側；
+ * uncovered = 此刻露出來的被蓋住的玻璃 (`room.side`；3-4b 巨根縮小後的苔窗；core/chapter sessionUncovered)
  */
-export function mapLight(def: CubeDef, cube: CubeState, layer: number): MapLight | undefined {
+export function mapLight(def: CubeDef, cube: CubeState, layer: number, uncovered: ReadonlySet<string> = new Set()): MapLight | undefined {
   if (!def.glass) return undefined;
   const r3 = (v: number) => Math.round(v * 1000) / 1000;
   const lane = (c: Cell) => ({ x: r3(c[0] + LANE), y: r3(c[1] + LANE) });
@@ -100,7 +101,7 @@ export function mapLight(def: CubeDef, cube: CubeState, layer: number): MapLight
   };
   const out: MapLight = { segs: [], stops: [], glass: [], prisms: [] };
   const seg = (a: { x: number; y: number }, b: { x: number; y: number }, white: boolean) => out.segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, white });
-  for (const beam of lightPaths(def, cube).beams) {
+  for (const beam of lightPaths(def, cube, uncovered).beams) {
     if (beam.source[2] !== layer) continue;
     const e0 = edge(beam.source, beam.side);
     const [dx, dy] = SIDE_VEC[beam.side];
@@ -118,7 +119,7 @@ export function mapLight(def: CubeDef, cube: CubeState, layer: number): MapLight
     const g = def.glass[room];
     if (!g || c[2] !== layer) continue;
     const rot = cube.rot[room] ?? 0;
-    for (const side of g.glass) if (!g.covered?.includes(side)) out.glass.push({ x: c[0], y: c[1], side: rotateSide(side, rot) });
+    for (const side of g.glass) if (!g.covered?.includes(side) || uncovered.has(`${room}.${side}`)) out.glass.push({ x: c[0], y: c[1], side: rotateSide(side, rot) });
     for (const [a, b] of g.prism ?? []) out.prisms.push({ x: c[0], y: c[1], a: rotateSide(a, rot), b: rotateSide(b, rot) });
   }
   return out;
@@ -230,7 +231,7 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
         const after = layout(cs, text, r, layer);
         const moves = Object.keys(cube.pos).filter(room => cube.pos[room][2] === layer && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1]))
           .map(room => ({ room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0], cube.pos[room][1]] as [number, number], to: [r.pos[room][0], r.pos[room][1]] as [number, number] }));
-        const light = mapLight(def, r, layer);
+        const light = mapLight(def, r, layer, sessionUncovered(cs));
         preview = { cells: after.cells, doors: after.doors, moves, ...(light ? { light } : {}) };
       }
       caption = text('ui.turn.preview', { what: label });

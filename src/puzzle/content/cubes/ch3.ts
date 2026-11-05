@@ -119,3 +119,56 @@ export const CH3_ZONE33 = {
   start: 'nursery',
   finish: 'ch3.night'
 };
+
+/** 九格花窗要的排列 (3-4a；列優先 x + 3y：'empty' / 'solid' = 那一格沒有房間、'any' = 玻璃片那三格、房間 id) */
+const LATTICE = ['empty', 'any', 'solid', 'empty', 'any', 'any', 'solid', 'nursery', 'depths'] as const;
+/** 排列此刻符合花窗的圖 (非 'any' 的格都對；同 mechanics/depths latticePattern) */
+const latticeMatch = (s: CubeState): boolean => {
+  const at = new Map<number, string>();
+  for (const [room, c] of Object.entries(s.pos)) at.set(c[0] + 3 * c[1], room);
+  return LATTICE.every((want, i) => want === 'any' || (want === 'empty' || want === 'solid' ? !at.has(i) : at.get(i) === want));
+};
+/** 溫室深處此刻在章門格 [2,2] (章門只接 [2,2] 南側屋框) */
+const depthsHome = (s: CubeState): boolean => !!s.pos.depths && s.pos.depths[0] === 2 && s.pos.depths[1] === 2;
+
+/** 3-4 區的尺度卡：唯一的「小」——開場 (3-3b 之後) 貼在夜溫室的巨盆上；巨根的方槽 3-4a 之後才看得到 */
+export const CH3_CARDS34 = [
+  { id: 'xiao', start: 'bigPot', slots: { bigPot: { room: 'night' }, giantRoot: { room: 'depths', after: '3-4a' } } }
+] as const;
+
+/**
+ * 3-4 區的抽象模型 (devtools/validateDial；規格 6「3-4 溫室深處（細化）」3-4 區抽象模型)：九格滑動、預算各房 8；尺度卡「小」的位置進模型 (cards)。
+ * 起點 S0、人在苗圃；3-1～3-3 以「三片玻璃到手、『小』在巨盆上」抽象 (苗圃已鬆開)。
+ * 題：3-4a.light = 深處北窗有穿過三間房的光 (不是題：只當多解列舉的起點，玩家最常先接上的就是 3-2b 的 L 形)；
+ * 3-4a = 光 + 花窗的六格 (需 3-4a.light)；3-4b = 「小」在巨根上、深處西窗有穿過兩間房的光 (苔窗露出)、完成時墨補滿 (需 3-4a)；
+ * 終點 ch3.depths = 3-4a、3-4b 都完成、深處在章門格、人在深處。
+ * 卡榫：深處 until 3-4b (巨根；「小」貼在巨根上時不卡)、夜溫室 (巨盆被推進軌道；「小」在巨盆上時不卡)
+ */
+export const CH3_ZONE34 = {
+  cube: CH3_CUBE,
+  puzzles: [
+    { id: '3-4a.light', room: 'depths', needs: [], teaching: true, light: { from: 'N', via: 3 } },
+    { id: '3-4a', room: 'depths', needs: ['3-4a.light'], light: { from: 'N', via: 3 }, goal: (s, f) => f.has('3-4a.light') && latticeMatch(s) },
+    { id: '3-4b', room: 'depths', needs: ['3-4a'], card: 'xiao@giantRoot', light: { from: 'W', via: 2, uncovered: ['depths.W'] }, refill: true, span: 10, goal: (_s, f) => f.has('3-4a') },
+    { id: 'ch3.depths', room: 'depths', needs: ['3-4a', '3-4b'], teaching: true, goal: (s, f) => f.has('3-4a') && f.has('3-4b') && depthsHome(s) }
+  ] as readonly ZonePuzzle[],
+  jams: [{ room: 'depths', until: '3-4b', unless: 'xiao@giantRoot' }, { room: 'night', unless: 'xiao@bigPot' }] as ReadonlyArray<{ room: string; until?: string; from?: string; unless?: string }>,
+  cards: CH3_CARDS34,
+  start: 'nursery',
+  finish: 'ch3.depths'
+};
+
+/**
+ * 3-4 區的核心變體 (只要 3-4a：擴充前的 validateDial 就能驗——3-4a 之前「小」不會離開巨盆，深處一直卡著、夜溫室照常滑)：
+ * 題 = 3-4a.light、3-4a、終點 ch3.depths.core (3-4a 完成、深處在章門格、人在深處)
+ */
+export const CH3_ZONE34_CORE = {
+  cube: CH3_CUBE,
+  puzzles: [
+    ...CH3_ZONE34.puzzles.slice(0, 2),
+    { id: 'ch3.depths.core', room: 'depths', needs: ['3-4a'], teaching: true, goal: (s, f) => f.has('3-4a') && depthsHome(s) }
+  ] as readonly ZonePuzzle[],
+  jams: [{ room: 'depths' }] as ReadonlyArray<{ room: string; until?: string; from?: string }>,
+  start: 'nursery',
+  finish: 'ch3.depths.core'
+};

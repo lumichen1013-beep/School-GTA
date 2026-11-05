@@ -11,6 +11,7 @@ import { deep } from './ch2/2-5-deep';
 import { nursery } from './ch3/3-1-nursery';
 import { gallery } from './ch3/3-2-gallery';
 import { night } from './ch3/3-3-night';
+import { depths } from './ch3/3-4-depths';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -52,7 +53,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 3-2 玻璃長廊：第三章第二關 (同一章魔方；光路 N26)；3-1 通關後開放 (章內：啟動園丁羅盤、經夜溫室走進長廊即可，不必等 3-1b)
   { id: '3-2', chapter: 3, titleKey: 'lvl.3-2.title', abilities: ['nib'], unlock: { after: ['3-1'] }, load: () => gallery },
   // 3-3 夜溫室：第三章第三關 (中心格；跨房天平、跨房伸出、P4 墨 4)；3-1 通關後開放 (3-3a 需 3-1b)
-  { id: '3-3', chapter: 3, titleKey: 'lvl.3-3.title', abilities: ['nib'], unlock: { after: ['3-1'] }, load: () => night }
+  { id: '3-3', chapter: 3, titleKey: 'lvl.3-3.title', abilities: ['nib'], unlock: { after: ['3-1'] }, load: () => night },
+  // 3-4 溫室深處：第三章第四關 (章末；九格花窗、唯一的「小」、追逐 1、章門 = 第三章通關)；3-3 通關後開放 (3-4a 需 3-1b / 3-2a / 3-3a 的三片玻璃)
+  { id: '3-4', chapter: 3, titleKey: 'lvl.3-4.title', abilities: ['nib'], unlock: { after: ['3-3'] }, load: () => depths }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

@@ -338,4 +338,23 @@ describe('渲染：深度打架 (共面)：第三章溫室的五間占位房 (�
       view.dispose();
     }
   });
+  it('3-4 的各種狀態 (玻璃片嵌上、「許」字亮與抽屜彈出、巨根小 / 原 / 大、苔窗閂住、柵門打開) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const layout = { nursery: [1, 2, 0], night: [1, 0, 0], gallery: [2, 1, 0], bed: [1, 1, 0], depths: [2, 2, 0] } as const;
+    for (const k of [0.5, 1, 1.5]) {
+      const w = newWorld(depths);
+      w.ext = { cube: { links: {}, at: [2, 2, 0], layout }, dial: { active: true } };
+      w.byId.get('paneFrame')!.used = true;
+      w.byId.get('lattice')!.used = k !== 1;
+      w.byId.get('mossW')!.used = k === 0.5;
+      const root = w.byId.get('giantRoot')!;
+      root.def = { ...root.def, w: 2.8 * k, h: 2.6 * k, d: 2.4 * k };
+      const view = new PuzzleScene(w, THEMES.greenhouse);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 240; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([k, zFightPairs(view.scene, [depths.bounds.minX + 3, depths.bounds.maxX - 3])]).toEqual([k, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

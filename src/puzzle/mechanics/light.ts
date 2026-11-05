@@ -9,6 +9,7 @@ import type { ObjId, ObjState, TextKey, World } from '../core/types';
 import type { Side } from '../core/cube';
 import { lightState, type LightState } from '../core/chapter';
 import { say } from '../core/world';
+import { SCALE_CARDS, effectiveFactor } from './scale';
 
 declare module '../core/types' {
   interface ObjBase {
@@ -23,9 +24,14 @@ declare module '../core/types' {
      */
     sensor: {
       from: Side; via: number; closedText: TextKey; whiteText: TextKey; weakText: TextKey; solvedText: TextKey; openText: TextKey;
-      beam?: readonly [number, number, number]; mount?: 'floor' | 'stand' | 'planter';
+      beam?: readonly [number, number, number]; mount?: 'floor' | 'stand' | 'planter' | 'wall';
       /** v0.4 3-3b 月下美人：光夠了還要四面的門都不接任何房才算 (沒人經過)；crowdText = 光夠、門還接著房時 */
       alone?: boolean; crowdText?: TextKey;
+      /**
+       * v0.4 3-4b 苔窗：coveredBy = 蓋住這扇窗的卡榫物件 (巨根)；那個物件此刻不是「小」→ 3D 按 E 說 coveredText
+       * (光本身由章節層的 uncovered 決定進不進得來；mount 'wall' = 牆上的窗，沒有花)
+       */
+      coveredBy?: ObjId; coveredText?: TextKey;
     };
   }
 }
@@ -38,6 +44,13 @@ export function sensorLight(w: World, o: ObjState): LightState | 'crowd' {
   if (o.def.type !== 'sensor') return 'dark';
   const s = lightState(w.ext.light?.hits ?? [], o.def.from, o.def.via);
   return s === 'lit' && o.def.alone && roomConnected(w) ? 'crowd' : s;
+}
+
+/** 蓋住這扇窗的物件此刻不是「小」(有效倍率 > 小；沒有 coveredBy = 沒蓋著) */
+export function sensorCovered(w: World, o: ObjState): boolean {
+  if (o.def.type !== 'sensor' || !o.def.coveredBy) return false;
+  const c = w.byId.get(o.def.coveredBy);
+  return !!c && effectiveFactor(c.def, w.ext.labels, c.used) > SCALE_CARDS['card.xiao'] + 1e-6;
 }
 
 /** 上一步的光 (只用來決定要不要說話；換房 / R = 新的 World、重新記) */
@@ -71,6 +84,7 @@ export const light: Mechanic = {
       interact: (w, o) => {
         if (o.def.type !== 'sensor') return;
         const s = sensorLight(w, o);
+        if (!o.used && o.def.coveredText && sensorCovered(w, o)) { say(w, o.def.coveredText); return; }
         say(w, o.used ? o.def.openText : textFor(o, s) ?? o.def.closedText);
       }
     }

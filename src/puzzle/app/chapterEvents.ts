@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 
@@ -19,6 +19,17 @@ export type ChapterStep =
   | { kind: 'state'; cs: ChapterSession }
   /** 魔方儀剛啟動 (v0.4)：外殼寫存檔，並在下一次能進轉動模式時自動打開展開圖的轉動模式 (規格 5.4.2) */
   | { kind: 'dial'; cs: ChapterSession };
+
+/**
+ * v0.4 3-4b：本房 turnBudget.refillOn 列的題完成的那一刻 → 墨補滿到此刻的預算 (回退堆疊已由 clearUndo 清空)；
+ * refillText 接在當下的訊息 (那一題的 solvedText) 後面說
+ */
+function refill(cs: ChapterSession, flag: string): ChapterSession {
+  const tb = cs.spec.rooms[cs.state.room]?.turnBudget;
+  if (!isDialChapter(cs.spec) || !tb?.refillOn?.includes(flag)) return cs;
+  if (tb.refillText) say(cs.world, tb.refillText, { msg: cs.world.msg });
+  return { ...cs, state: { ...cs.state, turns: { left: turnBudgetFor(cs.spec, cs.state, cs.world), undo: [] } } };
+}
 
 /**
  * 處理一個事件：door → enterRoom；turnRequest → 拉桿此刻的方向字 (標籤上的詞卡優先) → turn (轉不動 → say 原因)；
@@ -55,7 +66,7 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     say(w, (entry && w.byId.get(entry.obj)?.def.useText) ?? 'msg.dial.activated');
     return { kind: 'dial', cs: activateDial(cs) };
   }
-  if (e.t === 'done') return { kind: 'state', cs: refreshUnlocks(clearUndo(cs, [e])).cs };
+  if (e.t === 'done') return { kind: 'state', cs: refill(refreshUnlocks(clearUndo(cs, [e])).cs, e.flag) };
   // 貼卡 / 取卡 (門牌貼上「日」= 「間」)：重算當前房間的門接法 (World 只更新 ext)
   if (e.t === 'card' && e.ok && cs.spec.cube) return { kind: 'state', cs: syncLinks(cs) };
   return { kind: 'none' };

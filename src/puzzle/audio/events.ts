@@ -199,7 +199,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 3-2 玻璃長廊：感光花開 (光路接上；溫和的亮燈聲)
   sensor: 'sfx.lamp.on',
   // 3-3 夜溫室：半座天平停在正中間 (秤盤落定)、巨盆被推進軌道 (拖過石板；驚嚇聲另由 scare:handprint 播)、拿到筆記一頁 (撿到的紙聲另由道具欄決定)
-  balanceHalf: 'sfx.plate.press', bigPot: 'sfx.crate.push', page: 'sfx.note.read'
+  balanceHalf: 'sfx.plate.press', bigPot: 'sfx.crate.push', page: 'sfx.note.read',
+  // 3-4 溫室深處：三片玻璃嵌進花窗架 (卡榫打開的聲音)、「許」字亮起 (溫和的亮燈聲；苔窗是 sensor，沿用上面的 sfx.lamp.on)
+  paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

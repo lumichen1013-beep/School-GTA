@@ -64,5 +64,11 @@ export const term = {
   'term.scrap.2': '老宅圖殘片',
   // 3-3 夜溫室：花窗玻璃片三 (3-3a)、爸爸的園藝筆記一頁 (3-3c，劇情擴充物)
   'term.pane.3': '花窗玻璃片・三',
-  'term.page.garden': '爸爸的園藝筆記一頁'
+  'term.page.garden': '爸爸的園藝筆記一頁',
+  // 3-4 溫室深處：房間的銅鑰匙 (3-4a 的抽屜；開第三章章門)、許問津的手記第三頁；花窗架缺幾片玻璃的數字
+  'term.key.greenhouse': '房間的銅鑰匙',
+  'term.diary.3': '手記第三頁',
+  'term.num.1': '一',
+  'term.num.2': '兩',
+  'term.num.3': '三'
 } as const;

@@ -68,9 +68,11 @@ function dashedRing(r: number): THREE.BufferGeometry {
   return mergeParts(Array.from({ length: 8 }, (_, i) => new THREE.RingGeometry(r * 0.82, r, 4, 1, (i / 8) * Math.PI * 2, Math.PI / 8)));
 }
 
-export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+export function sensorModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
+  const { pal } = theme;
   const g = new THREE.Group();
   if (d.type !== 'sensor') return { root: g };
+  if (d.mount === 'wall') return mossWindowModel(p, d, theme);
   const stand = d.mount === 'stand';
   const planter = d.mount === 'planter';
   const [lx, lz] = SIDE_DIR[d.from] ?? [0, -1];
@@ -181,6 +183,81 @@ export function sensorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     spot.visible = !is3d && s !== 'dark';
     spotLit.visible = s === 'lit' && !crowd;
     spotWhite.visible = s === 'white' || crowd;
+    spotWeak.visible = s === 'weak';
+  };
+  return { root: g, update };
+}
+
+/** 苔窗的玻璃 (苔綠)、窗框上的苔、窗上浮出的字 (淡金) */
+const MOSS_GLASS = 0x6f9a52;
+const MOSS = 0x5f7d3a;
+const WRITING = 0xf2d98a;
+
+/**
+ * 苔窗 (mount 'wall'；3-4b)：西牆上的彩繪玻璃窗 (鐵框 2 × 2、苔綠玻璃、框上一圈苔)，沒有花。原點 = 窗的底邊中心，窗面朝 +x (房內)。
+ * 光：從窗 (def.beam) 斜射進房的一道淡光柱 (同感光花：1 秒緩入緩出、不閃爍)；閂住後玻璃上浮出爸爸的字 (幾道淡金的筆畫)；
+ * 2D 只畫光點 (形狀區分同感光花：實心八角星 / 虛線空心圓 / 細實線空心圓)
+ */
+function mossWindowModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  if (d.type !== 'sensor') return { root: g };
+  const H = d.h, D = d.d, bar = 0.07, fx = -0.04;
+  const frame = [
+    placed(new THREE.BoxGeometry(0.06, bar, D + bar), fx, H, 0), placed(new THREE.BoxGeometry(0.06, bar, D + bar), fx, 0, 0),
+    placed(new THREE.BoxGeometry(0.06, H, bar), fx, H / 2, -D / 2), placed(new THREE.BoxGeometry(0.06, H, bar), fx, H / 2, D / 2),
+    placed(new THREE.BoxGeometry(0.05, H - bar, bar * 0.7), fx + 0.005, H / 2, 0), placed(new THREE.BoxGeometry(0.05, bar * 0.7, D - bar), fx + 0.005, H / 2, 0)
+  ];
+  g.add(p.mesh(mergeParts(frame), pal.iron, { metalness: 0.5, roughness: 0.55, outline: false }));
+  const glass = p.mesh(placed(new THREE.PlaneGeometry(D - bar, H - bar), fx - 0.02, H / 2, 0, 0, Math.PI / 2, 0), MOSS_GLASS, { opacity: 0.7, emissive: MOSS_GLASS, emissiveIntensity: 0.35, outline: false, shadow: false });
+  g.add(glass);
+  const tufts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 10; i++) {
+    const t = i / 9;
+    const s = new THREE.SphereGeometry(0.09 + (i % 3) * 0.03, 7, 5);
+    s.scale(0.6, 0.8, 1.3);
+    tufts.push(placed(s, 0.02, i % 2 ? H - 0.02 : 0.02, -D / 2 + t * D));
+  }
+  g.add(p.mesh(mergeParts(tufts), MOSS, { roughness: 1, outline: false }));
+  // 爸爸的字：玻璃上幾道淡金的筆畫 (閂住後才看得到)
+  const strokes: THREE.BufferGeometry[] = [];
+  for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) strokes.push(placed(new THREE.PlaneGeometry(0.22 - (i % 2) * 0.06, 0.035), fx + 0.01, H * 0.72 - row * 0.32, -0.6 + i * 0.36, (i % 3 - 1) * 0.5, Math.PI / 2, 0));
+  const writing = p.mesh(mergeParts(strokes), WRITING, { emissive: WRITING, emissiveIntensity: 0.6, outline: false, shadow: false });
+  g.add(writing);
+  // 光柱：從窗中心斜射到房內地上
+  let shaft: THREE.Mesh | null = null;
+  let shaftMat: THREE.MeshBasicMaterial | null = null;
+  if (d.beam) {
+    const from = new THREE.Vector3(d.beam[0] - d.x, d.beam[1] - d.y, d.beam[2] - d.z);
+    const to = new THREE.Vector3(2.6, -d.y + 0.1, 0);
+    const geo = new THREE.CylinderGeometry(0.7, 0.4, from.distanceTo(to), 16, 1, true);
+    shaftMat = new THREE.MeshBasicMaterial({ color: STAINED_LIGHT, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    shaft = new THREE.Mesh(geo, shaftMat);
+    shaft.position.copy(from).add(to).multiplyScalar(0.5);
+    shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), to.clone().sub(from).normalize());
+    shaft.renderOrder = 2;
+    g.add(shaft);
+  }
+  const spot = new THREE.Group();
+  spot.position.set(0.45, H / 2, D / 2 + 0.08);
+  const spotLit = p.mesh(star(0.22), SPOT_LIT, { outline: false, shadow: false });
+  const spotWhite = p.mesh(dashedRing(0.22), SPOT_DIM, { outline: false, shadow: false });
+  const spotWeak = p.mesh(new THREE.RingGeometry(0.19, 0.22, 24), SPOT_DIM, { outline: false, shadow: false });
+  spot.add(spotLit, spotWhite, spotWeak);
+  g.add(spot);
+  let alpha = 0;
+  let ink = -1;
+  const update = (c: ModelCtx) => {
+    const s = lightOf(c, d);
+    const want = s === 'dark' ? 0 : 1;
+    alpha += Math.max(-FADE * c.dt, Math.min(FADE * c.dt, want - alpha));
+    const is3d = c.mode === '3d';
+    if (shaft && shaftMat) { shaft.visible = is3d && alpha > 0.01; shaftMat.opacity = SHAFT_ALPHA * alpha * (s === 'lit' ? 1 : 0.6); }
+    const goal = c.obj.used ? 1 : 0;
+    ink = ink < 0 ? goal : ink + (goal - ink) * Math.min(1, c.dt * (c.calm ? 1 : 2));
+    writing.visible = is3d && ink > 0.5;
+    spot.visible = !is3d && s !== 'dark';
+    spotLit.visible = s === 'lit';
+    spotWhite.visible = s === 'white';
     spotWeak.visible = s === 'weak';
   };
   return { root: g, update };

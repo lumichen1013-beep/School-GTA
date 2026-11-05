@@ -88,13 +88,17 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'pot') return [o.fixedText, label];
   if (o.type === 'trellis') return [o.lockedRead, label];
   if (o.type === 'root') return [o.jamText, o.freeText, o.doneText, o.freedText, label];
+  if (o.type === 'sensor') return [o.closedText, o.whiteText, o.weakText, o.solvedText, o.openText, o.crowdText, o.coveredText, label];
+  if (o.type === 'paneFrame') return [o.okText, o.missingText, label];
+  if (o.type === 'lattice') return [o.readText, o.patternText, o.lightText, o.solvedText, o.doneText, label];
+  if (o.type === 'oldCompass') return [o.readText, label];
   if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.stripped, ...Object.values(o.label?.forms ?? {})];
   return [label, o.label?.solvedText, o.label?.stripped];
 }
 
-/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
+/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱、補墨的話，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
 function levelKeyRefs(level: LevelDef): KeyRef[] {
-  const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey)].map(key => ({ key }));
+  const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey), ...(level.turnBudget?.refillText ? [level.turnBudget.refillText] : [])].map(key => ({ key }));
   for (const o of level.objects) {
     const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o), o.label?.noCardText].filter((k): k is string => k !== undefined);
     refs.push(...keys.map(key => ({ key, obj: o.id })));
@@ -168,7 +172,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
   const byId = new Map(def.objects.map(o => [o.id, o]));
   const granted = new Set(def.objects.flatMap(o => [
     o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' || o.type === 'smallPrint' ? o.reward : undefined, o.label?.reward,
-    ...(o.type === 'hook' ? o.also ?? [] : []), ...(o.type === 'ruler' ? o.also : []), ...(o.type === 'cardCatalog' ? o.cards : [])
+    ...(o.type === 'hook' || o.type === 'latticeBox' ? o.also ?? [] : []), ...(o.type === 'ruler' ? o.also : []), ...(o.type === 'cardCatalog' ? o.cards : [])
   ]).filter((g): g is string => typeof g === 'string'));
   // 合成的產物 (N28)：配方的兩件都是章節道具 (可能在別的房間)，所以產物視為取得得到 (配料的來源由章節模型 validateDial 驗)
   for (const r of RECIPES) granted.add(r.out);

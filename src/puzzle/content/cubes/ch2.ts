@@ -37,9 +37,14 @@ interface ZoneLink { from: { room: string; door: string }; to: { room: string; d
 export interface ZonePuzzle {
   id: string; room: string; needs: readonly string[]; teaching?: boolean;
   goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[] }) => boolean;
-  light?: { from: Side; via: number };
+  light?: { from: Side; via: number; uncovered?: readonly string[] };
   /** 刻意排除的較長策略 (validateDial 同名欄位；minSteps 可為 Infinity = 不這樣做就無解) */
   excluded?: { name: string; minSteps: number };
+  /** v0.4 3-4b (validateDial 同名欄位)：尺度卡此刻在那個槽 ('card@slot')、完成時本房墨補滿 */
+  card?: string;
+  refill?: boolean;
+  /** v0.4 多解列舉的步數上限 (validateDial 同名欄位；要換房補墨的題) */
+  span?: number;
 }
 
 /** 2-1 在上列的第幾行 (不在上列 = -1) */

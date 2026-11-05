@@ -159,10 +159,26 @@ export interface DialPuzzle {
   excluded?: { name: string; minSteps: number };
   /**
    * v0.4 第三章 光路 (N26)：這間房 (p.room) 此刻要有從 from 進來、穿過至少 via 間房的光 (core/chapter lightPaths + lightState = lit；
-   * 與 goal 同時成立才算)。內容層只能 import 核心型別，光路條件以資料宣告，由這裡以同一個純函式判定
+   * 與 goal 同時成立才算)。內容層只能 import 核心型別，光路條件以資料宣告，由這裡以同一個純函式判定；
+   * v0.4 3-4b uncovered = 光路以這幾扇露出來的被蓋住的玻璃計 (`room.side`；同 ChapterSpec.uncovered)
    */
-  light?: { from: Side; via: number };
+  light?: { from: Side; via: number; uncovered?: readonly string[] };
+  /** v0.4 3-4b 題的條件：這張卡此刻貼在這個槽 ('card@slot'；DialModel.cards) */
+  card?: string;
+  /** v0.4 3-4b 完成的那一刻本房墨補滿 (LevelDef.turnBudget.refillOn) */
+  refill?: boolean;
+  /**
+   * v0.4 ⑦ 多解列舉的步數上限 (沒給 = 房間預算 / P4 預算)：解法本身要換房 (穿門 = 墨補滿) 的題，總轉動數可以超過一次進房的墨
+   * (3-4b：「小」要從夜溫室親手帶到深處；規格「≤ 10 步內閂住時的排列」)
+   */
+  span?: number;
 }
+
+/**
+ * v0.4 3-4 尺度卡的位置 (規格「3-4 溫室深處（細化）」3-4 區抽象模型)：狀態多一維「每張卡在哪個槽 / 手上」；
+ * 動作 (不耗墨、不改排列) = 人在 slot.room 時「槽 → 手」或「手 → 槽」(after = 那一題完成後才貼得上；同一個槽只貼一張)
+ */
+export interface DialCard { id: string; start: string; slots: Readonly<Record<string, { room: string; after?: string }>> }
 
 export interface DialModel {
   cube: CubeDef;
@@ -182,14 +198,61 @@ export interface DialModel {
   plates?: ReadonlyArray<{ room: string; door: string; when: string }>;
   /**
    * v0.4 第三章 卡榫 (P3；規格「第三章共用規則」驗證)：room 卡住時，牽涉這間房的轉動一律轉不動。
-   * until = 這一題完成之前卡住 (之後鬆開)；from = 這一題完成之後卡住；兩者都沒給 = 本區一直卡著 (例：深處的巨根在 3-4b 才縮)
+   * until = 這一題完成之前卡住 (之後鬆開)；from = 這一題完成之後卡住；兩者都沒給 = 本區一直卡著 (例：深處的巨根在 3-4b 才縮)；
+   * v0.4 unless = 'card@slot'：那張卡此刻在那個槽時不卡 (3-4：巨盆貼著「小」→ 夜溫室不卡)
    */
-  jams?: ReadonlyArray<{ room: string; until?: string; from?: string }>;
+  jams?: ReadonlyArray<DialJam>;
+  /** v0.4 3-4 尺度卡的位置 (沒給 = 卡片不進模型，旗標的階段近似照舊) */
+  cards?: readonly DialCard[];
 }
 
-/** 這組旗標下卡住的房 */
-function jammedRooms(m: DialModel, flags: ReadonlySet<string>): Set<string> {
-  return new Set((m.jams ?? []).filter(j => (j.until === undefined || !flags.has(j.until)) && (j.from === undefined || flags.has(j.from))).map(j => j.room));
+export interface DialJam { room: string; until?: string; from?: string; unless?: string }
+
+/** 卡片位置的編碼 (每張卡：0 = 手上、1… = 依 slots 的鍵順序；多張卡 = 混合進位)；沒有卡 = 只有一個位置 */
+interface CardSpace {
+  size: number;
+  start: number;
+  /** 'card@slot' 此刻成立 */
+  at(c: number, ref: string): boolean;
+  /** 人在 room、這組旗標下的拿 / 放 (不耗墨) → 新位置 */
+  moves(c: number, room: string, flags: ReadonlySet<string>): number[];
+}
+function cardSpaceOf(m: DialModel): CardSpace {
+  const cards = m.cards ?? [];
+  const slots = cards.map(k => Object.keys(k.slots));
+  const base = slots.map(ss => ss.length + 1);
+  const mul = base.map((_, j) => base.slice(0, j).reduce((a, b) => a * b, 1));
+  const size = base.reduce((a, b) => a * b, 1);
+  const pos = (c: number, j: number): number => Math.floor(c / mul[j]) % base[j];
+  const start = cards.reduce((acc, k, j) => acc + (slots[j].indexOf(k.start) + 1) * mul[j], 0);
+  const at = (c: number, ref: string): boolean => {
+    const [id, slot] = ref.split('@');
+    const j = cards.findIndex(k => k.id === id);
+    if (j < 0) return false;
+    if (slot === 'hand') return pos(c, j) === 0;
+    const i = slots[j].indexOf(slot);
+    return i >= 0 && pos(c, j) === i + 1;
+  };
+  const moves = (c: number, room: string, flags: ReadonlySet<string>): number[] => {
+    const out: number[] = [];
+    cards.forEach((k, j) => {
+      const p = pos(c, j);
+      if (p > 0) { if (k.slots[slots[j][p - 1]].room === room) out.push(c - p * mul[j]); return; }
+      slots[j].forEach((sl, i) => {
+        const def = k.slots[sl];
+        if (def.room !== room || (def.after !== undefined && !flags.has(def.after))) return;
+        if (cards.some((_, q) => q !== j && pos(c, q) > 0 && slots[q][pos(c, q) - 1] === sl)) return;
+        out.push(c + (i + 1) * mul[j]);
+      });
+    });
+    return out;
+  };
+  return { size, start, at, moves };
+}
+
+/** 這組旗標 (與卡片位置) 下卡住的房 */
+function jammedRooms(m: DialModel, flags: ReadonlySet<string>, card: (ref: string) => boolean = () => false): Set<string> {
+  return new Set((m.jams ?? []).filter(j => (j.until === undefined || !flags.has(j.until)) && (j.from === undefined || flags.has(j.from)) && (j.unless === undefined || !card(j.unless))).map(j => j.room));
 }
 
 /** 這一個轉動 (組) 在排列 s 下牽涉到的房 (組內格子上的房) */
@@ -203,17 +266,23 @@ function platesFor(m: DialModel, flags: ReadonlySet<string>): Set<string> {
   return new Set((m.plates ?? []).filter(p => flags.has(p.when)).map(p => `${p.room}.${p.door}`));
 }
 
-/** 每個排列的光路 (只算一次；沒有彩繪玻璃的魔方 = 空) */
-const lightMemo = new WeakMap<CubeState, Record<string, LightHit[]>>();
-function hitsAt(def: CubeDef, s: CubeState): Record<string, LightHit[]> {
-  let h = lightMemo.get(s);
-  if (!h) { h = def.glass ? lightPaths(def, s).hits : {}; lightMemo.set(s, h); }
+/** 每個排列 (× 露出來的玻璃) 的光路 (只算一次；沒有彩繪玻璃的魔方 = 空)；以魔方定義分開記 (同一個排列物件可能被不同玻璃表的變體共用) */
+const lightMemo = new WeakMap<CubeDef, WeakMap<CubeState, Map<string, Record<string, LightHit[]>>>>();
+function hitsAt(def: CubeDef, s: CubeState, uncovered: readonly string[] = []): Record<string, LightHit[]> {
+  const key = [...uncovered].sort().join(',');
+  let byDef = lightMemo.get(def);
+  if (!byDef) { byDef = new WeakMap(); lightMemo.set(def, byDef); }
+  let byKey = byDef.get(s);
+  if (!byKey) { byKey = new Map(); byDef.set(s, byKey); }
+  let h = byKey.get(key);
+  if (!h) { h = def.glass ? lightPaths(def, s, new Set(uncovered)).hits : {}; byKey.set(key, h); }
   return h;
 }
 
-/** 題目的排列條件此刻是否成立：goal (沒給 = 成立) 且光路條件 (沒給 = 成立) */
-function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet<string>): boolean {
-  if (p.light && lightState(hitsAt(m.cube, s)[p.room] ?? [], p.light.from, p.light.via) !== 'lit') return false;
+/** 題目的排列條件此刻是否成立：卡片條件 (沒給 = 成立)、goal (沒給 = 成立) 且光路條件 (沒給 = 成立) */
+function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet<string>, card: (ref: string) => boolean = () => false): boolean {
+  if (p.card && !card(p.card)) return false;
+  if (p.light && lightState(hitsAt(m.cube, s, p.light.uncovered)[p.room] ?? [], p.light.from, p.light.via) !== 'lit') return false;
   return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)) });
 }
 
@@ -309,8 +378,10 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const pid = new Map(m.puzzles.map((p, i) => [p.id, i]));
   const maxInk = Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
   const K = maxInk + 1;
-  const enc = (a: number, r: number, f: number, d: number, k: number): number => (((a * R + r) * F + f) * 2 + d) * K + k;
-  const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k }; };
+  const cs = cardSpaceOf(m);
+  const C = cs.size;
+  const enc = (a: number, r: number, f: number, d: number, k: number, c = 0): number => ((((a * R + r) * F + f) * C + c) * 2 + d) * K + k;
+  const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const c = x % C; x = (x - c) / C; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k, c }; };
   // 每個排列 (× 讀作「間」的門)：各房穿門可到的房 (只算房 ↔ 房的接通)
   const plateIdx = (m.plates ?? []).map(p => pid.get(p.when) ?? -1);
   const plateMask = (f: number): number => plateIdx.reduce((acc, i, j) => (i >= 0 && f & (1 << i) ? acc | (1 << j) : acc), 0);
@@ -342,15 +413,15 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const flagSet = (f: number): Set<string> => new Set(m.puzzles.filter((_, i) => f & (1 << i)).map(p => p.id));
   // 卡榫：依旗標決定哪些房卡住 (旗標組合 → 卡住的房；沒有 jams = 永遠空)
   const jamMemo = new Map<number, Set<string>>();
-  const jamsAt = (f: number): Set<string> => { let j = jamMemo.get(f); if (!j) { j = jammedRooms(m, flagSet(f)); jamMemo.set(f, j); } return j; };
-  const optJammed = (a: number, o: number, f: number): boolean => {
-    const j = jamsAt(f);
+  const jamsAt = (f: number, c: number): Set<string> => { const key = f * C + c; let j = jamMemo.get(key); if (!j) { j = jammedRooms(m, flagSet(f), ref => cs.at(c, ref)); jamMemo.set(key, j); } return j; };
+  const optJammed = (a: number, o: number, f: number, c: number): boolean => {
+    const j = jamsAt(f, c);
     return j.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => j.has(r));
   };
   const finish = pid.get(m.finish) ?? -1;
   const dialRoom = rooms.indexOf(def.dial?.entry.room ?? '');
   const start = rooms.indexOf(m.start);
-  const s0 = enc(0, start, 0, 0, budgetOf(m.start, 0));
+  const s0 = enc(0, start, 0, 0, budgetOf(m.start, 0), cs.start);
   const index = new Map<number, number>([[s0, 0]]);
   const order = [s0];
   const entry: number[] = [1];
@@ -368,27 +439,30 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     return i;
   };
   for (let n = 0; n < order.length && !overflow; n++) {
-    const { a, r, f, d, k } = dec(order[n]);
+    const { a, r, f, d, k, c } = dec(order[n]);
     flagsReached |= f;
     succStart.push(succ.length);
     if (finish >= 0 && f & (1 << finish)) continue;
     const add = (x: number, isEntry = false) => { const i = visit(x, isEntry); if (i >= 0) succ.push(i); };
-    for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f)), true);
-    if (!d && r === dialRoom) add(enc(a, r, f, 1, budgetOf(rooms[r], f)), entry[n] === 1);
+    for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f), c), true);
+    if (!d && r === dialRoom) add(enc(a, r, f, 1, budgetOf(rooms[r], f), c), entry[n] === 1);
     const flags = flagSet(f);
     m.puzzles.forEach((p, i) => {
       if (f & (1 << i) || rooms[r] !== p.room) return;
-      if (!goalHolds(m, p, arr.states[a], flags)) return;
+      if (!goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref))) return;
       if (!p.needs.every(q => flags.has(q))) early.add(p.id);
-      add(enc(a, r, f | (1 << i), d, k));
+      const f2 = f | (1 << i);
+      add(enc(a, r, f2, d, p.refill ? budgetOf(rooms[r], f2) : k, c));
     });
     if (d && k > 0) {
       for (let o = 0; o < arr.opts.length; o++) {
         const a2 = arr.next[a * arr.opts.length + o];
-        if (a2 < 0 || optLocked(o, f) || optJammed(a, o, f)) continue;
-        add(enc(a2, r, f, d, k - 1));
+        if (a2 < 0 || optLocked(o, f) || optJammed(a, o, f, c)) continue;
+        add(enc(a2, r, f, d, k - 1, c));
       }
     }
+    // 拿 / 放尺度卡 (不耗墨、不改排列；同一房內)
+    for (const c2 of cs.moves(c, rooms[r], flags)) add(enc(a, r, f, d, k, c2));
   }
   succStart.push(succ.length);
   const goal = new Uint8Array(order.length);
@@ -415,26 +489,35 @@ function canFinish(g: DialGraph): Uint8Array {
  * ⑦ 多解列舉：從 start (排列 a0、玩家可在 rooms0 任一房) 出發，步數 ≤ budget 的轉動序列 (中間可自由穿門；同一序列內狀態不重複)，
  * 第一次能走進 p.room 且 goal 成立即算一解 (不再延長)。依深度分層：每層最多 cap / budget 條，超過 = 取樣
  */
-function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, room0: string, flags: ReadonlySet<string>, budget: number, cap: number) {
+function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, room0: string, card0: number, flags: ReadonlySet<string>, budget: number, cap: number) {
   const def = m.cube;
   const locks = def.dial?.locks ?? [];
   const usable = arr.opts.map(o => { const ls = locks.filter(l => l.group === o.group); return ls.length === 0 || ls.some(l => flags.has(l.until)); });
-  const jams = jammedRooms(m, flags);
-  const jammed = (a: number, o: number): boolean => jams.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => jams.has(r));
+  const cs = cardSpaceOf(m);
+  const jamMemo = new Map<number, Set<string>>();
+  const jamsOf = (c: number): Set<string> => { let j = jamMemo.get(c); if (!j) { j = jammedRooms(m, flags, ref => cs.at(c, ref)); jamMemo.set(c, j); } return j; };
+  const jammed = (a: number, o: number, c: number): boolean => { const jams = jamsOf(c); return jams.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => jams.has(r)); };
   const plates = platesFor(m, flags);
+  // 不耗步數的動作可達的 (房, 卡片位置) 組合：穿門 + 拿放尺度卡 (編碼 'room#c'，排序)
+  const conf = (room: string, c: number): string => `${room}#${c}`;
+  const split = (x: string): [string, number] => { const i = x.lastIndexOf('#'); return [x.slice(0, i), Number(x.slice(i + 1))]; };
   const reach = (a: number, from: readonly string[]): string[] => {
     const ls = links(def, arr.states[a], m.doors, plates);
     const seen = new Set(from);
     const q = [...from];
-    while (q.length) { const r = q.shift()!; for (const l of ls) if (l.from.room === r && 'room' in l.to && !seen.has(l.to.room)) { seen.add(l.to.room); q.push(l.to.room); } }
+    while (q.length) {
+      const [r, c] = split(q.shift()!);
+      const next = [...ls.filter(l => l.from.room === r && 'room' in l.to).map(l => conf((l.to as { room: string }).room, c)), ...cs.moves(c, r, flags).map(c2 => conf(r, c2))];
+      for (const x of next) if (!seen.has(x)) { seen.add(x); q.push(x); }
+    }
     return [...seen].sort();
   };
-  const solved = (a: number, rs: readonly string[]) => rs.includes(p.room) && goalHolds(m, p, arr.states[a], flags);
+  const solved = (a: number, rs: readonly string[]) => rs.some(x => { const [r, c] = split(x); return r === p.room && goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref)); });
   const perDepth = Math.max(1, Math.floor(cap / Math.max(1, budget)));
   const lengths: number[] = [];
   const multisets = new Map<string, number>();
   let sampled = false;
-  const start = reach(a0, [room0]);
+  const start = reach(a0, [conf(room0, card0)]);
   if (solved(a0, start)) return { lengths: [0], multisets: new Map([['', 0]]), sampled: false };
   for (let depth = 1; depth <= budget; depth++) {
     let found = 0;
@@ -452,10 +535,12 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
       }
       if (seq.length > 0 && solved(a, rs)) return true; // 較短就解開了：屬於較淺的層
       for (let o = 0; o < arr.opts.length; o++) {
-        if (!usable[o] || jammed(a, o)) continue;
+        if (!usable[o]) continue;
+        const free = rs.filter(x => !jammed(a, o, split(x)[1]));
+        if (!free.length) continue;
         const a2 = arr.next[a * arr.opts.length + o];
         if (a2 < 0) continue;
-        const rs2 = reach(a2, rs);
+        const rs2 = reach(a2, free);
         const key = `${a2}|${rs2.join(',')}`;
         if (onPath.has(key)) continue;
         onPath.add(key); seq.push(o);
@@ -516,17 +601,18 @@ export function validateDial(m: DialModel): DialReport {
   const F = 1 << m.puzzles.length;
   const maxInk = Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
   const K = maxInk + 1;
-  const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k }; };
+  const C = cardSpaceOf(m).size;
+  const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const c = x % C; x = (x - c) / C; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k, c }; };
   const perPuzzle: DialPuzzleReport[] = m.puzzles.map((p, i) => {
     const needMask = p.needs.reduce((acc, q) => acc | (1 << (pid.get(q) ?? 0)), 0);
     const startIdx = g.order.findIndex(x => { const s = dec(x); return s.d === 1 && (s.f & needMask) === needMask && (s.f & (1 << i)) === 0; });
     const roomCfg = m.rooms[p.room];
-    const budget = roomCfg?.p4?.[p.id] ?? roomCfg?.budget ?? 0;
+    const budget = p.span ?? roomCfg?.p4?.[p.id] ?? roomCfg?.budget ?? 0;
     const out: DialPuzzleReport = { id: p.id, shortest: null, second: null, solutions: 0, distinct: 0, sampled: false, budget, issues: [] };
     if (startIdx < 0) { out.issues.push('never available (needs unreachable with dial on)'); return out; }
     const s = dec(g.order[startIdx]);
     const flags = new Set(m.puzzles.filter((_, j) => s.f & (1 << j)).map(q => q.id));
-    const e = enumerate(m, arr, p, s.a, rooms[s.r], flags, budget, cap);
+    const e = enumerate(m, arr, p, s.a, rooms[s.r], s.c, flags, budget, cap);
     out.solutions = e.lengths.length;
     out.distinct = e.multisets.size;
     out.sampled = e.sampled;
@@ -590,7 +676,7 @@ export function validateDial(m: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish, ...extra };
