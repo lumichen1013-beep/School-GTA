@@ -145,12 +145,12 @@ describe('2-4 手稿庫：資料與驗證器', () => {
   });
 });
 
-describe('validateDial：2-4 區 (兩列 + 三行；門牌 plates)', () => {
-  const m = { ...dialModelOf(CH2_ZONE24.cube, CH2.rooms, CH2_ZONE24.puzzles, CH2_ZONE24.start, CH2_ZONE24.finish), plates: CH2_ZONE24.plates };
+describe('validateDial：2-4 區 (兩列 + 三行；門牌 plates；夾層的後面 areas)', () => {
+  const m = { ...dialModelOf(CH2_ZONE24.cube, CH2.rooms, CH2_ZONE24.puzzles, CH2_ZONE24.start, CH2_ZONE24.finish, { areas: CH2_ZONE24.areas }), plates: CH2_ZONE24.plates };
   const r = validateDial(m);
 
-  it('可達排列 720、抽象狀態 571,172 (< 2×10⁶)、有解、卡死 0 (含 R)；預算繞過 / 鎖扣 / 入口 / 前置繞過無問題', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 571172, true, [], 43377]);
+  it('可達排列 720、抽象狀態 566,912 (< 2×10⁶；H1 之前 571,172)、有解、卡死 0 (含 R)；預算繞過 / 鎖扣 / 入口 / 前置繞過無問題', () => {
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 566912, true, [], 47642]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
   });
 

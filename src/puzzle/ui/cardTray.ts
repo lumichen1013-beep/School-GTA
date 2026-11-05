@@ -1,10 +1,13 @@
 // 字卡匣 (v0.3 N22 最小版；mobile-controls 2.5)：從畫面底部升起的紙卡；左邊是標籤 (墨框裡的字，貼了詞卡就是卡上的字)，
-// 右邊是卡匣格 (每張 ≥ 56 CSS px，點一張 = 貼到這個標籤)、貼著的卡 (點「取下」)；寫錯 → 標籤字顫動、墨色變淡；
+// 右邊是卡匣格 (每張 ≥ 56 CSS px，點一張 = 貼到這個標籤)、貼著的卡 (點「取下」)；v0.4 H1：卡匣上方的頁籤 (詞卡 / 部件卡 / 尺度卡)；寫錯 → 標籤字顫動、墨色變淡；
 // 底部一直顯示操作說明 (鍵盤與滑鼠 / 觸控)，最近的訊息另起一行；按鈕按下不取焦點
 // 只畫 app/cardTrayModel 推導好的資料；點選只回呼外殼 (外殼產生 WorldCommand)，不改世界
 import type { Text } from '../text/text';
 
 export interface CardTrayModel {
+  /** v0.4 H1 分頁：此刻出現過的組 (詞卡 / 部件卡 / 尺度卡) 與開著的那一頁；只有一組時不畫頁籤 */
+  tabs: ReadonlyArray<'word' | 'part' | 'scale'>;
+  tab: 'word' | 'part' | 'scale';
   label: string;
   title: string;
   /** 標籤此刻的字、原字；covered = 原字被詞卡蓋住 */
@@ -18,10 +21,10 @@ export interface CardTrayModel {
   /** 無效字回饋的序號 (變了就播一次顫動) */
   feedbackSeq: number;
   /** howto = 操作說明 (貼上 / 取下 / 關閉；鍵盤與滑鼠 / 觸控並列，一直顯示) */
-  text: { head: string; close: string; remove: string; howto: readonly string[]; scale: string };
+  text: { head: string; close: string; remove: string; howto: readonly string[]; scale: string; tabs: Readonly<Partial<Record<'word' | 'part' | 'scale', string>>> };
 }
 
-export interface CardTrayHandlers { slot(n: number): void; remove(): void; close(): void }
+export interface CardTrayHandlers { slot(n: number): void; remove(): void; close(): void; tab(t: 'word' | 'part' | 'scale'): void }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -99,6 +102,17 @@ export class CardTray {
     foot.append(info, this.button('pz-tray-close', m.text.close, () => this.on.close()));
     const body = el('div', 'pz-tray-body');
     body.append(tag, cards);
-    this.sheet.replaceChildren(head, body, foot);
+    // 頁籤 (v0.4 H1：詞卡 / 部件卡 / 尺度卡；只有一組時不畫)：點一下換頁 (鍵盤 ← / → 由外殼處理)
+    if (m.tabs.length > 1) {
+      const tabs = el('div', 'pz-tray-tabs');
+      tabs.setAttribute('role', 'tablist');
+      for (const k of m.tabs) {
+        const b = this.button(`pz-tray-tab${k === m.tab ? ' on' : ''}`, m.text.tabs[k] ?? k, () => this.on.tab(k));
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', String(k === m.tab));
+        tabs.append(b);
+      }
+      this.sheet.replaceChildren(head, tabs, body, foot);
+    } else this.sheet.replaceChildren(head, body, foot);
   }
 }

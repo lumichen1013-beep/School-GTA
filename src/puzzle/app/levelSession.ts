@@ -21,7 +21,7 @@ import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
 import { deriveCubeMap, deriveTurnMode, inkHud, previewFor, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel } from './cubeMapModel';
-import { closedTrayKey, deriveCardTray, slotCommand, uncardCommand } from './cardTrayModel';
+import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
 export interface SessionContext {
   renderer: THREE.WebGLRenderer;
@@ -79,6 +79,8 @@ export class LevelSession {
   private mapOpen = false;
   /** 字卡匣開著的標籤 (null = 關著)；無效字回饋序號；字卡匣送出、下一幀進世界的指令；點互動提示 = 下一幀按 E */
   private trayLabel: string | null = null;
+  /** v0.4 H1 字卡匣開著的那一頁 (null = 這個標籤收的那一組；開匣時重設) */
+  private trayTabSel: TrayTab | null = null;
   private traySeq = 0;
   private commands: WorldCommand[] = [];
   private tapInteract = false;
@@ -266,6 +268,7 @@ export class LevelSession {
 
   private openTray(label: string): void {
     this.trayLabel = label;
+    this.trayTabSel = null;
     this.mapOpen = false;
     this.turnMode = false;
     this.ctx.onTrayOpen?.();
@@ -276,6 +279,14 @@ export class LevelSession {
 
 
   closeTray(): void { this.trayLabel = null; }
+  /** 字卡匣開著時那一頁 (開發期自動化驗證用) */
+  get trayTab(): TrayTab | null { return this.trayModel()?.tab ?? null; }
+  /** 字卡匣換頁 (點頁籤 = 指定頁；← / → = 前後一頁，循環) */
+  trayGoTab(t: TrayTab | -1 | 1): void {
+    const m = this.trayModel();
+    if (!m) return;
+    this.trayTabSel = typeof t === 'number' ? shiftTab(m, t) : t;
+  }
   /** 字卡匣：貼第 n 格的卡 (1 起算) / 取下標籤上的卡 (指令下一幀進世界) */
   trayPick(n: number): void { const m = this.trayModel(); const c = m && slotCommand(m, n); if (c) this.commands.push(c); }
   trayRemove(): void { const m = this.trayModel(); const c = m && uncardCommand(m); if (c) this.commands.push(c); }
@@ -286,7 +297,7 @@ export class LevelSession {
 
   private trayModel() {
     if (this.trayLabel === null) return null;
-    const m = deriveCardTray(this.world, this.ctx.text, this.traySeq);
+    const m = deriveCardTray(this.world, this.ctx.text, this.traySeq, this.trayTabSel ?? undefined);
     return m && m.label === this.trayLabel ? m : null;
   }
 
@@ -329,9 +340,12 @@ export class LevelSession {
     if (this.tapInteract) { this.tapInteract = false; if (!pressed.includes('interact')) pressed = [...pressed, 'interact']; }
     let move = { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump };
     if (this.trayLabel !== null) {
-      // 字卡匣開著：1～3 貼卡、X 取下、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)
+      // 字卡匣開著：1～3 貼卡、X 取下、← / → 換頁、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)
       if (!this.trayModel()) this.trayLabel = null;
       else {
+        // ← / → 換頁 (v0.4 H1；字卡匣與轉動模式互斥，方向鍵不衝突)；1～3 = 本頁第 n 張
+        if (input.pressed.includes('navLeft')) this.trayGoTab(-1);
+        if (input.pressed.includes('navRight')) this.trayGoTab(1);
         const slot = (['slot1', 'slot2', 'slot3'] as const).findIndex(a => input.pressed.includes(a));
         if (slot >= 0) this.trayPick(slot + 1);
         if (input.pressed.includes('uncard')) this.trayRemove();

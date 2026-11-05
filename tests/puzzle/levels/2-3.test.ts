@@ -171,13 +171,20 @@ describe('門牌「間」與洞位', () => {
     expect([cs.world.ext.cube!.links.archS, get(cs, 'plateS').used, hasItem(cs.world, 'card.ri')]).toEqual([{ to: 'wall' }, true, true]);
   });
 
-  it('穿過洞：印房 → 夾層 (洞位在場、北牆中點)，從洞回到印房南拱門內側；洞在別的時候不在場', () => {
+  it('穿過洞：印房 → 夾層——洞的到達處被後面那面書櫃堵住 (H1)；量小之後進到後面 (洞位在場、北牆中點)，從洞回到印房南拱門內側；洞在別的時候不在場', () => {
     let cs = solveA(inPrint(1, false));
-    let r = play(cs, [{ wait: 0.1 }, { walkTo: [null, 3.6] }, { walkTo: [-2.6, null] }, { walkTo: [null, 3.9] }, { act: 'interact' }]);
+    const TO_ARCH: Cmd[] = [{ wait: 0.1 }, { walkTo: [null, 3.6] }, { walkTo: [-2.6, null] }, { walkTo: [null, 3.9] }, { act: 'interact' }];
+    let r = play(cs, TO_ARCH);
+    // 書櫃原尺寸：到達處 (0, −3.7) 被占住 → 不換房、說書櫃的 blockText
+    expect([r.kinds, r.cs.state.room, r.cs.world.msgKey]).toEqual([['blocked'], 'print', 'lvl.H1.shelf.block']);
+    // 量小之後 (書櫃標籤貼著「小」；H1 的前廳那一步)：到達處讓開 → 進到後面
+    cs = r.cs;
+    cs.world.ext = { ...cs.world.ext, labels: { ...cs.world.ext.labels, 'scale:innerShelf': ['card.xiao'] } };
+    r = play(cs, TO_ARCH);
     expect([r.kinds, r.cs.state.room, r.cs.state.door]).toEqual([['enter'], 'mezz', 'holeN']);
     const hole = get(r.cs, 'holeN');
-    expect([isActiveIn(r.cs.world, hole, '3d'), hole.def.x, hole.def.z, r.cs.world.player.z > -4]).toEqual([true, 0, -4.8, true]);
-    r = play(r.cs, [{ wait: 0.1 }, { act: 'interact' }]);
+    expect([isActiveIn(r.cs.world, hole, '3d'), hole.def.x, hole.def.z, r.cs.world.player.z > -4, r.cs.world.player.z < -3.0]).toEqual([true, 0, -4.8, true, true]);
+    r = play(r.cs, [{ wait: 0.1 }, { walkTo: [null, -4.4] }, { act: 'interact' }]);
     expect([r.cs.state.room, r.cs.state.door]).toEqual(['print', 'archS']);
     cs = openChapter(SPEC, chapterStart(defaultSave(), SPEC, { room: 'mezz', door: null }), OPTS);
     expect(isActiveIn(cs.world, get(cs, 'holeN'), '3d')).toBe(false);
@@ -194,12 +201,12 @@ describe('門牌「間」與洞位', () => {
   });
 });
 
-describe('validateDial：2-3 區 (兩列 + 三行；門牌以 plates 表示)', () => {
-  const m = { ...dialModelOf(CH2_ZONE23.cube, CH2.rooms, CH2_ZONE23.puzzles, CH2_ZONE23.start, CH2_ZONE23.finish), plates: CH2_ZONE23.plates };
+describe('validateDial：2-3 區 (兩列 + 三行；門牌以 plates 表示；夾層的後面以 areas 表示)', () => {
+  const m = { ...dialModelOf(CH2_ZONE23.cube, CH2.rooms, CH2_ZONE23.puzzles, CH2_ZONE23.start, CH2_ZONE23.finish, { areas: CH2_ZONE23.areas }), plates: CH2_ZONE23.plates };
   const r = validateDial(m);
 
-  it('可達排列 720、抽象狀態 108,098、有解、卡死 0 (含 R)；鎖扣 / 入口 / 前置繞過無問題', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 108098, true, [], 9039]);
+  it('可達排列 720、抽象狀態 107,246 (H1 之前 108,098：夾層不再是「洞 ↔ 西門」穿得過去的房)、有解、卡死 0 (含 R)；鎖扣 / 入口 / 前置繞過無問題', () => {
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 107246, true, [], 9892]);
     expect([r.issues, r.lockIssues, r.entryIssues]).toEqual([[], [], []]);
   });
 
@@ -391,7 +398,7 @@ describe('2-3 字條：量表 H1～H4、H9、H10 與預算', () => {
   });
 });
 
-describe('夾層 (H1 占位) 與手稿庫占位：validateLevel 0 issue', () => {
+describe('夾層 (H1) 與手稿庫：validateLevel 0 issue', () => {
   it('夾層北牆的洞位、手稿庫的排字架與字輪', () => {
     for (const r of [mezz, manuscripts]) expect([r.id, validateLevel(r, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })]).toEqual([r.id, []]);
   });

@@ -213,7 +213,11 @@ function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
 export function writableTarget(w: World): ObjState | null {
   const t = labelTarget(w);
   if (!t) return null;
-  return trayCards(w).length > 0 || attachedCards(w, t).length > 0 ? t : null;
+  const held = trayCards(w);
+  if (attachedCards(w, t).length > 0) return t;
+  // v0.4 H1：要量的謎題標籤 (方槽 + noCardText) 在匣裡沒有尺度卡時 = 缺卡 (第二章回來前：手上只有詞卡 / 部件卡，打開匣也沒有一張貼得上)
+  if (t.def.label?.scale && t.def.label.noCardText && !held.some(c => CARDS[c].slot === 'scale')) return null;
+  return held.length > 0 ? t : null;
 }
 
 /**
@@ -230,7 +234,8 @@ export const promptLabelTarget = (w: World): ObjState | null => writableTarget(w
 
 /** 缺卡時按 E 的說明 */
 function sayMissingCard(w: World, t: ObjState): void {
-  const away = Object.values(w.ext.labels ?? {}).flat().find(isCard);
+  // 貼在別處、而且這個標籤收得下的卡 (v0.4 H1：門牌上的「日」不是書櫃方槽要的卡)
+  const away = Object.values(w.ext.labels ?? {}).flat().find(c => isCard(c) && accepts(t, c));
   if (away) say(w, 'msg.label.cardElsewhere', { card: w.rt.text(`term.${away}`) });
   else say(w, t.def.label!.noCardText!);
 }

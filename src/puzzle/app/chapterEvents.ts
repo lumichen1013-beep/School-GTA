@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, doorArrival, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 
@@ -32,7 +32,7 @@ function refill(cs: ChapterSession, flag: string): ChapterSession {
 }
 
 /**
- * 處理一個事件：door → enterRoom；turnRequest → 拉桿此刻的方向字 (標籤上的詞卡優先) → turn (轉不動 → say 原因)；
+ * 處理一個事件：door → 到達處空著 (v0.4 H1 doorArrival；被占 → say、blocked) → enterRoom；turnRequest → 拉桿此刻的方向字 (標籤上的詞卡優先) → turn (轉不動 → say 原因)；
  * objCross → transferObject (推不過去 → say 原因)；flag → 記下章節旗標；
  * v0.4：dialActivate → activateDial (本章是控制盤章、還沒啟動時)；done → 回退堆疊清空、解開條件成立的鎖扣寫回
  */
@@ -42,6 +42,9 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     const o = w.byId.get(e.door);
     const l = o && doorLink(w, o);
     if (!l || l.to !== 'room') return { kind: 'none' };
+    // v0.4 H1：到達處被實體占住 (例：夾層的書櫃堵住洞) → 在這一房說那個實體的話、不換房
+    const blocked = doorArrival(cs, e.door);
+    if (blocked) { say(w, blocked.blockText ?? 'msg.cube.doorBlocked'); return { kind: 'blocked' }; }
     return { kind: 'enter', next: enterRoom(cs, l.room, l.door, opts) };
   }
   if (e.t === 'turnRequest') {

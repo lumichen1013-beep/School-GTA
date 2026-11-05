@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { glowSprite } from '../materials';
 import { glow } from '../textures';
 import { buildBookcase } from '../library';
+import { mergeParts, placed } from '../geometry';
 import { num, str } from './fields';
 import { drawingTexture } from '../models/manuscripts';
 import type { DecorFactory } from './types';
@@ -116,4 +117,37 @@ export const floorPieceDecor: DecorFactory = (p, item) => {
   m.rotation.x = -Math.PI / 2;
   m.position.set(num(item, 'x'), 0.009, num(item, 'z'));
   return { root: m, only3d: [m] };
+};
+
+/**
+ * wallTopBooks：書牆頂的裝飾書 (H1 夾層；規格 9.1 D 手法「書櫃後的書櫃在切換後多一層」做在書牆頂)：三層，每次從藏寶圖切回實景多一層、最多三層；
+ * 減弱緊張效果 (calm) 時不出現；純裝飾、只在實景。欄位 x、z (書牆中心)、y (書牆頂)、w (書牆寬)、seed。每層一個合併網格 (一種書色)
+ */
+export const wallTopBooksDecor: DecorFactory = (p, item, { theme: { pal }, calm }) => {
+  const g = new THREE.Group();
+  const r = rng(num(item, 'seed', 91));
+  const W = num(item, 'w'), Y = num(item, 'y');
+  const layers = [0, 1, 2].map(i => {
+    const parts: THREE.BufferGeometry[] = [];
+    for (let x = -W / 2 + 0.3 + i * 0.37; x < W / 2 - 0.3; x += 0.9 + r() * 0.5) {
+      const n = 2 + Math.floor(r() * 3);
+      for (let k = 0; k < n; k++) {
+        const bh = 0.2 + r() * 0.14, bw = 0.05 + r() * 0.03;
+        parts.push(placed(new THREE.BoxGeometry(bw, bh, 0.12 + r() * 0.02), x + k * 0.075, Y + bh / 2 + 0.002, -0.17 + i * 0.17 + (r() - 0.5) * 0.01, 0, (r() - 0.5) * 0.2, k === n - 1 ? 0.18 : 0));
+      }
+    }
+    const m = p.mesh(mergeParts(parts), pal.books[(i * 2 + 1) % pal.books.length], { roughness: 0.9, outline: false, unique: true });
+    m.visible = false;
+    g.add(m);
+    return m;
+  });
+  g.position.set(num(item, 'x'), 0, num(item, 'z'));
+  let shown = 0;
+  let last: boolean | null = null;
+  const update = (_t: number, is2d: boolean) => {
+    if (last === true && !is2d) shown = Math.min(layers.length, shown + 1);
+    last = is2d;
+    layers.forEach((m, i) => { m.visible = !calm && i < shown; });
+  };
+  return { root: g, only3d: [g], occluders: layers, update };
 };

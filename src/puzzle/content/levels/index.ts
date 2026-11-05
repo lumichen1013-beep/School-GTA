@@ -8,6 +8,7 @@ import { reading } from './ch2/2-2-reading';
 import { print } from './ch2/2-3-print';
 import { manuscripts } from './ch2/2-4-manuscripts';
 import { deep } from './ch2/2-5-deep';
+import { mezz } from './ch2/H1-mezz';
 import { nursery } from './ch3/3-1-nursery';
 import { gallery } from './ch3/3-2-gallery';
 import { night } from './ch3/3-3-night';
@@ -24,6 +25,8 @@ export interface LevelEntry {
   /** 本關開場允許的能力白名單 (重玩規則：防新能力破解舊關) */
   abilities: readonly AbilityId[];
   unlock: Unlock;
+  /** v0.4 隱藏房 (H1～H3；規格 6 隱藏房表)：解鎖前不列進選單 (不劇透)；章門通關不順帶記入 (只由房間通關記入) */
+  hidden?: boolean;
   load(): LevelDef;
 }
 
@@ -48,6 +51,8 @@ export const LEVELS: readonly LevelEntry[] = [
   { id: '2-4', chapter: 2, titleKey: 'lvl.2-4.title', abilities: ['nib'], unlock: { after: ['2-3'] }, load: () => manuscripts },
   // 2-5 書房深處：第二章章末；2-4 通關後開放；章門打開 = 第二章通關
   { id: '2-5', chapter: 2, titleKey: 'lvl.2-5.title', abilities: ['nib'], unlock: { after: ['2-4'] }, load: () => deep },
+  // H1 夾層：第二章隱藏房 (同一章魔方；從選單進 = 接著第二章存檔玩)；要第三章的比例尺 → 3-1 通關 (能力 scale) 後開放、之前不列出
+  { id: 'H1', chapter: 2, titleKey: 'lvl.H1.title', abilities: ['nib'], unlock: { after: ['3-1'] }, hidden: true, load: () => mezz },
   // 3-1 苗圃：第三章第一關 (魔方 3×3 滑動、控制盤 = 園丁羅盤)；第二章章門打開 (2-5 通關) 後開放；前置能力 = 筆尖 (占位版，謎題逐關加入)
   { id: '3-1', chapter: 3, titleKey: 'lvl.3-1.title', abilities: ['nib'], unlock: { after: ['2-5'] }, load: () => nursery },
   // 3-2 玻璃長廊：第三章第二關 (同一章魔方；光路 N26)；3-1 通關後開放 (章內：啟動園丁羅盤、經夜溫室走進長廊即可，不必等 3-1b)

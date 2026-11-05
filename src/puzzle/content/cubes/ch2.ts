@@ -47,6 +47,18 @@ export interface ZonePuzzle {
   span?: number;
 }
 
+/**
+ * v0.4 H1：房內被隔開的一區 (devtools/validateCube DialModel.areas 同形)：room 裡只從 doors 進出的那一區 (節點 id；墨量 = 那間房的預算、
+ * 轉動時跟著房間走)；opensWhen = 那一題完成前從門的另一側進不來 (已在區內的人照樣出得去；不在模型裡的題 = 一直進不來)
+ */
+export interface ZoneArea { id: string; room: string; doors: readonly string[]; opensWhen?: string }
+
+/**
+ * 夾層的後面 (書牆後面的窄廊：只從北牆的洞進出；洞的到達處被後面那面書櫃堵住，H1.shrink 量小之後才進得去)。
+ * 2-3 / 2-4 / 2-5 區沒有 H1.shrink = 洞一直堵著 (夾層不再是「洞 ↔ 西門」穿得過去的房)
+ */
+export const MEZZ_BACK: ZoneArea = { id: 'mezzBack', room: 'mezz', doors: ['holeN'], opensWhen: 'H1.shrink' };
+
 /** 2-1 在上列的第幾行 (不在上列 = -1) */
 const shelfCol = (s: CubeState): number => (s.pos.shelf && s.pos.shelf[1] === 0 ? s.pos.shelf[0] : -1);
 
@@ -115,6 +127,7 @@ export const CH2_ZONE23 = {
     { id: '2-3c', room: 'manuscripts', needs: ['2-3b'], teaching: true, goal: (_s, f, c) => f.has('2-3b') && hasRoute(c.links(), 'print', 'manuscripts', 3) }
   ] as readonly ZonePuzzle[],
   plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  areas: [MEZZ_BACK] as readonly ZoneArea[],
   start: 'shelf',
   finish: '2-3c'
 };
@@ -141,6 +154,7 @@ export const CH2_ZONE24 = {
     { id: 'ch2.mid', room: 'manuscripts', needs: ['2-4a', '2-4b'], teaching: true, goal: (_s, f) => f.has('2-4a') && f.has('2-4b') }
   ] as readonly ZonePuzzle[],
   plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  areas: [MEZZ_BACK] as readonly ZoneArea[],
   start: 'shelf',
   finish: 'ch2.mid'
 };
@@ -160,6 +174,27 @@ export const CH2_ZONE25 = {
     { id: '2-5', room: 'deep', needs: ['2-5.tray'], teaching: true, goal: (s, f) => f.has('2-5.tray') && s.pos.deep?.[0] === 2 && s.pos.deep?.[1] === 1 }
   ] as readonly ZonePuzzle[],
   plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  areas: [MEZZ_BACK] as readonly ZoneArea[],
   start: 'shelf',
   finish: '2-5'
+};
+
+/**
+ * H1 區的抽象模型 (devtools/validateDial；規格 6「H1 夾層（細化）」H1 區抽象模型)：兩列 + 三行；印房南拱門在 2-3a 之後讀作「間」；
+ * 夾層分成前廳 (mezz：西門) 與後面 (mezzBack：洞，H1.shrink 之後才進得去)。
+ * 題：2-1a / 2-3a (兩個鎖扣，教學)；H1.shrink = 走進前廳 (藏寶圖隔著書牆量小，抽象成「走進前廳」；需 2-3a)；
+ * H1 = 走進後面 (需 H1.shrink)；終點 H1。尺度卡不進 cards (第二章只有這一個方槽；「小」貼上就不必再拿下，「大」是錯誤嘗試)
+ */
+export const CH2_ZONEH1 = {
+  cube: CH2_CUBE,
+  puzzles: [
+    { id: '2-1a', room: 'shelf', needs: [], teaching: true, goal: s => shelfCol(s) === 2 },
+    { id: '2-3a', room: 'print', needs: [], teaching: true },
+    { id: 'H1.shrink', room: 'mezz', needs: ['2-3a'], goal: (_s, f) => f.has('2-3a') },
+    { id: 'H1', room: 'mezzBack', needs: ['H1.shrink'], goal: (_s, f) => f.has('H1.shrink') }
+  ] as readonly ZonePuzzle[],
+  plates: [{ room: 'print', door: 'archS', when: '2-3a' }],
+  areas: [MEZZ_BACK] as readonly ZoneArea[],
+  start: 'shelf',
+  finish: 'H1'
 };

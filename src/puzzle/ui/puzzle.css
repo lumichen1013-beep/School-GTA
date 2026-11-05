@@ -284,6 +284,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 }
 .pz-tray.show { transform: translate(-50%, 0); }
 .pz-tray-head { font-weight: 700; letter-spacing: .2em; font-size: 15px; }
+.pz-tray-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.pz-tray-tab { min-height: 40px; min-width: 72px; padding: 6px 14px; border: 2px solid var(--inkblue); border-radius: 18px; background: transparent; color: var(--inkblue); font-family: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
+.pz-tray-tab.on { background: var(--inkblue); color: #fffaf0; }
 .pz-tray-body { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .pz-tray-tag { display: flex; align-items: center; gap: 8px; }
 .pz-tray-glyph {

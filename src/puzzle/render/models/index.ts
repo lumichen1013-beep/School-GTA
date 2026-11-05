@@ -20,6 +20,7 @@ import { balanceHalfModel, bigPotModel, ledgeModel, pageModel, protrudeStepModel
 import { chaseGateModel, giantRootModel, latticeBoxModel, latticeModel, oldCompassModel, paneFrameModel } from './depths';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import { chaserModel } from './chaser';
+import { bookWallModel, deskModel, innerShelfModel } from './mezz';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
 
@@ -50,7 +51,8 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   coupletCabinet: coupletCabinetModel, couplet: coupletModel, cardCatalog: cardCatalogModel, lens: lensModel,
   typeCase: typeCaseModel, press: pressModel, typeTray: typeTrayModel, doorPlate: doorPlateModel, typeLock: typeLockModel, typeWheel: typeWheelModel,
   patternCabinet: patternCabinetModel, smallCabinet: smallCabinetModel, bundleRack: bundleRackModel, bundle: bundleModel,
-  landing: landingModel, keyBench: keyBenchModel, diaryStand: diaryStandModel,
+  // 手記架；H1 的小書桌 = 同一類型的 look 'desk'
+  landing: landingModel, keyBench: keyBenchModel, diaryStand: (p, d, t) => (d.type === 'diaryStand' && d.look === 'desk' ? deskModel : diaryStandModel)(p, d, t),
   // 3-1 苗圃
   balance: balanceModel, pot: potModel, trellis: trellisModel, pottingShelf: pottingShelfModel, root: rootModel, ruler: rulerModel, pane: paneModel,
   // 3-2 玻璃長廊：感光花 (光路 N26)
@@ -60,7 +62,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 3-4 溫室深處：九格花窗、花窗架、抽屜裡的鑰匙與手記、巨根、舊羅盤架、長廊柵門 (苔窗 = sensorModel 的 mount 'wall')
   lattice: latticeModel, paneFrame: paneFrameModel, latticeBox: latticeBoxModel, giantRoot: giantRootModel, oldCompass: oldCompassModel, chaseGate: chaseGateModel,
   // 追逐 1：守衛殘影 (只在藏寶圖)
-  chaser: chaserModel
+  chaser: chaserModel,
+  // H1 夾層：只在實景的書牆、後面那面書櫃 (小書桌 = diaryStand look 'desk')
+  bookWall: bookWallModel, innerShelf: innerShelfModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

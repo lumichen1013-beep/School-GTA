@@ -4,6 +4,7 @@ import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
 import { glow, painting, rug, wallpaper } from '../textures';
 import { num } from './fields';
+import { mergeParts, placed } from '../geometry';
 import type { DecorFactory } from './types';
 
 // 房間裝飾 (S7 前寫死在 render/models/room.ts 的 buildDecor；座標改由關卡資料 LevelDef.decor 提供)
@@ -33,13 +34,16 @@ function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number): THREE.
   // 頂面比牆頂低 5mm：不與貼牆的隔牆壁紙頂面 (y = 牆高) 共面
   crown.position.set(0, WALL_H - 0.065, 0.06);
   g.add(paper, wains, rail, base, crown);
-  // 護牆板分格
+  // 護牆板分格 (同材質合成一個網格：外框一個、內嵌一個；v0.4 H1 起，省繪製次數，外觀不變)
+  const panels: THREE.BufferGeometry[] = [];
+  const insets: THREE.BufferGeometry[] = [];
   for (let a = -len / 2 + 0.9; a < len / 2 - 0.4; a += 1.6) {
-    const panel = p.mesh(box(1.2, 0.7, 0.02), pal.trim, { flat: BG2D.trim, outline: false, shadow: false });
-    panel.position.set(a + 0.4, 0.58, 0.065);
-    const inset = p.mesh(box(1.08, 0.58, 0.022), pal.wainscot, { flat: BG2D.wainscot, outline: false, shadow: false });
-    inset.position.set(a + 0.4, 0.58, 0.068);
-    g.add(panel, inset);
+    panels.push(placed(box(1.2, 0.7, 0.02), a + 0.4, 0.58, 0.065));
+    insets.push(placed(box(1.08, 0.58, 0.022), a + 0.4, 0.58, 0.068));
+  }
+  if (panels.length) {
+    g.add(p.mesh(mergeParts(panels), pal.trim, { flat: BG2D.trim, outline: false, shadow: false }));
+    g.add(p.mesh(mergeParts(insets), pal.wainscot, { flat: BG2D.wainscot, outline: false, shadow: false }));
   }
   return g;
 }

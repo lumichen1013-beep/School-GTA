@@ -12,7 +12,7 @@ import { durationRange, validateCutscene } from '../../../src/puzzle/devtools/va
 import { PAPER_SCENES } from '../../../src/puzzle/render/cutscene/scenes';
 import { CUE_MAP, CUTSCENE_SCORE, SHOT_MUSIC } from '../../../src/puzzle/audio/events';
 import { cutsceneBeforeLevel, memoryEntries, recordCutscene } from '../../../src/puzzle/meta/cutscenes';
-import { levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
+import { chapterClearAlso, levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
 import { chapterStart, entryNarrationKey } from '../../../src/puzzle/meta/chapters';
 import { defaultSave, seenCutscenes, skippedCutscenes } from '../../../src/puzzle/meta/save';
 import { DEFAULT_MECHANICS } from '../../../src/puzzle/mechanics';
@@ -98,7 +98,8 @@ describe('外殼流程：2-5 通關 → 前往第三章　溫室 → cs:ch2 → 
     const CH3 = CUBE_CHAPTERS.find(c => c.chapter === 3)!;
     // 1. 2-5 章門打開 (章門的通關畫面：kind chapter，本章所有關卡記為通關)
     const w = createWorld(deep, { mechanics: DEFAULT_MECHANICS, text: TEXT, abilities: ['nib'] });
-    let save = recordClear({ ...defaultSave(), name: '阿青', cleared: CH2_DONE, abilities: ['nib'] }, '2-5', w, Object.keys(CH2.levels));
+    // 章門通關的 also = app 的 chapterClearAlso (本章關卡去掉隱藏房 H1)
+    let save = recordClear({ ...defaultSave(), name: '阿青', cleared: CH2_DONE, abilities: ['nib'] }, '2-5', w, chapterClearAlso(CH2.levels));
     expect(save.cleared).toEqual([...CH2_DONE, '2-5']);
     expect(TEXT(deep.nextKey)).toBe('書房和溫室，在牆後換了位置。');
     // 2. 通關畫面的「繼續」= 下一章第一關 (按鈕文字同 1-3 章門的格式)

@@ -130,7 +130,7 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
     expect(CH2_CUBE.cells.map(c => [c.at[0], c.at[1], c.room])).toEqual([[0, 0, 'shelf'], [1, 0, 'reading'], [2, 0, 'print'], [0, 1, 'mezz'], [1, 1, 'manuscripts'], [2, 1, 'deep']]);
     expect(CH2_CUBE.dial!.entry).toEqual({ room: 'shelf', obj: 'dial' });
     expect(CH2_CUBE.dial!.locks.map(l => `${l.group}<-${l.until}`)).toEqual(['row1<-2-1a', 'col0<-2-3a', 'col1<-2-3a', 'col2<-2-3a']);
-    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep' });
+    expect(CH2.levels).toEqual({ '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep', H1: 'mezz' });
     expect(CH2.start).toEqual({ room: 'shelf', door: 'doorW' });
     expect(cubeChapterOf('2-1')).toBe(CH2);
   });
@@ -174,12 +174,13 @@ describe('第二章魔方與門位 (規格 6「第二章魔方與門位（v0.4 �
     expect([count(['row0']), count(['row0', 'row1']), count(['row0', 'row1', 'col0', 'col1', 'col2'])]).toEqual([3, 9, 720]);
   });
 
-  it('占位房：只有門 (validateLevel 0 issue)、不計題、每房預算 6；2-5 東章門要的鑰匙本章取不到 (此版本一律鎖著)', () => {
-    // 2-2～2-5 已是完整關卡 (levels/2-2～2-5.test.ts)；只剩 H1 夾層是占位房 (隱藏房)
+  it('夾層 (H1 隱藏房，已是完整關卡：levels/H1.test.ts)：validateLevel 0 issue、題 = H1、每房預算 6、門位同占位版 (西門 + 北牆洞位)；2-5 東章門要的鑰匙本章取不到 (此版本一律鎖著)', () => {
+    // 2-2～2-5、H1 都已是完整關卡 (levels/2-2～2-5.test.ts、levels/H1.test.ts)；占位房已全部退役
     expect([print.id, print.turnBudget, manuscripts.id, deep.id]).toEqual(['2-3', { base: 6, puzzles: { '2-3b': 3 } }, '2-4', '2-5']);
     for (const r of [mezz]) {
       expect([r.id, validateLevel(r, { mechanics: DEFAULT_MECHANICS, bundle: zhHant })]).toEqual([r.id, []]);
-      expect([r.id, r.puzzles, r.turnBudget, r.objects.every(o => o.type === 'floor' || o.type === 'cubeDoor')]).toEqual([r.id, undefined, { base: 6 }, true]);
+      expect([r.id, r.puzzles?.map(p => p.id), r.turnBudget, r.objects.filter(o => o.type === 'cubeDoor').map(o => o.id)]).toEqual([r.id, ['H1'], { base: 6 }, ['doorW', 'holeN']]);
+      expect(r.objects.filter(o => o.type !== 'floor' && o.type !== 'cubeDoor' && o.type !== 'note').map(o => o.type)).toEqual(['bookWall', 'innerShelf', 'diaryStand']);
     }
     expect([reading.id, reading.turnBudget]).toEqual(['2-2', { base: 6 }]);
     const E = deep.objects.find(o => o.id === 'chapterE')!;
@@ -201,7 +202,7 @@ describe('2-1 書架迴廊：資料與驗證器', () => {
     expect(shelf.puzzles!.map(q => TEXT(q.titleKey))).toEqual(['2-1a 整列一起走', '2-1b 那年的推測', '2-1c 書名的順序']);
     const e = levelById('2-1')!;
     expect([e.chapter, e.unlock.after, e.abilities]).toEqual([2, ['1-3'], ['nib']]);
-    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4', '2-5'] });
+    expect(CHAPTERS.find(c => c.id === 2)).toEqual({ id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4', '2-5', 'H1'] });
     expect([TEXT('ch.2.title'), shelf.theme, shelf.turnBudget]).toEqual(['第二章　書房', 'study', { base: 6 }]);
   });
 

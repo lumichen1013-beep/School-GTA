@@ -25,12 +25,17 @@ export interface CubeChapter {
   levels: Readonly<Record<string, string>>;
   /** 舊存檔已通關某關 → 開章時的預設快照 (規格 8 遷移) */
   legacy?: typeof CH1_LEGACY;
+  /**
+   * v0.4 H1：回到本章時補發尺度卡 (存檔能力 scale、章節道具與標籤上都沒有那張卡 → 補進章節道具；meta/chapters grantScaleCards)。
+   * 只有第二章 (夾層的書櫃要量)；第一章不補 (8 節「新能力不進舊關」)、第三章本來就有
+   */
+  scaleCards?: boolean;
 }
 
 export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 1, cube: CH1_CUBE, rooms: { foyer, stair, closet }, start: { room: 'foyer', door: 'archS' }, levels: { '1-2': 'foyer', '1-3': 'closet' }, legacy: CH1_LEGACY },
-  // 第二章 書房 (v0.4 控制盤)：2-1～2-5 為完整關卡，H1 夾層為占位房 (隱藏房，要第三章的比例尺)；從衣帽間章門外的走廊進 2-1 西門
-  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep' } },
+  // 第二章 書房 (v0.4 控制盤)：2-1～2-5、H1 夾層 (隱藏房，要第三章的比例尺：回到本章時補發尺度卡) 都是完整關卡；從衣帽間章門外的走廊進 2-1 西門
+  { chapter: 2, cube: CH2_CUBE, rooms: { shelf, reading, print, mezz, manuscripts, deep }, start: { room: 'shelf', door: 'doorW' }, levels: { '2-1': 'shelf', '2-2': 'reading', '2-3': 'print', '2-4': 'manuscripts', '2-5': 'deep', H1: 'mezz' }, scaleCards: true },
   // 第三章 溫室 (v0.4 控制盤、滑動)：3-1 苗圃、3-2 玻璃長廊、3-3 夜溫室、3-4 溫室深處為完整關卡，溫床為占位房 (沒有門)；從書房深處章門外的走廊進 3-1 苗圃西門
   { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night', '3-4': 'depths' } }
 ];

@@ -3,8 +3,8 @@ import type { DecorItem, LevelDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { paintingDecor, pendantDecor, pitsDecor, rugDecor, wallShelfDecor, wallsDecor } from './room';
-import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor } from './library';
-import { armchairDecor, bookPileDecor, floorLampDecor, ladderDecor } from './furniture';
+import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor, wallTopBooksDecor } from './library';
+import { armchairDecor, bookCartDecor, bookPileDecor, floorLampDecor, ladderDecor, stoolDecor, wallLampDecor } from './furniture';
 import { benchDecor, chaseHallDecor, glassPaneDecor, glowPlantsDecor, planterDecor, potsDecor, pottingRackDecor, prismDecor, stakeDecor, stonePathDecor, toolBoardDecor } from './greenhouse';
 import type { DecorFactory } from './types';
 
@@ -18,10 +18,12 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   walls: wallsDecor, painting: paintingDecor, wallShelf: wallShelfDecor, rug: rugDecor, pendant: pendantDecor, pits: pitsDecor,
   // 森林圖書館 (第二章)
   roots: rootsDecor, stainedGlass: stainedGlassDecor, floatBooks: floatBooksDecor, bookcase: bookcaseDecor,
-  // 2-4a：地板上的老宅圖一角
-  floorPiece: floorPieceDecor,
+  // 2-4a：地板上的老宅圖一角；H1：書牆頂的裝飾書 (9.1 D)
+  floorPiece: floorPieceDecor, wallTopBooks: wallTopBooksDecor,
   // 家具 (擺設規則 ①：椅子、落地燈、書堆、書梯；只在實景)
   armchair: armchairDecor, floorLamp: floorLampDecor, bookPile: bookPileDecor, ladder: ladderDecor,
+  // H1 夾層：書車、小凳、壁燈
+  bookCart: bookCartDecor, stool: stoolDecor, wallLamp: wallLampDecor,
   // 彩繪玻璃溫室 (第三章；只在實景)
   glassPane: glassPaneDecor, planter: planterDecor, pots: potsDecor, pottingRack: pottingRackDecor, glowPlants: glowPlantsDecor, bench: benchDecor, prism: prismDecor, stake: stakeDecor, toolBoard: toolBoardDecor,
   // 3-4 溫室深處：前景的石板小徑、追逐長廊 (花槽、玻璃窗、吊燈、虛線邊框、石階)
@@ -32,7 +34,7 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
 export interface Decor { root: THREE.Group; only3d: THREE.Object3D[]; occluders: THREE.Mesh[]; update(t: number, is2d: boolean): void }
 
 /** 依 level.decor 的順序建出全部裝飾 (未登錄的 kind 略過並警告) */
-export function buildDecor(p: Painter, level: LevelDef, theme: Theme, opts: { still?: boolean } = {}): Decor {
+export function buildDecor(p: Painter, level: LevelDef, theme: Theme, opts: { still?: boolean; calm?: boolean } = {}): Decor {
   const root = new THREE.Group();
   const only3d: THREE.Object3D[] = [];
   const occluders: THREE.Mesh[] = [];
@@ -43,7 +45,7 @@ export function buildDecor(p: Painter, level: LevelDef, theme: Theme, opts: { st
     if (!make) { console.warn(`[puzzle] unknown decor kind: ${item.kind}`); continue; }
     const nth = counts.get(item.kind) ?? 0;
     counts.set(item.kind, nth + 1);
-    const part = make(p, item, { level, theme, nth, still: !!opts.still });
+    const part = make(p, item, { level, theme, nth, still: !!opts.still, calm: !!opts.calm });
     root.add(part.root);
     if (part.only3d) only3d.push(...part.only3d);
     if (part.occluders) occluders.push(...part.occluders);

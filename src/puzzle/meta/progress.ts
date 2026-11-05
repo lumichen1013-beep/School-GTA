@@ -30,6 +30,16 @@ export function levelState(e: LevelEntry, save: Save, levels: readonly LevelEntr
   return isUnlocked(e, save, levels) ? 'open' : 'locked';
 }
 
+/** v0.4 選單列不列這一關：隱藏房 (LevelEntry.hidden) 在解鎖前不列 (不劇透)；其餘一律列 */
+export const listedInMenu = (e: LevelEntry, save: Save, levels: readonly LevelEntry[] = LEVELS): boolean => !e.hidden || levelState(e, save, levels) !== 'locked';
+
+/**
+ * 章門打開 (整章通關) 時一併記為通關的關卡 = 這一章的關卡 (CubeChapter.levels 的鍵) 去掉隱藏房 (v0.4 H1：第二章通關只記 2-1～2-5；
+ * 隱藏房只由它自己的房間通關記入)
+ */
+export const chapterClearAlso = (chapterLevels: Readonly<Record<string, string>>, levels: readonly LevelEntry[] = LEVELS): string[] =>
+  Object.keys(chapterLevels).filter(id => !levels.find(l => l.id === id)?.hidden);
+
 /** 開場可用能力 = 關卡白名單 ∩ 存檔已得能力 */
 export const startAbilities = (e: LevelEntry, save: Save): AbilityId[] => e.abilities.filter(a => save.abilities.includes(a));
 

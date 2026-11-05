@@ -2,7 +2,7 @@
 import type { ObjState, World } from '../core/types';
 import type { WorldCommand } from '../core/actions';
 import type { Text } from '../text/text';
-import { attachedCards, cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writableTarget } from '../mechanics/labels';
+import { attachedCards, cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writableTarget, type CardDef } from '../mechanics/labels';
 import { findTarget } from '../core/interact';
 import type { InputAction } from '../input/types';
 import { WORD_KEYS } from '../mechanics/cube';
@@ -50,17 +50,44 @@ export function labelTitle(w: World, text: Text, o: ObjState): string {
   return o.def.label?.kind === 'dir' ? text('ui.label.dir', { name: text('term.lever'), word: g.now }) : g.now;
 }
 
+/** v0.4 H1 字卡匣的頁 (CardDef.slot 分組；mobile-controls 2.5)：依此順序 */
+export type TrayTab = CardDef['slot'];
+export const TRAY_TABS: readonly TrayTab[] = ['word', 'part', 'scale'];
+const TAB_KEYS: Readonly<Record<TrayTab, string>> = { word: 'ui.cards.tab.word', part: 'ui.cards.tab.part', scale: 'ui.cards.tab.scale' };
+
+/** 這個標籤收的那一組 (只依組別、不依答案)：方槽 → 尺度卡；門牌 / 拆字 → 部件卡；字謎空格 / 方向字 → 詞卡；其餘 (例：沒有方槽的名詞) = null */
+export function labelTab(o: ObjState): TrayTab | null {
+  const l = o.def.label;
+  if (!l) return null;
+  if (l.kind === 'noun') return l.scale ? 'scale' : null;
+  if (l.kind === 'plate' || l.kind === 'strip') return 'part';
+  return 'word';
+}
+
 /**
  * 字卡匣 (開著的對象 = 此刻 2D 範圍內可寫的標籤；離開 / 切回實景 → null，外殼關掉卡匣)：
- * 卡匣格 TRAY_SLOTS 格 (持有的卡依序放，其餘空著)、標籤上貼著的卡、尺度卡槽 (只鋪陳)
+ * 卡匣格 TRAY_SLOTS 格 (本頁持有的卡依序放，其餘空著)、標籤上貼著的卡、尺度卡槽 (只鋪陳)；
+ * v0.4 H1 分頁：tabs = 持有或貼著的卡出現過的組 (TRAY_TABS 順序)；tab = 指定的頁 (不在 tabs 裡 / 沒給 = 這個標籤收的那一組；
+ * 那一組沒有卡 (手上與這個標籤上都沒有) → 第一個有卡的組)
  */
-export function deriveCardTray(w: World, text: Text, feedbackSeq: number): CardTrayModel | null {
+export function deriveCardTray(w: World, text: Text, feedbackSeq: number, tab?: TrayTab): CardTrayModel | null {
   const t = writableTarget(w);
   if (!t || !t.def.label) return null;
-  const held = trayCards(w);
+  const all = trayCards(w);
   const id = t.def.label.id;
   const g = labelGlyph(w, text, t);
+  const slotOf = (c: string): TrayTab | undefined => CARDS[c]?.slot;
+  const placed = [...Object.values(w.ext.labels ?? {}).flat(), ...attachedCards(w, t)];
+  const tabs = TRAY_TABS.filter(k => [...all, ...placed].some(c => slotOf(c) === k));
+  const has = (k: TrayTab): boolean => all.some(c => slotOf(c) === k) || attachedCards(w, t).some(c => slotOf(c) === k);
+  const own = labelTab(t);
+  const fallback = own !== null && has(own) ? own : tabs.find(has) ?? tabs[0] ?? 'word';
+  const active = tab !== undefined && tabs.includes(tab) ? tab : fallback;
+  const held = all.filter(c => slotOf(c) === active);
+  const howto = ['ui.cards.howto.paste', 'ui.cards.howto.remove', ...(tabs.length > 1 ? ['ui.cards.howto.tab'] : []), 'ui.cards.howto.close'];
   return {
+    tabs,
+    tab: active,
     label: id,
     title: labelTitle(w, text, t),
     glyph: g.now,
@@ -76,9 +103,16 @@ export function deriveCardTray(w: World, text: Text, feedbackSeq: number): CardT
     feedbackSeq,
     text: {
       head: text('ui.cards.head', { title: labelTitle(w, text, t) }), close: text('ui.cards.close'),
-      remove: text('ui.cards.remove', { word: attachedCards(w, t)[0] ? cardGlyph(text, attachedCards(w, t)[0]) : '' }), howto: ['ui.cards.howto.paste', 'ui.cards.howto.remove', 'ui.cards.howto.close'].map(k => text(k)), scale: text('ui.cards.scale')
+      remove: text('ui.cards.remove', { word: attachedCards(w, t)[0] ? cardGlyph(text, attachedCards(w, t)[0]) : '' }), howto: howto.map(k => text(k)), scale: text('ui.cards.scale'),
+      tabs: Object.fromEntries(tabs.map(k => [k, text(TAB_KEYS[k])]))
     }
   };
+}
+
+/** 換頁 (← = −1 / → = +1；循環)：只有一組 = 不換 */
+export function shiftTab(m: CardTrayModel, dir: -1 | 1): TrayTab {
+  const i = m.tabs.indexOf(m.tab);
+  return m.tabs.length > 1 ? m.tabs[(i + dir + m.tabs.length) % m.tabs.length] : m.tab;
 }
 
 /** 卡匣第 n 格 (1 起算) 的貼卡指令；空格 → null */

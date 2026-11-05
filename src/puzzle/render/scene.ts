@@ -60,7 +60,7 @@ export class PuzzleScene {
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target);
 
-    this.decor = buildDecor(this.paint, world.level, theme, { still: opts.still });
+    this.decor = buildDecor(this.paint, world.level, theme, { still: opts.still, calm: opts.calm });
     this.scene.add(this.decor.root);
     this.occluders.push(...this.decor.occluders);
     this.nearFaders = new Set(this.decor.occluders);

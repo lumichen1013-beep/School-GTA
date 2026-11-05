@@ -7,8 +7,11 @@ declare module '../core/types' {
   interface ObjKinds {
     /** 鑰匙台：parts 全部持有 → 各減一、得到 out、used、okText；缺件 → missingText ({parts} = 缺的道具名)；組過之後 = doneText */
     keyBench: { parts: readonly ItemId[]; out: ItemId; okText: TextKey; missingText: TextKey; doneText: TextKey };
-    /** 手記架：第一次按 E → 取得 gives、used、useText (doneFlag → done)；之後 = emptyText */
-    diaryStand: { gives: ItemId; emptyText: TextKey };
+    /**
+     * 手記架：第一次按 E → 取得 gives、used、useText (doneFlag → done)；之後 = emptyText；
+     * v0.4 look = 外觀 (純呈現，行為不變)：'desk' = H1 爸爸小時候的小書桌 (抽屜裡是老宅圖殘片 4)
+     */
+    diaryStand: { gives: ItemId; emptyText: TextKey; look?: 'desk' };
     /** 章門平台 (實體；呈現) */
     landing: {};
   }

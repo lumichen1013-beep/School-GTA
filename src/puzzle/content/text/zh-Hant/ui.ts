@@ -36,6 +36,11 @@ export const ui = {
   'ui.cards.howto.paste': '貼上：點卡片，或按 1～3',
   'ui.cards.howto.remove': '取下：點「取下」，或按 X',
   'ui.cards.howto.close': '關閉：點「關閉」或空白處，或按 Esc / E',
+  // v0.4 H1：字卡匣分頁 (詞卡 / 部件卡 / 尺度卡；只有一組時不畫頁籤、不說換頁)
+  'ui.cards.tab.word': '詞卡',
+  'ui.cards.tab.part': '部件卡',
+  'ui.cards.tab.scale': '尺度卡',
+  'ui.cards.howto.tab': '換頁：點頁籤，或按 ← / →',
   'ui.label.dir': '{name}：{word}',
   'ui.lever.label': '拉桿「{word}」',
   // 展開圖 (v0.3；規格 5.4.1：接通 = 實線 + 墨點、門後是牆 = 斷線 + ×、拱門 = 雙線)

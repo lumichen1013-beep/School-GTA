@@ -14,7 +14,7 @@ import { loadSettings, writeSettings, type Settings } from '../meta/settings';
 import { cutsceneBeforeLevel, memoryEntries, recordCutscene, shouldAutoPlayPrologue } from '../meta/cutscenes';
 import { seenCutscenes } from '../meta/save';
 import { cutsceneById, PROLOGUE_ID, type CutsceneId } from '../content/cutscenes';
-import { isUnlocked, levelState, nextAfterClear, recordClear, startAbilities, type ClearKind } from '../meta/progress';
+import { chapterClearAlso, isUnlocked, levelState, listedInMenu, nextAfterClear, recordClear, startAbilities, type ClearKind } from '../meta/progress';
 import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom } from '../ui/dom';
@@ -37,7 +37,8 @@ import { LevelSession } from './levelSession';
 import { newChapterState, singleRoomSpec, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { cubeChapterOf } from '../content/cubes';
 import { chapterSpecOf } from '../mechanics';
-import { chapterStart, entryNarrationKey, withChapter } from '../meta/chapters';
+import { chapterStart, entryNarrationKey, grantScaleCards, withChapter } from '../meta/chapters';
+import { say } from '../core/world';
 import { browserStorage } from './services';
 import { AudioBridge } from './audioBridge';
 
@@ -99,7 +100,8 @@ export class PuzzleApp {
     this.tray = new CardTray(root, this.text, {
       slot: n => this.session?.trayPick(n),
       remove: () => this.session?.trayRemove(),
-      close: () => this.session?.closeTray()
+      close: () => this.session?.closeTray(),
+      tab: t => this.session?.trayGoTab(t)
     });
     this.input = new KeyboardSource(this.bindings);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -173,7 +175,8 @@ export class PuzzleApp {
           name: this.save.name,
           chapters: CHAPTERS.map(ch => ({
             titleKey: ch.titleKey,
-            levels: ch.levels.map(levelById).filter((e): e is LevelEntry => !!e).map(e => ({ id: e.id, titleKey: e.titleKey, state: levelState(e, this.save) }))
+            // 隱藏房 (H1) 解鎖前不列 (meta/progress listedInMenu)
+            levels: ch.levels.map(levelById).filter((e): e is LevelEntry => !!e && listedInMenu(e, this.save)).map(e => ({ id: e.id, titleKey: e.titleKey, state: levelState(e, this.save) }))
           })),
           ...(this.dev ? { dev: { titleKey: 'lvl.proto.menu', levels: PROTO_LEVELS.map(e => ({ id: e.id, titleKey: e.titleKey, state: 'open' as const })) } } : {})
         }, {
@@ -210,12 +213,12 @@ export class PuzzleApp {
         break;
       }
       case 'clear': {
-        // 魔方章：章門打開 = 本章每個房間 (關卡) 都記為通關 (例：1-3 的章門 → 1-2、1-3)
+        // 魔方章：章門打開 = 本章每個房間 (關卡) 都記為通關 (例：1-3 的章門 → 1-2、1-3)；隱藏房 (H1) 不順帶記入
         const e = levelById(s.levelId) ?? this.entry(s.levelId);
         const def = e.load();
         const cc = cubeChapterOf(e.id);
         const room = s.kind === 'room';
-        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? Object.keys(cc.levels) : []));
+        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? chapterClearAlso(cc.levels) : []));
         // 通關畫面是模態的：收起展開圖 / 轉動模式 / 字卡匣 (在轉動模式裡完成的題，例 3-1b)；底下的世界照常推進但不收玩家輸入 (frame)
         this.session?.closeOverlays();
         // 繼續：章門打開 → 下一章的第一關 (「前往第二章　書房」)；章內的房間通關 → 回到本章 (「繼續探索」)
@@ -242,20 +245,23 @@ export class PuzzleApp {
   }
 
   /** 關卡 → 章節 spec 與起始狀態：在魔方上 → 整章 (接著存檔玩)；否則單房 */
-  private chapterFor(e: LevelEntry): { spec: ChapterSpec; state: ChapterState } {
+  private chapterFor(e: LevelEntry): { spec: ChapterSpec; state: ChapterState; granted?: boolean } {
     const cc = cubeChapterOf(e.id);
     if (!cc) {
       const spec = singleRoomSpec(e.load());
       return { spec, state: newChapterState(spec, e.id, null) };
     }
     const spec: ChapterSpec = chapterSpecOf(cc);
-    return { spec, state: chapterStart(this.save, spec, cc.start, cc.legacy) };
+    // v0.4 H1：帶著比例尺回到第二章 → 補發尺度卡 (只補一次：補完立刻寫進章節存檔；HUD 說一次)
+    const g = grantScaleCards(this.save, cc, chapterStart(this.save, spec, cc.start, cc.legacy));
+    if (g.granted.length) this.commit(withChapter(this.save, g.state));
+    return { spec, state: g.state, granted: g.granted.length > 0 };
   }
 
   private startSession(e: LevelEntry): void {
     this.endSession();
     const levelId = e.id;
-    const { spec, state } = this.chapterFor(e);
+    const { spec, state, granted } = this.chapterFor(e);
     const level = spec.rooms[state.room];
     const theme = resolveTheme(level.theme ?? CHAPTERS.find(ch => ch.id === e.chapter)?.theme);
     this.session = new LevelSession(
@@ -278,6 +284,7 @@ export class PuzzleApp {
         onRoomCleared: room => this.roomCleared(levelId, room)
       }
     );
+    if (granted) say(this.session.world, 'msg.cards.scaleBack');
     this.resize();
     this.input.clear();
   }

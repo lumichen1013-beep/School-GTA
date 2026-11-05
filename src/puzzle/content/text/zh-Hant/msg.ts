@@ -22,6 +22,8 @@ export const msg = {
   'msg.cube.doorOnly': '對面是一扇門，只容得下人。箱子過不去。',
   'msg.cube.archWall': '拱門後面是牆。',
   'msg.cube.archBlocked': '拱門那一頭被擋住了。',
+  // v0.4 H1：人穿門 / 洞前查到達處 (被實體占住、那個實體沒有 blockText 時)
+  'msg.cube.doorBlocked': '門的另一邊被堵住了。',
   'msg.cube.mapOnly2d': '展開圖只畫在[[term.mode2d]]上。',
   // 控制盤 (v0.4 N32；規格 5.4.1)：魔方儀、轉動模式、轉不動的原因
   'msg.dial.activated': '魔方儀轉了起來。切到[[term.mode2d]]打開展開圖，就能自己選一排轉。',
@@ -72,5 +74,7 @@ export const msg = {
   // 謎題標籤前按 E、匣裡沒有卡：卡貼在別的標籤上 (關卡自己的缺卡指路見 label.noCardText)
   'msg.label.cardElsewhere': '{card}還貼在別的標籤上。先去把它取下來。',
   // 字卡匣關著時按 1～3 / X：說明怎麼打開
-  'msg.cards.howto': '字卡匣要在[[term.mode2d]]裡、站在標籤前按 E 打開。'
+  'msg.cards.howto': '字卡匣要在[[term.mode2d]]裡、站在標籤前按 E 打開。',
+  // v0.4 H1：帶著比例尺回到第二章 (開章時補發尺度卡的那一次)
+  'msg.cards.scaleBack': '建築比例尺也跟來了。字卡匣裡多了「大」「小」。'
 } as const;

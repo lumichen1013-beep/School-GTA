@@ -37,6 +37,11 @@ export interface ChapterSpec {
    * (mechanics/index chapterSpecOf)；lightExt、展開圖 mapLight、validateDial 都以同一個結果呼叫 lightPaths。沒給 = 一律蓋著
    */
   uncovered?(state: ChapterState, labels: Readonly<Record<string, readonly string[]>>): readonly string[];
+  /**
+   * v0.4 H1 讀檔位置校正：人站在 state.room 的 state.door 到達處時，此刻被哪個實體占住 (null = 空著)。由 app 以機制表注入
+   * (mechanics/index chapterSpecOf → arrivalBlocker；核心不 import mechanics)；meta/chapters chapterStart 用 (被占 → 從開章入口進)。沒給 = 不校正
+   */
+  arrival?(state: ChapterState): ObjId | null;
 }
 
 /** 章節狀態 (可 JSON 序列化；SaveV3 的 chapters[n] 由此而來) */
@@ -304,11 +309,12 @@ export function transferObject(cs: ChapterSession, obj: ObjId, door: ObjId, opts
   const pos = { x: dst.x, y: o.y, z: dst.z };
   if (along) { pos.x = clamp(dst.x + lateral, b.minX + o.def.w / 2, b.maxX - o.def.w / 2); pos.z = di.side === 'S' ? dst.z - dst.d / 2 - reach : dst.z + dst.d / 2 + reach; }
   else { pos.z = clamp(dst.z + lateral, b.minZ + o.def.d / 2, b.maxZ - o.def.d / 2); pos.x = di.side === 'E' ? dst.x - dst.w / 2 - reach : dst.x + dst.w / 2 + reach; }
-  // 目標房此刻的樣子 (快照 + 跨房物件) 裡，到達處要空著、底下要有地板
+  // 目標房此刻的樣子 (快照 + 跨房物件 + 即時標籤；尺寸先依標籤重算) 裡，到達處要空著、底下要有地板
   const next = clone(state);
   next.room = link.room;
   next.door = null;
-  const probe = loadRoom(spec, next, opts);
+  if (world.ext.labels) next.labels = clone(world.ext.labels);
+  const probe = probeRoom(spec, next, opts);
   const box: Box = { min: [pos.x - o.def.w / 2, pos.y, pos.z - o.def.d / 2], max: [pos.x + o.def.w / 2, pos.y + o.def.h, pos.z + o.def.d / 2] };
   const solids = solidsFor(probe, '3d').filter(s => s.def.id !== obj);
   const blocked = solids.some(s => overlaps(objBox(s), box, '3d'));
@@ -326,6 +332,44 @@ export function transferObject(cs: ChapterSession, obj: ObjId, door: ObjId, opts
   world.objs.splice(world.objs.indexOf(o), 1);
   world.byId.delete(obj);
   return { ...cs, state: out };
+}
+
+/**
+ * 目標房此刻的樣子 (到達處檢查用；不改 state)：loadRoom 之後先跑一次機制的 beforePhysics——mechanics/scale 依標籤重算尺寸
+ * (建 World 時 def 是關卡資料的原尺寸)
+ */
+function probeRoom(spec: ChapterSpec, state: ChapterState, opts: WorldOptions): World {
+  const probe = loadRoom(spec, state, opts);
+  for (const m of probe.rt.mechanics.beforePhysics) m.beforePhysics!(probe, 0);
+  return probe;
+}
+
+/**
+ * v0.4 H1 到達處 (規格「H1 夾層（細化）」洞的到達處)：人從 state.door 進 state.room 時站的位置 (doorSpawn) 此刻被哪個實景實體占住；
+ * 空著 / 不是從門進 = null。目標房 = 快照 + 跨房物件 + 標籤 (尺寸先依標籤重算)
+ */
+export function arrivalBlocker(spec: ChapterSpec, state: ChapterState, opts: WorldOptions): ObjId | null {
+  const level = spec.rooms[state.room];
+  const di = state.door === null ? undefined : spec.doors.find(d => d.room === state.room && d.door === state.door);
+  if (!level || !di) return null;
+  const probe = probeRoom(spec, { ...clone(state), door: null }, opts);
+  const at = doorSpawn({ ...level, objects: roomObjects(spec, state, state.room) }, di.door, di.side);
+  const box = boxAt(at.x, at.y, at.z);
+  return solidsFor(probe, '3d').find(s => overlaps(objBox(s), box, '3d'))?.def.id ?? null;
+}
+
+/**
+ * v0.4 H1：穿過這扇門 (此刻接到別的房) 之前查到達處——目標房的 doorSpawn 被實體占住 → { by } (外殼說 by 的 blockText ?? msg.cube.doorBlocked、
+ * 不換房)；空著 / 這扇門沒接到房 = null。當前房以即時快照與標籤計 (例：剛在前廳貼上「小」)
+ */
+export function doorArrival(cs: ChapterSession, door: ObjId): { by: ObjId; blockText?: string } | null {
+  const link = roomLinks(cs.spec, cs.state, cs.world.ext.labels ?? cs.state.labels)[door];
+  if (!link || link.to !== 'room') return null;
+  const next: ChapterState = { ...captureState(cs), room: link.room, door: link.door };
+  const by = arrivalBlocker(cs.spec, next, { mechanics: cs.world.rt.mechanics.list, text: cs.world.rt.text });
+  if (by === null) return null;
+  const def = roomObjects(cs.spec, next, link.room).find(o => o.id === by);
+  return def?.blockText ? { by, blockText: def.blockText } : { by };
 }
 
 /** 記下章節旗標 (目前 = 演出過的驚嚇)：同時寫進 entry，R 不還原 (見 ChapterState.flags) */

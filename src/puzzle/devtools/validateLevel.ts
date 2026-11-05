@@ -95,15 +95,18 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'lattice') return [o.readText, o.patternText, o.lightText, o.solvedText, o.doneText, label];
   if (o.type === 'oldCompass') return [o.readText, label];
   if (o.type === 'chaser') return [o.caughtText, label];
+  if (o.type === 'bookWall') return [o.readText, label];
+  if (o.type === 'innerShelf') return [o.readText, o.smallText, label];
+  if (o.type === 'diaryStand') return [o.emptyText, label];
   if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.stripped, ...Object.values(o.label?.forms ?? {})];
   return [label, o.label?.solvedText, o.label?.stripped];
 }
 
-/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱、補墨的話，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明) */
+/** 關卡引用的文字 key (順序：title、narration、next、謎題名稱、補墨的話，然後每個物件的 label / lockedText / useText / 類型專屬欄位 / 標籤缺卡說明 / 到達處被占的話) */
 function levelKeyRefs(level: LevelDef): KeyRef[] {
   const refs: KeyRef[] = [level.titleKey, level.narrationKey, level.nextKey, ...(level.puzzles ?? []).map(q => q.titleKey), ...(level.turnBudget?.refillText ? [level.turnBudget.refillText] : [])].map(key => ({ key }));
   for (const o of level.objects) {
-    const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o), o.label?.noCardText].filter((k): k is string => k !== undefined);
+    const keys = [o.labelKey, o.lockedText, o.useText, ...typeKeys(o), o.label?.noCardText, o.blockText].filter((k): k is string => k !== undefined);
     refs.push(...keys.map(key => ({ key, obj: o.id })));
   }
   return refs;

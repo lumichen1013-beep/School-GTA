@@ -112,3 +112,61 @@ export const ladderDecor: DecorFactory = (p, item, { level, theme: { pal } }) =>
   g.position.x = num(item, 'x');
   return { root: g, only3d: [g] };
 };
+
+/**
+ * bookCart：推到角落的書車 (胡桃木兩層架 + 兩側擋板 + 推把 + 四個小輪；上下兩層各一排書，同色合併)；欄位 x、z、rot (預設 0)、seed。
+ * 寬 0.9、深 0.48、頂層 0.82 (H1 的劇情字條斜靠在它西側的書堆上)
+ */
+export const bookCartDecor: DecorFactory = (p, item, { theme: { pal } }) => {
+  const g = new THREE.Group();
+  const r = rng(num(item, 'seed', 1));
+  const W = 0.9, D = 0.48;
+  const wood = [
+    part(box(W, 0.04, D), 0, 0.2, 0), part(box(W, 0.04, D), 0, 0.8, 0),
+    ...[-1, 1].map(s => part(box(0.04, 0.78, D + 0.02), s * (W / 2 + 0.02), 0.51, 0)),
+    part(new THREE.CylinderGeometry(0.018, 0.018, W + 0.08, 8), 0, 0.98, -D / 2 + 0.02, 0, 0, Math.PI / 2),
+    ...[-1, 1].map(s => part(box(0.03, 0.18, 0.03), s * (W / 2 + 0.02), 0.9, -D / 2 + 0.02))
+  ];
+  const wheels: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) wheels.push(part(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 10), sx * (W / 2 - 0.06), 0.05, sz * (D / 2 - 0.06), 0, 0, Math.PI / 2));
+  g.add(p.mesh(merge(wood), pal.shelf, { map: crateWood(pal), flat: pal.shelf, outline: false }), p.mesh(merge(wheels), pal.iron, { metalness: 0.5, roughness: 0.5, outline: false }));
+  // 書：兩種書色 (上下層各一色)，每層一個合併網格
+  for (const [j, y0] of [0.22, 0.82].entries()) {
+    const parts: THREE.BufferGeometry[] = [];
+    for (let x = -W / 2 + 0.06; x < W / 2 - 0.08;) {
+      const bw = 0.05 + r() * 0.04, bh = 0.22 + r() * 0.12;
+      parts.push(part(box(bw, bh, 0.3 + r() * 0.06), x + bw / 2, y0 + bh / 2, 0.02, 0, 0, x > W / 2 - 0.25 ? 0.2 : 0));
+      x += bw + 0.008;
+    }
+    g.add(p.mesh(merge(parts), pal.books[(j * 3 + 1) % pal.books.length], { roughness: 0.9, outline: false }));
+  }
+  g.position.set(num(item, 'x'), 0, num(item, 'z'));
+  g.rotation.y = num(item, 'rot', 0);
+  return { root: g, only3d: [g] };
+};
+
+/** stool：小凳 (圓座 + 三支腳，合成一個網格)；欄位 x、z */
+export const stoolDecor: DecorFactory = (p, item, { theme: { pal } }) => {
+  const parts = [part(new THREE.CylinderGeometry(0.17, 0.17, 0.05, 14), 0, 0.4, 0)];
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    parts.push(part(new THREE.CylinderGeometry(0.018, 0.022, 0.4, 6), Math.cos(a) * 0.11, 0.19, Math.sin(a) * 0.11, Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12));
+  }
+  const m = p.mesh(merge(parts), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark, outline: false });
+  m.position.set(num(item, 'x'), 0, num(item, 'z'));
+  return { root: m, only3d: [m] };
+};
+
+/** wallLamp：後牆上的小壁燈 (黃銅托架 + 布燈罩 + 燈泡 + 光暈)；欄位 x、y (燈罩中心高度)、wall (牆面的 z，預設 = 房間後牆 + 0.07) */
+export const wallLampDecor: DecorFactory = (p, item, { level, theme: { pal } }) => {
+  const g = new THREE.Group();
+  const brass = { metalness: 0.6, roughness: 0.4 } as const;
+  const bracket = p.mesh(merge([part(box(0.12, 0.16, 0.03), 0, -0.12, 0.015), part(box(0.03, 0.03, 0.2), 0, -0.1, 0.12)]), pal.brass, { ...brass, outline: false });
+  const shade = p.mesh(new THREE.CylinderGeometry(0.08, 0.13, 0.16, 14, 1, true), pal.lampShade, { emissive: pal.lampShade, emissiveIntensity: 0.4, side: THREE.DoubleSide, outline: false, shadow: false });
+  shade.position.set(0, 0, 0.22);
+  const halo = glowSprite(glow(), pal.lampLight, 0.9, 0.3, true);
+  halo.position.set(0, -0.02, 0.24);
+  g.add(bracket, shade, halo);
+  g.position.set(num(item, 'x'), num(item, 'y', 1.9), num(item, 'wall', level.bounds.minZ + 0.07));
+  return { root: g, only3d: [g] };
+};

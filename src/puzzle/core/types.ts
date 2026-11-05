@@ -46,6 +46,8 @@ export interface ObjBase {
   useText?: TextKey;
   /** v0.4：此物件 used (觸發過) 時成立的謎題旗標 (= 謎題 id；控制盤鎖扣的解開條件、P4 預算的「目前謎題」，規格 5.4.1) */
   doneFlag?: string;
+  /** v0.4 H1：這個實體占住門 / 洞的到達處時 (人穿門前章節層先查；core/chapter doorArrival) 說的話；沒給 = msg.cube.doorBlocked */
+  blockText?: TextKey;
 }
 
 /** 開放式類型表：每個機制檔以 declaration merging 加入自己的類型與專屬欄位 */

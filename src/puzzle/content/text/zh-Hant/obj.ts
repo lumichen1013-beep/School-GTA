@@ -42,5 +42,8 @@ export const obj = {
   'obj.balance.verb': '查看',
   'obj.bigPot.verb': '推',
   'obj.paneFrame.verb': '嵌上',
+  // H1 夾層：書牆、後面那面書櫃
+  'obj.bookWall.verb': '查看',
+  'obj.innerShelf.verb': '查看',
   'obj.default.verb': '互動'
 } as const;

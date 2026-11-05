@@ -8,7 +8,7 @@ import { PuzzleScene } from '../../../src/puzzle/render/scene';
 import { PuzzleCameras } from '../../../src/puzzle/render/cameras';
 import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
-import { deep, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
+import { deep, mezz, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { THEMES } from '../../../src/puzzle/render/themes';
 import { bed, depths, gallery, night, nursery } from '../../../src/puzzle/content/levels/ch3/rooms';
 
@@ -384,5 +384,35 @@ describe('渲染：深度打架 (共面)：第三章溫室的五間占位房 (�
     view.modelRoot('barsA')!.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes++; });
     expect(meshes).toBe(2);
     view.dispose();
+  });
+});
+
+describe('渲染：深度打架 (共面)：H1 夾層 (書牆、後面那面書櫃、小書桌)', () => {
+  beforeAll(stubCanvas);
+
+  it('書櫃三檔 (小 / 原 / 大) × 書桌拿過與否、書牆頂的裝飾書三層都出現：3D 鏡頭看得到的面沒有共面；藏寶圖畫得出書櫃、書牆只在實景', () => {
+    for (const k of [0.5, 1, 1.5]) {
+      const w = newWorld(mezz);
+      w.ext = { labels: k === 1 ? {} : { 'scale:innerShelf': [k < 1 ? 'card.xiao' : 'card.da'] } };
+      const shelf = w.byId.get('innerShelf')!;
+      shelf.def = { ...shelf.def, w: 3.6 * k, h: 2.6 * k, d: 1.4 * k };
+      w.byId.get('desk')!.used = k !== 1;
+      const view = new PuzzleScene(w, THEMES.study);
+      const cams = new PuzzleCameras(w);
+      // 切三次藏寶圖 → 實景：書牆頂的裝飾書長到三層
+      for (let n = 0; n < 3; n++) { w.player.mode = '2d'; view.update('2d', 1 / 60, n, cams.active('2d')); w.player.mode = '3d'; view.update('3d', 1 / 60, n + 0.5, cams.active('3d')); }
+      for (let i = 0; i < 60; i++) view.update('3d', 1 / 60, 2 + i / 60, cams.active('3d'));
+      expect([k, zFightPairs(view.scene, [mezz.bounds.minX + 3, mezz.bounds.maxX - 3])]).toEqual([k, []]);
+      let walls = 0;
+      view.modelRoot('bookWall')!.traverse(o => { if ((o as THREE.Mesh).isMesh && o.parent === view.modelRoot('bookWall')) walls++; });
+      // 書牆 = 木框 + 背板 + 書 (3 個網格)；頂上的裝飾書 (decor wallTopBooks) 三層都出現
+      let tops = 0;
+      view.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.visible && m.parent?.children.length === 3 && m.parent.position.z === -2.7 && m.parent.parent?.type === 'Group' && !view.modelRoot('bookWall')!.children.includes(m)) tops++; });
+      expect([k, walls, tops]).toEqual([k, 3, 3]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 9, cams.active('2d'));
+      expect([view.modelRoot('innerShelf')!.visible, view.modelRoot('bookWall')!.visible, view.modelRoot('desk')!.visible]).toEqual([true, false, true]);
+      view.dispose();
+    }
   });
 });

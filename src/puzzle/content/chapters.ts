@@ -3,7 +3,8 @@ export interface ChapterDef { id: number; titleKey: string; theme: string; level
 
 export const CHAPTERS: readonly ChapterDef[] = [
   { id: 1, titleKey: 'ch.1.title', theme: 'foyer', levels: ['1-1', '1-2', '1-3'] },
-  { id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4', '2-5'] },
+  // 第二章 書房 (2×3 列 / 行轉)：2-1～2-5、H1 夾層 (隱藏房，排在 2-5 之後；解鎖前選單不列)
+  { id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4', '2-5', 'H1'] },
   // 第三章 溫室 (3×3 滑動)：3-1 苗圃、3-2 玻璃長廊、3-3 夜溫室、3-4 溫室深處 (章末)
   { id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2', '3-3', '3-4'] }
 ];

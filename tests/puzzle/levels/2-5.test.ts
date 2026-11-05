@@ -19,7 +19,7 @@ import { applyChapterEvent } from '../../../src/puzzle/app/chapterEvents';
 import { chapterStart, withChapter } from '../../../src/puzzle/meta/chapters';
 import { defaultSave, loadSave, writeSave } from '../../../src/puzzle/meta/save';
 import { memoryStorage } from '../../../src/puzzle/meta/storage';
-import { levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
+import { chapterClearAlso, levelState, nextAfterClear, recordClear } from '../../../src/puzzle/meta/progress';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
 import { layoutDepthIssues, validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
 import { dialModelOf, validateDial } from '../../../src/puzzle/devtools/validateCube';
@@ -109,7 +109,9 @@ describe('2-5 書房深處：資料與驗證器', () => {
     expect(validateEntry(levelById('2-5')!, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect(deep.puzzles!.map(q => TEXT(q.titleKey))).toEqual(['2-5 刻著同一個圖案']);
     const e = levelById('2-5')!;
-    expect([e.chapter, e.unlock.after, CH2.levels['2-5'], cubeChapterOf('2-5'), CHAPTERS.find(c => c.id === 2)!.levels]).toEqual([2, ['2-4'], 'deep', CH2, ['2-1', '2-2', '2-3', '2-4', '2-5']]);
+    expect([e.chapter, e.unlock.after, CH2.levels['2-5'], cubeChapterOf('2-5'), CHAPTERS.find(c => c.id === 2)!.levels]).toEqual([2, ['2-4'], 'deep', CH2, ['2-1', '2-2', '2-3', '2-4', '2-5', 'H1']]);
+    // 第二章五關齊 + 隱藏房 H1 (章門通關只記 2-1～2-5：meta/progress chapterClearAlso)
+    expect([CH2.levels.H1, levelById('H1')!.hidden, chapterClearAlso(CH2.levels)]).toEqual(['mezz', true, ['2-1', '2-2', '2-3', '2-4', '2-5']]);
     const E = def('chapterE');
     expect(E.type === 'cubeDoor' && [E.kind, E.key, E.y, !!E.carving, E.doneFlag]).toEqual(['chapter', 'key.study', 2, true, '2-5']);
     expect([TEXT(deep.narrationKey), TEXT(deep.nextKey)]).toEqual(['最後一扇門上，刻著同一個圖案。', '書房和溫室，在牆後換了位置。']); // 第三章骨架：拿掉「第三章　溫室——還在路上。」
@@ -125,16 +127,16 @@ describe('2-5 書房深處：資料與驗證器', () => {
   });
 });
 
-describe('validateDial：2-5 區', () => {
-  const m = { ...dialModelOf(CH2_ZONE25.cube, CH2.rooms, CH2_ZONE25.puzzles, CH2_ZONE25.start, CH2_ZONE25.finish), plates: CH2_ZONE25.plates };
+describe('validateDial：2-5 區 (夾層的後面 areas)', () => {
+  const m = { ...dialModelOf(CH2_ZONE25.cube, CH2.rooms, CH2_ZONE25.puzzles, CH2_ZONE25.start, CH2_ZONE25.finish, { areas: CH2_ZONE25.areas }), plates: CH2_ZONE25.plates };
   const r = validateDial(m);
-  it('可達排列 720、抽象狀態 113,942、有解、卡死 0 (含 R)；無問題', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 113942, true, [], 8927]);
+  it('可達排列 720、抽象狀態 113,090 (H1 之前 113,942)、有解、卡死 0 (含 R)；無問題', () => {
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([720, 113090, true, [], 9780]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
   });
-  it('2-5.tray (把印房轉到書房深處正上方)：最短 1、次短 2、本質不同 120 (列先 / 行先都行)；拿掉門牌 → 無解 (P7)', () => {
+  it('2-5.tray (把印房轉到書房深處正上方)：最短 1、次短 2、序列 330、本質不同 121 (列先 / 行先都行；H1 之前 338 / 120：舊模型有 8 條序列要從洞穿過夾層走到西門，實際走不到)；拿掉門牌 → 無解 (P7)', () => {
     expect(r.perPuzzle.map(p => [p.id, p.shortest, p.second, p.solutions, p.distinct, p.issues])).toEqual([
-      ['2-1a', 1, 2, 3, 3, []], ['2-3a', 1, 1, 2, 2, []], ['2-5.tray', 1, 2, 338, 120, []], ['2-5', 0, null, 1, 1, []]
+      ['2-1a', 1, 2, 3, 3, []], ['2-3a', 1, 1, 2, 2, []], ['2-5.tray', 1, 2, 330, 121, []], ['2-5', 0, null, 1, 1, []]
     ]);
     expect(validateDial({ ...m, plates: [] }).solvable).toBe(false);
   });
@@ -145,8 +147,9 @@ describe('通關腳本 (runScript)', () => {
     let cs = turns(printWithJian(), [T('row0', 1)]);
     expect([pos(cs, 'print'), pos(cs, 'deep'), cs.world.ext.cube!.links.archS]).toEqual(['20', '21', { to: 'room', room: 'deep', door: 'holeN', kind: 'arch' }]);
     cs = finish(trayIntoDeep(cs));
-    const save = recordClear({ ...defaultSave(), cleared: ['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4'] }, '2-5', cs.world, Object.keys(CH2.levels));
+    const save = recordClear({ ...defaultSave(), cleared: ['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4'] }, '2-5', cs.world, chapterClearAlso(CH2.levels));
     expect([save.cleared.includes('2-5'), save.diary]).toEqual([true, [2]]);
+    expect(save.cleared.includes('H1')).toBe(false); // 隱藏房不隨章門通關記入
     expect(nextAfterClear('2-5', 'chapter', CHAPTERS)).toBe('3-1'); // 第三章骨架：通關畫面「前往第三章　溫室」
   });
 

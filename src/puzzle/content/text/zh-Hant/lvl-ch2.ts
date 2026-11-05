@@ -1,8 +1,5 @@
-// 第二章的占位房 (2-3 印房、H1 夾層、2-4 手稿庫、2-5 書房深處)：標題、門、旁白 (只有門，不計題；謎題另做)
+// 第二章的共用文字：門、洞、章門 (H1 夾層的占位標題 / 旁白已退役，見 lvl-H1.ts)
 export const lvlCh2 = {
-  'lvl.ch2.mezz.title': '夾層',
-  'lvl.ch2.placeholder.narration': '這裡的書還沒排好，像在等誰回來。',
-  'lvl.ch2.placeholder.next': '書房',
   'lvl.ch2.doorE': '東門',
   'lvl.ch2.doorW': '西門',
   'lvl.ch2.doorN': '北門',

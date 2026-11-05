@@ -2,6 +2,7 @@
 import type { ObjId } from '../core/types';
 import { isDialChapter, newChapterState, turnBudgetFor, type ChapterSpec, type ChapterState, type ObjSnapshot } from '../core/chapter';
 import type { ChapterSave, Save } from './save';
+import type { CubeChapter } from '../content/cubes';
 
 /** 舊存檔的預設快照 (content/cubes/ch<N>.ts 的 *_LEGACY)：已通關 level → 開章時 room 的物件旗標與章節道具 */
 export interface LegacyChapter {
@@ -56,8 +57,11 @@ export function chapterStart(save: Save, spec: ChapterSpec, start: { room: strin
       labels: saved.labels ?? {}, moved: (saved.moved ?? {}),
       room: known ? saved.at.room : start.room, door: known ? saved.at.door : start.door
     };
-    // 存檔的房間不在本章 (改從開章入口進) → 墨量屬於別的房，不沿用
-    return { ...base, ...dialFields(spec, known ? saved : { ...saved, turns: undefined }, base) };
+    // v0.4 H1：存檔的門 / 洞此刻的到達處被占住 (例：占位版夾層的洞內側，現在是書櫃) → 從開章入口進 (不把人放進後面)
+    const open = !known || saved.at.door === null || !spec.arrival || spec.arrival(base) === null;
+    if (!open) { base.room = start.room; base.door = start.door; }
+    // 存檔的房間不在本章 / 改從開章入口進 → 墨量屬於別的房，不沿用
+    return { ...base, ...dialFields(spec, known && open ? saved : { ...saved, turns: undefined }, base) };
   }
   const state = newChapterState(spec, start.room, start.door);
   if (legacy && save.cleared.includes(legacy.level)) {
@@ -76,3 +80,21 @@ export function chapterStart(save: Save, spec: ChapterSpec, start: { room: strin
  * 不在魔方上的單房關卡 = 該關的旁白
  */
 export const entryNarrationKey = (spec: ChapterSpec, state: ChapterState): string => spec.rooms[state.room].narrationKey;
+
+/** 尺度卡 (3-1 建築比例尺的「大」「小」；mechanics/scale SCALE_CARDS 的鍵) */
+const SCALE_CARD_IDS: readonly string[] = ['card.da', 'card.xiao'];
+
+/**
+ * v0.4 H1 補發尺度卡 (規格「H1 夾層（細化）」怎麼進 2)：存檔能力有 scale、這一章 cc.scaleCards (只有第二章)、
+ * 章節道具與標籤上都沒有那張卡 → 補進 state.items (各一張)；granted = 這次補的卡 (非空 → 開章後 HUD 說一次 msg.cards.scaleBack)。
+ * 之後卡片就是一般章節道具 (存檔 / R 照舊)；不改傳入的 state
+ */
+export function grantScaleCards(save: Save, cc: Pick<CubeChapter, 'scaleCards'>, state: ChapterState): { state: ChapterState; granted: string[] } {
+  if (!cc.scaleCards || !save.abilities.includes('scale')) return { state, granted: [] };
+  const onLabels = new Set(Object.values(state.labels).flat());
+  const granted = SCALE_CARD_IDS.filter(id => (state.items[id] ?? 0) <= 0 && !onLabels.has(id));
+  if (!granted.length) return { state, granted };
+  const items = { ...state.items };
+  for (const id of granted) items[id] = 1;
+  return { state: { ...state, items }, granted };
+}
