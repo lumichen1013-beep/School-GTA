@@ -3,6 +3,7 @@ import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { crateWood, stoneBlocks } from '../textures';
+import { mergeParts, placed } from '../geometry';
 import type { ModelCtx, PropModel } from './types';
 
 // 門廊 (1-1) 的物件：鐵柵 (僅現實)、圖上的墨牆 (僅藏寶圖)、玻璃牆 (僅現實)、木板橋 (僅現實)、石階 (兩邊都有)
@@ -10,29 +11,28 @@ import type { ModelCtx, PropModel } from './types';
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 
-/** 鐵柵 (僅現實)：沿長邊排列的鐵條 + 尖頭 + 三道橫檔；原點在底面中心 */
+/**
+ * 鐵柵 (僅現實)：沿長邊排列的鐵條 + 尖頭 + 三道橫檔；原點在底面中心。
+ * 同材質零件合成一個網格 (mergeParts)：鐵條與尖頭一個、橫檔一個 (原本每根各一個網格；3-4 長廊三道鐵柵約 210 次繪製)
+ */
 export function barsModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
   const g = new THREE.Group();
   const alongZ = d.d >= d.w;
   const len = alongZ ? d.d : d.w;
   const h = d.h;
-  const place = (m: THREE.Mesh, a: number, y: number) => { if (alongZ) m.position.set(0, y, a); else m.position.set(a, y, 0); g.add(m); };
+  const at = (geo: THREE.BufferGeometry, a: number, y: number) => (alongZ ? placed(geo, 0, y, a) : placed(geo, a, y, 0));
   const iron = { metalness: 0.6, roughness: 0.45, outline: false };
   const barLen = h - 0.25;
   const n = Math.floor((len - 0.1) / 0.3);
+  const bars: THREE.BufferGeometry[] = [];
   for (let i = 0; i <= n; i++) {
     const a = -len / 2 + 0.05 + (i * (len - 0.1)) / n;
-    const bar = p.mesh(new THREE.CylinderGeometry(0.035, 0.035, barLen, 8), pal.iron, iron);
-    place(bar, a, barLen / 2);
-    const tip = p.mesh(new THREE.ConeGeometry(0.07, 0.25, 6), pal.iron, iron);
-    place(tip, a, h - 0.125);
+    bars.push(at(new THREE.CylinderGeometry(0.035, 0.035, barLen, 8), a, barLen / 2), at(new THREE.ConeGeometry(0.07, 0.25, 6), a, h - 0.125));
   }
+  g.add(p.mesh(mergeParts(bars), pal.iron, iron));
   // 橫檔兩端內縮 1cm (不與後牆 / 前緣共面)；不落地 (底面離地，避免與地板頂面重疊)
   const railLen = len - 0.02;
-  for (const y of [0.18, h * 0.5, h - 0.5]) {
-    const rail = p.mesh(alongZ ? box(0.14, 0.1, railLen) : box(railLen, 0.1, 0.14), pal.metal, iron);
-    place(rail, 0, y);
-  }
+  g.add(p.mesh(mergeParts([0.18, h * 0.5, h - 0.5].map(y => at(alongZ ? box(0.14, 0.1, railLen) : box(railLen, 0.1, 0.14), 0, y))), pal.metal, iron));
   return { root: g };
 }
 

@@ -96,7 +96,7 @@ export class LevelSession {
   private roomClearSent = new Set<string>();
 
   constructor(private ctx: SessionContext, spec: ChapterSpec, state: ChapterState, private hooks: SessionHooks) {
-    this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities };
+    this.opts = { mechanics: DEFAULT_MECHANICS, text: ctx.text, abilities: hooks.abilities, ...(ctx.calm ? { calm: true } : {}) };
     this.cs = openChapter(spec, state, this.opts);
     this.mount();
   }

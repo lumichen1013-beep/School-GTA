@@ -7,7 +7,7 @@
 // - latticeBox：花窗架彈出的抽屜 (拾取物：grants + also；revealedBy 'lattice' = 字亮了才在場，mechanics/light hidden)
 // - giantRoot：巨根 (卡榫物件：jam、名詞標籤 + 方槽 (label.after 'lattice')、stayShrunk、covers = 蓋住的那扇玻璃；縮放與卡榫在 mechanics/scale)；
 //   usedWhen 指向的物件 (苔窗) used 的那一刻 → used (= 縮回土裡：之後一直以「小」計)
-// - chaseGate：長廊的鐵柵門 (實體)；opensWhen 指向的物件 (花窗) used 之後 = 不擋路 (passable)
+// - chaseGate：長廊的鐵柵門 (實體)；opensWhen 指向的物件 (花窗) used 之後 = 不擋路 (passable)；used 跟著 opensWhen (音訊 USED_ON 的「柵門打開」)
 // - oldCompass：舊的羅盤架 (資訊物件；開場旁白「羅盤的把手磨亮了」的依據)：3D / 2D 按 E = readText
 // - uncoveredQuery = ChapterSpec.uncovered 的實作 (app 以 mechanics/index chapterSpecOf 注入)
 import type { Mechanic } from '../core/registry';
@@ -85,6 +85,7 @@ function update(w: World): void {
       if (!o.used && w.byId.get(o.def.usedWhen)?.used) o.used = true;
       continue;
     }
+    if (o.def.type === 'chaseGate') { o.used = !!w.byId.get(o.def.opensWhen)?.used; continue; }
     if (o.def.type !== 'lattice' || o.gone) continue;
     const s = latticeState(w, o);
     const prev = last.get(o);

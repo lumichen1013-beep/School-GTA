@@ -86,6 +86,8 @@ const LIST: SfxDef[] = [
   { id: 'sfx.cord.reset', cat: 'action', db: -26, world: true, parts: [noise('bandpass', 700, 0.6, { a: 0.02, h: 0.15, d: 0.3 }, {}, 1400), tone('triangle', 330, 0.3, { a: 0.01, d: 0.3 }, { at: 0.1 })] },
   { id: 'sfx.plate.press', cat: 'feedback', db: -18, world: true, gap: 0.5, lowImpact: true, parts: [noise('lowpass', 500, 0.3, { a: 0.005, d: 0.15 }), thump(0, 0.7, 100)] },
   { id: 'sfx.gate.open', cat: 'action', db: -22, world: true, reverb: 0.4, parts: [noise('lowpass', 400, 0.5, { a: 0.15, h: 0.4, d: 0.4 }), tone('sawtooth', 60, 0.15, { a: 0.15, h: 0.4, d: 0.3 }, { filter: { type: 'lowpass', f: 200 } })] },
+  // 追逐 1 被追上：紙張一皺 (短促的揉紙聲 + 往下的掃頻；≤ −18 dBFS)
+  { id: 'sfx.chase.caught', cat: 'action', db: -20, reverb: 0.25, parts: [noise('bandpass', 2200, 0.7, { a: 0.01, h: 0.06, d: 0.22 }, {}, 900, 1.4), noise('bandpass', 1300, 0.5, { a: 0.01, d: 0.18 }, { at: 0.08 }, 2600, 1.2), tone('sine', 330, 0.25, { a: 0.02, d: 0.35 }, { f2: 220 })] },
   { id: 'sfx.reset.room', cat: 'action', db: -26, reverb: 0.3, parts: [noise('bandpass', 1500, 0.6, { a: 0.05, h: 0.1, d: 0.35 }, {}, 3000), tone('sine', 440, 0.3, { a: 0.05, d: 0.5 }, { f2: 330 })] },
   // ── 驚嚇 (規格 9.1：≤ 1.2 秒、峰值 ≤ −6 dBFS 經限幅器；平靜版 ≤ −24 dBFS) ──
   {

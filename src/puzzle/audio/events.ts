@@ -10,6 +10,8 @@ export type AudioAction =
   | { kind: 'sfx'; id: string; pitch?: number }
   /** 驚嚇：由 ScareGate 依 calmTension 決定一般 / 平靜版 */
   | { kind: 'scare'; flag: string }
+  /** 追逐 (N19)：on = 預兆起 tension 情境 (3 秒漸強)；quiet = 抵達終點、安靜 CHASE_QUIET_SEC 秒後回原情境；off = 中途走回主室 (直接回原情境) */
+  | { kind: 'chase'; op: 'on' | 'quiet' | 'off' }
   | { kind: 'music'; op: MusicOp }
   | { kind: 'view'; mode: Mode };
 
@@ -17,7 +19,23 @@ const sfx = (id: string, pitch?: number): AudioAction => (pitch === undefined ? 
 const music = (op: MusicOp): AudioAction => ({ kind: 'music', op });
 
 /** 所有 GameEvent 的 t (完整性測試用；新增事件種類時 worldEventActions 的 switch 會因 never 檢查編譯失敗) */
-export const GAME_EVENT_TYPES: readonly GameEvent['t'][] = ['switch', 'switchDenied', 'door', 'turnRequest', 'objCross', 'labelOpen', 'card', 'flag', 'dialActivate', 'done'];
+export const GAME_EVENT_TYPES: readonly GameEvent['t'][] = ['switch', 'switchDenied', 'door', 'turnRequest', 'objCross', 'labelOpen', 'card', 'flag', 'dialActivate', 'done', 'chase'];
+
+/** 追逐抵達終點後的安靜秒數 (規格 9.1：追逐後 ≥ 20 秒安靜) */
+export const CHASE_QUIET_SEC = 20;
+
+/**
+ * 追逐事件 → 音訊動作 (規格「3-4 溫室深處（細化）」音訊對映)：omen = tension 情境 + 遠處腳步 (實景也聽得到)；start = 無；
+ * caught = 紙張一皺；end = 安靜 20 秒後回 explore；autoPass (減弱緊張效果) = 無；reset (中途走回主室) = 回原情境
+ */
+export const CHASE_ACTIONS: Readonly<Record<Extract<GameEvent, { t: 'chase' }>['s'], readonly AudioAction[]>> = {
+  omen: [{ kind: 'chase', op: 'on' }, { kind: 'sfx', id: 'sfx.amb.footstep' }],
+  start: [],
+  caught: [{ kind: 'sfx', id: 'sfx.chase.caught' }],
+  end: [{ kind: 'chase', op: 'quiet' }],
+  autoPass: [],
+  reset: [{ kind: 'chase', op: 'off' }]
+};
 
 /**
  * 世界事件 → 音訊動作。switch (切換) 與 labelOpen (開字卡匣) 改由 LevelObserver 從狀態看 (迴圈不轉發 switch)，這裡回空陣列。
@@ -35,6 +53,7 @@ export function worldEventActions(e: GameEvent): AudioAction[] {
     case 'flag': return e.flag.startsWith('scare:') ? [{ kind: 'scare', flag: e.flag }] : [];
     case 'dialActivate': return [sfx('sfx.dial.activate')];
     case 'done': return [sfx('sfx.puzzle.solved'), music('solved')];
+    case 'chase': return [...CHASE_ACTIONS[e.s]];
     default: { const never: never = e; return never; }
   }
 }
@@ -200,8 +219,8 @@ const USED_ON: Readonly<Record<string, string>> = {
   sensor: 'sfx.lamp.on',
   // 3-3 夜溫室：半座天平停在正中間 (秤盤落定)、巨盆被推進軌道 (拖過石板；驚嚇聲另由 scare:handprint 播)、拿到筆記一頁 (撿到的紙聲另由道具欄決定)
   balanceHalf: 'sfx.plate.press', bigPot: 'sfx.crate.push', page: 'sfx.note.read',
-  // 3-4 溫室深處：三片玻璃嵌進花窗架 (卡榫打開的聲音)、「許」字亮起 (溫和的亮燈聲；苔窗是 sensor，沿用上面的 sfx.lamp.on)
-  paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on'
+  // 3-4 溫室深處：三片玻璃嵌進花窗架 (卡榫打開的聲音)、「許」字亮起 (溫和的亮燈聲；苔窗是 sensor，沿用上面的 sfx.lamp.on)、長廊的柵門打開
+  paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on', chaseGate: 'sfx.gate.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

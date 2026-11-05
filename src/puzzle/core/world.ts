@@ -7,6 +7,8 @@ export interface WorldOptions {
   text?: Runtime['text'];
   /** 開場可用能力 (預設無) */
   abilities?: readonly AbilityId[];
+  /** 減弱緊張效果 (追逐自動通過；Runtime.calm) */
+  calm?: boolean;
 }
 
 const identity = (key: TextKey): string => key;
@@ -20,7 +22,7 @@ export function createWorld(level: LevelDef, opts: WorldOptions): World {
     checkpoint: -1,
     inv: {}, abilities: [...(opts.abilities ?? [])], cleared: false, msg: '', msgKey: '', msgSeq: 0, time: 0,
     events: [], ext: {},
-    rt: { mechanics: compileMechanics(opts.mechanics), text: opts.text ?? identity }
+    rt: { mechanics: compileMechanics(opts.mechanics), text: opts.text ?? identity, ...(opts.calm ? { calm: true } : {}) }
   };
   for (const m of w.rt.mechanics.init) m.init!(w);
   return w;

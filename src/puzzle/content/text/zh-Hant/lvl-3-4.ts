@@ -33,6 +33,8 @@ export const lvl34 = {
   'lvl.3-4.compass': '舊羅盤架',
   'lvl.3-4.compass.read': '一座舊的羅盤架。盤面不見了，把手磨得發亮。',
   'lvl.3-4.gate': '長廊的柵門',
+  // 追逐 1：被追上 (story-bible 7.2 #3 的寫法；殘影只攔不傷)
+  'lvl.3-4.chase.caught': '圖面一皺。你回到了長廊的起點。',
   // 字條 (父親的筆記；story-bible 7.3)：3-4a / 3-4b 各 L1 + L2 (空白，4 分鐘浮現)
   'lvl.3-4.note': '字條',
   'lvl.3-4.note.a': '爸爸畫窗的時候，總會留白給月亮。',

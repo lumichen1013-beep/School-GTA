@@ -24,6 +24,8 @@ export class AudioBridge {
   private observer = new LevelObserver(DENY_KEYS);
   private session: LevelSession | null = null;
   private room: string | null = null;
+  /** 目前的 World (R / 換房 = 新的 World：追逐情境收掉，同 mechanics/chase 的重置) */
+  private world: object | null = null;
   private levelId: string | null = null;
   private cutsceneId: string | null = null;
   private closeSettings: (() => void) | null = null;
@@ -86,6 +88,7 @@ export class AudioBridge {
     if (!session) { this.session = null; return; }
     if (session !== this.session) { this.session = session; this.observer.reset(); }
     const cs = session.chapter;
+    if (session.world !== this.world) { this.world = session.world; this.manager.chase('off'); }
     const room = cs.state.room;
     if (room !== this.room) {
       this.room = room;

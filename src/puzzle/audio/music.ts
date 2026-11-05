@@ -68,7 +68,8 @@ export class MusicDirector {
     this.deck = null;
   }
 
-  setContext(c: MusicContext, at = this.engine.now): void { this.ctxName = c; this.applyMix(at, 0.8); }
+  /** fade = 各層滑到新情境的秒數 (預設 0.8；追逐的預兆 3 秒漸強) */
+  setContext(c: MusicContext, at = this.engine.now, fade = 0.8): void { this.ctxName = c; this.applyMix(at, fade); }
   setIntensity(i: number, at = this.engine.now): void { this.intensity = i; this.applyMix(at, 1.2); }
   setCalm(on: boolean, at = this.engine.now): void { this.calm = on; this.applyMix(at, 0.8); }
 

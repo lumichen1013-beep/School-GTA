@@ -357,4 +357,32 @@ describe('渲染：深度打架 (共面)：第三章溫室的五間占位房 (�
       view.dispose();
     }
   });
+  it('追逐 1：長廊 (柵門開、殘影在追) 3D 鏡頭看得到的面沒有共面；殘影只在藏寶圖、1 秒緩入到 0.4、離場 1 秒淡出後不畫；鐵柵一道 = 2 個網格 (鐵條 + 尖頭、橫檔合併)', () => {
+    const w = newWorld(depths);
+    w.byId.get('lattice')!.used = true;
+    w.byId.get('chaseGate')!.used = true;
+    const c = w.byId.get('chaser')!;
+    c.used = true;
+    c.x = 30;
+    w.player.x = 33;
+    const view = new PuzzleScene(w, THEMES.greenhouse);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 120; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, [depths.bounds.minX + 3, depths.bounds.maxX - 3])).toEqual([]);
+    const figure = (): THREE.Mesh => { let m: THREE.Mesh | null = null; view.modelRoot('chaser')!.traverse(o => { if ((o as THREE.Mesh).isMesh) m = o as THREE.Mesh; }); return m!; };
+    expect(view.modelRoot('chaser')!.visible).toBe(false); // 實景：不在場
+    w.player.mode = '2d';
+    const alpha = () => +((figure().material as THREE.MeshBasicMaterial).opacity).toFixed(3);
+    view.update('2d', 1 / 60, 3, cams.active('2d'));
+    const first = alpha();
+    for (let i = 0; i < 70; i++) view.update('2d', 1 / 60, 3 + i / 60, cams.active('2d'));
+    expect([view.modelRoot('chaser')!.visible, first > 0 && first < 0.02, alpha(), figure().visible]).toEqual([true, true, 0.4, true]);
+    c.used = false;
+    for (let i = 0; i < 70; i++) view.update('2d', 1 / 60, 5 + i / 60, cams.active('2d'));
+    expect([alpha(), figure().visible]).toEqual([0, false]);
+    let meshes = 0;
+    view.modelRoot('barsA')!.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes++; });
+    expect(meshes).toBe(2);
+    view.dispose();
+  });
 });

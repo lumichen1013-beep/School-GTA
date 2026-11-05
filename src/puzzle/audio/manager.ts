@@ -6,7 +6,7 @@ import { MusicDirector } from './music';
 import { DEFAULT_VOLUMES, FADES, LIMITS, dbToGain, type MusicContext, type Volumes } from './mix';
 import { SCORES, clearPhrase, scoreForChapter, solvedPhrase, type ScoreId } from './score';
 import { SFX, type SfxDef } from './sfx';
-import { AMBIENCE, AmbientClock, CALM_HALF, CUE_MAP, CUTSCENE_SCORE, SHOT_MUSIC, ScareGate, Throttle, ambientSeed, type AudioAction } from './events';
+import { AMBIENCE, AmbientClock, CALM_HALF, CHASE_QUIET_SEC, CUE_MAP, CUTSCENE_SCORE, SHOT_MUSIC, ScareGate, Throttle, ambientSeed, type AudioAction } from './events';
 import { hashSeed } from './rng';
 
 export interface AudioStats { state: string; score: ScoreId | null; context: MusicContext; active: number; dropped: number; played: number; cutscene: string | null }
@@ -50,6 +50,8 @@ export interface ManagerOptions {
   makeupComp?: number;
 }
 
+/** 追逐預兆：tension 情境的漸強秒數 (規格 9.1：開始前 ≥ 3 秒預兆) */
+export const CHASE_OMEN_FADE = 3;
 /** 過場時限幅器前的整體增益 (分鏡 2.5：過場總輸出 ≤ −14 dBFS) */
 export const CUTSCENE_TRIM = 0.8;
 const LOOKAHEAD = 0.3;
@@ -74,6 +76,8 @@ export class WebAudioManager implements AudioManager {
   /** 關卡中的房間 (環境音時鐘的種子；null = 不在關卡) */
   private room: string | null = null;
   private quietRestore: { until: number; context: MusicContext } | null = null;
+  /** 追逐中 (預兆起～抵達終點 / 走回主室 / 離開關卡)：外殼每幀要的情境先記在這裡，追逐結束再切 */
+  private chaseBack: MusicContext | null = null;
   private phraseBus = new Map<string, GainNode>();
   private readonly realtime: boolean;
   private failed = false;
@@ -179,7 +183,9 @@ export class WebAudioManager implements AudioManager {
   setIntensity(i: number): void { this.intensity = i; this.director?.setIntensity(i); }
 
   setContext(c: MusicContext): void {
-    // 驚嚇後的安靜期：先記下，期滿再切
+    // 追逐中：維持 tension，先記下外殼要的情境
+    if (this.chaseBack !== null && c !== 'tension') { this.chaseBack = c; return; }
+    // 驚嚇 / 追逐後的安靜期：先記下，期滿再切
     if (this.quietRestore && c !== 'quiet') { this.quietRestore.context = c; return; }
     this.context = c;
     this.director?.setContext(c);
@@ -221,8 +227,30 @@ export class WebAudioManager implements AudioManager {
       else if (a.kind === 'view') this.setView(a.mode);
       else if (a.kind === 'music') this.director?.op(a.op);
       else if (a.kind === 'scare') this.scare(a.flag);
+      else if (a.kind === 'chase') this.chase(a.op);
     }
   }
+
+  /** 追逐情境 (規格 9.1：預兆 ≥ 3 秒漸強、結束後 ≥ 20 秒安靜)：on → tension；quiet → quiet 20 秒後回原情境；off → 直接回原情境 */
+  chase(op: 'on' | 'quiet' | 'off'): void {
+    if (op === 'on') {
+      if (this.chaseBack !== null) return;
+      this.chaseBack = this.quietRestore?.context ?? this.context;
+      this.quietRestore = null;
+      this.context = 'tension';
+      if (this.director && this.engine) this.director.setContext('tension', this.engine.now, CHASE_OMEN_FADE);
+      return;
+    }
+    if (this.chaseBack === null) return;
+    const back = this.chaseBack;
+    this.chaseBack = null;
+    if (op === 'off') { this.setContext(back); return; }
+    this.context = 'quiet';
+    this.director?.setContext('quiet');
+    this.quietRestore = { until: (this.engine?.now ?? 0) + CHASE_QUIET_SEC, context: back };
+  }
+
+  get chasing(): boolean { return this.chaseBack !== null; }
 
   /** 驚嚇 (規格 9.1)：一般 / 平靜版；之後 15 秒進 quiet，不播環境音 */
   private scare(flag: string): void {
@@ -259,8 +287,8 @@ export class WebAudioManager implements AudioManager {
     if (e) { e.setTrim(1, e.now, 1); e.setView(this.view); }
   }
 
-  levelStart(room: string): void { this.room = room; this.ambient = null; }
-  levelEnd(): void { this.room = null; this.ambient = null; }
+  levelStart(room: string): void { this.room = room; this.ambient = null; this.chase('off'); }
+  levelEnd(): void { this.room = null; this.ambient = null; this.chase('off'); }
 
   stopMusic(fade: number = FADES.cutsceneOut): void {
     this.score = null;

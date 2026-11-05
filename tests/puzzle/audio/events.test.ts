@@ -9,12 +9,15 @@ import { SFX } from '../../../src/puzzle/audio/sfx';
 import { SCORES } from '../../../src/puzzle/audio/score';
 import { LIMITS } from '../../../src/puzzle/audio/mix';
 import { CUTSCENES } from '../../../src/puzzle/content/cutscenes';
+import { CHASE_ACTIONS, CHASE_QUIET_SEC } from '../../../src/puzzle/audio/events';
+import { WebAudioManager } from '../../../src/puzzle/audio/manager';
 
 const sfxIds = (as: readonly AudioAction[]) => as.flatMap(a => (a.kind === 'sfx' ? [a.id] : []));
 const sample: Record<GameEvent['t'], GameEvent> = {
   switch: { t: 'switch', to: '2d' }, switchDenied: { t: 'switchDenied' }, door: { t: 'door', door: 'd' }, turnRequest: { t: 'turnRequest', lever: 'l' },
   objCross: { t: 'objCross', obj: 'o', door: 'd' }, labelOpen: { t: 'labelOpen', label: 'x', obj: 'o' }, card: { t: 'card', label: 'x', ok: true },
-  flag: { t: 'flag', flag: 'scare:coats' }, dialActivate: { t: 'dialActivate', chapter: 2 }, done: { t: 'done', flag: '2-1a' }
+  flag: { t: 'flag', flag: 'scare:coats' }, dialActivate: { t: 'dialActivate', chapter: 2 }, done: { t: 'done', flag: '2-1a' },
+  chase: { t: 'chase', id: 'chase:3-4', s: 'omen' }
 };
 
 describe('映射完整性', () => {
@@ -30,6 +33,29 @@ describe('映射完整性', () => {
     expect(worldEventActions({ t: 'flag', flag: 'cube:turned' })).toEqual([]);
     expect(worldEventActions(sample.flag)).toEqual([{ kind: 'scare', flag: 'scare:coats' }]);
     expect(worldEventActions(sample.done)).toEqual([{ kind: 'sfx', id: 'sfx.puzzle.solved' }, { kind: 'music', op: 'solved' }]);
+  });
+  it('追逐 (N19；3-4 追逐 1)：omen = tension + 遠處腳步、start 無、caught = 紙張一皺 (≤ −18 dBFS、短)、end = 安靜 20 秒、autoPass 無、reset = 回原情境', () => {
+    const chase = (s: keyof typeof CHASE_ACTIONS) => worldEventActions({ t: 'chase', id: 'chase:3-4', s });
+    expect(Object.fromEntries((['omen', 'start', 'caught', 'end', 'autoPass', 'reset'] as const).map(s => [s, chase(s)]))).toEqual({
+      omen: [{ kind: 'chase', op: 'on' }, { kind: 'sfx', id: 'sfx.amb.footstep' }], start: [], caught: [{ kind: 'sfx', id: 'sfx.chase.caught' }],
+      end: [{ kind: 'chase', op: 'quiet' }], autoPass: [], reset: [{ kind: 'chase', op: 'off' }]
+    });
+    const caught = SFX['sfx.chase.caught'];
+    expect([caught.db <= -18, Math.max(...caught.parts.map(p => (p.at ?? 0) + p.env.a + (p.env.h ?? 0) + p.env.d)) <= 0.5, CHASE_QUIET_SEC]).toEqual([true, true, 20]);
+    // 情境：追逐中外殼每幀的 explore / turn 先記下 (維持 tension)；抵達終點 → quiet，期滿回記下的情境；走回主室 → 直接回去；換房 / R (off) 收掉
+    const m = new WebAudioManager({ realtime: false });
+    m.chase('on');
+    m.setContext('turn');
+    expect([m.stats().context, m.chasing]).toEqual(['tension', true]);
+    m.chase('quiet');
+    expect([m.stats().context, m.chasing]).toEqual(['quiet', false]);
+    const n = new WebAudioManager({ realtime: false });
+    n.setContext('turn');
+    n.chase('on');
+    n.chase('off');
+    expect([n.stats().context, n.chasing]).toEqual(['turn', false]);
+    n.chase('quiet'); // 沒在追 → 不動
+    expect(n.stats().context).toBe('turn');
   });
   it('過場：CUTSCENES 裡每個音訊提示都有對映 (序章 23 個 + cs:ch2 新增 pages.turn / leaves = 25)；對到的音效都存在；鏡頭音樂只指向存在的鏡頭', () => {
     const cues = CUTSCENES.flatMap(c => c.shots.flatMap(s => (s.audio ?? []).map(a => a.cue)));

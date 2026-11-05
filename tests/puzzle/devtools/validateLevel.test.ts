@@ -9,6 +9,8 @@ import { validateEntry, validateLevel, type LevelIssue } from '../../../src/puzz
 import type { AbilityId, LevelDef, ObjDef } from '../../../src/puzzle/core/types';
 import type { LevelEntry } from '../../../src/puzzle/content/levels';
 import { FOYER_V02 } from '../fixtures/foyerV02';
+import { depths } from '../../../src/puzzle/content/levels/ch3/3-4-depths';
+import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 import { TEST_BUNDLE } from '../msgs';
 
 /** zh-Hant + v0.2 凍結場景的文字 (C7 起 v0.2 才有的 key 不在 zh-Hant) */
@@ -113,5 +115,28 @@ describe('validateLevel：故意壞掉的關卡逐項回報', () => {
     const bad: LevelEntry = { ...e, id: '1-9', titleKey: 'lvl.1-9.title', abilities: ['wings' as AbilityId], unlock: { after: ['0-0'] } };
     expect(validateEntry(bad, reg).map(i => i.code)).toEqual(['entry.mismatch', 'entry.mismatch', 'entry.ability', 'entry.unlock', 'entry.chapter']);
     expect(validateEntry({ ...e, chapter: 9 }, reg).map(i => i.code)).toEqual(['entry.chapter']);
+  });
+
+  it('追逐 (chaser；規格 4.2)：3-4 的長廊 0 issue；落後 < 6、預兆 < 3 秒、速度 ≥ 玩家、柵門不存在、線的順序、檢查點站不住 / 不在預兆線與觸發線之間、長廊裡有謎題物件 / 可推物、障礙間距 < 1.5 秒 → chase.field；被追上的訊息也要在文字表', () => {
+    const c34 = { mechanics: DEFAULT_MECHANICS, bundle: zhHant, abilities: ['nib' as AbilityId] };
+    expect(validateLevel(depths, c34)).toEqual([]);
+    const withChaser = (patch: Record<string, unknown>, extra: ObjDef[] = []): LevelDef =>
+      ({ ...depths, objects: [...depths.objects.map(o => (o.id === 'chaser' ? ({ ...o, ...patch } as ObjDef) : o)), ...extra] });
+    const chase = (l: LevelDef) => validateLevel(l, c34).filter(i => i.code === 'chase.field').map(i => i.message);
+    expect(chase(withChaser({ spawnX: 13.0, omenX: 12.8 })).length).toBe(1); // 19 − 13 − 0.6 = 5.4 < 6
+    expect(chase(withChaser({ omenSec: 2 }))).toEqual(['omenSec 2 < 3']);
+    expect(chase(withChaser({ speed: 3.2 }))).toEqual(['speed 3.2 must be in (0, 3.2)']);
+    expect(chase(withChaser({ gate: 'nope' }))).toEqual(['gate "nope" does not name another object']);
+    expect(chase(withChaser({ endX: 18 }))).toEqual(['lines must be resetX < omenX < triggerX < endX and spawnX < triggerX']);
+    expect(chase(withChaser({ checkpoint: { x: 20, y: 0, z: 0 } }))).toEqual(['checkpoint must be in [omenX, triggerX)']);
+    expect(chase(withChaser({ checkpoint: { x: 14, y: 2, z: 0 } }))).toEqual(['chaser checkpoint does not stand in mode 3d, 2d']);
+    const crate: ObjDef = { id: 'box', type: 'crate', x: 30, y: 0, z: 0, w: 1, h: 1, d: 1, visible: 'both', solid: true, pushable: true };
+    const note: ObjDef = { id: 'n', type: 'note', textKey: 'lvl.3-4.note.a', x: 40, y: 1, z: 2.8, w: 0.7, h: 0.9, d: 0.1, visible: 'both', solid: false, interactable: true };
+    const wall: ObjDef = { id: 'inkZ', type: 'inkwall', x: 27, y: 0, z: 0, w: 0.5, h: 6, d: 10, visible: '2d', solid: true };
+    expect(chase(withChaser({}, [crate, note, wall]))).toEqual([
+      'pushable "box" is inside the chase corridor', 'puzzle object "n" is inside the chase corridor',
+      'obstacles "inkA" / "inkZ" are 2.50 apart (< 4.80)', 'obstacles "inkZ" / "barsA" are 3.60 apart (< 4.80)'
+    ]);
+    expect(validateLevel(withChaser({ caughtText: 'lvl.none' }), c34).map(i => [i.code, i.obj])).toEqual([['text.missing', 'chaser']]);
   });
 });

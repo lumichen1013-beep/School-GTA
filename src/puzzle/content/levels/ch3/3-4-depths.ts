@@ -11,7 +11,9 @@ import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
 //     三格玻璃片 = 月光的路 (天窗 → 夜溫室 → 溫床的稜鏡 → 長廊的稜鏡 → 深處北窗) → 「許」字亮 → 抽屜 (房間的銅鑰匙 + 手記第三頁)、柵門打開
 //   3-4b 長進軌道的根 (P3 / P6)：唯一的「小」從巨盆拿來貼巨根 (夜溫室又卡住) → 苔窗露出、深處鬆開 → 西邊穿過兩間房的光 (溫床的稜鏡往東) → 爸爸的字、墨補滿
 // 家具可穿過：巨根、花窗架、羅盤架、長椅、花槽不進碰撞；擋路的只有地板、高台、柵門與長廊的墨牆 / 鐵柵。
-// 追逐殘影 (chaser) 與章門移位後的通關流程由下一步實作；本版長廊可走、章門照設計位置、要鑰匙。文字 = content/text/zh-Hant/lvl-3-4.ts
+// 追逐 1 (N19，不計題)：柵門內側的守衛殘影 chaser (只在藏寶圖、只在 2D 碰得到；預兆線 13 / 觸發線 19 / 終點線 60.5、出生點 12.0、
+//   被追上回 (14, 0, 0)、速度 2.6、被追上 3 次後 ×0.8、預兆 3 秒；完成旗標 chase:3-4；減弱緊張效果 = 過預兆線直接通過)。
+// 章門打開 = 第三章通關 (記入 3-1～3-4；第四章占位：通關畫面沒有「前往」)。文字 = content/text/zh-Hant/lvl-3-4.ts
 // 座標：x 向右、y 向上、z 向觀眾；地板頂面 y = 0；後牆 z = -5
 const noteBase = { type: 'note', y: 1.0, w: 0.7, h: 0.9, d: 0.1, visible: 'both', solid: false, interactable: true, labelKey: 'lvl.3-4.note', mount: 'post' } as const;
 /** 長廊的墨牆 (只在藏寶圖：要在實景通過) / 鐵柵 (只在實景：要在藏寶圖通過)；1-1 同型 */
@@ -55,6 +57,10 @@ const objects: ObjDef[] = [
   // ── 長廊 (追逐 1 的場地)：入口的鐵柵門 (花窗亮了才開)；墨牆 / 鐵柵交替六道 (全深：只能切換視角通過)；盡頭南側的章門 ──
   { id: 'chaseGate', type: 'chaseGate', opensWhen: 'lattice', x: 12.2, y: 0, z: 0, w: 0.3, h: 2.6, d: 10, visible: 'both', solid: true, labelKey: 'lvl.3-4.gate' },
   inkwall('inkA', 24), bars('barsA', 31), inkwall('inkB', 38), bars('barsB', 45), inkwall('inkC', 52), bars('barsC', 59),
+  // 守衛殘影 (推導物件：不進快照)：起跑時落後 19.0 − 12.0 − 0.6 = 6.4；每段切換窗 7 / 3.2 ≈ 2.2 秒
+  { id: 'chaser', type: 'chaser', derived: true, omenX: 13.0, triggerX: 19.0, endX: 60.5, resetX: 12.5, spawnX: 12.0, checkpoint: { x: 14.0, y: 0, z: 0 },
+    speed: 2.6, assistAfter: 3, assistFactor: 0.8, omenSec: 3, gate: 'chaseGate', flag: 'chase:3-4', caughtText: 'lvl.3-4.chase.caught',
+    x: 12.0, y: 0, z: 0, w: 0.6, h: 1.7, d: 0.6, visible: '2d', solid: false },
   { id: 'chapterS', type: 'cubeDoor', side: 'S', kind: 'chapter', key: 'key.greenhouse', doneFlag: '3-4',
     x: 61.0, y: 0, z: 4.8, w: 1.6, h: 2.4, d: 0.4, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch3.chapterS' }
 ];

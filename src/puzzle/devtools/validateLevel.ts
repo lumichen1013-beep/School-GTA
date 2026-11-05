@@ -8,6 +8,7 @@ import { boxAt, objBox } from '../core/geometry';
 import { hits, inBounds } from '../core/place';
 import { solidsFor } from '../core/presence';
 import { step } from '../core/step';
+import { SPEED } from '../core/constants';
 import type { LevelEntry } from '../content/levels';
 import type { ChapterDef } from '../content/chapters';
 import { ABILITY_IDS } from '../meta/save';
@@ -40,6 +41,7 @@ export type IssueCode =
   | 'entry.ability'       // 能力白名單含未知能力
   | 'entry.unlock'        // 解鎖前置引用不存在的關卡
   | 'entry.chapter'       // 章節不存在或章節 levels 未列入本關
+  | 'chase.field'         // 追逐 (N19 chaser)：線的順序、落後 < 6、預兆 < 3 秒、速度 / 輔助不合理、柵門不存在、檢查點站不住、長廊裡有謎題物件 / 可推物、障礙間距 < 1.5 秒
   | 'layout.depth';       // 擺設：可互動物件的 z 沒有同時落在後 / 中 / 前三帶 (layoutDepthIssues；2-3 起的擺設規則)
 
 export interface LevelIssue { level: string; obj?: ObjId; code: IssueCode; message: string }
@@ -92,6 +94,7 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'paneFrame') return [o.okText, o.missingText, label];
   if (o.type === 'lattice') return [o.readText, o.patternText, o.lightText, o.solvedText, o.doneText, label];
   if (o.type === 'oldCompass') return [o.readText, label];
+  if (o.type === 'chaser') return [o.caughtText, label];
   if (o.type === 'doorPlate') return [label, o.label?.solvedText, o.label?.stripped, ...Object.values(o.label?.forms ?? {})];
   return [label, o.label?.solvedText, o.label?.stripped];
 }
@@ -237,6 +240,9 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     if (!def.objects.some(o => o.opens === d.id)) add('ref.exitLocked', `exit door "${d.id}" is never opened by any object`, d.id);
   }
 
+  // 追逐 (N19；規格 4.2、architecture 4.14 的 validate 條目改讀關卡物件)
+  for (const o of def.objects) if (o.type === 'chaser') for (const m of chaserIssues(def, o)) add('chase.field', m, o.id);
+
   // 文字 key
   for (const r of levelKeyRefs(def)) if (!(r.key in ctx.bundle)) add('text.missing', `text key "${r.key}" is missing`, r.obj);
   for (const t of new Set(def.objects.map(o => o.type))) {
@@ -251,6 +257,11 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
       const bad = standsInBothModes(def, ctx.mechanics, def.start);
       if (bad.length) add('level.start', `start does not stand in mode ${bad.join(', ')}`);
     }
+    for (const o of def.objects) {
+      if (o.type !== 'chaser') continue;
+      const bad = standsInBothModes(def, ctx.mechanics, o.checkpoint);
+      if (bad.length) add('chase.field', `chaser checkpoint does not stand in mode ${bad.join(', ')}`, o.id);
+    }
     let prevMinX = -Infinity;
     (def.checkpoints ?? []).forEach((cp, i) => {
       if (![cp.minX, cp.x, cp.y, cp.z].every(finite)) { add('level.checkpoint', `checkpoint #${i} must have finite minX/x/y/z`); return; }
@@ -261,6 +272,43 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
     });
   }
   return issues;
+}
+
+/** 追逐的最小值 (規格 4.2)：起跑時殘影落後 ≥ 6、預兆 ≥ 3 秒、每段 2D 通行窗 ≥ 1.5 秒 (× 玩家速度 = 障礙間距) */
+export const CHASE_MIN = { lead: 6, omenSec: 3, windowSec: 1.5 } as const;
+
+/**
+ * 守衛殘影 (chaser) 的走道檢查：線依序 resetX < omenX < triggerX < endX、出生點在觸發線之前；落後 (triggerX − spawnX − 殘影寬) ≥ 6；
+ * 預兆 ≥ 3 秒；0 < 速度 < 玩家、0 < 輔助倍率 ≤ 1、輔助次數 ≥ 1；柵門存在；檢查點在 [omenX, triggerX) 且兩模式站得住；
+ * 走道 [omenX, endX] 裡沒有謎題物件 (有 doneFlag / 可互動 / 有標籤；魔方門除外：章門在走道盡頭) 與可推物；
+ * 走道裡的障礙 (墨牆 / 鐵柵) 間距 ≥ 1.5 秒 × 玩家速度
+ */
+function chaserIssues(def: LevelDef, o: Extract<ObjDef, { type: 'chaser' }>): string[] {
+  const out: string[] = [];
+  if (!(o.resetX < o.omenX && o.omenX < o.triggerX && o.triggerX < o.endX && o.spawnX < o.triggerX)) out.push('lines must be resetX < omenX < triggerX < endX and spawnX < triggerX');
+  const lead = o.triggerX - o.spawnX - o.w;
+  if (!(lead >= CHASE_MIN.lead - 1e-9)) out.push(`lead ${lead.toFixed(2)} < ${CHASE_MIN.lead}`);
+  if (!(o.omenSec >= CHASE_MIN.omenSec)) out.push(`omenSec ${o.omenSec} < ${CHASE_MIN.omenSec}`);
+  if (!(o.speed > 0 && o.speed < SPEED)) out.push(`speed ${o.speed} must be in (0, ${SPEED})`);
+  if (!(o.assistFactor > 0 && o.assistFactor <= 1) || !(o.assistAfter >= 1)) out.push('assistFactor must be in (0, 1] and assistAfter >= 1');
+  if (!def.objects.some(d => d.id === o.gate && d.id !== o.id)) out.push(`gate "${o.gate}" does not name another object`);
+  if (typeof o.flag !== 'string' || o.flag === '') out.push('flag must be a non-empty string');
+  const cp = o.checkpoint;
+  if (!(cp.x >= o.omenX && cp.x < o.triggerX)) out.push('checkpoint must be in [omenX, triggerX)');
+  const lo = o.omenX, hi = o.endX;
+  const inHall = (d: ObjDef) => d.x + d.w / 2 > lo && d.x - d.w / 2 < hi;
+  for (const d of def.objects) {
+    if (d.id === o.id || !inHall(d)) continue;
+    if (d.pushable) out.push(`pushable "${d.id}" is inside the chase corridor`);
+    else if (d.type !== 'cubeDoor' && (d.doneFlag || d.interactable || d.label)) out.push(`puzzle object "${d.id}" is inside the chase corridor`);
+  }
+  const walls = def.objects.filter(d => (d.type === 'inkwall' || d.type === 'bars') && inHall(d)).sort((a, b) => a.x - b.x);
+  const gap = CHASE_MIN.windowSec * SPEED;
+  for (let i = 1; i < walls.length; i++) {
+    const g = walls[i].x - walls[i].w / 2 - (walls[i - 1].x + walls[i - 1].w / 2);
+    if (g < gap - 1e-9) out.push(`obstacles "${walls[i - 1].id}" / "${walls[i].id}" are ${g.toFixed(2)} apart (< ${gap.toFixed(2)})`);
+  }
+  return out;
 }
 
 /** 驗證登錄表一筆：與 LevelDef 一致、能力白名單、解鎖前置、章節歸屬，再驗證關卡本身 */

@@ -132,7 +132,8 @@ export interface World {
   readonly rt: Runtime;
 }
 
-export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, params?: TextParams) => string }
+/** calm = 減弱緊張效果 (v0.4 追逐 1：殘影不生成、走道直接通過；createWorld 的 WorldOptions.calm，不讀設定檔) */
+export interface Runtime { mechanics: CompiledMechanics; text: (key: TextKey, params?: TextParams) => string; calm?: boolean }
 
 /**
  * 一扇魔方門此刻的接法 (architecture 4.16)：wall = 門後是牆；room = 接到鄰房的門 (kind 取兩側較窄者)；
@@ -167,7 +168,8 @@ export interface WorldExt {
  * turnRequest = 3D 拉了轉動機關 (外殼 → turn，機關的方向字決定轉向)；
  * objCross = 可推物被推進接通的拱門 (外殼 → transferObject)；labelOpen = 2D 對標籤按 E (外殼開字卡匣)；
  * card = 貼卡 / 取卡結果 (ok = false：無效字，卡片退回；字卡匣播回饋)；flag = 章節旗標 (演出過的驚嚇，R 不還原)；
- * v0.4：dialActivate = 3D 啟動了魔方儀 (外殼 → activateDial)；done = 物件的 doneFlag 剛成立 (外殼 → 解開鎖扣、清空回退堆疊；R 會還原)
+ * v0.4：dialActivate = 3D 啟動了魔方儀 (外殼 → activateDial)；done = 物件的 doneFlag 剛成立 (外殼 → 解開鎖扣、清空回退堆疊；R 會還原)；
+ * chase = 追逐 (N19；id = 完成旗標)：omen 預兆、start 起跑、caught 被追上、end 抵達終點、autoPass 減弱緊張效果直接通過、reset 中途走回主室 (只供音訊)
  */
 export type GameEvent =
   | { t: 'switch'; to: Mode } | { t: 'switchDenied' }
@@ -178,7 +180,11 @@ export type GameEvent =
   | { t: 'card'; label: string; ok: boolean }
   | { t: 'flag'; flag: string }
   | { t: 'dialActivate'; chapter: number }
-  | { t: 'done'; flag: string };
+  | { t: 'done'; flag: string }
+  | { t: 'chase'; id: string; s: ChasePhase };
+
+/** 追逐事件的種類 (規格 4.2 / 3-4 追逐 1；reset = 中途走回主室、本段重置) */
+export type ChasePhase = 'omen' | 'start' | 'caught' | 'end' | 'autoPass' | 'reset';
 
 export interface Box { min: V3; max: V3 }
 export interface InputState { moveX: number; moveZ: number; jump: boolean }

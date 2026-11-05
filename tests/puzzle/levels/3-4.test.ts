@@ -1,7 +1,8 @@
 // 3-4 溫室深處 (規格 6「3-4 溫室深處（細化）」；第三章第四關 = 章末)：資料與驗證器、擺設深度帶、高度與距離 (D10)、3-4 區 validateDial
 // (CH3_ZONE34 / CH3_ZONE34_CORE；cards / jams.unless / card / light.uncovered / refill；拿掉關鍵要素)、花窗架 (缺 0～3 片)、3-4a 兩種解法與兩個錯誤方向、
 // 3-4b 唯一的「小」(先縮 / 先排光再縮)、苔窗 (蓋著 / 光不夠 / 閂住)、墨補滿、stayShrunk、章門 (門後是牆 / 鑰匙 / 第三章通關)、
-// 反例 (只用 2D / 只用 3D；盲轉取樣)、R、存檔讀檔與舊存檔、展開圖的光路 (uncovered)、音效、字條規則、捷徑掃描
+// 反例 (只用 2D / 只用 3D；盲轉取樣)、R、存檔讀檔與舊存檔、展開圖的光路 (uncovered)、音效、字條規則、捷徑掃描；
+// 追逐 1 (N19：腳本回放 ①～⑥、走回主室、R 不重演、calm)、章門 = 第三章通關 (記入 3-1～3-4、存檔、房間通關不蓋掉章通關)、柵門的音效
 import { describe, it, expect } from 'vitest';
 import { depths } from '../../../src/puzzle/content/levels/ch3/3-4-depths';
 import { LEVELS, levelById } from '../../../src/puzzle/content/levels';
@@ -24,6 +25,10 @@ import {
   type ChapterSession, type ChapterState
 } from '../../../src/puzzle/core/chapter';
 import type { GameEvent, ObjDef, World } from '../../../src/puzzle/core/types';
+import { chaseRun, chaserSpeed } from '../../../src/puzzle/mechanics/chase';
+import { recordClear } from '../../../src/puzzle/meta/progress';
+import { CUTSCENES } from '../../../src/puzzle/content/cutscenes';
+import { cutsceneBeforeLevel } from '../../../src/puzzle/meta/cutscenes';
 import { createWorld } from '../../../src/puzzle/core/world';
 import { applyChapterEvent } from '../../../src/puzzle/app/chapterEvents';
 import { deriveCubeMap } from '../../../src/puzzle/app/cubeMapModel';
@@ -410,6 +415,195 @@ describe('章門：鑰匙、第三章通關', () => {
   });
 });
 
+// ── 追逐 1 (N19；規格 4.2 測試策略 ①～⑥ + 走回主室 / R 不重演 / 預兆 ≥ 3 秒) ──
+/** 切換 (含 app 的 0.3 秒墨色過場；腳本裡世界照常推進 = 比實際嚴格：app 的過場中殘影不動) */
+const FLIP3: Cmd[] = [{ act: 'flip' }, { wait: 0.3 }];
+/** 從北拱門內側走到柵門前 (實景，z 0) */
+const TO_GATE: Cmd[] = [{ walkTo: [null, 0] }, { walkTo: [11.5, null] }];
+/** 交替切換穿過長廊：實景過墨牆 24 → 藏寶圖過鐵柵 31 → 實景過墨牆 38 → 藏寶圖過鐵柵 45 → 實景過墨牆 52 → 藏寶圖過鐵柵 59、過終點 60.5 */
+const RUN: Cmd[] = [
+  { walkTo: [27, null] }, ...FLIP3, { walkTo: [34.5, null] }, ...FLIP3, { walkTo: [41, null] }, ...FLIP3,
+  { walkTo: [48.5, null] }, ...FLIP3, { walkTo: [55, null] }, ...FLIP3, { walkTo: [61.0, null] }
+];
+/** 章門 (實景、長廊盡頭南側) */
+const DOOR: Cmd[] = [...FLIP3, { walkTo: [61.0, 4.0] }, { wait: 0.1 }, { act: 'interact' }];
+const CALM = { ...OPTS, calm: true };
+interface Pose { x: number; y: number; z: number; vy: number; mode: string }
+interface ChaseLog { xs: number[]; events: string[]; gateAt: number | null; endAt: number | null; caughtAt: Pose[] }
+/** 跑腳本並逐幀記下殘影位置、追逐事件 (不取走：pump 照常交給章節層)、過柵門與抵達終點的模擬時間、被追上那一幀的玩家 */
+function chaseScript(cs: ChapterSession, cmds: Cmd[]): { cs: ChapterSession; log: ChaseLog } {
+  const o = get(cs, 'chaser');
+  const log: ChaseLog = { xs: [], events: [], gateAt: null, endAt: null, caughtAt: [] };
+  let seen = cs.world.events.length;
+  runScript(cs.world, cmds, {
+    onFrame: w => {
+      log.xs.push(+o.x.toFixed(6));
+      for (const e of w.events.slice(seen)) {
+        if (e.t !== 'chase') continue;
+        log.events.push(e.s);
+        const p = w.player;
+        if (e.s === 'caught') log.caughtAt.push({ x: p.x, y: p.y, z: p.z, vy: p.vy, mode: p.mode });
+        if (e.s === 'end' || e.s === 'autoPass') log.endAt = w.time;
+      }
+      seen = w.events.length;
+      if (log.gateAt === null && w.player.x > 12.2) log.gateAt = w.time;
+    }
+  });
+  return { cs: pump(cs).cs, log };
+}
+
+describe('追逐 1 (N19，不計題)：守衛殘影、長廊、預兆 / 被追上 / 終點', () => {
+  it('資料：殘影只在藏寶圖、不擋路、不可互動、不進快照 (derived)；預兆線 13 / 觸發線 19 / 終點 60.5、出生點 12.0 (落後 6.4)、檢查點 (14, 0, 0)、速度 2.6、3 次後 ×0.8、預兆 3 秒；3-4a 之前柵門關著 = 不追', () => {
+    const c = def('chaser');
+    expect(c.type === 'chaser' && [c.visible, c.solid, !!c.interactable, c.derived, c.omenX, c.triggerX, c.endX, c.resetX, c.spawnX, c.checkpoint, c.speed, c.assistAfter, c.assistFactor, c.omenSec, c.gate, c.flag, +(c.triggerX - c.spawnX - c.w).toFixed(2)])
+      .toEqual(['2d', false, false, true, 13, 19, 60.5, 12.5, 12.0, { x: 14, y: 0, z: 0 }, 2.6, 3, 0.8, 3, 'chaseGate', 'chase:3-4', 6.4]);
+    const cs = open(SOLVED);
+    runScript(cs.world, [{ place: [13.5, 0, 0], mode: '2d' }, { wait: 4 }]); // 柵門關著 (瞬移到長廊裡)：殘影不動
+    expect([chaseRun(get(cs, 'chaser')).phase, get(cs, 'chaser').used, captureState(cs).rooms.depths.objs.some(s => s.id === 'chaser')]).toEqual(['idle', false, false]);
+  });
+
+  it('① 交替切換的成功路徑必過 (柵門 → 終點約 16 秒、預兆 ≥ 3 秒)；章節旗標 chase:3-4 (寫進 entry：R 不重演)、殘影離場；之後章門 = 第三章通關', () => {
+    let cs = play(after34a(), TO_GATE).cs;
+    const r = chaseScript(cs, RUN);
+    cs = r.cs;
+    const o = get(cs, 'chaser');
+    expect(r.log.events).toEqual(['omen', 'start', 'end']);
+    const secs = +(r.log.endAt! - r.log.gateAt!).toFixed(1);
+    expect([secs >= 15 && secs <= 20, secs]).toEqual([true, 17.3]);
+    expect([chaseRun(o).phase, o.used, cs.state.flags.includes('chase:3-4'), cs.entry.flags.includes('chase:3-4'), chaseRun(o).startAt - chaseRun(o).omenAt >= 3]).toEqual(['done', false, true, true, true]);
+    // 殘影一直在玩家身後
+    expect(Math.max(...r.log.xs)).toBeLessThan(50);
+    runScript(cs.world, DOOR);
+    expect([cs.world.cleared, cs.world.msg, get(cs, 'chapterS').used]).toEqual([true, '門開了。', true]);
+  });
+
+  it('② 一直待在藏寶圖：卡在第一道墨牆、被追上 → 「圖面一皺」、回檢查點 (14, 0, 0；速度清零、還是藏寶圖)、殘影消失；旗標、道具、花窗、柵門、排列都不變；不計失敗', () => {
+    let cs = play(after34a(), [...TO_GATE, ...FLIP3]).cs;
+    const before = { inv: { ...cs.world.inv }, cube: JSON.stringify(cs.state.cube), flags: [...cs.state.flags] };
+    const r = chaseScript(cs, [{ hold: { moveX: 1 }, seconds: 8 }]);
+    cs = r.cs;
+    const o = get(cs, 'chaser');
+    expect(r.log.events).toEqual(['omen', 'start', 'caught']);
+    expect(r.log.caughtAt).toEqual([{ x: 14, y: 0, z: 0, vy: 0, mode: '2d' }]);
+    expect([chaseRun(o).caught, chaseRun(o).phase, o.used, o.x, cs.world.msg]).toEqual([1, 'wait', false, 12, '圖面一皺。你回到了長廊的起點。']);
+    expect([cs.world.inv, JSON.stringify(cs.state.cube), cs.state.flags, get(cs, 'lattice').used, isPassable(cs.world, get(cs, 'chaseGate'))]).toEqual([before.inv, before.cube, before.flags, true, true]);
+    // 再過一次觸發線就重新起跑 (不再等預兆)
+    const again = chaseScript(cs, [{ walkTo: [19.2, null] }]);
+    expect([again.log.events, chaseRun(o).phase, o.used]).toEqual([['start'], 'run', true]);
+  });
+
+  it('③ 確定性：同一串輸入兩次 → 殘影逐幀位置相同 (含被追上與重置)', () => {
+    const cmds: Cmd[] = [...TO_GATE, { walkTo: [27, null] }, ...FLIP3, { walkTo: [33, null] }, { hold: { moveX: 1 }, seconds: 9 }, { walkTo: [12.0, null] }, { walkTo: [20, null] }];
+    const a = chaseScript(after34a(), cmds).log, b = chaseScript(after34a(), cmds).log;
+    expect(a.xs.length).toBeGreaterThan(1000);
+    expect(a.xs).toEqual(b.xs);
+    expect(a.events).toEqual(b.events);
+    expect(a.events).toEqual(['omen', 'start', 'caught', 'start', 'caught', 'reset', 'omen']);
+  });
+
+  it('④ 減弱緊張效果 (Runtime.calm)：過預兆線即 chase:3-4 + autoPass、殘影從不出現；鐵柵 / 墨牆照樣在 (要切換)', () => {
+    let cs = openChapter(SPEC, captureState(after34a()), CALM);
+    expect(cs.world.rt.calm).toBe(true);
+    const r = chaseScript(cs, [...TO_GATE, { walkTo: [13.2, null] }]);
+    cs = r.cs;
+    expect([r.log.events, cs.state.flags.includes('chase:3-4'), chaseRun(get(cs, 'chaser')).phase]).toEqual([['autoPass'], true, 'done']);
+    let used = false;
+    runScript(cs.world, [{ hold: { moveX: 1 }, seconds: 8 }], { onFrame: w => { used ||= w.byId.get('chaser')!.used; } });
+    // 實景：墨牆只在藏寶圖 → 走過 24，停在鐵柵 31 之前
+    expect([used, +cs.world.player.x.toFixed(2), cs.world.player.mode]).toEqual([false, 30.55, '3d']);
+  });
+
+  it('⑤ 同一段被追上 3 次後殘影速度 ×0.8 = 2.08 (確定性計數；R 重算)', () => {
+    const cs = play(after34a(), [...TO_GATE, ...FLIP3]).cs;
+    const o = get(cs, 'chaser');
+    const r = chaseScript(cs, [{ hold: { moveX: 1 }, seconds: 21 }]);
+    expect([r.log.events.filter(e => e === 'caught').length, chaserSpeed(o)]).toEqual([3, 2.08]);
+    // 第 4 段：每幀前進 2.08 / 60
+    const xs: number[] = [];
+    runScript(cs.world, [{ walkTo: [19.5, null] }, { wait: 1 }], { onFrame: () => xs.push(o.x) });
+    const d = xs[xs.length - 1] - xs[xs.length - 2];
+    expect([+(d * 60).toFixed(4), chaseRun(o).caught]).toEqual([2.08, 3]);
+    const fresh = restartRoom(r.cs, OPTS);
+    expect([chaserSpeed(get(fresh, 'chaser')), chaseRun(get(fresh, 'chaser')).caught]).toEqual([2.6, 0]);
+  });
+
+  it('中途走回主室 (x < 12.5) = 本段重置 (殘影淡出、不計失敗)；再進長廊重新預兆；R 不重演已完成的追逐；預兆期間殘影站在出生點不動', () => {
+    let cs = play(after34a(), TO_GATE).cs;
+    const o = get(cs, 'chaser');
+    const omenXs: number[] = [];
+    runScript(cs.world, [{ walkTo: [14, null] }, { wait: 1 }], { onFrame: () => omenXs.push(o.x) });
+    expect([chaseRun(o).phase, o.used, new Set(omenXs.slice(-30)).size]).toEqual(['omen', true, 1]);
+    const back = chaseScript(cs, [{ walkTo: [11.0, null] }]);
+    expect([back.log.events, chaseRun(o).phase, o.used, chaseRun(o).caught]).toEqual([['reset'], 'idle', false, 0]);
+    cs = chaseScript(back.cs, [{ walkTo: [11.5, null] }, ...RUN]).cs;
+    expect(cs.state.flags.includes('chase:3-4')).toBe(true);
+    const r = restartRoom(cs, OPTS);
+    const replay = chaseScript(r, [...TO_GATE, { walkTo: [22, null] }]);
+    expect([replay.log.events, chaseRun(get(r, 'chaser')).phase, isPassable(r.world, get(r, 'chaseGate'))]).toEqual([[], 'done', true]);
+  });
+
+  it('⑥ 加入長廊後：3-4a / 3-4b 的腳本照樣成立；人在主室時殘影一直不動 (追逐不在任何謎題的 area 裡)；validateLevel 0 issue', () => {
+    const a = after34a();
+    expect([chaseRun(get(a, 'chaser')).phase, get(a, 'chaser').used]).toEqual(['idle', false]);
+    const b = shrinkFirst(a);
+    expect(b.done).toEqual(['3-4b']);
+    expect(chaseRun(get(b.cs, 'chaser')).phase).toBe('idle');
+    expect(validateLevel(depths, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, abilities: ['nib'] })).toEqual([]);
+  });
+});
+
+describe('章門 = 第三章通關 (記入 3-1～3-4；第四章占位)', () => {
+  it('追逐 → 章門：記入 3-1～3-4、手記第三頁進存檔、章末文字、沒有「前往」(nextAfterClear = null)、cs:ch3 不觸發；選單 3-1～3-4 = cleared', () => {
+    let cs = play(after34a(), TO_GATE).cs;
+    cs = chaseScript(cs, [...RUN, ...DOOR]).cs;
+    expect(cs.world.cleared).toBe(true);
+    const save = recordClear({ ...defaultSave(), cleared: ['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5'], abilities: ['nib', 'scale'] }, '3-4', cs.world, Object.keys(CH3.levels));
+    expect([save.cleared.slice(-4), save.current, save.diary, TEXT(depths.nextKey), nextAfterClear('3-4', 'chapter', CHAPTERS)])
+      .toEqual([['3-1', '3-2', '3-3', '3-4'], '3-4', [3], '溫室往下沉了。第四章　地下室——還在路上。', null]);
+    expect(['3-1', '3-2', '3-3', '3-4'].map(id => levelState(levelById(id)!, save))).toEqual(['cleared', 'cleared', 'cleared', 'cleared']);
+    expect([CUTSCENES.some(c => c.id === 'cs:ch3'), cutsceneBeforeLevel(save, '3-4')]).toEqual([false, undefined]);
+  });
+
+  it('房間通關與章通關不互相蓋掉：3-4a、3-4b 都完成 (章門還沒開) → 深處不算房間通關 (章門列在 puzzles 最後)；章門打開 → world.cleared (外殼不再另送房間通關)；3-4b 沒做也能通關', () => {
+    const b = shrinkFirst(after34a());
+    expect([b.done, clearedRooms(SPEC, b.cs.state, b.cs.world).includes('depths')]).toEqual([['3-4b'], false]);
+    let cs = play(after34a(), TO_GATE).cs;
+    cs = chaseScript(cs, [...RUN, ...DOOR]).cs;
+    expect([cs.world.cleared, get(cs, 'mossW').used, clearedRooms(SPEC, cs.state, cs.world).includes('depths')]).toEqual([true, false, false]);
+  });
+
+  it('存檔：通關後重開 → 接著第三章存檔 (深處、章門開過、chase:3-4、殘影不再追、花窗亮、鑰匙)；殘影不進快照；實作一的舊快照 (柵門 used 缺) 照常開：柵門開、殘影 idle', () => {
+    let cs = play(after34a(), TO_GATE).cs;
+    cs = chaseScript(cs, [...RUN, ...DOOR]).cs;
+    const store = memoryStorage();
+    writeSave(store, withChapter(recordClear({ ...defaultSave(), cleared: ['2-5', '3-1', '3-2', '3-3'], abilities: ['nib', 'scale'] }, '3-4', cs.world, Object.keys(CH3.levels)), captureState(cs)));
+    const back = openChapter(SPEC, chapterStart(loadSave(store), SPEC, CH3.start), OPTS);
+    const r = chaseScript(back, [{ wait: 1 / 30 }, { walkTo: [56, null] }]);
+    expect([back.state.room, get(back, 'chapterS').used, back.state.flags.includes('chase:3-4'), r.log.events, get(back, 'lattice').used, hasItem(back.world, 'key.greenhouse')])
+      .toEqual(['depths', true, true, [], true, true]);
+    expect(captureState(back).rooms.depths.objs.some(s => s.id === 'chaser')).toBe(false);
+    const old = stateAt(L_SHAPE, { depthsObjs: [snap('paneFrame'), snap('lattice'), snap('latticeBox', { gone: true }), snap('chaseGate', { used: false })], items: { 'key.greenhouse': 1, 'diary.3': 1, 'card.da': 1 } });
+    const o = openChapter(SPEC, old, OPTS);
+    runScript(o.world, [{ wait: 1 / 30 }]);
+    expect([isPassable(o.world, get(o, 'chaseGate')), get(o, 'chaseGate').used, chaseRun(get(o, 'chaser')).phase]).toEqual([true, true, 'idle']);
+  });
+});
+
+describe('音效：柵門打開 (USED_ON chaseGate)', () => {
+  it('LevelObserver：chaseGate used → sfx.gate.open (花窗亮的那一刻同時打開)；殘影 (chaser) 本身沒有狀態差的聲音', () => {
+    const W = {};
+    const s = (objs: LevelSnap['objs']): LevelSnap => ({
+      world: W, room: 'depths', mode: '2d', player: { x: 0, y: 0, z: 0, vy: 0, onGround: true }, inv: {}, objs, cube: '', ink: 8,
+      mapOpen: false, turnMode: false, trayOpen: false, busy: false, msgSeq: 0, msgKey: ''
+    });
+    const o = (id: string, type: string, used: boolean) => ({ id, type, used, gone: false, x: 0, z: 0 });
+    const obs = new LevelObserver();
+    obs.update(s([o('g', 'chaseGate', false), o('c', 'chaser', false)]));
+    const out = obs.update(s([o('g', 'chaseGate', true), o('c', 'chaser', true)]));
+    expect(out.filter(a => a.kind === 'sfx').map(a => a.kind === 'sfx' && a.id)).toEqual(['sfx.gate.open']);
+  });
+});
+
 describe('反例：只用 2D / 只用 3D、盲轉取樣', () => {
   it('只用 2D：花窗架與抽屜只在實景按得到、門只在實景穿得過；只用 3D：標籤只在藏寶圖 (巨根)、轉動模式只在藏寶圖', () => {
     const cs = open(SOLVED);
@@ -560,7 +754,7 @@ describe('捷徑掃描 (三個尺度檔 × 站位 × 兩模式 × 探針)', () =
           [{ act: 'interact' }, { act: 'flip' }, { wait: 0.2 }, { act: 'interact' }],
           [{ act: 'flip' }, { wait: 0.2 }, { hold: { moveX: 1, jump: true }, seconds: 2 }, { act: 'flip' }, { wait: 0.2 }, { hold: { moveX: 1 }, seconds: 1 }]
         ],
-        forbidden: ['used:lattice', 'used:mossW', 'used:paneFrame', 'item:key.greenhouse', 'used:chapterS', { id: 'corridor', holds: (w: World) => w.player.x > 12.4 }]
+        forbidden: ['used:lattice', 'used:mossW', 'used:paneFrame', 'item:key.greenhouse', 'used:chapterS', { id: 'corridor', holds: (w: World) => w.player.x > 12.4 }, { id: 'chaser', holds: (w: World) => w.byId.get('chaser')!.used }]
       });
       expect([tier, r.hits, r.runs > 0]).toEqual([tier, [], true]);
     }

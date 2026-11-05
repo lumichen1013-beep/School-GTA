@@ -243,4 +243,4 @@ sfx(ui)     → sfxGain ──────────────────�
 ## 9. 不做 / 之後
 
 - 不做：音檔、空間音訊（PannerNode）、動態混音自動化、使用者自訂音色。
-- 之後：`content/moodTypes.ts` 建好後，強度改讀 `LevelEntry.mood`（目前 `levelIntensity()` 依規格 9.1 表查）；追逐（N19）實作後接 `tension` 情境與預兆漸強；`cs:ch1` 以後的過場加入時，只需補 `CUE_MAP`（測試會提醒）。
+- 之後：`content/moodTypes.ts` 建好後，強度改讀 `LevelEntry.mood`（目前 `levelIntensity()` 依規格 9.1 表查）；（已做，2026-11-05 3-4 追逐 1：`chase` 事件 → `tension` 情境 3 秒漸強 + 遠處腳步、被追上 `sfx.chase.caught`、終點後 `quiet` 20 秒；`audio/events.CHASE_ACTIONS`、`WebAudioManager.chase`）；`cs:ch1` 以後的過場加入時，只需補 `CUE_MAP`（測試會提醒）。
