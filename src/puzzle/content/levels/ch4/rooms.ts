@@ -60,29 +60,8 @@ export const well = room('well', -5, 5, [
 /** 4-2 墨爐間 (下層中心)：完整檔在 4-2-furnace.ts */
 export { furnace } from './4-2-furnace';
 
-/**
- * 4-3 封存書庫 (下層西邊)：東門 (↔ 墨爐間西門；墨線鎖)、天花板梯口 (窄梯；只有人過)。
- * 後景整面鐵皮抽屜牆 (貼著樹根) ｜ 中景長桌與檔案櫃 (成組、面向抽屜牆) ｜ 前景散落的封條與積水、紙籤
- */
-export const archive = room('archive', -10, 10, [
-  door('E', 'door', 9.8, inkSealed('4-2a')),
-  // 4-1b：天花板梯口的折疊梯收著 (拉繩拉下之前爬不上去)；拉繩只在藏寶圖、要站上只畫在圖上的台階才搆得到
-  hatch('U', 'door', -4.0, -4.4, { sealed: { until: '4-1b', text: 'lvl.4-1.ladder.folded' } }),
-  // 樹根管線 (外觀；4-2a)：天花板 → 東門 (墨流回墨爐的西門)
-  { id: 'pipeArchive', type: 'inkPipe', when: 'through', path: '-3.2,5.6,-4.7 2,4.4,-4.7 9.6,1.8,-1.2', x: 3.2, y: 1.8, z: -3.0, w: 0.3, h: 3.8, d: 0.3, visible: '3d', solid: false },
-  { id: 'foldCord', type: 'foldCord', doneFlag: '4-1b', useText: 'msg.cellar.cord', x: -3.0, y: 2.6, z: -3.9, w: 0.2, h: 0.5, d: 0.2, visible: 'both', solid: false, interactable: true, interactIn: '2d', labelKey: 'lvl.4-1.cord' },
-  { id: 'inkStep', type: 'inkStep', x: -2.2, y: 0, z: -3.6, w: 1.2, h: 1.4, d: 1.0, visible: '2d', solid: true, labelKey: 'lvl.4-1.inkStep' },
-  plaque('plaqueArchive', 'lvl.ch4.archive.plaque', 2.4, 0.8, 3.0)
-], [
-  { kind: 'drawerWall', x: 3.0, w: 9.0, h: 3.2, seed: 221 },
-  { kind: 'rootCeiling', x: 0, w: 18, seed: 223 },
-  { kind: 'longTable', x: 1.6, z: -0.8, w: 3.2, rot: 0 },
-  { kind: 'cabinets', x: -6.4, z: -1.2, n: 2, rot: 0.25, seed: 225 },
-  { kind: 'cabinets', x: 7.4, z: -2.6, n: 2, rot: -0.2, seed: 227 },
-  { kind: 'seals', x: -1.4, z: 2.4, seed: 229 },
-  { kind: 'puddle', x: 5.6, z: 2.4, w: 1.6, d: 1.0 },
-  { kind: 'lantern', x: -1.0, y: 3.6, z: -0.4 }
-]);
+/** 4-3 封存書庫 (下層西邊)：完整檔在 4-3-archive.ts */
+export { archive } from './4-3-archive';
 
 /**
  * 4-4 最後的抽屜 (下層東邊)：西門 (↔ 墨爐間東門；墨線鎖)、天花板梯口 (寬梯：木箱落得進來)、東章門 (要房間的銅鑰匙 key.cellar；只接 [1,0,0] 北側屋框)。

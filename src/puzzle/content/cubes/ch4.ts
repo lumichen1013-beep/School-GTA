@@ -96,3 +96,24 @@ export const CH4_ZONE42 = {
   start: 'hall',
   finish: 'ch4.furnace'
 };
+
+/**
+ * 4-3 區的抽象模型 (devtools/validateDial；規格 6「4-3 封存書庫（細化）」4-3 區抽象模型)：起點同 4-2 區 (4-1c、4-1b 以不需轉動的教學題代表)。
+ * 題：4-2a = 墨爐西門的墨線鎖 (教學)、ink.E = 西門化開之後再把墨轉給東門 (4-3b 的轉動量在這一題)；4-3a = 走進封存書庫 (資訊題：讀法不需轉動，正確性由讀法表與腳本驗)；
+ * 4-3b = 兩道墨線鎖都化開、人在書庫；終點 ch4.archive = 兩題都完成、人在書庫
+ */
+export const CH4_ZONE43 = {
+  cube: CH4_CUBE,
+  puzzles: [
+    { id: '4-1c', room: 'hall', needs: [], teaching: true },
+    { id: '4-1b', room: 'archive', needs: [], teaching: true },
+    { id: '4-2a', room: 'furnace', needs: [], teaching: true, ink: { side: 'W' } },
+    // 4-3b 的轉動 = 第二股墨 (西門化開之後再轉給東門)：多解列舉量在 ink.E (需 4-2a)；4-3b 本身只是兩道都化開後走進書庫
+    { id: 'ink.E', room: 'furnace', needs: ['4-2a'], goal: (_s, f) => f.has('4-2a'), ink: { side: 'E' } },
+    { id: '4-3a', room: 'archive', needs: [], teaching: true },
+    { id: '4-3b', room: 'archive', needs: ['4-2a', 'ink.E'], teaching: true, goal: (_s, f) => f.has('4-2a') && f.has('ink.E') },
+    { id: 'ch4.archive', room: 'archive', needs: ['4-3a', '4-3b'], teaching: true, goal: (_s, f) => f.has('4-3a') && f.has('4-3b') }
+  ] as readonly ZonePuzzle[],
+  start: 'hall',
+  finish: 'ch4.archive'
+};

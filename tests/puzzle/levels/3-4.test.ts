@@ -698,7 +698,7 @@ describe('音效 (USED_ON)：花窗架、花窗', () => {
     obs.update(s([o('a', 'paneFrame', false), o('b', 'lattice', false), o('c', 'sensor', false)]));
     const out = obs.update(s([o('a', 'paneFrame', true), o('b', 'lattice', true), o('c', 'sensor', true)]));
     expect(out.filter(a => a.kind === 'sfx').map(a => a.kind === 'sfx' && a.id)).toEqual(['sfx.latch.open', 'sfx.lamp.on', 'sfx.lamp.on']);
-    expect(Object.keys(SCARE_SFX)).toEqual(['scare:coats', 'scare:handprint']);
+    expect(Object.keys(SCARE_SFX)).toEqual(['scare:coats', 'scare:handprint', 'scare:archive']); // 3-4 不加；第四章 4-3 加 scare:archive
   });
 });
 

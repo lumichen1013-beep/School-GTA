@@ -185,7 +185,7 @@ function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
   const light = lightExt(spec, state, w.ext.labels ?? state.labels, w);
   if (light) w.ext = { ...w.ext, light };
   const ink = inkExt(spec, state, w);
-  if (ink) w.ext = { ...w.ext, ink };
+  if (ink) w.ext = { ...w.ext, ink, done: [...doneFlags(spec, state, w)] };
   writeDerived(spec, state, w, w.ext.labels ?? state.labels);
 }
 
@@ -209,7 +209,7 @@ function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   const light = lightExt(spec, state, state.labels, w);
   if (light) w.ext = { ...w.ext, light };
   const ink = inkExt(spec, state, w);
-  if (ink) w.ext = { ...w.ext, ink };
+  if (ink) w.ext = { ...w.ext, ink, done: [...doneFlags(spec, state, w)] };
   writeDerived(spec, state, w, state.labels);
 }
 
@@ -718,6 +718,8 @@ declare module './types' {
   interface WorldExt {
     /** v0.4 第四章 墨流：這間房此刻有沒有墨流過、收到墨的匯點 (本地門位)；章節層寫入，mechanics/ink 只讀 */
     ink?: { through: boolean; sinks: readonly Side[] };
+    /** v0.4 第四章 此刻成立的謎題旗標 (doneFlags；有墨流的章節才寫：進房 / 轉動 / done 之後)；4-3b 封存櫃只讀 */
+    done?: readonly string[];
   }
 }
 
@@ -784,7 +786,7 @@ function inkExt(spec: ChapterSpec, state: ChapterState, w?: World): NonNullable<
 /** 墨流可能改變的事之後 (閥打開、轉動、換房) 重算當前房的 ext.ink (光路 / 門接法照舊) */
 export function syncInk(cs: ChapterSession): ChapterSession {
   const ink = inkExt(cs.spec, cs.state, cs.world);
-  if (ink) cs.world.ext = { ...cs.world.ext, ink };
+  if (ink) cs.world.ext = { ...cs.world.ext, ink, done: [...doneFlags(cs.spec, cs.state, cs.world)] };
   return cs;
 }
 

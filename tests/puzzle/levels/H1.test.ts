@@ -598,6 +598,6 @@ describe('選單與音效', () => {
     obs.update(s(false, {}));
     const out = obs.update(s(true, { 'scrap.4': 1 }));
     expect(out.filter(a => a.kind === 'sfx').map(a => a.kind === 'sfx' && a.id).sort()).toEqual(['sfx.note.read', 'sfx.pickup.paper']);
-    expect([GAME_EVENT_TYPES, Object.keys(SCARE_SFX)]).toEqual([['switch', 'switchDenied', 'door', 'turnRequest', 'objCross', 'labelOpen', 'card', 'flag', 'dialActivate', 'done', 'chase'], ['scare:coats', 'scare:handprint']]);
+    expect([GAME_EVENT_TYPES, Object.keys(SCARE_SFX)]).toEqual([['switch', 'switchDenied', 'door', 'turnRequest', 'objCross', 'labelOpen', 'card', 'flag', 'dialActivate', 'done', 'chase'], ['scare:coats', 'scare:handprint', 'scare:archive']]); // H1 不加；第四章 4-3 加 scare:archive
   });
 });

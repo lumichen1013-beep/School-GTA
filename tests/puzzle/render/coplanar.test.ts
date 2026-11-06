@@ -468,4 +468,18 @@ describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 
       view.dispose();
     }
   });
+
+  it('4-3 的狀態 (符號櫃開、封存櫃開、驚嚇演出中) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const w = newWorld(archive);
+    w.ext = { cube: { links: {}, at: [0, 1, 0], layout: { hall: [0, 1, 1], well: [1, 1, 1], furnace: [1, 1, 0], archive: [0, 1, 0], drawer: [2, 1, 0], sealed: [1, 2, 0] } }, dial: { active: true }, unlocked: ['L0'], done: ['4-2a', 'ink.E'] };
+    const view = new PuzzleScene(w, THEMES.cellar);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 10; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    for (const id of ['symbolLock', 'sealCabinet', 'archiveScare']) w.byId.get(id)!.used = true;
+    for (let i = 10; i < 70; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, [archive.bounds.minX + 3, archive.bounds.maxX - 3])).toEqual([]);
+    w.player.mode = '2d';
+    view.update('2d', 1 / 60, 2, cams.active('2d'));
+    view.dispose();
+  });
 });

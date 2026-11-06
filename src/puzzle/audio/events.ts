@@ -59,7 +59,7 @@ export function worldEventActions(e: GameEvent): AudioAction[] {
 }
 
 /** 驚嚇旗標 → 一般版音效 (沒列的旗標用預設) */
-export const SCARE_SFX: Readonly<Record<string, string>> = { 'scare:coats': 'sfx.scare.coats', 'scare:handprint': 'sfx.scare.coats' };
+export const SCARE_SFX: Readonly<Record<string, string>> = { 'scare:coats': 'sfx.scare.coats', 'scare:handprint': 'sfx.scare.coats', 'scare:archive': 'sfx.scare.dim' };
 export const SCARE_DEFAULT = 'sfx.scare.coats';
 export const SCARE_GENTLE = 'sfx.scare.gentle';
 
@@ -224,7 +224,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 第四章 4-1：折疊梯的拉繩、根結踏板
   foldCord: 'sfx.cord.pull', rootPlate: 'sfx.plate.press',
   // 4-2：墨爐閥、墨線鎖、墨痕、爐邊小櫃 (玻璃眼 = sensor)
-  inkValve: 'sfx.lever.pull', inkLock: 'sfx.door.unseal', inkMark: 'sfx.lamp.on', markCase: 'sfx.drawer.open'
+  inkValve: 'sfx.lever.pull', inkLock: 'sfx.door.unseal', inkMark: 'sfx.lamp.on', markCase: 'sfx.drawer.open',
+  // 4-3：符號櫃、封存櫃
+  symbolLock: 'sfx.drawer.open', sealCabinet: 'sfx.latch.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

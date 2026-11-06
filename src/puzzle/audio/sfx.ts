@@ -100,6 +100,8 @@ const LIST: SfxDef[] = [
       noise('bandpass', 400, 0.07, { a: 0.003, d: 0.2 }, { at: 0.12 })
     ]
   },
+  // 4-3 燈暗一瞬：低頻一聲 (起音 ≥ 150 ms、≤ −18 dBFS；第四章不放 BGM，只有 40～80 Hz 的低頻)
+  { id: 'sfx.scare.dim', cat: 'scare', db: -18, world: true, reverb: 0.35, parts: [tone('sine', 55, 0.5, { a: 0.18, h: 0.4, d: 1.2 }, { f2: 45 }), noise('bandpass', 300, 0.3, { a: 0.2, d: 0.9 }, {}, 200, 0.8)] },
   { id: 'sfx.scare.gentle', cat: 'scare', db: -26, world: true, reverb: 0.4, parts: [noise('bandpass', 700, 0.6, { a: 0.3, h: 0.2, d: 0.6 }, {}, 400, 0.7), tone('sine', 196, 0.4, { a: 0.04, d: 0.8 }, { at: 0.3 })] },
   // ── 旋律 (目前章節的調；score.solvedPhrase / clearPhrase) ──
   { id: 'sfx.puzzle.solved', cat: 'phrase', db: -18, reverb: 0.5, phrase: 'solved', parts: [] },

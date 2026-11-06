@@ -15,6 +15,7 @@ import { night } from './ch3/3-3-night';
 import { depths } from './ch3/3-4-depths';
 import { hall } from './ch4/4-1-hall';
 import { furnace } from './ch4/4-2-furnace';
+import { archive } from './ch4/4-3-archive';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -66,7 +67,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 4-1 根窖走廊：第四章第一關 (魔方 3×3×2 層轉、控制盤 = 年輪根盤)；第三章章門打開 (3-4 通關) 後開放；前置能力 = 筆尖 (占位版，謎題逐關加入)
   { id: '4-1', chapter: 4, titleKey: 'lvl.4-1.title', abilities: ['nib'], unlock: { after: ['3-4'] }, load: () => hall },
   // 4-2 墨爐間：第四章第二關 (墨流 P15 首次、光往下、顯影)；4-1 通關後開放 (章內：開場經根井的根梯就到得了)
-  { id: '4-2', chapter: 4, titleKey: 'lvl.4-2.title', abilities: ['nib'], unlock: { after: ['4-1'] }, load: () => furnace }
+  { id: '4-2', chapter: 4, titleKey: 'lvl.4-2.title', abilities: ['nib'], unlock: { after: ['4-1'] }, load: () => furnace },
+  // 4-3 封存書庫：第四章第三關 (P11 兩層的讀法、兩股墨、驚嚇)；4-2 通關後開放 (章內：4-1a 的梯口或 4-2a 的西門)
+  { id: '4-3', chapter: 4, titleKey: 'lvl.4-3.title', abilities: ['nib'], unlock: { after: ['4-2'] }, load: () => archive }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

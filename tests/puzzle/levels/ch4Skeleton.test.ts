@@ -67,13 +67,13 @@ const spin = (...ts: Turn[]): CubeState => ts.reduce<CubeState>((s, t) => { cons
 
 describe('第四章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第四章 (地下室主題、levels 4-1)；LevelEntry 4-1 (筆尖、前置 3-4)；CUBE_CHAPTERS chapter 4 (六間房、從走廊北門進)', () => {
-    expect(CHAPTERS.find(c => c.id === 4)).toEqual({ id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1', '4-2'] }); // 4-2 登錄
+    expect(CHAPTERS.find(c => c.id === 4)).toEqual({ id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1', '4-2', '4-3'] }); // 4-2 / 4-3 登錄
     expect([TEXT('ch.4.title'), THEMES.cellar.id]).toEqual(['第四章　地下室', 'cellar']);
     const e = levelById('4-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([4, ['nib'], ['3-4'], hall, '根窖走廊']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect([cubeChapterOf('4-1'), CH4.cube, CH4.start, CH4.levels, Object.keys(CH4.rooms).sort()])
-      .toEqual([CH4, CH4_CUBE, { room: 'hall', door: 'doorN' }, { '4-1': 'hall', '4-2': 'furnace' }, ['archive', 'drawer', 'furnace', 'hall', 'sealed', 'well']]);
+      .toEqual([CH4, CH4_CUBE, { room: 'hall', door: 'doorN' }, { '4-1': 'hall', '4-2': 'furnace', '4-3': 'archive' }, ['archive', 'drawer', 'furnace', 'hall', 'sealed', 'well']]);
   });
 
   it('CH4_CUBE：3×3×2 層轉、控制盤；S0 (上層：走廊在北邊、根井在中心；下層：書庫 西 / 墨爐 中 / 抽屜 東 / 封存室 南)；沒有實心格；屋框；L0 / L1、L0 鎖到 4-1c', () => {
