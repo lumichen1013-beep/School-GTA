@@ -22,7 +22,9 @@ export function deriveHud(w: World, text: Text, view: HudView): HudModel {
   let prompt: string | null = null;
   const key = keyLabel(view.bindings.interact[0] ?? '');
   if (t) {
-    const verb = text(w.rt.mechanics.types.get(t.def.type)?.spec.verbKey ?? 'obj.default.verb');
+    // v0.4 第四章 梯口：爬上去 / 爬下去 (同一個 cubeDoor 類型，依門位換動詞)
+    const hatch = t.def.type === 'cubeDoor' && (t.def.side === 'U' || t.def.side === 'D') ? (t.def.side === 'U' ? 'obj.hatch.up.verb' : 'obj.hatch.down.verb') : null;
+    const verb = text(hatch ?? w.rt.mechanics.types.get(t.def.type)?.spec.verbKey ?? 'obj.default.verb');
     // 有標籤的拉桿：名稱跟著此刻的方向字 (詞卡蓋上去之後顯示新字；mobile-controls 2.1「拉　上」)
     const label = t.def.type === 'lever' && t.def.label ? text('ui.lever.label', { word: text(WORD_KEYS[leverWord(w, t)]) })
       : t.def.labelKey ? text(t.def.labelKey) : '';

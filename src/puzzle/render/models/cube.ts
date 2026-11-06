@@ -3,7 +3,8 @@ import type { ObjDef } from '../../core/types';
 import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
-import { glow, inscription } from '../textures';
+import { crateWood, glow, inscription } from '../textures';
+import { mergeParts, placed } from '../geometry';
 import { drawingTexture } from './manuscripts';
 import type { ModelCtx, PropModel } from './types';
 import { labelBadge } from './label';
@@ -15,8 +16,63 @@ const approach = (cur: number, target: number, k: number) => cur + (target - cur
 /** 門位 → 正面朝向 (模型以 +z 為正面；E 門朝西、W 門朝東、S 前緣的門朝後牆) */
 const FACING: Readonly<Record<string, number>> = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
 
-/** 魔方門：門框 + 門扇 (門 / 章門) 或兩柱 + 拱頂 (拱門)；接通時門縫透出暖光 (章門另有銅鎖板) */
-export function cubeDoorModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+/**
+ * v0.4 第四章 梯口 (U / D 門位；規格 6「第四章共用規則」梯口)：
+ * U = 靠後牆的梯子 (兩根梯柱 + 橫檔，頂端接天花板上的方形梯口框)；拱門形 (寬) = 梯子較寬、梯口框雙層
+ * D = 地上的活板門 (木板 + 鐵環 + 外框)；接通 = 門板掀起 (往後立起)、露出往下的黑洞與梯子頂端；門後是土 = 門板蓋著
+ * 兩個視角都畫 (藏寶圖：地上的一道縫 / 牆邊的梯子)
+ */
+function hatchModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  const side = d.type === 'cubeDoor' ? d.side : 'U';
+  const wide = d.type === 'cubeDoor' && d.kind === 'arch';
+  if (side === 'U') {
+    const w = d.w, h = d.h;
+    const wood = [placed(box(0.09, h, 0.09), -w / 2 + 0.05, h / 2, 0), placed(box(0.09, h, 0.09), w / 2 - 0.05, h / 2, 0)];
+    for (let y = 0.35; y < h - 0.1; y += 0.38) wood.push(placed(box(w - 0.1, 0.05, 0.07), 0, y, 0));
+    g.add(p.mesh(mergeParts(wood), pal.shelf, { map: crateWood(pal), flat: pal.shelf }));
+    // 天花板上的梯口框 (方框 + 往上的暗洞)
+    const fw = w + 0.5;
+    const frame = [placed(box(fw, 0.12, 0.14), 0, h + 0.06, -0.3), placed(box(fw, 0.12, 0.14), 0, h + 0.06, 0.5), placed(box(0.14, 0.12, 0.8), -fw / 2, h + 0.06, 0.1), placed(box(0.14, 0.12, 0.8), fw / 2, h + 0.06, 0.1)];
+    if (wide) frame.push(placed(box(fw - 0.3, 0.06, 0.06), 0, h + 0.15, 0.1));
+    g.add(p.mesh(mergeParts(frame), pal.doorFrame));
+    const hole = p.mesh(new THREE.PlaneGeometry(fw - 0.14, 0.66), pal.outline, { outline: false, shadow: false });
+    hole.rotation.x = Math.PI / 2;
+    hole.position.set(0, h + 0.01, 0.1);
+    g.add(hole);
+    return { root: g };
+  }
+  // D：活板門
+  const w = d.w, dd = d.d;
+  const frame = [placed(box(w + 0.16, 0.06, 0.08), 0, 0.03, -dd / 2 - 0.04), placed(box(w + 0.16, 0.06, 0.08), 0, 0.03, dd / 2 + 0.04), placed(box(0.08, 0.06, dd), -w / 2 - 0.04, 0.03, 0), placed(box(0.08, 0.06, dd), w / 2 + 0.04, 0.03, 0)];
+  if (wide) frame.push(placed(box(w, 0.05, 0.05), 0, 0.03, 0));
+  g.add(p.mesh(mergeParts(frame), pal.doorFrame, { outline: false }));
+  const hole = p.mesh(new THREE.PlaneGeometry(w, dd), 0x0c0b0a, { outline: false, shadow: false });
+  hole.rotation.x = -Math.PI / 2;
+  hole.position.y = 0.005;
+  g.add(hole);
+  // 門板 (鉸鏈在後緣 z = -d/2)；接通 = 掀到 100°
+  const leaf = new THREE.Group();
+  leaf.position.set(0, 0.05, -dd / 2);
+  const planks = [placed(box(w - 0.04, 0.05, dd - 0.04), 0, 0, dd / 2)];
+  for (const z of [0.25, dd - 0.25]) planks.push(placed(box(w - 0.04, 0.03, 0.08), 0, 0.035, z));
+  leaf.add(p.mesh(mergeParts(planks), pal.crate, { map: crateWood(pal), flat: pal.crate }));
+  const ring = p.mesh(new THREE.TorusGeometry(0.08, 0.015, 6, 14), pal.iron, { metalness: 0.6, roughness: 0.4, outline: false });
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, 0.04, dd - 0.18);
+  leaf.add(ring);
+  g.add(leaf);
+  const update = (c: ModelCtx) => {
+    const open = c.world.ext.cube?.links[c.obj.def.id]?.to === 'room';
+    leaf.rotation.x = approach(leaf.rotation.x, open ? -1.75 : 0, c.dt * 4);
+  };
+  return { root: g, update };
+}
+
+/** 魔方門：門框 + 門扇 (門 / 章門) 或兩柱 + 拱頂 (拱門)；接通時門縫透出暖光 (章門另有銅鎖板)；U / D = 梯口 (hatchModel) */
+export function cubeDoorModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
+  if (d.type === 'cubeDoor' && (d.side === 'U' || d.side === 'D')) return hatchModel(p, d, theme);
+  const { pal } = theme;
   const g = new THREE.Group();
   const face = new THREE.Group();
   const side = d.type === 'cubeDoor' ? d.side : 'N';

@@ -20,7 +20,7 @@ import type { CardTray } from '../ui/cardTray';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
-import { deriveCubeMap, deriveTurnMode, inkHud, previewFor, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel } from './cubeMapModel';
+import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel } from './cubeMapModel';
 import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
 export interface SessionContext {
@@ -236,7 +236,7 @@ export class LevelSession {
     const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel);
     const r = reduceTurnMode(this.turnSel, i, m);
     // 按確認卻轉不動 (鎖著 / 卡住 / 墨乾)：預覽已寫了原因，再用訊息說一次
-    if (i.t === 'confirm' && m.blocked) say(this.world, DIAL_BLOCK_MSG[m.blocked as keyof typeof DIAL_BLOCK_MSG]);
+    if (i.t === 'confirm' && m.blocked) say(this.world, dialBlockKey(this.cs, this.turnSel?.group, m.blocked));
     if (i.t === 'undo' && !m.canUndo) say(this.world, 'msg.dial.nothingToUndo');
     // 點實心格 / 不鄰接空格的房 / 沒有房間能往那邊滑 (第三章)：只說明
     if (r.note) say(this.world, r.note.key, r.note.params);
@@ -248,14 +248,21 @@ export class LevelSession {
   /** 固定步開始時套用章節指令：轉不動 → 說明原因；轉成功 → 存檔，玩家所在房跟著移動就播轉動過場 (本步停下) */
   private runChapterCommand(c: ChapterCommand): void {
     const before = this.cs.state.cube?.pos[this.cs.state.room];
+    const beforeRot = this.cs.state.cube?.rot[this.cs.state.room] ?? 0;
     const r = applyChapterCommand(this.cs, c);
-    if ('blocked' in r) { say(this.world, DIAL_BLOCK_MSG[r.blocked]); return; }
+    if ('blocked' in r) { say(this.world, dialBlockKey(this.cs, c.t === 'turn' ? c.turn.group : undefined, r.blocked)); return; }
     this.cs = r;
     this.saveChapter();
     const after = r.state.cube?.pos[r.state.room];
-    const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1]);
     const slide = r.spec.cube?.ops === 'slide';
-    const done = c.t === 'undo' ? 'msg.dial.undone' : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
+    // v0.4 第四章 層轉：你這間房換了位置或朝向 (中心格只換朝向) = 連你一起轉
+    const layer = r.spec.cube?.ops === 'layer';
+    const spun = layer && (r.state.cube?.rot[r.state.room] ?? 0) !== beforeRot;
+    const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1]);
+    const here = moved || spun;
+    const done = c.t === 'undo' ? 'msg.dial.undone'
+      : layer ? (here ? 'msg.dial.layerHere' : 'msg.dial.layer')
+        : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
     if (!moved) { say(this.world, done); return; }
     // 過場方向 = 你這間房的移動方向 (列循環繞回時依轉動方向)
     const dx = after![0] - before![0];

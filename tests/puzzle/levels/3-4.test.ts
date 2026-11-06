@@ -141,7 +141,7 @@ describe('3-4 溫室深處：資料與驗證器', () => {
     expect([levelById('3-4')!.unlock.after, levelById('3-4')!.chapter, CH3.levels['3-4'], CH3.rooms.depths, depths.bounds, depths.theme, depths.turnBudget])
       .toEqual([['3-3'], 3, 'depths', depths, { minX: -10, maxX: 62, minZ: -5, maxZ: 5 }, 'greenhouse', { base: 10, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }]);
     expect([TEXT(depths.titleKey), TEXT(depths.narrationKey), TEXT(depths.nextKey), nextAfterClear('3-4', 'chapter', CHAPTERS)])
-      .toEqual(['溫室深處', '羅盤的把手磨亮了。有人轉過它，很多次。', '溫室往下沉了。第四章　地下室——還在路上。', null]);
+      .toEqual(['溫室深處', '羅盤的把手磨亮了。有人轉過它，很多次。', '溫室往下沉了。', '4-1']); // 第四章骨架：拿掉「還在路上」、前往 4-1
     // 3-3c 的高台 / 筆記一頁座標不動；章門 id 不變、在長廊盡頭；彩繪玻璃資料不變
     expect([def('ledge').x, def('ledge').z, def('pageGarden').y, def('chapterS').x, def('chapterS').type === 'cubeDoor' && def('chapterS').key, CH3_GLASS.depths])
       .toEqual([1.85, -4.55, 1.9, 61.0, 'key.greenhouse', { glass: ['N', 'W'], covered: ['W'] }]);
@@ -405,13 +405,13 @@ describe('3-4b 長進軌道的根 (P3 / P6)：唯一的「小」', () => {
 });
 
 describe('章門：鑰匙、第三章通關', () => {
-  it('沒有鑰匙 = 鎖著；有鑰匙、深處在 [2,2] → 打開 = 第三章通關 (3-4b 是擴充題，不擋章門)；cs:ch3 不做 (沒有「前往」)', () => {
+  it('沒有鑰匙 = 鎖著；有鑰匙、深處在 [2,2] → 打開 = 第三章通關 (3-4b 是擴充題，不擋章門)；第四章骨架起「前往」= 4-1', () => {
     const locked = open(SOLVED);
     runScript(locked.world, [{ place: [61.0, 0, 4.0] }, { wait: 0.1 }, { act: 'interact' }]);
     expect([locked.world.msg, locked.world.cleared]).toEqual(['門鎖著。鑰匙孔是銅的。', false]);
     const cs = after34a();
     runScript(cs.world, [...to3d(cs.world), { place: [61.0, 0, 4.0] }, { wait: 0.1 }, { act: 'interact' }]);
-    expect([cs.world.cleared, get(cs, 'mossW').used, nextAfterClear('3-4', 'chapter', CHAPTERS)]).toEqual([true, false, null]);
+    expect([cs.world.cleared, get(cs, 'mossW').used, nextAfterClear('3-4', 'chapter', CHAPTERS)]).toEqual([true, false, '4-1']);
   });
 });
 
@@ -552,16 +552,16 @@ describe('追逐 1 (N19，不計題)：守衛殘影、長廊、預兆 / 被追�
   });
 });
 
-describe('章門 = 第三章通關 (記入 3-1～3-4；第四章占位)', () => {
-  it('追逐 → 章門：記入 3-1～3-4、手記第三頁進存檔、章末文字、沒有「前往」(nextAfterClear = null)、cs:ch3 不觸發；選單 3-1～3-4 = cleared', () => {
+describe('章門 = 第三章通關 (記入 3-1～3-4；第四章骨架起接 4-1)', () => {
+  it('追逐 → 章門：記入 3-1～3-4、手記第三頁進存檔、章末文字、「前往」= 4-1 (第四章骨架)、進 4-1 前播 cs:ch3 (進 3-4 不播)；選單 3-1～3-4 = cleared、4-1 開放', () => {
     let cs = play(after34a(), TO_GATE).cs;
     cs = chaseScript(cs, [...RUN, ...DOOR]).cs;
     expect(cs.world.cleared).toBe(true);
     const save = recordClear({ ...defaultSave(), cleared: ['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5'], abilities: ['nib', 'scale'] }, '3-4', cs.world, Object.keys(CH3.levels));
     expect([save.cleared.slice(-4), save.current, save.diary, TEXT(depths.nextKey), nextAfterClear('3-4', 'chapter', CHAPTERS)])
-      .toEqual([['3-1', '3-2', '3-3', '3-4'], '3-4', [3], '溫室往下沉了。第四章　地下室——還在路上。', null]);
+      .toEqual([['3-1', '3-2', '3-3', '3-4'], '3-4', [3], '溫室往下沉了。', '4-1']);
     expect(['3-1', '3-2', '3-3', '3-4'].map(id => levelState(levelById(id)!, save))).toEqual(['cleared', 'cleared', 'cleared', 'cleared']);
-    expect([CUTSCENES.some(c => c.id === 'cs:ch3'), cutsceneBeforeLevel(save, '3-4')]).toEqual([false, undefined]);
+    expect([CUTSCENES.some(c => c.id === 'cs:ch3'), cutsceneBeforeLevel(save, '3-4'), cutsceneBeforeLevel(save, '4-1')?.id, levelState(levelById('4-1')!, save)]).toEqual([true, undefined, 'cs:ch3', 'open']);
   });
 
   it('房間通關與章通關不互相蓋掉：3-4a、3-4b 都完成 (章門還沒開) → 深處不算房間通關 (章門列在 puzzles 最後)；章門打開 → world.cleared (外殼不再另送房間通關)；3-4b 沒做也能通關', () => {

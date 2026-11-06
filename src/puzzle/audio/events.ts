@@ -112,7 +112,7 @@ export const SHOT_MUSIC: Readonly<Record<string, Readonly<Record<number, readonl
 };
 
 /** 過場 → 配樂 (沒列的過場 = 目前章節的配樂、安靜情境) */
-export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:ch2': 'ch2', 'cs:endA': 'endA', 'cs:endB': 'endB' };
+export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:ch2': 'ch2', 'cs:ch3': 'ch3', 'cs:endA': 'endA', 'cs:endB': 'endB' };
 
 /** 過場 (calmTension) 降一半音量的音效 (分鏡 2.5：cs:night 的低頻長音與撕紙聲) */
 export const CALM_HALF: readonly string[] = ['sfx.cs.paper.tear', 'sfx.cs.wood.groan', 'sfx.cs.circle.hum'];

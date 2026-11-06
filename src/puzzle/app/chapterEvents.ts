@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, doorArrival, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, doneFlags, doorArrival, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 
@@ -42,6 +42,8 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     const o = w.byId.get(e.door);
     const l = o && doorLink(w, o);
     if (!l || l.to !== 'room') return { kind: 'none' };
+    // v0.4 第四章 封住的門 (墨線鎖 / 收起來的折疊梯)：旗標還沒成立 → 說明、不換房
+    if (o.def.type === 'cubeDoor' && o.def.sealed && !doneFlags(cs.spec, cs.state, w).has(o.def.sealed.until)) { say(w, o.def.sealed.text); return { kind: 'blocked' }; }
     // v0.4 H1：到達處被實體占住 (例：夾層的書櫃堵住洞) → 在這一房說那個實體的話、不換房
     const blocked = doorArrival(cs, e.door);
     if (blocked) { say(w, blocked.blockText ?? 'msg.cube.doorBlocked'); return { kind: 'blocked' }; }

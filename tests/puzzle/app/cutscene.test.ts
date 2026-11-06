@@ -38,7 +38,7 @@ const mini: CutsceneDef = {
 
 describe('序章資料 (12 鏡新版)', () => {
   it('12 鏡；每段都有文字；總長 (自動播放、一般速度、暱稱 12 字) 約 108.4 秒 (±1，在 60～110 內)', () => {
-    expect(CUTSCENES.map(c => c.id)).toEqual(['cs:prologue', 'cs:ch2']); // 序章 + 第二章末 (cs:ch2)
+    expect(CUTSCENES.map(c => c.id)).toEqual(['cs:prologue', 'cs:ch2', 'cs:ch3']); // 序章 + 第二章末 (cs:ch2) + 第三章末 (cs:ch3，第四章骨架)
     expect(prologue.shots.length).toBe(12);
     const p = plan(prologue, { name: NAME12 });
     expect(p.totalSec).toBeGreaterThan(107.4);

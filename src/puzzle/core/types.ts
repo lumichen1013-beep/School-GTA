@@ -65,6 +65,8 @@ export interface PuzzleRef { id: string; titleKey: TextKey }
 export interface LevelDef {
   id: string;
   titleKey: TextKey;
+  /** v0.4 第四章 展開圖格子小 (手機的兩層並排) 時用的短名 (文字 key；沒給 = 用 titleKey) */
+  shortKey?: TextKey;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** 低於此高度視為掉入坑洞 */
   voidY: number;
@@ -163,6 +165,8 @@ export interface WorldExt {
   flags?: readonly string[];
   /** v0.4 控制盤章節：本章的魔方儀是否已啟動 (章節層寫入，機制只讀) */
   dial?: { active: boolean };
+  /** v0.4 控制盤章節：此刻已解開的鎖扣 (組 id；章節層寫入、外觀只讀：第四章年輪根盤的根結) */
+  unlocked?: readonly string[];
 }
 
 /**

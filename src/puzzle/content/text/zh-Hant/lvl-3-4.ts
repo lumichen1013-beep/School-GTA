@@ -3,7 +3,7 @@
 export const lvl34 = {
   'lvl.3-4.title': '溫室深處',
   'lvl.3-4.narration': '羅盤的把手磨亮了。有人轉過它，很多次。',
-  'lvl.3-4.next': '溫室往下沉了。第四章　地下室——還在路上。',
+  'lvl.3-4.next': '溫室往下沉了。',
   'lvl.3-4.puzzle.a': '3-4a 月下的花窗',
   'lvl.3-4.puzzle.b': '3-4b 長進軌道的根',
   'lvl.3-4.puzzle.door': '追逐・章門',

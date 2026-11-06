@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Painter } from '../materials';
 import { glowSprite } from '../materials';
 import type { Theme } from '../themes';
-import { glow, painting, rug, wallpaper } from '../textures';
+import { glow, painting, rug, stoneBlocks, wallpaper } from '../textures';
 import { num } from './fields';
 import { mergeParts, placed } from '../geometry';
 import type { DecorFactory } from './types';
@@ -17,10 +17,14 @@ const TRIM_OVERHANG = 0.01;
 /** 圖紙裡把背景牆 (與掛畫) 往後推的距離：貼牆物件 (高台、門、紙條) 的描邊才不會被牆面蓋住 */
 const PUSH_2D = 0.8;
 
-/** 一面牆：壁紙 + 護牆板 (分格) + 腰線 + 踢腳線 + 頂線；原點在牆底中央、正面朝 +z */
-function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number): THREE.Group {
+/**
+ * 一面牆：壁紙 + 護牆板 (分格) + 腰線 + 踢腳線 + 頂線；原點在牆底中央、正面朝 +z。
+ * v0.4 第四章 stone = 石砌牆 (方石紋理、沒有護牆板分格；石基與鐵飾條照主題色)
+ */
+function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number, stone = false): THREE.Group {
   const g = new THREE.Group();
-  const paper = p.mesh(new THREE.PlaneGeometry(len, WALL_H), 0xffffff, { map: wallpaper(pal, len / 1.2, WALL_H / 1.2), flat: BG2D.paper, flatMap: true, outline: false });
+  const tex = stone ? stoneBlocks(pal, len / 2.4, WALL_H / 1.0) : wallpaper(pal, len / 1.2, WALL_H / 1.2);
+  const paper = p.mesh(new THREE.PlaneGeometry(len, WALL_H), 0xffffff, { map: tex, flat: BG2D.paper, flatMap: true, outline: false });
   paper.position.y = WALL_H / 2;
   const wains = p.mesh(box(len, 1.1, 0.06), pal.wainscot, { flat: BG2D.wainscot, outline: false });
   wains.position.set(0, 0.55, 0.03);
@@ -37,7 +41,7 @@ function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number): THREE.
   // 護牆板分格 (同材質合成一個網格：外框一個、內嵌一個；v0.4 H1 起，省繪製次數，外觀不變)
   const panels: THREE.BufferGeometry[] = [];
   const insets: THREE.BufferGeometry[] = [];
-  for (let a = -len / 2 + 0.9; a < len / 2 - 0.4; a += 1.6) {
+  for (let a = -len / 2 + 0.9; !stone && a < len / 2 - 0.4; a += 1.6) {
     panels.push(placed(box(1.2, 0.7, 0.02), a + 0.4, 0.58, 0.065));
     insets.push(placed(box(1.08, 0.58, 0.022), a + 0.4, 0.58, 0.068));
   }
@@ -48,18 +52,19 @@ function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number): THREE.
   return g;
 }
 
-/** walls：後牆 + 左右側牆 (沿關卡 bounds；側牆只在現實)；欄位：無 */
-export const wallsDecor: DecorFactory = (p, _item, { level, theme }) => {
+/** walls：後牆 + 左右側牆 (沿關卡 bounds；側牆只在現實)；欄位 stone (選填，1 = 石砌牆：第四章地下室) */
+export const wallsDecor: DecorFactory = (p, item, { level, theme }) => {
   const b = level.bounds;
   const W = b.maxX - b.minX;
   const D = b.maxZ - b.minZ;
+  const stone = item.stone === 1;
   const root = new THREE.Group();
-  const back = wallSide(p, theme, W);
+  const back = wallSide(p, theme, W, stone);
   back.position.set((b.minX + b.maxX) / 2, 0, b.minZ);
-  const left = wallSide(p, theme, D);
+  const left = wallSide(p, theme, D, stone);
   left.position.set(b.minX, 0, (b.minZ + b.maxZ) / 2);
   left.rotation.y = Math.PI / 2;
-  const right = wallSide(p, theme, D);
+  const right = wallSide(p, theme, D, stone);
   right.position.set(b.maxX, 0, (b.minZ + b.maxZ) / 2);
   right.rotation.y = -Math.PI / 2;
   root.add(back, left, right);

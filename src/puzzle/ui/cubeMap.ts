@@ -5,7 +5,8 @@ import type { Text } from '../text/text';
 
 export type MapLink = 'room' | 'wall' | 'frame';
 /** piece = 這間房地板上畫的圖的一角 (2-4a；整張圖的折線與這一角的格) */
-export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid'; room: string | null; name: string; current: boolean; piece?: { px: number; py: number; drawing: string } }
+/** short = 格子小時改寫的短名 (v0.4 第四章；沒給 = name) */
+export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid'; room: string | null; name: string; short?: string; current: boolean; piece?: { px: number; py: number; drawing: string } }
 /** via = 接通時通道的型別 (兩側較窄者；拱門對拱門才是 arch) */
 export interface MapDoor { room: string; door: string; x: number; y: number; side: Side; kind: DoorKind; link: MapLink; via?: 'door' | 'arch' }
 export interface MapFrame { x: number; y: number; side: Side; kind: FrameKind; name: string }
@@ -45,6 +46,8 @@ export interface CubeMapModel {
   legend: { open: string; wall: string; arch: string; you: string; white?: string; stained?: string };
   /** v0.4 第三章：此刻的光路 (沒有彩繪玻璃的章節不給) */
   light?: MapLight;
+  /** v0.4 第四章 多層魔方：各層並排 (x = 起始欄、w = 欄數、name = 層名，畫在那一層上方)；單層不給 */
+  layers?: Array<{ x: number; w: number; name: string }>;
   /** v0.4 控制盤章節：「轉」頁籤 (null = 本章不是控制盤章)；turn = 轉動模式中的資料 (deriveTurnMode) */
   tab?: { label: string; enabled: boolean; reason: string | null; active: boolean } | null;
   turn?: TurnModeModel | null;
@@ -246,9 +249,10 @@ export class CubeMapOverlay {
   }
 
   /** 標頭箭頭 (DOM 按鈕，疊在畫布上；位置依畫布上格子的實際位置) */
-  private renderHeads(t: TurnModeModel | null, geo: { ox: number; oy: number; size: number; cols: number; rows: number } | null): void {
+  private renderHeads(t: TurnModeModel | null, geo: Geo | null): void {
     if (!t || !geo) { this.heads.replaceChildren(); return; }
     const { ox, oy, size, cols, rows } = geo;
+    if (geo.stack) t = stackTurn(t, geo.stack);
     // 滑動章節 (第三章)：箭頭畫在房間與空格的交界；格子小 (手機) 時箭頭縮到 ≥ 28 px 不互相重疊，觸控區改由格子負責——
     // 每一格都是點擊區 (≥ 44 px)：點在某個箭頭附近 (0.4 格內) = 選那個箭頭；否則 = 點格子 (房間 / 空格選取、實心格說明)
     const arrow = Math.max(SLIDE_MIN, Math.min(HEAD, Math.floor(size * 0.46)));
@@ -289,6 +293,12 @@ export class CubeMapOverlay {
       if (h.at.side === 'left') { x = ox - HEAD_GAP - HEAD; y = oy + (i + 0.5) * size - HEAD / 2; }
       else if (h.at.side === 'right') { x = ox + cols * size + HEAD_GAP; y = oy + (i + 0.5) * size - HEAD / 2; }
       else if (h.at.side === 'top') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy - HEAD_GAP - HEAD; }
+      else if (h.at.side === 'bottom' && geo.stack) {
+        // v0.4 第四章 直屏的多層展開圖 (各層上下疊)：層轉標頭畫在那一層的右側 (↺ 上、↻ 下)
+        const k = geo.stack.panels.findIndex(p => i >= p.x - 0.5 && i < p.x + p.w);
+        x = ox + cols * size + HEAD_GAP;
+        y = oy + (k * (geo.stack.rows + 1) + (h.dir === -1 ? 0.75 : 2.25)) * size - HEAD / 2;
+      }
       else if (h.at.side === 'bottom') { x = ox + (i + 0.5) * size - HEAD / 2; y = oy + rows * size + HEAD_GAP; }
       else if (h.at.side === 'cell' && h.cell && typeof h.dir === 'string') {
         // 滑動：房間與空格交界線的中點 (一半在房間、一半在空格，不壓房名)
@@ -307,12 +317,19 @@ export class CubeMapOverlay {
     this.heads.replaceChildren(...cellBtns, ...btns);
   }
 
-  private draw(m: CubeMapModel): { ox: number; oy: number; size: number; cols: number; rows: number } | null {
+  private draw(model: CubeMapModel): Geo | null {
     const cv = this.canvas;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = cv.clientWidth;
     const H = cv.clientHeight;
     if (W < 10 || H < 10) return null;
+    // v0.4 第四章 多層魔方在直屏 (手機) 上改為上下疊 (上層在上)：格子才夠大，房名讀得到
+    // (只在上下疊的格子明顯比較大時才疊：並排 = 寬 / 欄數、高 / 列數取小；疊 = 反過來)
+    const L = model.layers?.length ?? 1;
+    const sideBySide = Math.min(W / model.cols, H / model.rows);
+    const stacked = model.layers ? Math.min(W / Math.max(...model.layers.map(p => p.w)), H / (L * model.rows + L - 1)) : 0;
+    const stack = model.layers && stacked > sideBySide * 1.15 ? { panels: model.layers, rows: model.rows } : null;
+    const m = stack ? stackModel(model, stack) : model;
     cv.width = Math.round(W * dpr);
     cv.height = Math.round(H * dpr);
     const g = cv.getContext('2d');
@@ -325,11 +342,13 @@ export class CubeMapOverlay {
     g.font = font(labelPx);
     const side = (ds: Side[]) => Math.max(0, ...m.frames.filter(f => ds.includes(f.side)).map(f => g.measureText(f.name).width + 18));
     const t = m.turn ?? null;
-    const hx = t?.headers.some(h => h.at.side === 'left' || h.at.side === 'right') ? HEAD + HEAD_GAP + 4 : 0;
-    const hy = (s: 'top' | 'bottom') => (t?.headers.some(h => h.at.side === s) ? HEAD + HEAD_GAP + 4 : 0);
+    const hx = t?.headers.some(h => h.at.side === 'left' || h.at.side === 'right' || (stack && h.at.side === 'bottom')) ? HEAD + HEAD_GAP + 4 : 0;
+    const hy = (s: 'top' | 'bottom') => (t?.headers.some(h => h.at.side === s && !(stack && s === 'bottom')) ? HEAD + HEAD_GAP + 4 : 0);
     const mx = Math.max(24, hx || side(['E', 'W']));
     const fy = m.frames.some(f => f.side === 'N' || f.side === 'S') ? labelPx * 2 + 8 : 0;
-    const mt = Math.max(t ? 10 : 24, fy, hy('top'));
+    // 多層：層名寫在各層上方 (與北側屋框標籤分兩行)
+    const ly = m.layers ? labelPx + 10 + fy : 0;
+    const mt = Math.max(t ? 10 : 24, fy, ly, hy('top'));
     const mb = Math.max(t ? 10 : 24, fy, hy('bottom'));
     const size = Math.min((W - mx * 2) / m.cols, (H - mt - mb) / m.rows);
     const ox = (W - size * m.cols) / 2;
@@ -348,6 +367,18 @@ export class CubeMapOverlay {
     for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'text', !!light);
     // 轉動模式有列標頭時，左右兩側的屋框標籤會被箭頭蓋住 → 不畫 (門的接線照畫；一般展開圖照常標)
     for (const f of m.frames) if (!(hx && (f.side === 'E' || f.side === 'W'))) this.frame(g, f, cx(f.x), cy(f.y), size, font(labelPx));
+    if (m.layers) {
+      g.save();
+      g.font = font(labelPx, true);
+      g.fillStyle = INK;
+      g.textAlign = 'center';
+      g.textBaseline = 'bottom';
+      for (const [k, L] of m.layers.entries()) {
+        if (stack) { g.textAlign = 'left'; g.fillText(L.name, ox, oy + k * (stack.rows + 1) * size - 4 - (k === 0 ? fy : 0)); }
+        else g.fillText(L.name, ox + (L.x + L.w / 2) * size, oy - 4 - fy);
+      }
+      g.restore();
+    }
     if (tp) {
       for (const d of tp.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
       g.save();
@@ -364,7 +395,9 @@ export class CubeMapOverlay {
         // 箭頭畫在房名下方 (橫移) / 右側 (直移)，不壓到字
         const ax = (x: number) => cx(x) + (fx === tx ? size * 0.27 : 0);
         const ay = (y: number) => cy(y) + (fy === ty ? size * 0.27 : 0);
-        if (Math.abs(tx - fx) + Math.abs(ty - fy) === 1) this.arrow(g, ax(fx), ay(fy), ax(tx), ay(ty), size * 0.6);
+        // v0.4 第四章 層轉：原地只換朝向 (中心格) 不畫箭頭；邊格 → 斜對角的下一格 = 直接一支箭頭
+        if (fx === tx && fy === ty) continue;
+        if (Math.abs(tx - fx) + Math.abs(ty - fy) === 1 || (Math.abs(tx - fx) === 1 && Math.abs(ty - fy) === 1)) this.arrow(g, ax(fx), ay(fy), ax(tx), ay(ty), size * 0.6);
         else {
           // 繞回 (列循環)：從原位往外指、再從另一端指進新位置
           const sx = Math.sign(fx - tx); const sy = Math.sign(fy - ty);
@@ -373,7 +406,7 @@ export class CubeMapOverlay {
         }
       }
       g.restore();
-      return { ox, oy, size, cols: m.cols, rows: m.rows };
+      return { ox, oy, size, cols: m.cols, rows: m.rows, ...(stack ? { stack } : {}) };
     }
     // 預覽中會改變的門 (同一格) 只畫轉後的樣子，不與現況疊在一起
     const replaced = (d: MapDoor) => !!m.preview?.doors.some(p => p.door === d.door && p.room === d.room && p.x === d.x && p.y === d.y);
@@ -403,7 +436,34 @@ export class CubeMapOverlay {
       g.restore();
     }
     if (pv) for (const d of pv.doors) this.door(g, d, cx(d.x), cy(d.y), size, 2);
-    return { ox, oy, size, cols: m.cols, rows: m.rows };
+    return { ox, oy, size, cols: m.cols, rows: m.rows, ...(stack ? { stack } : {}) };
+  }
+
+  /**
+   * v0.4 第四章 梯口 (U / D)：格內右側的小方框 (U = 上半格、D = 下半格)；接通 = 實線框 + 墨點、門後是土 = 虛線框 + ×；拱門形 = 雙線框；
+   * 框裡一個小箭頭 (U ▲ / D ▼) 指出往上 / 往下 (形狀區分，不只靠顏色)
+   */
+  private hatch(g: CanvasRenderingContext2D, d: MapDoor, cx: number, cy: number, s: number, style: 1 | 2): void {
+    // 角落 (U = 右上角、D = 右下角)：不壓房名與「你在這裡」
+    const k = Math.max(5, s * 0.085);
+    const hx = cx + s / 2 - 4 - k - 3;
+    const hy = d.side === 'U' ? cy - s / 2 + 4 + k + 3 : cy + s / 2 - 4 - k - 3;
+    const open = d.link !== 'wall';
+    const color = style === 2 ? BLUE : INK;
+    g.save();
+    g.strokeStyle = color;
+    g.fillStyle = color;
+    g.lineWidth = 2;
+    if (!open) g.setLineDash([3, 3]);
+    g.strokeRect(hx - k, hy - k, k * 2, k * 2);
+    const wide = d.link === 'room' ? d.via === 'arch' : d.kind === 'arch';
+    if (wide) g.strokeRect(hx - k + 3, hy - k + 3, k * 2 - 6, k * 2 - 6);
+    g.setLineDash([]);
+    const up = d.side === 'U' ? -1 : 1;
+    g.beginPath(); g.moveTo(hx - k * 0.45, hy - up * k * 0.25); g.lineTo(hx + k * 0.45, hy - up * k * 0.25); g.lineTo(hx, hy + up * k * 0.45); g.closePath(); g.fill();
+    if (open) { g.beginPath(); g.arc(hx + k, hy - k, 3.5, 0, Math.PI * 2); g.fill(); }
+    else { g.lineWidth = 2; g.beginPath(); g.moveTo(hx + k - 4, hy - k - 4); g.lineTo(hx + k + 4, hy - k + 4); g.moveTo(hx + k + 4, hy - k - 4); g.lineTo(hx + k - 4, hy - k + 4); g.stroke(); }
+    g.restore();
   }
 
   /** 地板上那一角的圖 (淡墨線；房名蓋在上面)：整張圖的 [px, py]～[px + 1, py + 1] 畫進邊長 s 的格子 */
@@ -442,8 +502,10 @@ export class CubeMapOverlay {
       // 房名放不下格子 (窄螢幕、四字房名) → 字縮小到留 10px 邊
       const room = s - pad * 2 - 10;
       const fit = (px: number, bold: boolean, str: string) => { g.font = font(px, bold); const w = g.measureText(str).width; if (w > room) g.font = font(px * room / w, bold); };
-      fit(nameSize, true, c.name);
-      say(c.name, x + s / 2, y + s / 2 - (c.current ? nameSize * 0.45 : 0));
+      // 格子小 (手機的兩層並排) 且有短名：寫短名 (房名縮到讀不出來之前先換字)
+      const label = c.short && s < 64 ? c.short : c.name;
+      fit(nameSize, true, label);
+      say(label, x + s / 2, y + s / 2 - (c.current ? nameSize * 0.45 : 0));
       if (c.current) {
         fit(nameSize * 0.72, false, `● ${you}`);
         g.fillStyle = '#a8640f';
@@ -492,7 +554,7 @@ export class CubeMapOverlay {
    */
   private door(g: CanvasRenderingContext2D, d: MapDoor, cx: number, cy: number, s: number, style: 1 | 2): void {
     const [dx, dy] = DIR[d.side];
-    if (dx === 0 && dy === 0) return;
+    if (dx === 0 && dy === 0) { this.hatch(g, d, cx, cy, s, style); return; }
     const open = d.link !== 'wall';
     const edge = open ? s / 2 : s / 2 - 5;
     const ex = cx + dx * edge;
@@ -610,6 +672,15 @@ export class CubeMapOverlay {
     g.save();
     g.fillStyle = INK;
     g.font = font;
+    // v0.4 第四章 天花板 / 地板上的屋框 (天窗在上層的上側)：格內左上角的小字 (☼ + 名稱)，不壓房名
+    if (dx === 0 && dy === 0) {
+      g.font = font.replace(/\d+px/, `${Math.max(10, Math.round(s * 0.13))}px`);
+      g.textAlign = 'left';
+      g.textBaseline = 'top';
+      g.fillText(`\u263C ${f.name}`, cx - s / 2 + 8, cy - s / 2 + 7);
+      g.restore();
+      return;
+    }
     g.textBaseline = 'middle';
     g.textAlign = dx > 0 ? 'left' : dx < 0 ? 'right' : 'center';
     const x = cx + dx * (s / 2 + 12);
@@ -638,4 +709,49 @@ export class CubeMapOverlay {
     g.closePath();
     g.fill();
   }
+}
+
+/** 畫布上的版面 (標頭與格子按鈕依此定位)；stack = 直屏的多層上下疊 (各層的原始欄位與每層列數) */
+interface Geo { ox: number; oy: number; size: number; cols: number; rows: number; stack?: Stack }
+interface Stack { panels: NonNullable<CubeMapModel['layers']>; rows: number }
+
+/** 並排座標 (x 含層位移) → 上下疊座標：第 k 層的 x 減去該層起始欄、y 加上 k × (每層列數 + 1)；ref = 判斷屬於哪一層的參考 x (預設 = x) */
+function stackXY(st: Stack, x: number, y: number, ref = x): [number, number] {
+  const k = Math.max(0, st.panels.findIndex(p => ref >= p.x - 1e-6 && ref < p.x + p.w + 1e-6));
+  return [x - st.panels[k].x, y + k * (st.rows + 1)];
+}
+function stackModel(m: CubeMapModel, st: Stack): CubeMapModel {
+  const xy = <T extends { x: number; y: number }>(o: T): T => { const [x, y] = stackXY(st, o.x, o.y, Math.floor(o.x)); return { ...o, x, y }; };
+  const light = (l: MapLight | undefined) => l && stackLight(l, st);
+  const mv = (v: { from: [number, number]; to: [number, number] }) => ({ from: stackXY(st, v.from[0], v.from[1]) as [number, number], to: stackXY(st, v.to[0], v.to[1]) as [number, number] });
+  const out: CubeMapModel = {
+    ...m,
+    cols: Math.max(...st.panels.map(p => p.w)), rows: st.panels.length * st.rows + st.panels.length - 1,
+    cells: m.cells.map(xy), doors: m.doors.map(xy), frames: m.frames.map(xy),
+    layers: st.panels.map((p, k) => ({ x: 0, w: p.w, name: p.name, k })),
+    preview: m.preview && { ...m.preview, doors: m.preview.doors.map(xy), moved: m.preview.moved && { ...m.preview.moved, ...mv(m.preview.moved) } },
+    ...(m.light ? { light: light(m.light) } : {}),
+    turn: m.turn ? stackTurn(m.turn, st) : m.turn
+  };
+  return out;
+}
+/** 轉動模式的預覽 / 格子按鈕跟著上下疊 (標頭的 i 照舊是並排的欄位；renderHeads 另依層換位置) */
+function stackTurn(t: TurnModeModel, st: Stack): TurnModeModel {
+  if ((t as TurnModeModel & { stacked?: boolean }).stacked) return t;
+  const xy = <T extends { x: number; y: number }>(o: T): T => { const [x, y] = stackXY(st, o.x, o.y, Math.floor(o.x)); return { ...o, x, y }; };
+  const pv = t.preview;
+  return {
+    ...t,
+    ...(pv ? { preview: { ...pv, cells: pv.cells.map(xy), doors: pv.doors.map(xy), moves: pv.moves.map(v => ({ ...v, from: stackXY(st, v.from[0], v.from[1]) as [number, number], to: stackXY(st, v.to[0], v.to[1]) as [number, number] })), ...(pv.light ? { light: stackLight(pv.light, st) } : {}) } } : {}),
+    ...(t.cells ? { cells: t.cells.map(xy) } : {}),
+    stacked: true
+  } as TurnModeModel;
+}
+/** 光路圖層跟著上下疊 (線段以較左的端點判斷屬於哪一層) */
+function stackLight(l: MapLight, st: Stack): MapLight {
+  const xy = <T extends { x: number; y: number }>(o: T): T => { const [x, y] = stackXY(st, o.x, o.y, Math.floor(o.x)); return { ...o, x, y }; };
+  return {
+    segs: l.segs.map(s => { const ref = Math.floor(Math.min(s.x0, s.x1) + 1e-6); const [x0, y0] = stackXY(st, s.x0, s.y0, ref); const [x1, y1] = stackXY(st, s.x1, s.y1, ref); return { ...s, x0, y0, x1, y1 }; }),
+    stops: l.stops.map(xy), glass: l.glass.map(xy), prisms: l.prisms.map(xy)
+  };
 }

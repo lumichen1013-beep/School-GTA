@@ -11,6 +11,7 @@ import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
 import { deep, mezz, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { THEMES } from '../../../src/puzzle/render/themes';
 import { bed, depths, gallery, night, nursery } from '../../../src/puzzle/content/levels/ch3/rooms';
+import { archive, drawer, furnace, hall, sealed, well } from '../../../src/puzzle/content/levels/ch4/rooms';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
 function stubCanvas(): void {
@@ -412,6 +413,26 @@ describe('渲染：深度打架 (共面)：H1 夾層 (書牆、後面那面書�
       w.player.mode = '2d';
       view.update('2d', 1 / 60, 9, cams.active('2d'));
       expect([view.modelRoot('innerShelf')!.visible, view.modelRoot('bookWall')!.visible, view.modelRoot('desk')!.visible]).toEqual([true, false, true]);
+      view.dispose();
+    }
+  });
+});
+
+describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 (石砌牆、天花板的根、銅管、墨爐、檔案櫃、梯口、年輪根盤)', () => {
+  beforeAll(stubCanvas);
+
+  it('六間房的 3D 場景 (地下室主題) 鏡頭看得到的面沒有共面 (含已啟動的年輪根盤、接通 / 沒接通的梯口)；藏寶圖畫得出來', () => {
+    const layout = { hall: [1, 0, 1], well: [1, 1, 1], furnace: [1, 1, 0], archive: [0, 1, 0], drawer: [2, 1, 0], sealed: [1, 2, 0] } as const;
+    for (const [room, link] of [[hall, 'wall'], [hall, 'room'], [well, 'room'], [furnace, 'room'], [archive, 'room'], [drawer, 'wall'], [sealed, 'wall']] as const) {
+      const w = newWorld(room);
+      const links = Object.fromEntries(room.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, link === 'room' ? { to: 'room' as const, room: 'x', door: 'y', kind: 'door' as const } : { to: 'wall' as const }]));
+      w.ext = { cube: { links, at: [1, 0, 1], layout }, dial: { active: true }, unlocked: [] };
+      const view = new PuzzleScene(w, THEMES.cellar);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, link, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, link, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
       view.dispose();
     }
   });

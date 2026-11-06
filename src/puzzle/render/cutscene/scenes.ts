@@ -1,4 +1,4 @@
-// 序章 12 鏡與 cs:ch2 三鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
+// 序章 12 鏡、cs:ch2 三鏡與 cs:ch3 三鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
 // 顏色一律取自主題 (render/themes)；畫面內的字由 labels 傳入 (文字表)；時間 t = 鏡頭秒數 (含轉場)
 import type { Palette } from '../themes';
 import {
@@ -1333,6 +1333,133 @@ const ch2Swap: SceneDraw = s => {
   vignette(s, 450, 360, 220, 'rgba(8,14,12,A)', 0.55);
 };
 
+// ── cs:ch3 溫室之後「只攔，不傷」(cutscenes-v0.1 4；規格 6「第四章骨架與銜接」：三鏡一律剪紙) ──
+
+/** cs:ch3 鏡 1：溫室深處的長廊——九格花窗亮著、燈架停下；螢光植物由冷 (藍綠) 轉回暖 (琥珀)；人影沒有再追來 (地上只剩一道淡掉的殘影輪廓) */
+/** 兩色之間 (0xRRGGBB) 的線性混色 (k = 0 → a、1 → b) */
+function mix(a: number, b: number, k: number): string {
+  const ch = (c: number, sh: number) => (c >> sh) & 255;
+  const m = (sh: number) => Math.round(ch(a, sh) + (ch(b, sh) - ch(a, sh)) * clamp01(k));
+  return `rgb(${m(16)},${m(8)},${m(0)})`;
+}
+
+const ch3Depths: SceneDraw = s => {
+  const { g, t, view } = s;
+  const warm = s.reduce ? 1 : smooth(0.6, 4.2, t);
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#13221c'], [0.55, '#1e3328'], [1, '#2c3a2a']]));
+  layer(s, 0.4, () => {
+    // 玻璃屋頂的斜格 (遠景)
+    g.strokeStyle = 'rgba(160,220,190,0.18)'; g.lineWidth = 2;
+    for (let x = -200; x < 1200; x += 90) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 160, 220); g.stroke(); }
+    g.beginPath(); g.moveTo(-300, 220); g.lineTo(1300, 220); g.stroke();
+  });
+  layer(s, 0.8, () => {
+    // 北牆的九格花窗 (中央「許」字亮著)
+    const wx = 330, wy = 120, cs = 80;
+    cut(g, roughRect(wx - 14, wy - 14, cs * 3 + 28, cs * 3 + 28, 1501, 1), '#3e4a3a', { shadow: 6, lw: 2.6 });
+    const colors = ['#3e8a5a', '#d9a441', '#6aa84f', '#9fe3d0'];
+    const r = rng(1502);
+    for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) {
+      cut(g, roughRect(wx + c * cs + 4, wy + k * cs + 4, cs - 8, cs - 8, 1510 + k * 3 + c, 0.4), colors[Math.floor(r() * 4)], { shadow: 0, lw: 1.4, alpha: 0.88 });
+    }
+    additive(g, () => glow(g, wx + cs * 1.5, wy + cs * 1.5, 150, 0xd9e8ff, 0.32));
+    serif(g, s.labels.xu ?? '', wx + cs * 1.5, wy + cs * 1.5 + 4, 72, 'rgba(255,248,220,0.92)');
+    // 地面與石板小徑
+    g.fillStyle = '#3b3a2e'; g.fillRect(L(s), 470, R(s) - L(s), B(s) - 470);
+    for (let i = 0; i < 9; i++) cut(g, roughEllipse(80 + i * 100, 520 + (i % 2) * 14, 40, 14, 1530 + i, 1.2), '#6f6a58', { shadow: 2, lw: 1.4 });
+    // 停下的燈架 (左)：燈罩由冷轉暖
+    cut(g, roughRect(130, 230, 10, 240, 1540, 0.4), '#2f3a2c', { shadow: 3, lw: 1.8 });
+    cut(g, roughPoly([[100, 230], [170, 230], [150, 196], [120, 196]], 1541, 0.6), mix(0x9fd8c0, 0xd9a441, warm), { shadow: 3, lw: 1.8 });
+    additive(g, () => glow(g, 135, 236, 120, warm > 0.5 ? 0xf2c46b : 0x9fe3d0, 0.35 + 0.15 * warm));
+    // 兩側的螢光植物
+    for (const [x, sd] of [[60, 1550], [760, 1560], [840, 1570]] as const) {
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + (i - 2) * 0.35;
+        cut(g, roughPoly([[x, 470], [x + Math.cos(a) * 90 - 8, 470 + Math.sin(a) * 90], [x + Math.cos(a) * 90 + 8, 470 + Math.sin(a) * 90]], sd + i, 0.6), mix(0x6fd6c0, 0x8fb04a, warm), { shadow: 2, lw: 1.4 });
+      }
+    }
+    // 殘影的輪廓淡掉了 (地上只剩一道淺淺的灰藍)
+    if (warm < 1) capsule(g, 600, 390, 160, 54, Math.PI / 2, `rgba(138,150,176,${(0.3 * (1 - warm)).toFixed(3)})`, 1580, { shadow: 0, lw: 0 });
+  }, [450, 330]);
+  motes(g, 120, 150, 660, 340, 18, t, 1590, 'rgba(210,240,220,0.45)', 2, s.reduce, -10);
+  vignette(s, 450, 330, 220, 'rgba(6,12,10,A)', 0.55);
+};
+
+/** cs:ch3 鏡 2：許問津的手記第三頁——羊皮紙、一個守門人影的速寫，旁邊一行字 (畫面字 = labels.page) */
+const ch3Diary: SceneDraw = s => {
+  const { g, pal, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#4a3324'], [1, '#2e2018']]));
+  woodGrain(g, L(s), R(s), view.y0, B(s), 1601, 'rgba(20,10,4,0.25)');
+  layer(s, 1, () => {
+    cut(g, roughRect(170, 70, 560, 520, 1602, 2.2), '#ecdcb6', { shadow: 12, lw: 2.4 });
+    g.fillStyle = 'rgba(120,80,40,0.12)'; g.fillRect(450, 82, 4, 496);
+    // 左頁：守門人影的速寫 (墨線)
+    standingFigure(g, 300, 470, 190, 'rgba(58,38,24,0.82)', 1604);
+    g.strokeStyle = 'rgba(58,38,24,0.5)'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(220, 470); g.lineTo(390, 470); g.stroke();
+    // 門框速寫
+    g.strokeStyle = 'rgba(58,38,24,0.6)'; g.lineWidth = 2;
+    g.strokeRect(230, 230, 140, 240);
+    // 右頁：一行字 + 角落的符文與弧線
+    serif(g, s.labels.page ?? '', 590, 300, 34, INK);
+    g.save(); g.translate(640, 500); sigil(g, 36, 'rgba(58,38,24,0.7)', 1.6); g.restore();
+    g.strokeStyle = 'rgba(58,38,24,0.45)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(560, 520, 70, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
+    // 「許」字火漆印
+    cut(g, roughEllipse(660, 150, 30, 30, 1603, 1.4), hex(pal.sealInk), { shadow: 3, lw: 1.6 });
+    serif(g, s.labels.xu ?? '', 660, 152, 28, '#f0d8c0');
+  }, [450, 330]);
+  vignette(s, 450, 330, 260, 'rgba(10,6,2,A)', 0.5);
+};
+
+/** 剖面魔方的溫室方塊 (玻璃格 + 植物)；x, y = 左上角 */
+function ch3Glasshouse(g: CanvasRenderingContext2D, pal: Palette, x: number, y: number, w: number, h: number, seed: number): void {
+  ch2Block(g, pal, 'greenhouse', x, y, w, h, seed);
+}
+
+/** cs:ch3 鏡 3：剖面魔方——溫室那一層繞橫軸往下轉、沉到大樹的根系底下 (3 秒，無震動)；轉完後根從天花板垂下 */
+const ch3Sink: SceneDraw = s => {
+  const { g, pal, t } = s;
+  const tt = s.reduce ? 6 : t;
+  fillView(s, vGrad(g, s.view.y0, s.view.y1, [[0, '#26322c'], [0.5, '#2a2620'], [1, '#1a1612']]));
+  // 地面線與根系 (畫面下半是土)
+  const ground = 300;
+  g.fillStyle = '#3a2c20'; g.fillRect(L(s), ground, R(s) - L(s), B(s) - ground);
+  const u = smooth(0.8, 3.8, tt);
+  layer(s, 1, () => {
+    // 大樹的樹幹 (上方) 與往下鑽的根
+    cut(g, roughRect(410, -40, 80, ground + 40, 1701, 1.6), '#5a3e28', { shadow: 6, lw: 2.4 });
+    const r = rng(1702);
+    for (let i = 0; i < 7; i++) {
+      const x0 = 450 + (r() - 0.5) * 40, a = (i / 6 - 0.5) * 2.2;
+      g.strokeStyle = '#5a3e28'; g.lineWidth = 14 - i; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x0, ground); g.quadraticCurveTo(x0 + Math.sin(a) * 160, ground + 120, x0 + Math.sin(a) * 320, ground + 260 + r() * 60); g.stroke();
+    }
+    // 溫室方塊：從地面上 (y 70) 往下轉到根系底下 (y 420)；轉的時候繞橫軸 (縱向壓扁再展開)
+    const W = 300, H = 190;
+    const y = 70 + (420 - 70) * u;
+    const squash = Math.max(0.12, Math.abs(Math.cos(u * Math.PI)));
+    g.save();
+    g.translate(450, y + H / 2);
+    g.scale(1, squash);
+    ch3Glasshouse(g, pal, -W / 2, -H / 2, W, H, 1710);
+    g.restore();
+    // 轉完：根從天花板 (方塊上緣) 垂下來
+    const hang = smooth(4.0, 5.6, tt);
+    if (hang > 0) {
+      g.strokeStyle = '#6b4a2f'; g.lineCap = 'round';
+      for (let i = 0; i < 6; i++) {
+        const x = 450 - W / 2 + 30 + i * (W - 60) / 5;
+        g.lineWidth = 6 - (i % 3);
+        g.beginPath(); g.moveTo(x, 420); g.quadraticCurveTo(x + 12, 420 + 40 * hang, x - 6, 420 + (60 + (i % 3) * 20) * hang); g.stroke();
+      }
+    }
+  }, [450, 330]);
+  // 落下的泥土 (輕)
+  motes(g, 300, 260, 300, 260, 16, t, 1790, 'rgba(120,90,60,0.5)', 2, s.reduce, 24);
+  vignette(s, 450, 340, 220, 'rgba(8,6,4,A)', 0.55);
+};
+
 /** 未登錄 sceneId 的退回畫面：素紙 */
 export const blankScene: SceneDraw = s => fillView(s, vGrad(s.g, s.view.y0, s.view.y1, [[0, s.pal.bgTop], [1, s.pal.bgBottom]]));
 
@@ -1352,5 +1479,8 @@ export const PAPER_SCENES: Readonly<Record<string, SceneDraw>> = {
   'prologue.title': title,
   'ch2.notebook': ch2Notebook,
   'ch2.shadows': ch2Shadows,
-  'ch2.swap': ch2Swap
+  'ch2.swap': ch2Swap,
+  'ch3.depths': ch3Depths,
+  'ch3.diary': ch3Diary,
+  'ch3.sink': ch3Sink
 };

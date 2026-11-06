@@ -209,7 +209,14 @@ export interface DialModel {
    * 轉動時跟著房間走；題的 room 可以寫區 id)。opensWhen = 那一題完成前從門的另一側進不來 (已在區內的人照樣出得去；不在模型裡的題 = 一直進不來)
    */
   areas?: readonly DialArea[];
+  /**
+   * v0.4 第四章 封住的門 (cubeDoor.sealed：墨線鎖、收起來的折疊梯)：until 這一題完成前，人不能從 room 經 door 走出去
+   * (兩側都封 = 兩扇門各一筆)；dialModelOf 由各房的 cubeDoor 自動組出
+   */
+  doorLocks?: readonly DialDoorLock[];
 }
+
+export interface DialDoorLock { room: string; door: string; until: string }
 
 export interface DialArea { id: string; room: string; doors: readonly string[]; opensWhen?: string }
 
@@ -217,12 +224,14 @@ export interface DialArea { id: string; room: string; doors: readonly string[]; 
  * 連接表 → 節點對 (房 / 區；walks 與 ⑦ 的 reach 共用)：門所在的區 (沒有 = 房) → 對面門所在的區；
  * 對面的區此刻還沒開 (opensWhen 不在 flags 裡) → 這一對不列 (只出不進)
  */
-export function areaPairs(m: Pick<DialModel, 'areas'>, ls: readonly Link[], flags: ReadonlySet<string>): Array<[string, string]> {
+export function areaPairs(m: Pick<DialModel, 'areas' | 'doorLocks'>, ls: readonly Link[], flags: ReadonlySet<string>): Array<[string, string]> {
   const areas = m.areas ?? [];
+  const sealed = (room: string, door: string): boolean => (m.doorLocks ?? []).some(k => k.room === room && k.door === door && !flags.has(k.until));
   const areaOf = (room: string, door: string): DialArea | undefined => areas.find(a => a.room === room && a.doors.includes(door));
   const out: Array<[string, string]> = [];
   for (const l of ls) {
     if (!('room' in l.to)) continue;
+    if (sealed(l.from.room, l.from.door)) continue;
     const to = areaOf(l.to.room, l.to.door);
     if (to?.opensWhen !== undefined && !flags.has(to.opensWhen)) continue;
     out.push([areaOf(l.from.room, l.from.door)?.id ?? l.from.room, to?.id ?? l.to.room]);
@@ -418,16 +427,21 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   // 已開的區 (opensWhen 的題已完成；快取鍵的一部分)
   const areaIdx = (m.areas ?? []).map(x => (x.opensWhen === undefined ? -2 : pid.get(x.opensWhen) ?? -1));
   const areaMask = (f: number): number => areaIdx.reduce((acc, i, j) => (i === -2 || (i >= 0 && f & (1 << i)) ? acc | (1 << j) : acc), 0);
+  // 已解開的封門 (doorLocks 的 until 已完成；快取鍵的一部分)
+  const lockIdx = (m.doorLocks ?? []).map(k => pid.get(k.until) ?? -1);
+  const lockMask = (f: number): number => lockIdx.reduce((acc, i, j) => (i >= 0 && f & (1 << i) ? acc | (1 << j) : acc), 0);
   const walkMemo = new Map<number, number[][]>();
   const walks = (a: number, f: number): number[][] => {
     const pm = plateMask(f);
     const am = areaMask(f);
-    const key = (a * (1 << plateIdx.length) + pm) * (1 << areaIdx.length) + am;
+    const lm = lockMask(f);
+    const key = ((a * (1 << plateIdx.length) + pm) * (1 << areaIdx.length) + am) * (1 << lockIdx.length) + lm;
     let w = walkMemo.get(key);
     if (!w) {
       w = rooms.map(() => [] as number[]);
       const plates = new Set((m.plates ?? []).filter((_, j) => pm & (1 << j)).map(p => `${p.room}.${p.door}`));
       const open = new Set((m.areas ?? []).filter((x, j) => am & (1 << j) && x.opensWhen !== undefined).map(x => x.opensWhen!));
+      for (const [j, k] of (m.doorLocks ?? []).entries()) if (lm & (1 << j)) open.add(k.until);
       for (const [fr, tr] of areaPairs(m, links(def, arr.states[a], m.doors, plates), open)) {
         const from = rooms.indexOf(fr);
         const to = rooms.indexOf(tr);
@@ -711,10 +725,13 @@ export function validateDial(model: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   // 區 (areas) 的預算 = 所在房的基礎預算 (validateDial 也會自動補)
   for (const a of extra.areas ?? []) if (!(a.id in budgets) && budgets[a.room]) budgets[a.id] = { budget: budgets[a.room].budget };
-  return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish, ...extra };
+  // 封住的門 (cubeDoor.sealed)：沒另給 doorLocks 時由關卡資料組出
+  const doorLocks: DialDoorLock[] = [];
+  for (const [id, lv] of Object.entries(rooms)) for (const o of lv.objects) if (o.type === 'cubeDoor' && o.sealed) doorLocks.push({ room: id, door: o.id, until: o.sealed.until });
+  return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish, ...(doorLocks.length ? { doorLocks } : {}), ...extra };
 }

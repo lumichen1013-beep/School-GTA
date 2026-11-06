@@ -14,6 +14,7 @@ const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 /** 魔方儀：胡桃木圓几 (圓盤底座 + 車旋柱 + 圓桌面、黃銅包邊) + 黃銅渾儀環 + 2×3 小方塊；已啟動 (ext.dial.active) → 方塊組慢慢轉、上排不時滑一格 */
 export function dialModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
   if (d.type === 'dial' && d.chapter === 3) return compassModel(p, d, theme);
+  if (d.type === 'dial' && d.chapter === 4) return rootDialModel(p, d, theme);
   const { pal } = theme;
   const g = new THREE.Group();
   const standH = d.h * 0.55;
@@ -164,6 +165,64 @@ export function compassModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
       pg.userData.placed = true;
     });
     crank.rotation.y = c.world.ext.dial?.active ? -c.t * 0.8 : 0;
+  };
+  return { root: g, update };
+}
+
+/**
+ * 年輪根盤 (第四章；story-bible 5.1b)：一截大樹的橫切面平放在樹根上——盤面兩圈年輪 (外圈 = 上層、內圈 = 下層)，
+ * 盤上刻著此刻兩層的房間 (每間房一顆小木塞：外圈的照上層、內圈的照下層；位置與角度跟著 ext.cube.layout 轉)；
+ * 下圈被根結住時盤中央纏著一圈根 (鎖扣解開 = 根鬆開、縮回)。啟動後外圈的刻痕慢慢發出墨藍
+ */
+export function rootDialModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  const R = Math.min(d.w, d.d) * 0.5;
+  const topY = 0.78;
+  // 樹樁 (樹皮 + 根腳)
+  const bark = [placed(new THREE.CylinderGeometry(R, R * 1.08, topY, 20), 0, topY / 2, 0)];
+  for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; bark.push(placed(new THREE.CylinderGeometry(0.06, 0.12, 0.7, 6), Math.cos(a) * R * 1.05, 0.12, Math.sin(a) * R * 1.05, Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2)); }
+  g.add(p.mesh(mergeParts(bark), 0x5a4636, { roughness: 0.95 }));
+  // 切面 (淺木) + 年輪線
+  const face = p.mesh(new THREE.CylinderGeometry(R * 0.96, R * 0.96, 0.03, 32), 0xc9a878, { roughness: 0.9 });
+  face.position.y = topY + 0.015;
+  g.add(face);
+  const rings: THREE.BufferGeometry[] = [];
+  for (const k of [0.92, 0.78, 0.62, 0.48, 0.3, 0.14]) rings.push(placed(new THREE.TorusGeometry(R * k, 0.006, 4, 40), 0, topY + 0.032, 0, Math.PI / 2));
+  g.add(p.mesh(mergeParts(rings), 0x8a6844, { outline: false, shadow: false }));
+  // 兩圈之間的分界 (深色刻槽)：外圈 = 上層、內圈 = 下層
+  const groove = p.mesh(new THREE.TorusGeometry(R * 0.55, 0.014, 6, 40), 0x3a2a1e, { outline: false, shadow: false });
+  groove.rotation.x = Math.PI / 2;
+  groove.position.y = topY + 0.034;
+  g.add(groove);
+  // 根結 (下圈鎖著時纏在中央)
+  const knotPts = Array.from({ length: 13 }, (_, i) => new THREE.Vector3(Math.cos(i * 0.9) * R * 0.32, topY + 0.06 + (i % 2) * 0.03, Math.sin(i * 0.9) * R * 0.32));
+  const knot = p.mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(knotPts, true), 40, 0.025, 5, true), 0x5a4636, { outline: false });
+  g.add(knot);
+  // 每間房一顆木塞 (上層 = 外圈、下層 = 內圈)
+  const pegs = new Map<string, THREE.Mesh>();
+  const pegAt = (c: readonly number[]): THREE.Vector3 => {
+    const upper = c[2] === 1;
+    const rr = upper ? R * 0.74 : R * 0.36;
+    const dx = c[0] - 1, dy = c[1] - 1;
+    if (dx === 0 && dy === 0) return new THREE.Vector3(0, topY + 0.06, upper ? -R * 0.74 : 0);
+    const a = Math.atan2(dy, dx);
+    return new THREE.Vector3(Math.cos(a) * rr, topY + 0.06, Math.sin(a) * rr);
+  };
+  const update = (c: ModelCtx) => {
+    const layout = c.world.ext.cube?.layout;
+    for (const room of layout ? Object.keys(layout).sort() : []) {
+      let m = pegs.get(room);
+      if (!m) {
+        m = p.mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), pal.brass, { metalness: 0.6, roughness: 0.35, outline: false });
+        g.add(m);
+        pegs.set(room, m);
+        m.position.copy(pegAt(layout![room]));
+      }
+      m.position.lerp(pegAt(layout![room]), Math.min(1, c.dt * 6));
+    }
+    // 根結：下圈 (L0) 還鎖著才纏著
+    knot.visible = !(c.world.ext.unlocked ?? []).includes('L0');
+    face.rotation.y = c.world.ext.dial?.active ? -c.t * 0.05 : 0;
   };
   return { root: g, update };
 }

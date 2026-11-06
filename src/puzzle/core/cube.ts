@@ -41,7 +41,11 @@ export interface TurnGroup { id: string; kind: TurnKind; index: number; axis?: '
 /** 一次轉動：row / col / layer / slice 的 dir = ±1 (列 +1 = 往東、行 +1 = 往南、層 / 切片 +1 = 順時針)；slideCell 的 dir = 滑向的邊 */
 export interface Turn { group: string; dir: 1 | -1 | Side }
 /** 鎖扣：until = 解開條件 (謎題的 doneFlag；'item:<id>' = 持有道具；'ability:<id>' = 能力) */
-export interface DialLock { group: string; until: string }
+export interface DialLock {
+  group: string; until: string;
+  /** v0.4 第四章 鎖住時的說明 (文字 key；沒給 = 「這一排鎖著。」)：例「下圈年輪被樹根結住了。」 */
+  text?: string;
+}
 export interface DialDef {
   /** 魔方儀所在房與物件 id (3D 啟動) */
   entry: { room: string; obj: string };

@@ -6,6 +6,10 @@ import { paintingDecor, pendantDecor, pitsDecor, rugDecor, wallShelfDecor, walls
 import { bookcaseDecor, floatBooksDecor, floorPieceDecor, rootsDecor, stainedGlassDecor, wallTopBooksDecor } from './library';
 import { armchairDecor, bookCartDecor, bookPileDecor, floorLampDecor, ladderDecor, stoolDecor, wallLampDecor } from './furniture';
 import { benchDecor, chaseHallDecor, glassPaneDecor, glowPlantsDecor, planterDecor, potsDecor, pottingRackDecor, prismDecor, stakeDecor, stonePathDecor, toolBoardDecor } from './greenhouse';
+import {
+  atticStairDecor, cabinetsDecor, crateStackDecor, deskDecor, drawerWallDecor, greenhouseStairDecor, inkFurnaceDecor, inkTroughDecor, ironRackDecor, lanternDecor,
+  longTableDecor, puddleDecor, rootCeilingDecor, rootKnotDecor, rootWallDecor, sealsDecor, shelfRowDecor, stoneRailDecor, wallPipesDecor, wellMouthDecor
+} from './cellar';
 import type { DecorFactory } from './types';
 
 export type { DecorCtx, DecorFactory, DecorPart } from './types';
@@ -27,7 +31,11 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   // 彩繪玻璃溫室 (第三章；只在實景)
   glassPane: glassPaneDecor, planter: planterDecor, pots: potsDecor, pottingRack: pottingRackDecor, glowPlants: glowPlantsDecor, bench: benchDecor, prism: prismDecor, stake: stakeDecor, toolBoard: toolBoardDecor,
   // 3-4 溫室深處：前景的石板小徑、追逐長廊 (花槽、玻璃窗、吊燈、虛線邊框、石階)
-  stonePath: stonePathDecor, chaseHall: chaseHallDecor
+  stonePath: stonePathDecor, chaseHall: chaseHallDecor,
+  // 根窖書庫 (第四章；只在實景)：天花板的根、石壁的根、銅管、墨爐、墨槽、鐵架、檔案櫃 / 抽屜牆、長桌、書桌、封條、積水、油燈、井口、石欄、石階 / 木梯、木箱堆、一排一模一樣的書架
+  rootCeiling: rootCeilingDecor, rootWall: rootWallDecor, rootKnot: rootKnotDecor, wallPipes: wallPipesDecor, inkFurnace: inkFurnaceDecor, inkTrough: inkTroughDecor,
+  ironRack: ironRackDecor, cabinets: cabinetsDecor, drawerWall: drawerWallDecor, longTable: longTableDecor, desk: deskDecor, seals: sealsDecor, puddle: puddleDecor,
+  lantern: lanternDecor, wellMouth: wellMouthDecor, stoneRail: stoneRailDecor, greenhouseStair: greenhouseStairDecor, atticStair: atticStairDecor, crateStack: crateStackDecor, shelfRow: shelfRowDecor
 };
 
 /** 整個房間的裝飾：root = 全部；only3d = 僅現實顯示；occluders = 擋視線時淡出 */

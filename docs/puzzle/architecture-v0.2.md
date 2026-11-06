@@ -1258,6 +1258,8 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 
 > 設計註記 (2026-11-06，第四章骨架與銜接)：**內容** `content/cubes/ch4.ts`（`CH4_CUBE`：3×3×2、`ops 'layer'`、`control 'dial'`；組 `L0` / `L1`、鎖扣 `L0 until '4-1c'`；屋框：入口 [1,0,1] N to `greenhouse`、天窗 [1,2,1] U、章門出口 [1,0,0] N to `attic`；沒有實心格——`applyTurn` 對含實心格的層一律 `notEmpty`）、`content/levels/ch4/*`（走廊 4-1、根井（裝飾房）、墨爐間、封存書庫、抽屜、H3 封存室占位）。**核心**：`doorSpawn` 的 U / D 門位 = 梯口前方 0.9；`cubeDoor.sealed { until, text }`（墨線鎖封住的門：`mechanics/cube` 依此刻成立的謎題旗標判定）；`validateDial` 加 `DialModel.doorLocks`。**外殼**：`app/cubeMapModel` 的多層魔方把各層並排排進同一張格（上層在左；層 k 的 x 位移 = (寬 + 1) × 序號），`MapCell` / `MapDoor` 照舊；`MapDoor` 的 U / D 由 `ui/cubeMap` 畫成格內右上角的小方框（U 上半、D 下半）；層名 `CubeMapModel.layers`；層轉的標頭 `at.side 'bottom'`（各層下方 ↺ ↻）。**層轉不改層內的門**（剛體旋轉）：測試以「同層兩房的接法在 16 種排列下不變」鎖住這個前提。墨流 `inkPaths`、感光物的本地方位、木箱垂直落下、追逐 2 逐關加入。
 
+> 實作註記 (2026-11-06，第四章骨架與銜接)：照上方設計註記實作 (細節與數字見規格「第四章骨架與銜接」實作註記)。另加：`LevelDef.shortKey` (展開圖小格子的短名)、`World.ext.unlocked` (已解開的鎖扣；`ext.dial` 形狀不變)、`DialLock.text`、`app/cubeMapModel.dialBlockKey`、`ui/cubeMap` 的上下疊版面 (`stackModel` / `stackTurn` / `stackLight`；只在疊起來格子較大時採用)、梯口的 [E] 動詞 (`hudModel`)、層轉訊息 `msg.dial.layer*`。
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |

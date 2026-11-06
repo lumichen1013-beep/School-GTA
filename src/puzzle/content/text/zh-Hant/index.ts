@@ -24,5 +24,8 @@ import { lvl33 } from './lvl-3-3';
 import { lvl34 } from './lvl-3-4';
 import { lvlCh3 } from './lvl-ch3';
 import { csCh2 } from './cs-ch2';
+import { csCh3 } from './cs-ch3';
+import { lvlCh4 } from './lvl-ch4';
+import { lvl41 } from './lvl-4-1';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...csCh2, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvl25, ...lvlH1, ...lvlCh2, ...lvl31, ...lvl32, ...lvl33, ...lvl34, ...lvlCh3, ...uiSound };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...csCh2, ...csCh3, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvl25, ...lvlH1, ...lvlCh2, ...lvl31, ...lvl32, ...lvl33, ...lvl34, ...lvlCh3, ...lvlCh4, ...lvl41, ...uiSound };

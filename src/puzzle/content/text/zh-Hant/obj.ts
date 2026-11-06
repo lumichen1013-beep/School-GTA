@@ -7,6 +7,8 @@ export const obj = {
   'obj.gate.verb': '查看',
   'obj.lever.verb': '拉',
   'obj.cubeDoor.verb': '開門',
+  'obj.hatch.up.verb': '爬上去',
+  'obj.hatch.down.verb': '爬下去',
   'obj.cord.verb': '拉',
   'obj.hook.verb': '取下',
   'obj.label.verb': '寫',

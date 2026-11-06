@@ -9,6 +9,8 @@ export const msg = {
   'msg.plate.light': '[[term.mode2d]]上的機關踏板一動也不動。你太輕了。',
   // 魔方 (N21；規格 5.4.1)：門後是牆、轉不動的原因、轉動完成、屋框
   'msg.cube.wall': '門後是牆。',
+  'msg.cube.hatchDown': '梯口下面是土。',
+  'msg.cube.hatchUp': '梯口上面是土。',
   'msg.cube.notEmpty': '拉桿拉不動。那一邊有房間擋著。',
   'msg.cube.outOfCube': '拉桿拉不動。再過去就是屋外了。',
   'msg.cube.doorway': '門口有東西卡著。',
@@ -48,6 +50,8 @@ export const msg = {
   'msg.dial.noEmpty': '旁邊沒有空格。',
   'msg.dial.noDir': '沒有房間能往那邊滑。',
   'msg.dial.slid': '那間房滑進了空格。',
+  'msg.dial.layer': '那一層轉了過去。',
+  'msg.dial.layerHere': '整層樓連你一起轉了過去。',
   'msg.dial.slidHere': '房間連你一起滑進了空格。',
   // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
   'msg.cord.pulled': '繩子拉下去，停住了。',

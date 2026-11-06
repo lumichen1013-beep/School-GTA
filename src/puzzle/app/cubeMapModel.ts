@@ -35,7 +35,8 @@ export function previewLever(w: World): ObjState | null {
 /** 屋框名稱 (frame.to 優先，例：書房走廊；否則依種類) */
 const FRAME_KEYS: Readonly<Record<string, string>> = {
   porch: 'ui.map.frame.porch', chapterExit: 'ui.map.frame.chapterExit', skylight: 'ui.map.frame.skylight', study: 'ui.map.frame.study',
-  hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse', cellar: 'ui.map.frame.cellar'
+  hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse', cellar: 'ui.map.frame.cellar',
+  greenhouseStair: 'ui.map.frame.greenhouseStair', attic: 'ui.map.frame.attic'
 };
 const frameName = (text: Text, kind: FrameKind, to: string | undefined): string => text(FRAME_KEYS[to ?? kind] ?? FRAME_KEYS[kind]);
 
@@ -49,7 +50,7 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
   const def = spec.cube;
   const cube = state.cube;
   const layer = cube.pos[state.room]?.[2] ?? 0;
-  const { cells, doors } = layout(cs, text, cube, layer);
+  const { cells, doors } = layoutAll(cs, text, cube, layer);
   const name = (room: string): string => text(spec.rooms[room]?.titleKey ?? room);
   let pv: MapPreview | null = null;
   if (preview) {
@@ -60,16 +61,18 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
     } else {
       const from = cube.pos[preview.op.room];
       const to = r.pos[preview.op.room];
-      const after = layout(cs, text, r, layer).doors;
+      const after = layoutAll(cs, text, r, layer).doors;
       const changed = after.filter(a => { const b = doors.find(d => d.door === a.door && d.room === a.room); return !b || b.link !== a.link || b.via !== a.via || b.x !== a.x || b.y !== a.y; });
       pv = { caption: text('ui.map.preview', { word }), blocked: null, moved: { room: preview.op.room, name: name(preview.op.room), from: [from[0], from[1]], to: [to[0], to[1]] }, doors: changed };
     }
   }
   const light = mapLight(def, cube, layer, sessionUncovered(cs));
+  const multi = def.dims[2] > 1;
   return {
     title: text('ui.map.title'),
-    cols: def.dims[0], rows: def.dims[1], cells, doors,
-    frames: def.frame.filter(f => f.at[2] === layer).map(f => ({ x: f.at[0], y: f.at[1], side: f.side, kind: f.kind, name: frameName(text, f.kind, f.to) })),
+    cols: mapCols(def), rows: def.dims[1], cells, doors,
+    frames: def.frame.filter(f => multi || f.at[2] === layer).map(f => ({ x: f.at[0] + panelX(def, f.at[2]), y: f.at[1], side: f.side, kind: f.kind, name: frameName(text, f.kind, f.to) })),
+    ...(multi ? { layers: layerPanels(def, text) } : {}),
     preview: pv,
     hint: text('ui.map.hint'),
     legend: {
@@ -125,6 +128,32 @@ export function mapLight(def: CubeDef, cube: CubeState, layer: number, uncovered
   return out;
 }
 
+/**
+ * v0.4 第四章 多層魔方 (規格 6「第四章共用規則」層轉的轉動模式)：各層並排畫在同一張格上——上層在左、往右依序往下；
+ * 層 z 的 x 位移 = (寬 + 1) × (層數 − 1 − z)，中間空一欄。單層魔方 = 0
+ */
+export const panelX = (def: CubeDef, z: number): number => (def.dims[2] > 1 ? (def.dims[2] - 1 - z) * (def.dims[0] + 1) : 0);
+/** 展開圖的欄數 (多層 = 各層並排 + 層間的空欄) */
+const mapCols = (def: CubeDef): number => def.dims[0] * def.dims[2] + Math.max(0, def.dims[2] - 1);
+/** 各層的名稱與起始欄 (只有兩層的魔方有名稱：上層 / 下層) */
+function layerPanels(def: CubeDef, text: Text): Array<{ x: number; w: number; name: string }> {
+  return Array.from({ length: def.dims[2] }, (_, k) => def.dims[2] - 1 - k).map(z => ({ x: panelX(def, z), w: def.dims[0], name: text(z === def.dims[2] - 1 ? 'ui.map.layer.upper' : 'ui.map.layer.lower') }));
+}
+/** 多層魔方：所有層的格與門 (依位移並排)；單層：只畫 layer 那一層 (原樣) */
+function layoutAll(cs: ChapterSession, text: Text, cube: CubeState, layer: number): { cells: MapCell[]; doors: MapDoor[] } {
+  const def = cs.spec.cube!;
+  if (def.dims[2] <= 1) return layout(cs, text, cube, layer);
+  const cells: MapCell[] = [];
+  const doors: MapDoor[] = [];
+  for (let z = def.dims[2] - 1; z >= 0; z--) {
+    const dx = panelX(def, z);
+    const l = layout(cs, text, cube, z);
+    cells.push(...l.cells.map(c => ({ ...c, x: c.x + dx })));
+    doors.push(...l.doors.map(d => ({ ...d, x: d.x + dx })));
+  }
+  return { cells, doors };
+}
+
 /** 某個魔方狀態在 layer 層的格 (房名 / 空格 / 實心) 與門位接通狀態 (現況與預覽共用) */
 function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number): { cells: MapCell[]; doors: MapDoor[] } {
   const { spec, state } = cs;
@@ -139,7 +168,8 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
       const piece = fp && typeof fp.px === 'number' && typeof fp.py === 'number' && typeof fp.drawing === 'string' ? { px: fp.px, py: fp.py, drawing: fp.drawing } : undefined;
       // 實心格的名稱：魔方資料的 label (第三章：工具間 / 水塔)；沒有 = 「實心」
       const solidKey = kind === 'solid' ? def.cells.find(k => k.room === 'solid' && k.at[0] === x && k.at[1] === y && k.at[2] === layer)?.label ?? 'ui.map.solid' : '';
-      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : solidKey), current: c === state.room, ...(piece ? { piece } : {}) });
+      const shortKey = kind === 'room' ? spec.rooms[c]?.shortKey : undefined;
+      cells.push({ x, y, kind, room: kind === 'room' ? c : null, name: kind === 'room' ? name(c) : text(kind === 'empty' ? 'ui.map.empty' : solidKey), ...(shortKey ? { short: text(shortKey) } : {}), current: c === state.room, ...(piece ? { piece } : {}) });
     }
   }
   const ls = chapterLinks(spec, cube, cs.world.ext.labels ?? state.labels);
@@ -177,7 +207,8 @@ const GROUP_KEYS: Readonly<Record<TurnHeader['kind'], string>> = {
   row: 'ui.turn.group.row', col: 'ui.turn.group.col', slideCell: 'ui.turn.group.cell', layer: 'ui.turn.group.layer', slice: 'ui.turn.group.slice'
 };
 /** 一組的顯示名稱 (第 1 列 / 第 2 行 / 第 1 層…) */
-const groupName = (text: Text, kind: TurnHeader['kind'], index: number): string => text(GROUP_KEYS[kind], { n: index + 1 });
+const groupName = (text: Text, kind: TurnHeader['kind'], index: number, layers = 1): string =>
+  kind === 'layer' && layers === 2 ? text(index === 1 ? 'ui.turn.layer.upper' : 'ui.turn.layer.lower') : text(GROUP_KEYS[kind], { n: index + 1 });
 
 /**
  * 轉動模式的資料 (純函式，只算不寫：不改 session 也不改 World)：標頭箭頭 (每組 × 方向一顆；鎖住 / 卡住另標)、選取的預覽 (轉後的格與門、移動的房間)、
@@ -196,18 +227,21 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
     const locked = isLocked(spec, state, g.id, cs.world);
     for (const dir of turnDirs(def, g.id)) {
       const jam = !locked && dialBlocked(cs, { group: g.id, dir }) === 'jammed';
+      // v0.4 第四章 多層魔方的層轉：畫在那一層的下方 (↺ 偏左、↻ 偏右；i = 欄位，可為小數)
+      const panel = g.kind === 'layer' && def.dims[2] > 1;
       const side: TurnHeader['at']['side'] = g.kind === 'row' ? (dir === -1 ? 'left' : 'right')
-        : g.kind === 'col' ? (dir === -1 ? 'top' : 'bottom') : 'ring';
+        : g.kind === 'col' ? (dir === -1 ? 'top' : 'bottom') : panel ? 'bottom' : 'ring';
+      const at = panel ? panelX(def, g.index) + (dir === -1 ? 0.4 : def.dims[0] - 1.4) : g.index;
       const glyph = g.kind === 'row' ? (dir === -1 ? '\u25C0' : '\u25B6')
         : g.kind === 'col' ? (turnDirs(def, g.id).length === 1 ? '\u21C5' : dir === -1 ? '\u25B2' : '\u25BC')
           : dir === 1 ? '\u21BB' : '\u21BA';
       const dirKey = g.kind === 'row' ? (dir === -1 ? 'ui.turn.dir.left' : 'ui.turn.dir.right')
         : g.kind === 'col' ? (turnDirs(def, g.id).length === 1 ? 'ui.turn.dir.swap' : dir === -1 ? 'ui.turn.dir.up' : 'ui.turn.dir.down')
           : dir === 1 ? 'ui.turn.dir.cw' : 'ui.turn.dir.ccw';
-      const plain = text('ui.turn.header', { group: groupName(text, g.kind, g.index), dir: text(dirKey) });
+      const plain = text('ui.turn.header', { group: groupName(text, g.kind, g.index, def.dims[2]), dir: text(dirKey) });
       names.set(`${g.id}|${dir}`, plain);
       headers.push({
-        group: g.id, kind: g.kind, dir, state: locked ? 'locked' : jam ? 'jammed' : 'ok', at: { side, i: g.index }, glyph,
+        group: g.id, kind: g.kind, dir, state: locked ? 'locked' : jam ? 'jammed' : 'ok', at: { side, i: at }, glyph,
         label: locked ? text('ui.turn.headerLocked', { name: plain }) : plain,
         selected: sameTurn(sel, { group: g.id, dir })
       });
@@ -223,14 +257,16 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   let preview: TurnModeModel['preview'] = null;
   let caption = text(slide ? 'ui.turn.hintSlide' : 'ui.turn.hint');
   if (sel && g) {
-    const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index);
-    if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: text(DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG]) });
+    const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index, def.dims[2]);
+    if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: blockText(cs, text, sel.group, blocked) });
     else {
       const r = applyTurn(def, cube, sel as Turn);
       if (!isBlocked(r)) {
-        const after = layout(cs, text, r, layer);
-        const moves = Object.keys(cube.pos).filter(room => cube.pos[room][2] === layer && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1]))
-          .map(room => ({ room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0], cube.pos[room][1]] as [number, number], to: [r.pos[room][0], r.pos[room][1]] as [number, number] }));
+        const after = layoutAll(cs, text, r, layer);
+        const multi = def.dims[2] > 1;
+        // 多層：被轉的那一層的房 (含原地只換朝向的中心格) 都框起來；單層：換了格的房
+        const moves = Object.keys(cube.pos).filter(room => (multi || cube.pos[room][2] === layer) && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1] || (multi && (cube.rot[room] ?? 0) !== (r.rot[room] ?? 0))))
+          .map(room => { const dx = panelX(def, cube.pos[room][2]); return { room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0] + dx, cube.pos[room][1]] as [number, number], to: [r.pos[room][0] + dx, r.pos[room][1]] as [number, number] }; });
         const light = mapLight(def, r, layer, sessionUncovered(cs));
         preview = { cells: after.cells, doors: after.doors, moves, ...(light ? { light } : {}) };
       }
@@ -239,12 +275,19 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   }
   return {
     headers, selected: sel && g ? sel : null, preview, ink: { left, max }, canUndo: (state.turns?.undo.length ?? 0) > 0,
-    blocked: blocked ?? null, blockedText: blocked ? text(DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG]) : null,
+    blocked: blocked ?? null, blockedText: blocked && sel ? blockText(cs, text, sel.group, blocked) : null,
     caption,
     text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? 'ui.turn.keysSlide' : 'ui.turn.keys') },
     ...(slide ? { cells: layout(cs, text, cube, layer).cells } : {})
   };
 }
+
+/** 轉不動的說明：鎖住的組若有自己的說明 (DialLock.text；第四章「下圈年輪被樹根結住了。」) 用它，否則照 DIAL_BLOCK_MSG */
+export function dialBlockKey(cs: ChapterSession, group: string | undefined, blocked: string): string {
+  const lock = blocked === 'locked' && group !== undefined ? cs.spec.cube?.dial?.locks.find(l => l.group === group && l.text) : undefined;
+  return lock?.text ?? DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG];
+}
+const blockText = (cs: ChapterSession, text: Text, group: string, blocked: string): string => text(dialBlockKey(cs, group, blocked));
 
 /** 滑動的方向 → 箭頭符號 (上 = 北) 與方向的文字 */
 const SLIDE_GLYPH: Readonly<Record<'N' | 'E' | 'S' | 'W', string>> = { N: '\u25B2', E: '\u25B6', S: '\u25BC', W: '\u25C0' };

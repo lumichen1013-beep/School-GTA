@@ -132,6 +132,8 @@ export function doorSpawn(level: LevelDef, door: ObjId, side: Side): { x: number
   else if (side === 'S') z = o.z - o.d / 2 - SPAWN_IN;
   else if (side === 'E') x = o.x - o.w / 2 - SPAWN_IN;
   else if (side === 'W') x = o.x + o.w / 2 + SPAWN_IN;
+  // v0.4 第四章 梯口 (U 靠後牆的梯子 / D 地上的活板門)：站在梯口前方 (往觀眾) 0.9
+  else z = o.z + o.d / 2 + SPAWN_IN;
   return { x: clamp(x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW), y: o.y, z: clamp(z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW) };
 }
 
@@ -201,7 +203,7 @@ export function syncLinks(cs: ChapterSession): ChapterSession {
 function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (!spec.cube || !state.cube) return;
   w.ext = { ...w.ext, cube: cubeExt(spec, state), labels: clone(state.labels), flags: [...state.flags] };
-  if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial } };
+  if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial }, unlocked: unlockedGroups(spec, state) };
   const light = lightExt(spec, state, state.labels, w);
   if (light) w.ext = { ...w.ext, light };
   writeDerived(spec, state, w, state.labels);
@@ -474,6 +476,7 @@ export function refreshUnlocks(cs: ChapterSession): { cs: ChapterSession; added:
   if (!added.length) return { cs, added };
   const state: ChapterState = { ...cs.state, unlocked: [...known, ...added] };
   if (state.turns) state.turns = { ...state.turns, undo: [] };
+  cs.world.ext = { ...cs.world.ext, unlocked: state.unlocked };
   return { cs: { ...cs, state }, added };
 }
 

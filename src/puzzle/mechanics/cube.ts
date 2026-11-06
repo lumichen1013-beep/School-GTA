@@ -27,6 +27,11 @@ declare module '../core/types' {
       glyph?: TextKey;
       /** 門上刻的圖 (折線，外觀；2-5 章門 = 老宅立面圖) */
       carving?: string;
+      /**
+       * v0.4 第四章 封住的門 (墨線鎖、收起來的折疊梯)：until 的旗標此刻還沒成立 → 從這一側穿不過去 (按 E 說 text，不換房；
+       * 章節層 app/chapterEvents 依 doneFlags 判定)。兩側都封 = 兩扇門各寫一次 (驗證器 dialModelOf 由此組出 DialModel.doorLocks)
+       */
+      sealed?: { until: string; text: TextKey };
     };
     /** 門牌 (只在 2D；label kind 'plate' 掛在這裡) */
     doorPlate: {};
@@ -130,7 +135,8 @@ export const cube: Mechanic = {
         const l = doorLink(w, o);
         if (l.to === 'room') w.events.push({ t: 'door', door: o.def.id });
         else if (l.to === 'frame') frameDoor(w, o, l.frame);
-        else say(w, 'msg.cube.wall');
+        // v0.4 第四章 梯口：門後是土 (地板梯口 = 下面、天花板梯口 = 上面)
+        else say(w, o.def.type === 'cubeDoor' && o.def.side === 'D' ? 'msg.cube.hatchDown' : o.def.type === 'cubeDoor' && o.def.side === 'U' ? 'msg.cube.hatchUp' : 'msg.cube.wall');
       }
     },
     doorPlate: {}
