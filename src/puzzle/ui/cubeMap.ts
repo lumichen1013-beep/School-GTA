@@ -31,6 +31,15 @@ export interface MapLight {
   glass: Array<{ x: number; y: number; side: Side }>;
   prisms: Array<{ x: number; y: number; a: Side; b: Side }>;
 }
+/**
+ * v0.4 第四章 墨流圖層 (規格 6「4-2 墨爐間（細化）」)：格單位座標。pipes = 每間房的一段管線 (從格中心到 a / b 兩側；U / D = 格內的小圓)，
+ * lit = 墨此刻流過；stops = 墨停在牆外 (短橫槓)；sinks = 匯點 (lit = 收到墨：實心圓、沒有 = 空心圓)
+ */
+export interface MapInk {
+  pipes: Array<{ x: number; y: number; a: Side; b: Side; lit: boolean }>;
+  stops: Array<{ x: number; y: number; side: Side }>;
+  sinks: Array<{ x: number; y: number; side: Side; lit: boolean }>;
+}
 /** 展開圖資料 (由 app/cubeMapModel 的 deriveCubeMap 產生；字串已解析) */
 export interface CubeMapModel {
   title: string;
@@ -46,6 +55,8 @@ export interface CubeMapModel {
   legend: { open: string; wall: string; arch: string; you: string; white?: string; stained?: string };
   /** v0.4 第三章：此刻的光路 (沒有彩繪玻璃的章節不給) */
   light?: MapLight;
+  /** v0.4 第四章 墨流的管線圖層 (沒有管線的章節不給) */
+  ink?: MapInk;
   /** v0.4 第四章 多層魔方：各層並排 (x = 起始欄、w = 欄數、name = 層名，畫在那一層上方)；單層不給 */
   layers?: Array<{ x: number; w: number; name: string }>;
   /** v0.4 控制盤章節：「轉」頁籤 (null = 本章不是控制盤章)；turn = 轉動模式中的資料 (deriveTurnMode) */
@@ -104,6 +115,9 @@ const BLUE = '#3d63ff';
 const LIGHT = '#c98a1a';
 const LIGHT_WHITE = '#9c8f6c';
 const GLASS_MARK = '#3e8a7a';
+/** 第四章墨流：有墨的管線 (墨藍) / 樹根管線 (褐) */
+const INK_LINE = '#2c3fb0';
+const ROOT_LINE = 'rgba(110,80,50,0.55)';
 /** 光路走的「車道」：格內偏右下 (不壓房名中心、不壓邊上的門與箭頭) */
 const LANE = 0.72;
 const DIR: Readonly<Record<Side, [number, number]>> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], U: [0, 0], D: [0, 0] };
@@ -362,6 +376,8 @@ export class CubeMapOverlay {
     const cells = tp ? tp.cells : m.cells;
     for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'bg');
     // 第三章光路圖層 (轉動預覽 = 轉後的光路)：畫在格底之上、房名之下 (房名另描紙色邊，線經過也讀得到)
+    // 第四章墨流圖層 (現況；畫在光路之下)
+    if (m.ink && !tp) this.ink(g, m.ink, ox, oy, size);
     const light = tp ? tp.light : m.light;
     if (light) this.light(g, light, ox, oy, size);
     for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'text', !!light);
@@ -599,6 +615,36 @@ export class CubeMapOverlay {
    * 光路圖層：窗記號 (房間那一側的邊上、靠一端的小窗格，不壓邊中央的門)、稜鏡 (兩側之間的角上的小三角)、
    * 光路 (白光 = 點線；穿過玻璃的光 = 虛線 + 每段中點一個箭頭紋 ›)、停下的地方 (牆外 = 垂直於光的短橫槓；房內 = 圓點)
    */
+  /** 墨流圖層：管線 = 格中心到管口 (根色細線；有墨 = 墨藍粗線)、U / D 管口 = 小圓、匯點 = 圓 (收到墨實心)、停住 = 短橫槓 */
+  private ink(g: CanvasRenderingContext2D, k: MapInk, ox: number, oy: number, s: number): void {
+    const C = (x: number, y: number): [number, number] => [ox + (x + 0.32) * s, oy + (y + 0.68) * s];
+    const end = (x: number, y: number, side: Side): [number, number] => { const [dx, dy] = DIR[side]; const [cx, cy] = C(x, y); return dx || dy ? [ox + (x + 0.5 + dx * 0.5) * s + (dx ? 0 : -0.18 * s), oy + (y + 0.5 + dy * 0.5) * s + (dy ? 0 : 0.18 * s)] : [cx + (side === 'U' ? -0.1 : 0.1) * s, cy]; };
+    g.save();
+    g.lineCap = 'round';
+    for (const p of k.pipes) {
+      g.strokeStyle = p.lit ? INK_LINE : ROOT_LINE;
+      g.lineWidth = p.lit ? 4 : 2;
+      g.beginPath();
+      const [ax, ay] = end(p.x, p.y, p.a); const [cx, cy] = C(p.x, p.y); const [bx, by] = end(p.x, p.y, p.b);
+      g.moveTo(ax, ay); g.lineTo(cx, cy); g.lineTo(bx, by); g.stroke();
+      for (const sd of [p.a, p.b]) if (sd === 'U' || sd === 'D') { const [ux, uy] = end(p.x, p.y, sd); g.fillStyle = p.lit ? INK_LINE : ROOT_LINE; g.beginPath(); g.arc(ux, uy, 4, 0, Math.PI * 2); g.fill(); }
+    }
+    for (const sk of k.sinks) {
+      const [sx, sy] = end(sk.x, sk.y, sk.side);
+      g.strokeStyle = INK_LINE; g.fillStyle = INK_LINE; g.lineWidth = 2;
+      g.beginPath(); g.arc(sx, sy, 5, 0, Math.PI * 2); if (sk.lit) g.fill(); else g.stroke();
+    }
+    for (const st of k.stops) {
+      const [dx, dy] = DIR[st.side];
+      const [sx, sy] = end(st.x, st.y, st.side);
+      g.strokeStyle = INK_LINE; g.lineWidth = 3;
+      g.beginPath();
+      if (dx || dy) { g.moveTo(sx - dy * 7, sy - dx * 7); g.lineTo(sx + dy * 7, sy + dx * 7); } else { g.moveTo(sx - 7, sy); g.lineTo(sx + 7, sy); }
+      g.stroke();
+    }
+    g.restore();
+  }
+
   private light(g: CanvasRenderingContext2D, l: MapLight, ox: number, oy: number, s: number): void {
     const X = (x: number) => ox + x * s;
     const Y = (y: number) => oy + y * s;

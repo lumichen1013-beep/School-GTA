@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, doneFlags, doorArrival, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, doneFlags, doorArrival, syncInk, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 import { pressOnLanding } from '../mechanics/cellar';
@@ -80,7 +80,8 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     say(w, (entry && w.byId.get(entry.obj)?.def.useText) ?? 'msg.dial.activated');
     return { kind: 'dial', cs: activateDial(cs) };
   }
-  if (e.t === 'done') return { kind: 'state', cs: refill(refreshUnlocks(clearUndo(cs, [e])).cs, e.flag) };
+  // v0.4 第四章：旗標可能打開墨爐閥 → 重算當前房的墨
+  if (e.t === 'done') return { kind: 'state', cs: syncInk(refill(refreshUnlocks(clearUndo(cs, [e])).cs, e.flag)) };
   // 貼卡 / 取卡 (門牌貼上「日」= 「間」)：重算當前房間的門接法 (World 只更新 ext)
   if (e.t === 'card' && e.ok && cs.spec.cube) return { kind: 'state', cs: syncLinks(cs) };
   return { kind: 'none' };

@@ -70,6 +70,7 @@ export const term = {
   'term.diary.3': '手記第三頁',
   // H1 夾層 (第二章隱藏房)：老宅圖殘片 4 (爸爸小時候的小書桌)
   'term.scrap.4': '老宅圖殘片',
+  'term.scrap.3': '老宅圖殘片',
   'term.num.1': '一',
   'term.num.2': '兩',
   'term.num.3': '三'

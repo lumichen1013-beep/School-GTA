@@ -14,6 +14,7 @@ import { gallery } from './ch3/3-2-gallery';
 import { night } from './ch3/3-3-night';
 import { depths } from './ch3/3-4-depths';
 import { hall } from './ch4/4-1-hall';
+import { furnace } from './ch4/4-2-furnace';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -63,7 +64,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 3-4 溫室深處：第三章第四關 (章末；九格花窗、唯一的「小」、追逐 1、章門 = 第三章通關)；3-3 通關後開放 (3-4a 需 3-1b / 3-2a / 3-3a 的三片玻璃)
   { id: '3-4', chapter: 3, titleKey: 'lvl.3-4.title', abilities: ['nib'], unlock: { after: ['3-3'] }, load: () => depths },
   // 4-1 根窖走廊：第四章第一關 (魔方 3×3×2 層轉、控制盤 = 年輪根盤)；第三章章門打開 (3-4 通關) 後開放；前置能力 = 筆尖 (占位版，謎題逐關加入)
-  { id: '4-1', chapter: 4, titleKey: 'lvl.4-1.title', abilities: ['nib'], unlock: { after: ['3-4'] }, load: () => hall }
+  { id: '4-1', chapter: 4, titleKey: 'lvl.4-1.title', abilities: ['nib'], unlock: { after: ['3-4'] }, load: () => hall },
+  // 4-2 墨爐間：第四章第二關 (墨流 P15 首次、光往下、顯影)；4-1 通關後開放 (章內：開場經根井的根梯就到得了)
+  { id: '4-2', chapter: 4, titleKey: 'lvl.4-2.title', abilities: ['nib'], unlock: { after: ['4-1'] }, load: () => furnace }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

@@ -1625,7 +1625,7 @@ H4 註：3-1b 的 `keyObjects` 取「尺度卡、園丁羅盤、控制盤」（�
 | 4-2a | L2 | 爬上去的，要從哪裡回家？ | x −9（空白，4 分鐘浮現） |
 | 4-2b | L1 | 月亮也找得到地下室，只要地板有縫。 | x −5.5 |
 | 4-2b | L2 | 從天窗往下看，先經過誰、再經過誰？ | x 5.5（空白，4 分鐘浮現） |
-| 4-2c | L1 | 爸爸的圖，總比房子慢一步。 | x 9 |
+| 4-2c | L1 | 爸爸的圖，總是比房子慢半拍。 | x 9 |
 | 4-2c | L2 | 那個箭頭，指著哪一邊？ | x 12.5（空白，4 分鐘浮現） |
 
 **通關**：三題都完成 = 房間通關「墨爐的藍光穩下來了。牆上的影子，終於跟上了。」（呼應 5.3「牆上的影子，慢了半拍。」）。開場旁白改為「牆上的影子，慢了半拍。」（`lvl.4-2.narration`）。
@@ -1635,6 +1635,8 @@ H4 註：3-1b 的 `keyObjects` 取「尺度卡、園丁羅盤、控制盤」（�
 **音訊**：`USED_ON` 加 `inkValve: 'sfx.lever.pull'`、`inkLock: 'sfx.door.unseal'`、`markCase: 'sfx.drawer.open'`、`inkMark: 'sfx.lamp.on'`；玻璃眼是 `sensor`（沿用 `sfx.lamp.on`）；殘片 3 走 `pickupSfx`。
 
 **實作範圍**：新檔 `content/levels/ch4/4-2-furnace.ts`（`rooms.ts` 轉出；根井加墨痕與殘片 3、各房加 `inkPipe`）、`lvl-4-2.ts`、`term.scrap.3`（殘片）、登錄 `LEVELS` 4-2（前置 4-1）、`CHAPTERS` / `CUBE_CHAPTERS`；`core/chapter.inkPaths` / `inkExt` / `lightExt` 的本地方位；`mechanics/ink.ts`；`validateDial` 的 `ink` 與本地光路；`app/cubeMapModel.mapInk` + `ui/cubeMap` 管線圖層；模型（墨爐閥、墨線鎖、墨痕、小櫃、根管線）。**測試**（`levels/4-2.test.ts`）：資料與擺設、`inkPaths`（四種疊法、閥、拿掉管線）、4-2a（閥 / 錯誤嘗試 / 疊在抽屜 = 東門先化開 / 殘片 3）、4-2b（只轉上層 / 只轉下層 / 兩者、本地方位）、4-2c（顯影、叉本身那格、正解）、房間通關、`validateDial` 與拿掉要素、R、存檔與舊存檔、字條規則、音效、展開圖管線圖層。
+
+**實作註記（2026-11-06，4-2 實作）**：照上方設計實作。**新檔**：`content/levels/ch4/4-2-furnace.ts`（`rooms.ts` 轉出）、`mechanics/ink.ts`（`inkValve` / `inkLock` / `inkMark` / `markCase` / `inkPipe`）、`render/models/ink.ts`（閥輪轉開、墨線纏結化開成一道濕痕、墨痕緩入、小櫃門彈開、根管線墨流過時 1 秒緩亮）、`lvl-4-2.ts`、`tests/puzzle/levels/4-2.test.ts`（13 例）。**核心**：`CubeDef.ink` / `RoomPipes`、`core/chapter.inkPaths` / `activeInk` / `syncInk`、`World.ext.ink`（`writeExt` / `writeLinks` 寫入；`done` 事件後 `syncInk`：墨爐閥一開就重算）、`lightExt` 寫本地方位（第三章朝向恆 0，不變）；`validateDial` 的 `DialPuzzle.ink` 與本地光路（`localHits`、`inkAt` 依魔方定義快取）；`app/cubeMapModel.mapInk` + `ui/cubeMap` 的管線圖層；`mapLight` 支援多層並排（所有層的光都畫、加層位移）。**與設計的差異**：① 機制表裡 `ink` 排在 `light` 之前（4-2a 與 4-2b 會在同一個狀態同時成立——兩者都要「走廊疊在書庫上」——玻璃眼那一句要最後說，才看得到「舊圖浮出一層淡墨」）；② 舊圖 x 6.0 → 7.2、寬 2.4 → 2.0（藏寶圖裡 x 5.5 的字條會先被選到）；③ 4-2c L1 改為「爸爸的圖，總是比房子慢半拍。」（「慢一步」= 數字 + 步，違反 H3）；④ 驗證器的 4-2 區把 4-1c / 4-1b 寫成不需轉動的教學題（一開始就成立）、`ink.E` 寫成教學題（東門墨線鎖；封門 until 用），題號照列。**數字**：`CH4_ZONE42` 16 / 17,326 / 卡死 0 / R 104；4-2a 1 / 3 / 3 / 3（教學）、4-2b 3 / 3 / 610 / 22、4-2c 1 / 2 / 718 / 78、預算 8；書庫沒有稜鏡 → 4-2b 無解、書庫沒有管線 → 4-2a 無解、下層鎖著 → 4 種排列、4-2b 永遠拿不到。墨流（`inkPaths`）：走廊疊在土 / 封存室 → 停在走廊的地板梯口；疊在抽屜 → 墨爐 E；疊在書庫 → 墨爐 W；兩層一起轉同樣角度 = 一樣。**Playwright**（桌機路線 a / b、手機路線 a；主控台錯誤 0）：路線 a = 墨線鎖乾的 → 開閥（走廊疊在抽屜上：東門先化開）→ 展開圖的管線圖層 → 上層 ↻（玻璃眼暗）→ 下層 ↺（月光穿過書庫照進玻璃眼、同時墨也繞回西門）→ 藏寶圖塗開舊圖 → 下層 ↻ ×2（小櫃沒動）→ ↻（小櫃彈開）→ 房間通關；路線 b = ↻ ×2 先讓墨走書庫 → 開閥（西門化開）→ ↺ / 下層 ↺（玻璃眼）→ 舊圖 → 下層 ↺ → 通關。**繪製次數**：桌機 墨爐間實景 76 calls / 11,146 三角形、藏寶圖 130 / 9,514（舊圖 + 六張字條 + 管線外觀只在實景）；手機 墨爐間實景 63 / 9,828、藏寶圖 100 / 7,914。**既有測試的改動**：`devtools/validateLevel`（LEVELS 加 4-2）、`meta/progress`（選單狀態表五處加 `['4-2', 'locked']`）、`levels/ch4Skeleton`（`CHAPTERS` 第四章 levels 加 4-2、`CUBE_CHAPTERS` levels 加 `'4-2': 'furnace'`、墨爐間旁白「這裡的東西被封起來了。…」→「牆上的影子，慢了半拍。」）；`render/coplanar` 加 4-2 狀態。
 
 ### 第五章 閣樓（8 題，3×3×3 魔方：切片轉）/ 終章（1 題）
 

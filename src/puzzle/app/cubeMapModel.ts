@@ -4,14 +4,14 @@ import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
 import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, rotateSide, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
-import { chapterLinks, dialBlocked, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { activeInk, chapterLinks, dialBlocked, inkPaths, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import type { InputFrame } from '../input/types';
-import type { CubeMapModel, MapCell, MapDoor, MapLight, MapPreview, TurnDir, TurnHeader, TurnModeModel } from '../ui/cubeMap';
+import type { CubeMapModel, MapCell, MapDoor, MapInk, MapLight, MapPreview, TurnDir, TurnHeader, TurnModeModel } from '../ui/cubeMap';
 
 export type { CubeMapModel, MapCell, MapDoor, MapFrame, MapLight, MapLink, MapPreview, TurnHeader, TurnModeModel, TurnPreview } from '../ui/cubeMap';
 
@@ -67,6 +67,7 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
     }
   }
   const light = mapLight(def, cube, layer, sessionUncovered(cs));
+  const ink = mapInk(def, cube, activeInk(cs.spec, cs.state, cs.world));
   const multi = def.dims[2] > 1;
   return {
     title: text('ui.map.title'),
@@ -79,8 +80,36 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
       open: text('ui.map.legend.open'), wall: text('ui.map.legend.wall'), arch: text('ui.map.legend.arch'), you: text('ui.map.you'),
       ...(light ? { stained: text('ui.map.legend.stained'), white: text('ui.map.legend.white') } : {})
     },
-    ...(light ? { light } : {})
+    ...(light ? { light } : {}),
+    ...(ink ? { ink } : {})
   };
+}
+
+/**
+ * v0.4 第四章 墨流圖層 (core/chapter inkPaths)：每間有管線的房一筆一筆列出 (多層並排的位移已套上)；有墨流過的管線、收到墨的匯點、墨停住的地方
+ */
+export function mapInk(def: CubeDef, cube: CubeState, active: ReadonlySet<string>): MapInk | undefined {
+  if (!def.ink) return undefined;
+  const p = inkPaths(def, cube, active);
+  const out: MapInk = { pipes: [], stops: [], sinks: [] };
+  const lit = new Set(p.flows.flatMap(f => f.steps.map(s => s.room)));
+  for (const [room, rp] of Object.entries(def.ink)) {
+    const c = cube.pos[room];
+    if (!c) continue;
+    const rot = cube.rot[room] ?? 0;
+    const x = c[0] + panelX(def, c[2]), y = c[1];
+    for (const [a, b] of rp.pipes ?? []) out.pipes.push({ x, y, a: rotateSide(a, rot), b: rotateSide(b, rot), lit: lit.has(room) });
+    if (rp.source) out.pipes.push({ x, y, a: rotateSide(rp.source, rot), b: rotateSide(rp.source, rot), lit: active.has(room) });
+    for (const sd of rp.sinks ?? []) out.sinks.push({ x, y, side: rotateSide(sd, rot), lit: (p.sinks[room] ?? []).includes(sd) });
+  }
+  for (const f of p.flows) if (f.stop) {
+    const st = f.stop;
+    // 停在牆外：畫在停下前那一格的出口 (= stop.at 的反向鄰格)
+    const prev = f.steps[f.steps.length - 1];
+    if (prev?.out) out.stops.push({ x: prev.cell[0] + panelX(def, prev.cell[2]), y: prev.cell[1], side: prev.out });
+    else out.stops.push({ x: st.at[0] + panelX(def, st.at[2]), y: st.at[1], side: st.side });
+  }
+  return out;
 }
 
 /** 光路走的「車道」(格內偏右下；同 ui/cubeMap LANE)：格 (x, y) 裡的轉折點 */
@@ -96,16 +125,19 @@ const SIDE_VEC: Readonly<Record<Side, readonly [number, number]>> = { N: [0, -1]
 export function mapLight(def: CubeDef, cube: CubeState, layer: number, uncovered: ReadonlySet<string> = new Set()): MapLight | undefined {
   if (!def.glass) return undefined;
   const r3 = (v: number) => Math.round(v * 1000) / 1000;
-  const lane = (c: Cell) => ({ x: r3(c[0] + LANE), y: r3(c[1] + LANE) });
+  // v0.4 第四章 多層魔方：所有層的光都畫 (各層並排的位移)
+  const multi = def.dims[2] > 1;
+  const px = (c: Cell) => panelX(def, c[2]);
+  const lane = (c: Cell) => ({ x: r3(c[0] + px(c) + LANE), y: r3(c[1] + LANE) });
   // 邊上的點：沿著光前進的方向在車道上 (N / S 邊取車道的 x、E / W 邊取車道的 y)
   const edge = (c: Cell, side: Side) => {
     const [dx, dy] = SIDE_VEC[side];
-    return { x: r3(dx ? c[0] + 0.5 + dx * 0.5 : c[0] + LANE), y: r3(dy ? c[1] + 0.5 + dy * 0.5 : c[1] + LANE) };
+    return { x: r3(px(c) + (dx ? c[0] + 0.5 + dx * 0.5 : c[0] + LANE)), y: r3(dy ? c[1] + 0.5 + dy * 0.5 : c[1] + LANE) };
   };
   const out: MapLight = { segs: [], stops: [], glass: [], prisms: [] };
   const seg = (a: { x: number; y: number }, b: { x: number; y: number }, white: boolean) => out.segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, white });
   for (const beam of lightPaths(def, cube, uncovered).beams) {
-    if (beam.source[2] !== layer) continue;
+    if (!multi && beam.source[2] !== layer) continue;
     const e0 = edge(beam.source, beam.side);
     const [dx, dy] = SIDE_VEC[beam.side];
     seg({ x: r3(e0.x + dx * 0.32), y: r3(e0.y + dy * 0.32) }, e0, true);
@@ -120,10 +152,10 @@ export function mapLight(def: CubeDef, cube: CubeState, layer: number, uncovered
   }
   for (const [room, c] of Object.entries(cube.pos)) {
     const g = def.glass[room];
-    if (!g || c[2] !== layer) continue;
+    if (!g || (!multi && c[2] !== layer)) continue;
     const rot = cube.rot[room] ?? 0;
-    for (const side of g.glass) if (!g.covered?.includes(side) || uncovered.has(`${room}.${side}`)) out.glass.push({ x: c[0], y: c[1], side: rotateSide(side, rot) });
-    for (const [a, b] of g.prism ?? []) out.prisms.push({ x: c[0], y: c[1], a: rotateSide(a, rot), b: rotateSide(b, rot) });
+    for (const side of g.glass) if (!g.covered?.includes(side) || uncovered.has(`${room}.${side}`)) out.glass.push({ x: c[0] + px(c), y: c[1], side: rotateSide(side, rot) });
+    for (const [a, b] of g.prism ?? []) out.prisms.push({ x: c[0] + px(c), y: c[1], a: rotateSide(a, rot), b: rotateSide(b, rot) });
   }
   return out;
 }

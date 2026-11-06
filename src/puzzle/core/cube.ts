@@ -23,7 +23,15 @@ export interface CubeDef {
   dial?: DialDef;
   /** v0.4 第三章 光路 (N26)：房間 id → 彩繪玻璃 (沒給 = 本章沒有光路；core/chapter lightPaths 讀它) */
   glass?: Readonly<Record<string, RoomGlass>>;
+  /** v0.4 第四章 墨流 (P15)：房間 id → 樹根管線 (沒給 = 本章沒有墨流；core/chapter inkPaths 讀它) */
+  ink?: Readonly<Record<string, RoomPipes>>;
 }
+
+/**
+ * 一間房的樹根管線 (墨流 P15；本地門位)：pipes = 成對的管線 (雙向：從一端流進、另一端流出)；source = 源頭 (墨從這一側流出)；
+ * valve = 源頭的閥 (這個旗標成立才流)；sinks = 匯點 (墨流進這一側就停在這裡：墨線鎖)
+ */
+export interface RoomPipes { pipes?: ReadonlyArray<readonly [Side, Side]>; source?: Side; valve?: string; sinks?: readonly Side[] }
 
 /**
  * 一間房的彩繪玻璃 (光路 N26；本地門位)：glass = 有玻璃的邊；prism = 稜鏡 (成對、雙向：從 a 進來的光轉向 b，從 b 進來的轉向 a)；

@@ -7,6 +7,6 @@ export const CHAPTERS: readonly ChapterDef[] = [
   { id: 2, titleKey: 'ch.2.title', theme: 'study', levels: ['2-1', '2-2', '2-3', '2-4', '2-5', 'H1'] },
   // 第三章 溫室 (3×3 滑動)：3-1 苗圃、3-2 玻璃長廊、3-3 夜溫室、3-4 溫室深處 (章末)
   { id: 3, titleKey: 'ch.3.title', theme: 'greenhouse', levels: ['3-1', '3-2', '3-3', '3-4'] },
-  // 第四章 地下室 (3×3×2 層轉)：4-1 根窖走廊 (4-2～4-4 逐關登錄)
-  { id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1'] }
+  // 第四章 地下室 (3×3×2 層轉)：4-1 根窖走廊、4-2 墨爐間 (4-3、4-4 逐關登錄)
+  { id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1', '4-2'] }
 ];

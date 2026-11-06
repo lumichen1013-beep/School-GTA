@@ -452,4 +452,20 @@ describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 
       view.dispose();
     }
   });
+
+  it('4-2 的狀態 (墨爐閥開、墨流過 / 東西匯點、玻璃眼亮、舊圖與小櫃、根井的墨痕) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const layout = { hall: [1, 2, 1], well: [1, 1, 1], furnace: [1, 1, 0], archive: [1, 2, 0], drawer: [1, 0, 0], sealed: [0, 1, 0] } as const;
+    for (const [room, used] of [[furnace, ['inkValve', 'lockW', 'lockE', 'eye', 'veil', 'markCase']], [well, ['inkMark']], [hall, []], [archive, []], [drawer, []]] as const) {
+      const w = newWorld(room);
+      w.ext = { cube: { links: {}, at: [1, 1, 0], layout }, dial: { active: true }, unlocked: ['L0'], ink: { through: true, sinks: ['W', 'E'] }, light: { hits: [{ from: 'W', via: 2, out: null, rooms: ['hall', 'archive'] }] } };
+      for (const id of used) w.byId.get(id)!.used = true;
+      const view = new PuzzleScene(w, THEMES.cellar);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 60; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

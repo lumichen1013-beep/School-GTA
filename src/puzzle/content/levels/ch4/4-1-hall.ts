@@ -16,6 +16,8 @@ const objects: ObjDef[] = [
   door('S', 'door', 6.0),
   // 4-1a：地板梯口 (第一次爬下去 = 閂住；到了下面說 passText)
   hatch('D', 'arch', -2.0, 1.6, { doneFlag: '4-1a', passText: 'lvl.4-1.a.done' }),
+  // 樹根管線 (外觀；4-2a)：南門上方 (從根井接進來) → 地板梯口
+  { id: 'pipeHall', type: 'inkPipe', when: 'through', path: '6.6,5.6,4.6 3,4.6,3.6 -1.2,1.2,1.6 -1.6,0.05,1.6', x: 2.4, y: 0, z: 3.0, w: 0.3, h: 5.6, d: 0.3, visible: '3d', solid: false },
   // 4-1c：木箱 (與梯口同一條 z 線；推進梯口 → 落進下面那一間)
   { id: 'crate', type: 'crate', x: 4.5, y: 0, z: 1.6, w: 1.0, h: 0.9, d: 1.0, visible: 'both', solid: true, pushable: true, labelKey: 'lvl.4-1.crate' },
   // 字條 (父親的筆記；story-bible 7.3)：前景五根落地木柱 (4-1a L1、4-1b L1 / L2、4-1c L1 / L2)

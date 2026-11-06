@@ -38,6 +38,8 @@ export interface ZonePuzzle {
   id: string; room: string; needs: readonly string[]; teaching?: boolean;
   goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[] }) => boolean;
   light?: { from: Side; via: number; uncovered?: readonly string[] };
+  /** v0.4 第四章 墨流 (validateDial 同名欄位)：這間房的這個匯點 (本地門位) 此刻收到墨 */
+  ink?: { side: Side };
   /** 刻意排除的較長策略 (validateDial 同名欄位；minSteps 可為 Infinity = 不這樣做就無解) */
   excluded?: { name: string; minSteps: number };
   /** v0.4 3-4b (validateDial 同名欄位)：尺度卡此刻在那個槽 ('card@slot')、完成時本房墨補滿 */

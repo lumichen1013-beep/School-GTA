@@ -42,7 +42,7 @@ export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night', '3-4': 'depths' } },
   // 第四章 地下室 (v0.4 控制盤、層轉)：4-1 根窖走廊、根井 (裝飾房)、4-2 墨爐間、4-3 封存書庫、4-4 最後的抽屜為占位版 (逐關取代)、H3 封存室占位 (沒有門)；
   // 從溫室深處章門外的石階進 4-1 根窖走廊北門
-  { chapter: 4, cube: CH4_CUBE, rooms: { hall, well, furnace, archive, drawer, sealed }, start: { room: 'hall', door: 'doorN' }, levels: { '4-1': 'hall' } }
+  { chapter: 4, cube: CH4_CUBE, rooms: { hall, well, furnace, archive, drawer, sealed }, start: { room: 'hall', door: 'doorN' }, levels: { '4-1': 'hall', '4-2': 'furnace' } }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

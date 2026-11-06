@@ -1,7 +1,7 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
-import { lightPaths, lightState, type LightHit } from '../core/chapter';
+import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, rotateSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { inkPaths, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
 import type { CH1_MODEL } from '../content/cubes/ch1';
@@ -163,6 +163,8 @@ export interface DialPuzzle {
    * v0.4 3-4b uncovered = 光路以這幾扇露出來的被蓋住的玻璃計 (`room.side`；同 ChapterSpec.uncovered)
    */
   light?: { from: Side; via: number; uncovered?: readonly string[] };
+  /** v0.4 第四章 墨流 (P15)：這間房 (p.room) 的這個匯點 (本地門位) 此刻收到墨 (core/chapter inkPaths；模型裡閥一律視為已開) */
+  ink?: { side: Side };
   /** v0.4 3-4b 題的條件：這張卡此刻貼在這個槽 ('card@slot'；DialModel.cards) */
   card?: string;
   /** v0.4 3-4b 完成的那一刻本房墨補滿 (LevelDef.turnBudget.refillOn) */
@@ -318,10 +320,24 @@ function hitsAt(def: CubeDef, s: CubeState, uncovered: readonly string[] = []): 
   return h;
 }
 
+/** 光的方位 (魔方方位) → 房間本地 (rot 順時針的反向) */
+const localHits = (hits: readonly LightHit[], rot: number): LightHit[] => (rot ? hits.map(h => ({ ...h, from: rotateSide(h.from, (4 - rot) % 4) })) : [...hits]);
+/** 每個排列的墨流匯點 (所有源頭都開著；以魔方定義分開記) */
+const inkMemo = new WeakMap<CubeDef, WeakMap<CubeState, Record<string, Side[]>>>();
+function inkAt(def: CubeDef, s: CubeState): Record<string, Side[]> {
+  let byDef = inkMemo.get(def);
+  if (!byDef) { byDef = new WeakMap(); inkMemo.set(def, byDef); }
+  let h = byDef.get(s);
+  if (!h) { h = def.ink ? inkPaths(def, s, new Set(Object.keys(def.ink))).sinks : {}; byDef.set(s, h); }
+  return h;
+}
+
 /** 題目的排列條件此刻是否成立：卡片條件 (沒給 = 成立)、goal (沒給 = 成立) 且光路條件 (沒給 = 成立) */
 function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet<string>, card: (ref: string) => boolean = () => false): boolean {
   if (p.card && !card(p.card)) return false;
-  if (p.light && lightState(hitsAt(m.cube, s, p.light.uncovered)[p.room] ?? [], p.light.from, p.light.via) !== 'lit') return false;
+  // 光的方位換成房間本地 (第四章房間會轉；第三章朝向恆 0)
+  if (p.light && lightState(localHits(hitsAt(m.cube, s, p.light.uncovered)[p.room] ?? [], s.rot[p.room] ?? 0), p.light.from, p.light.via) !== 'lit') return false;
+  if (p.ink && !(inkAt(m.cube, s)[p.room] ?? []).includes(p.ink.side)) return false;
   return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)) });
 }
 

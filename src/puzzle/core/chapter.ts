@@ -184,6 +184,8 @@ function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (spec.cube && state.cube) w.ext = { ...w.ext, cube: cubeExt(spec, state, w.ext.labels ?? state.labels) };
   const light = lightExt(spec, state, w.ext.labels ?? state.labels, w);
   if (light) w.ext = { ...w.ext, light };
+  const ink = inkExt(spec, state, w);
+  if (ink) w.ext = { ...w.ext, ink };
   writeDerived(spec, state, w, w.ext.labels ?? state.labels);
 }
 
@@ -206,6 +208,8 @@ function writeExt(spec: ChapterSpec, state: ChapterState, w: World): void {
   if (isDialChapter(spec)) w.ext = { ...w.ext, dial: { active: !!state.dial }, unlocked: unlockedGroups(spec, state) };
   const light = lightExt(spec, state, state.labels, w);
   if (light) w.ext = { ...w.ext, light };
+  const ink = inkExt(spec, state, w);
+  if (ink) w.ext = { ...w.ext, ink };
   writeDerived(spec, state, w, state.labels);
 }
 
@@ -694,9 +698,95 @@ export const sessionUncovered = (cs: ChapterSession): Set<string> => uncoveredGl
 /** 當前房間此刻的光 (章節沒有光路 = undefined；寫入 World.ext.light)；被蓋住的玻璃以 uncoveredGlass 計 */
 function lightExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>, w?: World): WorldExtLight | undefined {
   if (!spec.cube?.glass || !state.cube) return undefined;
-  return { hits: lightPaths(spec.cube, state.cube, uncoveredGlass(spec, state, labels, w)).hits[state.room] ?? [] };
+  // v0.4 第四章：房間會轉 → 照進來的方位換成房間本地 (感光物的 from 是本地門位；第三章朝向恆 0，不變)
+  const rot = state.cube.rot[state.room] ?? 0;
+  const hits = lightPaths(spec.cube, state.cube, uncoveredGlass(spec, state, labels, w)).hits[state.room] ?? [];
+  return { hits: rot ? hits.map(h => ({ ...h, from: localSide(h.from, rot), out: h.out && localSide(h.out, rot) })) : hits };
 }
 type WorldExtLight = NonNullable<World['ext']['light']>;
+
+// ── v0.4 第四章 墨流 (P15；規格 6「第四章共用規則」墨流、「4-2 墨爐間（細化）」) ──
+
+/** 一間房的墨此刻：從哪一側進來 (魔方方位) 與本地門位；sink = 這一側是匯點 (墨停在這裡) */
+export interface InkStep { room: string; cell: Cell; from: Side | null; local: Side | null; out: Side | null; sink: boolean }
+/** 一股墨：source = 源頭房；steps = 依序流過的房 (第一格 = 源頭房)；stop = 墨停在牆外的那一格與那一側 (null = 流進匯點或停在房內) */
+export interface InkFlow { source: string; steps: InkStep[]; stop: { at: Cell; side: Side } | null }
+/** 墨流：flows = 每個打開的源頭一股；sinks = 每間房此刻收到墨的匯點 (本地門位)；through = 墨流過的房 */
+export interface InkPaths { flows: InkFlow[]; sinks: Record<string, Side[]>; through: string[] }
+
+declare module './types' {
+  interface WorldExt {
+    /** v0.4 第四章 墨流：這間房此刻有沒有墨流過、收到墨的匯點 (本地門位)；章節層寫入，mechanics/ink 只讀 */
+    ink?: { through: boolean; sinks: readonly Side[] };
+  }
+}
+
+/**
+ * 墨流 (純函式、確定性；同光路的逐格傳播)：每個 active 的源頭房從 source 那一側 (本地) 流出 → 鄰格 (U / D 也算) 的房在對面那一側 (本地) 要有管線口：
+ * 是匯點 → 收到墨、這股停止；是一對管線的一端 → 從另一端流出、繼續；沒有 / 空格 / 魔方外 → 墨停在牆外。同一股墨不會兩次流進同一間房 (源頭房除外：只收匯點)
+ */
+export function inkPaths(def: CubeDef, cube: CubeState, active: ReadonlySet<string>): InkPaths {
+  const table = def.ink ?? {};
+  const flows: InkFlow[] = [];
+  const sinks: Record<string, Side[]> = {};
+  const through = new Set<string>();
+  for (const [src, rp] of Object.entries(table)) {
+    if (!rp.source || !active.has(src) || !cube.pos[src]) continue;
+    const at0 = cube.pos[src];
+    const rot0 = cube.rot[src] ?? 0;
+    const flow: InkFlow = { source: src, steps: [{ room: src, cell: at0, from: null, local: null, out: rotateSide(rp.source, rot0), sink: false }], stop: null };
+    flows.push(flow);
+    through.add(src);
+    const passed = new Set<string>([src]);
+    let side: Side = rotateSide(rp.source, rot0);
+    let at: Cell = addSide(at0, side);
+    for (;;) {
+      const room = inCube(def, at) ? cellContent(def, cube, at) : 'empty';
+      const from = OPPOSITE[side];
+      const rot = cube.rot[room] ?? 0;
+      const local = localSide(from, rot);
+      const t = table[room];
+      if (!inCube(def, at) || room === 'empty' || room === 'solid' || !t) { flow.stop = { at, side: from }; break; }
+      if (t.sinks?.includes(local)) {
+        flow.steps.push({ room, cell: at, from, local, out: null, sink: true });
+        (sinks[room] ??= []).push(local);
+        through.add(room);
+        break;
+      }
+      const pipe = t.pipes?.find(p => p[0] === local || p[1] === local);
+      if (!pipe || (passed.has(room) && room !== src)) { flow.stop = { at, side: from }; break; }
+      const outLocal = pipe[0] === local ? pipe[1] : pipe[0];
+      const out = rotateSide(outLocal, rot);
+      flow.steps.push({ room, cell: at, from, local, out, sink: false });
+      through.add(room);
+      passed.add(room);
+      side = out;
+      at = addSide(at, out);
+    }
+  }
+  return { flows, sinks, through: [...through] };
+}
+
+/** 此刻打開的源頭房 (CubeDef.ink 的 valve 旗標成立；沒有 valve = 一直開著)；world 給定時當前房取即時狀態 */
+export function activeInk(spec: ChapterSpec, state: ChapterState, world?: World): Set<string> {
+  const table = spec.cube?.ink ?? {};
+  const done = doneFlags(spec, state, world);
+  return new Set(Object.entries(table).filter(([, rp]) => rp.source && (!rp.valve || done.has(rp.valve))).map(([r]) => r));
+}
+
+/** 當前房間此刻的墨 (章節沒有管線 = undefined；寫入 World.ext.ink) */
+function inkExt(spec: ChapterSpec, state: ChapterState, w?: World): NonNullable<World['ext']['ink']> | undefined {
+  if (!spec.cube?.ink || !state.cube) return undefined;
+  const p = inkPaths(spec.cube, state.cube, activeInk(spec, state, w));
+  return { through: p.through.includes(state.room), sinks: p.sinks[state.room] ?? [] };
+}
+
+/** 墨流可能改變的事之後 (閥打開、轉動、換房) 重算當前房的 ext.ink (光路 / 門接法照舊) */
+export function syncInk(cs: ChapterSession): ChapterSession {
+  const ink = inkExt(cs.spec, cs.state, cs.world);
+  if (ink) cs.world.ext = { ...cs.world.ext, ink };
+  return cs;
+}
 
 /** 單房關卡 (不在魔方上)：一間房、沒有門位；行為同 createWorld */
 export function singleRoomSpec(level: LevelDef): ChapterSpec {

@@ -222,7 +222,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 3-4 溫室深處：三片玻璃嵌進花窗架 (卡榫打開的聲音)、「許」字亮起 (溫和的亮燈聲；苔窗是 sensor，沿用上面的 sfx.lamp.on)、長廊的柵門打開
   paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on', chaseGate: 'sfx.gate.open',
   // 第四章 4-1：折疊梯的拉繩、根結踏板
-  foldCord: 'sfx.cord.pull', rootPlate: 'sfx.plate.press'
+  foldCord: 'sfx.cord.pull', rootPlate: 'sfx.plate.press',
+  // 4-2：墨爐閥、墨線鎖、墨痕、爐邊小櫃 (玻璃眼 = sensor)
+  inkValve: 'sfx.lever.pull', inkLock: 'sfx.door.unseal', inkMark: 'sfx.lamp.on', markCase: 'sfx.drawer.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
