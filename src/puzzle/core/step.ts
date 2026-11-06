@@ -62,7 +62,8 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
   if (spec.moveZ) moveAxis(w, 2, mz * SPEED * dt);
 
   if (input.jump && p.onGround) {
-    p.vy = spec.jumpV;
+    // v0.4 第五章 縮小時跳躍照比例 (跳高 ∝ v²：速度 × √倍率)
+    p.vy = spec.jumpV * Math.sqrt(p.scale ?? 1);
     p.onGround = false;
   }
   p.vy = Math.max(p.vy - GRAVITY * dt, -40);
@@ -72,8 +73,9 @@ export function stepWorld(w: World, input: InputState, dt: number): void {
   if (hit) { if (dy < 0) p.onGround = true; p.vy = 0; } else if (dy < 0) p.onGround = false;
 
   const b = w.level.bounds;
-  p.x = clamp(p.x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW);
-  if (spec.boundsZ) p.z = clamp(p.z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW);
+  const hw = PLAYER_HW * (p.scale ?? 1);
+  p.x = clamp(p.x, b.minX + hw, b.maxX - hw);
+  if (spec.boundsZ) p.z = clamp(p.z, b.minZ + hw, b.maxZ - hw);
 
   for (const m of w.rt.mechanics.afterPhysics) m.afterPhysics!(w, dt);
   updateCheckpoint(w);

@@ -18,6 +18,28 @@ export const CH5_MIDDLE: readonly TurnGroup[] = [
   { id: 'Z1', kind: 'slice', axis: 'z', index: 1 }
 ];
 
+/** 縮影的頂層 / 底層 (5-1a P10：只在縮影裡轉得到；ST = 頂面心、SB = 底面心那一格的房原地轉) */
+export const CH5_MINI: readonly TurnGroup[] = [
+  { id: 'ST', kind: 'spin', axis: 'z', index: 2 },
+  { id: 'SB', kind: 'spin', axis: 'z', index: 0 }
+];
+
+/**
+ * 5-1a 星圖對上觀星儀的刻度 (規格「5-1 天窗間（細化）」)：天窗間在頂面心、從上往下看順時針轉了四分之一圈 (朝向 1)，
+ * 樓梯口與三扇窗都在原位、原朝向 (觀星儀外環上的四個刻度)。中間片永遠做不到 (面心的扭轉同位性；拿掉縮影則無解)，縮影的頂層 ↻ 一次即成
+ */
+export const CH5_ALIGN = {
+  room: 'sky', at: [1, 1, 2] as const, rot: 1,
+  home: { landing: [1, 2, 1] as const, east: [2, 1, 1] as const, west: [0, 1, 1] as const, north: [1, 0, 1] as const }
+};
+
+/** CH5_ALIGN 此刻成立 (mechanics/attic alignState 的同一條件；validateDial 的 goal) */
+export function skyAligned(s: CubeState): boolean {
+  const at = (r: string, c: readonly number[]) => { const p = s.pos[r]; return !!p && p[0] === c[0] && p[1] === c[1] && p[2] === c[2]; };
+  return at(CH5_ALIGN.room, CH5_ALIGN.at) && (s.rot[CH5_ALIGN.room] ?? 0) === CH5_ALIGN.rot
+    && Object.entries(CH5_ALIGN.home).every(([r, c]) => at(r, c) && (s.rot[r] ?? 0) === 0);
+}
+
 /** 星釘 (外圈的星環被銀釘釘住) 的說明 */
 const NAILED = 'lvl.ch5.locked';
 
@@ -48,8 +70,19 @@ export const CH5_CUBE: CubeDef = {
       ...CH5_MIDDLE,
       { id: 'SE', kind: 'spin', index: 0, room: 'east' },
       { id: 'SW', kind: 'spin', index: 0, room: 'west' },
-      { id: 'SN', kind: 'spin', index: 0, room: 'north' }
+      { id: 'SN', kind: 'spin', index: 0, room: 'north' },
+      // 縮影的頂層 / 底層 (5-1a / 5-1b)：頂面心 / 底面心那一格的房原地轉 (從上往下看順時針)；只在縮影裡轉得到 (miniOnly)
+      ...CH5_MINI
     ],
+    miniOnly: ['ST', 'SB'],
+    // 5-1b：縮影底層的軌道被桌上的齒輪卡住 (齒輪量成「小」掉出軌道 = 旗標 gear)；底層第一次轉 = 縮影 (sky.mini) used = 5-1b
+    // 你站在縮影的屋頂上 = 天窗間：天窗間不在頂面心時縮影對不上這棟房子 (頂 / 底都轉不動)
+    jams: [
+      { group: 'ST', home: { room: 'sky', at: [1, 1, 2] }, text: 'lvl.5-1.miniAway' },
+      { group: 'SB', home: { room: 'sky', at: [1, 1, 2] }, text: 'lvl.5-1.miniAway' },
+      { group: 'SB', until: 'gear', text: 'lvl.5-1.jammed' }
+    ],
+    marks: [{ group: 'SB', obj: 'mini' }],
     locks: [
       { group: 'SE', until: '5-2', rooms: ['east'], text: NAILED },
       { group: 'SW', until: '5-3', rooms: ['west'], text: NAILED },
@@ -59,7 +92,45 @@ export const CH5_CUBE: CubeDef = {
 };
 
 /** 骨架區用的魔方 (規格「第五章骨架與銜接」驗證)：只開三條中間片 (窗框的星釘在本步打不開，不進排列) */
-export const CH5_MIDDLE_CUBE: CubeDef = { ...CH5_CUBE, dial: { ...CH5_CUBE.dial!, groups: CH5_MIDDLE, locks: [] } };
+export const CH5_MIDDLE_CUBE: CubeDef = { ...CH5_CUBE, dial: { ...CH5_CUBE.dial!, groups: CH5_MIDDLE, locks: [], miniOnly: [], jams: [], marks: [] } };
+
+/** 5-1 區用的魔方：中間片 + 縮影的頂 / 底 (窗框的星釘在 5-1 打不開，不進排列) */
+export const CH5_SKY_CUBE: CubeDef = { ...CH5_CUBE, dial: { ...CH5_CUBE.dial!, groups: [...CH5_MIDDLE, ...CH5_MINI], locks: [] } };
+/** 5-1 縮影子模型用的魔方：只有縮影的頂 / 底 (中間片對 5-1 兩題沒有用處，另以 CH5_ZONE51_MIDDLE 驗證) */
+export const CH5_MINI_CUBE: CubeDef = { ...CH5_CUBE, dial: { ...CH5_CUBE.dial!, groups: CH5_MINI, locks: [] } };
+
+/**
+ * 5-1 區 (一) 中間片 + 縮影 (devtools/validateDial；規格「5-1 天窗間（細化）」抽象模型)：卡片與齒輪不進模型 (縮影在天窗間隨時進得去)、
+ * 只有 5-1a；房 = 樓梯口與天窗間 (天窗間只接得到樓梯口)。量「中間片當干擾」：可達排列、卡死、多解；只用中間片則無解 (排列層級另驗)
+ */
+export const CH5_ZONE51_MIDDLE = {
+  cube: CH5_SKY_CUBE,
+  // 多解列舉只到 3 步 (span)：中間片當干擾時墨 10 的完整列舉太大；最短 1 / 次短 3 已在其內
+  puzzles: [{ id: '5-1a', room: 'sky', needs: [], teaching: true, span: 3, goal: (s: CubeState) => skyAligned(s) }] as readonly ZonePuzzle[],
+  mini: { room: 'sky' },
+  start: 'landing',
+  finish: '5-1a'
+};
+
+/**
+ * 5-1 區 (二) 縮影子模型 (devtools/validateDial；規格「5-1 天窗間（細化）」抽象模型)：只有縮影的頂 / 底 (中間片見上)；人從樓梯口開章 (天窗間啟動觀星儀)。
+ * 卡片：唯一的「小」在手上 / 標籤「你」(self) / 齒輪 (gear)，都在天窗間貼取；「小」在你身上 = 縮小：穿不過門、轉得到縮影的頂 / 底 (mini)。
+ * 題：5-1a = 星圖對上刻度 (skyAligned)；gear = 齒輪量成「小」(閂住)；5-1b = 齒輪掉出軌道後，縮影的底層轉一次 (turn SB)；
+ * 終點 ch5.sky = 兩題都完成 (天窗間通關)
+ */
+export const CH5_ZONE51 = {
+  cube: CH5_MINI_CUBE,
+  puzzles: [
+    { id: '5-1a', room: 'sky', needs: [], teaching: true, goal: (s: CubeState) => skyAligned(s) },
+    { id: 'gear', room: 'sky', needs: [], teaching: true, card: 'xiao@gear' },
+    { id: '5-1b', room: 'sky', needs: ['gear'], turn: 'SB' },
+    { id: 'ch5.sky', room: 'sky', needs: ['5-1a', '5-1b'], teaching: true, goal: (_s: CubeState, f: ReadonlySet<string>) => f.has('5-1a') && f.has('5-1b') }
+  ] as readonly ZonePuzzle[],
+  cards: [{ id: 'xiao', start: 'hand', slots: { self: { room: 'sky' }, gear: { room: 'sky' } } }],
+  mini: { room: 'sky', card: 'xiao@self' },
+  start: 'landing',
+  finish: 'ch5.sky'
+};
 
 /** 房間 room 此刻在哪個面 (面心格朝外的方位；不在面心 = null) */
 export function faceOf(s: CubeState, room: string): 'N' | 'S' | 'E' | 'W' | 'U' | 'D' | null {

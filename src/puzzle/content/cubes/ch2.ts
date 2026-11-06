@@ -47,6 +47,8 @@ export interface ZonePuzzle {
   refill?: boolean;
   /** v0.4 多解列舉的步數上限 (validateDial 同名欄位；要換房補墨的題) */
   span?: number;
+  /** v0.4 第五章 (validateDial 同名欄位)：這一組轉成功的那一刻完成 (5-1b：縮影的底層轉一次) */
+  turn?: string;
 }
 
 /**

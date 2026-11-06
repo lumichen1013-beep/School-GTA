@@ -298,7 +298,7 @@ describe('第三章存檔接著第四章、cs:ch3', () => {
   it('cs:ch3：觸發 = 3-4 通關後第一次前往 4-1 (看過就不再播)；三鏡、總長 20～45 秒；逐字稿照 cutscenes-v0.1', () => {
     const cut = cutsceneById('cs:ch3')!;
     expect([cut.trigger, cut.shots.map(s => s.art.kind === 'paper' && s.art.sceneId), CUTSCENES.map(c => c.id)]).toEqual([
-      { afterClear: '3-4' }, ['ch3.depths', 'ch3.diary', 'ch3.sink'], ['cs:prologue', 'cs:ch2', 'cs:ch3', 'cs:night'] // 第五章骨架：cs:night
+      { afterClear: '3-4' }, ['ch3.depths', 'ch3.diary', 'ch3.sink'], ['cs:prologue', 'cs:ch2', 'cs:ch3', 'cs:night', 'cs:attic'] // 第五章骨架：cs:night；5-1：cs:attic
     ]);
     expect(cut.shots.flatMap(s => s.lines.map(k => TEXT(k)))).toEqual(['燈架停了。人影沒有再追來。', '手記第三頁：', '「守門的影子，只攔，不傷。」', '老宅轉了第三次，整個往下沉。', '樹根，從天花板垂了下來。']);
     const sec = planCutscene(cut, TEXT, { speed: 'normal', reduceMotion: false, name: '阿青' }).totalSec;

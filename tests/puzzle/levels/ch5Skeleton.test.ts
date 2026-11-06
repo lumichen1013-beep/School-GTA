@@ -93,7 +93,8 @@ describe('第五章骨架：登錄表與魔方', () => {
     ]);
     // 窗 (wall) 不是門：樓梯口被轉到西面時，它的南門 (入口) 朝著西窗外的星空 = 門後是牆
     expect(linkTable(spin(T('Z1', 1))).filter(x => x.startsWith('landing.doorS'))).toEqual([]);
-    expect(CH5_CUBE.dial!.groups.map(g => [g.id, g.kind, g.axis ?? g.room])).toEqual([['X1', 'slice', 'x'], ['Y1', 'slice', 'y'], ['Z1', 'slice', 'z'], ['SE', 'spin', 'east'], ['SW', 'spin', 'west'], ['SN', 'spin', 'north']]);
+    // 5-1：加縮影的頂 / 底 (ST / SB，miniOnly)
+    expect(CH5_CUBE.dial!.groups.map(g => [g.id, g.kind, g.axis ?? g.room])).toEqual([['X1', 'slice', 'x'], ['Y1', 'slice', 'y'], ['Z1', 'slice', 'z'], ['SE', 'spin', 'east'], ['SW', 'spin', 'west'], ['SN', 'spin', 'north'], ['ST', 'spin', 'z'], ['SB', 'spin', 'z']]);
     expect(CH5_CUBE.dial!.locks).toEqual([
       { group: 'SE', until: '5-2', rooms: ['east'], text: 'lvl.ch5.locked' }, { group: 'SW', until: '5-3', rooms: ['west'], text: 'lvl.ch5.locked' }, { group: 'SN', until: '5-4', rooms: ['north'], text: 'lvl.ch5.locked' }
     ]);
@@ -394,7 +395,7 @@ describe('第四章存檔接著第五章、尺度卡、舊存檔、cs:night', ()
     const cut = cutsceneById('cs:night')!;
     expect([cut.trigger, cut.shots.map(s => s.art.sceneId), cut.shots.map(s => s.transitionIn), CUTSCENES.map(c => c.id)]).toEqual([
       { afterClear: '4-4' }, ['night.notes', 'night.study', 'night.dawn', 'night.tear', 'night.morning', 'night.flip'],
-      ['pageTurn', 'inkBleed', 'cut', 'paperTear', 'cut', 'inkBleed'], ['cs:prologue', 'cs:ch2', 'cs:ch3', 'cs:night']
+      ['pageTurn', 'inkBleed', 'cut', 'paperTear', 'cut', 'inkBleed'], ['cs:prologue', 'cs:ch2', 'cs:ch3', 'cs:night', 'cs:attic']
     ]);
     expect(cut.shots.flatMap(s => s.lines.map(k => TEXT(k)))).toEqual([
       '抽屜裡，是爸爸沒寫完的筆記。', '「那天晚上，我又站上了那個圖案——」', '很多年前的一個晚上，爸爸站在圖案中央。', '圖案沒有亮。', '他等到天亮，什麼都沒有發生。',

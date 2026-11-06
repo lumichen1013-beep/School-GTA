@@ -27,6 +27,8 @@ export class MusicDirector {
   private ctxName: MusicContext = 'explore';
   private intensity = 1;
   private calm = false;
+  /** v0.4 第五章 E♭ 分層 (三扇窗的完成數；null = 不分層，只在 ch5 配樂生效) */
+  private stage: number | null = null;
   private solvedUntil = -Infinity;
 
   constructor(private engine: AudioEngine) {}
@@ -72,6 +74,8 @@ export class MusicDirector {
   setContext(c: MusicContext, at = this.engine.now, fade = 0.8): void { this.ctxName = c; this.applyMix(at, fade); }
   setIntensity(i: number, at = this.engine.now): void { this.intensity = i; this.applyMix(at, 1.2); }
   setCalm(on: boolean, at = this.engine.now): void { this.calm = on; this.applyMix(at, 0.8); }
+  /** v0.4 第五章 E♭ 分層 (三扇窗的完成數；null = 不分層)：層變了 = 2 秒滑入 */
+  setStage(n: number | null, at = this.engine.now): void { if (this.stage === n) return; this.stage = n; this.applyMix(at, 2); }
 
   /** 脈動變速 (≥ 2 秒漸變；≤ 96 BPM) */
   setPulseBpm(bpm: number, ramp = 2, at = this.engine.now): void {
@@ -83,7 +87,7 @@ export class MusicDirector {
   private mixFor(at: number): Record<Layer, number> {
     const d = this.deck!;
     const c: MusicContext = at < this.solvedUntil ? 'solved' : this.ctxName;
-    return layerMix(c, this.intensity, this.calm, !!d.score.pulse && d.score.id === 'ch3');
+    return layerMix(c, this.intensity, this.calm, !!d.score.pulse && d.score.id === 'ch3', d.score.id === 'ch5' ? this.stage : null);
   }
 
   private applyMix(at: number, sec: number): void {
@@ -108,7 +112,7 @@ export class MusicDirector {
       case 'solved': {
         this.solvedUntil = at + 2.5;
         this.applyMix(at, 0.3);
-        if (d) { const m = layerMix(this.ctxName, this.intensity, this.calm); for (const l of LAYERS) glide(d.layers[l].gain, m[l], at + 2.5, 1.2); }
+        if (d) { const m = layerMix(this.ctxName, this.intensity, this.calm, false, d.score.id === 'ch5' ? this.stage : null); for (const l of LAYERS) glide(d.layers[l].gain, m[l], at + 2.5, 1.2); }
         break;
       }
       default: break;

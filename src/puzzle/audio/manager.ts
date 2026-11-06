@@ -21,6 +21,8 @@ export interface AudioManager {
   setContext(c: MusicContext): void;
   setView(mode: Mode): void;
   setCalm(on: boolean): void;
+  /** v0.4 第五章 E♭ 分層：三扇窗的完成數 (null = 不分層) */
+  setStage(n: number | null): void;
   play(id: string, opt?: { pitch?: number }): void;
   /** 事件映射的結果 (events.ts) */
   apply(actions: readonly AudioAction[]): void;
@@ -66,6 +68,7 @@ export class WebAudioManager implements AudioManager {
   private calm: boolean;
   private score: ScoreId | null = null;
   private intensity = 1;
+  private stage: number | null = null;
   private context: MusicContext = 'explore';
   private view: Mode = '3d';
   private hidden = false;
@@ -106,6 +109,7 @@ export class WebAudioManager implements AudioManager {
     this.engine.setView(this.view);
     this.director.setCalm(this.calm);
     this.director.setIntensity(this.intensity);
+    this.director.setStage(this.stage);
     this.director.setContext(this.context);
     if (this.cutscene) this.engine.setTrim(CUTSCENE_TRIM, this.engine.now, 0.01);
     if (this.score) this.director.play(this.score, this.engine.now, FADES.enter);
@@ -193,6 +197,7 @@ export class WebAudioManager implements AudioManager {
 
   setView(mode: Mode): void { this.view = mode; this.engine?.setView(mode); }
   setCalm(on: boolean): void { this.calm = on; this.director?.setCalm(on); }
+  setStage(n: number | null): void { this.stage = n; this.director?.setStage(n); }
 
   play(id: string, opt: { pitch?: number } = {}): void {
     const e = this.engine, d = this.director;

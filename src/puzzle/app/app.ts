@@ -301,12 +301,15 @@ export class PuzzleApp {
     const s = this.screen;
     if (s.id !== 'clear') return;
     const next = nextAfterClear(s.levelId, s.kind ?? 'level', CHAPTERS);
-    if (next) this.go(this.levelWithCutscene(next));
+    if (next) this.go(this.levelWithCutscene(next, s.kind === 'room' ? 'room' : 'chapter'));
   }
 
-  /** 進關：還沒看過的章末過場 (觸發關已通關、下一步就是這一關；例 2-5 → cs:ch2 → 3-1) 先播，播完 (或跳過) 再進關 */
-  private levelWithCutscene(levelId: string): Screen {
-    const cut = cutsceneBeforeLevel(this.save, levelId);
+  /**
+   * 進關：還沒看過的章末過場 (觸發關已通關、下一步就是這一關；例 2-5 → cs:ch2 → 3-1) 先播，播完 (或跳過) 再進關；
+   * v0.4 第五章 kind 'room' = 房間通關畫面的「繼續探索」(5-1 → cs:attic → 回到天窗間)
+   */
+  private levelWithCutscene(levelId: string, kind: 'room' | 'chapter' = 'chapter'): Screen {
+    const cut = cutsceneBeforeLevel(this.save, levelId, undefined, undefined, kind);
     return cut ? { id: 'cutscene', cutsceneId: cut.id, next: { id: 'level', levelId }, replay: false } : { id: 'level', levelId };
   }
 
@@ -439,7 +442,8 @@ export class PuzzleApp {
     const ctx: HelpContext = {
       inLevel: this.screen.id === 'level' && !!s,
       mapOpen: !!s?.isMapOpen, trayOpen: s?.trayOpen != null, turnMode: !!s?.isTurnMode,
-      busy: !s || s.busy || this.narrationUntil > 0 || this.confirm.isOpen
+      busy: !s || s.busy || this.narrationUntil > 0 || this.confirm.isOpen,
+      touch: this.touch
     };
     this.hud.renderHelp(deriveHelpView(this.settings.helpOpen, ctx, this.text, this.bindings));
     if (!ctx.inLevel && this.hud.tipShowing) this.hud.showTip(null, now, 0);
@@ -452,6 +456,9 @@ export class PuzzleApp {
     this.settings = { ...this.settings, tipsSeen: [...this.settings.tipsSeen, tip] };
     writeSettings(this.storage, this.settings);
   }
+
+  /** v0.4 觸控裝置 (粗指標)：鍵盤小提示不顯示 */
+  private readonly touch = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
   private resize(): void {
     const w = window.innerWidth, h = window.innerHeight;

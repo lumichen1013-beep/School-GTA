@@ -4,12 +4,13 @@
 import type { Mechanic } from '../core/registry';
 import type { WorldCommand } from '../core/actions';
 import type { ItemId, ObjId, ObjState, TextKey, World } from '../core/types';
-import { INTERACT_RANGE } from '../core/constants';
+import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { distanceTo } from '../core/interact';
 import { isActiveIn } from '../core/presence';
 import { addItem, hasItem, say } from '../core/world';
 import { LEVER_WORDS, type LeverWord } from './cube';
 import { SCALE_CARDS, SCALE_GLYPHS, canResize, rescale } from './scale';
+import { selfGrowOk } from './attic';
 
 declare module '../core/types' {
   interface ObjBase {
@@ -32,6 +33,13 @@ declare module '../core/types' {
       part?: ItemId; stripped?: TextKey; after?: ObjId;
       /** v0.4 純呈現：2D 標籤徽章往上抬的高度 (世界單位；3-3 苗圃的 potS 與 3-1 東盆在藏寶圖裡只隔 0.5，徽章錯開) */
       tagLift?: number;
+      /**
+       * v0.4 第五章 5-1 玩家自己的標籤「你」(mechanics/attic 的 selfTag 跟著玩家走)：只收 answers 的尺度卡；範圍內有別的標籤時讓位
+       * (最低優先)；縮小時搆不到高處的標籤 (mechanics/attic 的 outOfReach)；站在縮影裡取不下「小」
+       */
+      self?: boolean;
+      /** v0.4 第五章 5-1 不收任何尺度卡 (方槽照畫；貼上 = 說這句、卡片退回；例：把縮影本身標「小」) */
+      refuse?: TextKey;
     };
   }
 }
@@ -82,8 +90,8 @@ export function accepts(o: ObjState, card: string): boolean {
   const l = o.def.label;
   if (!c || !l) return false;
   if (l.kind === 'blank' || l.kind === 'plate') return (l.answers ?? []).includes(card);
-  // 尺度卡只收在有方槽的名詞標籤上 (其他標籤貼尺度卡 = 無效字；有方槽的標籤貼詞卡 = 無效字)
-  if (c.slot === 'scale') return l.kind === 'noun' && !!l.scale;
+  // 尺度卡只收在有方槽的名詞標籤上 (其他標籤貼尺度卡 = 無效字；有方槽的標籤貼詞卡 = 無效字)；v0.4 第五章 方槽有 answers = 只收這幾張
+  if (c.slot === 'scale') return l.kind === 'noun' && !!l.scale && (!l.answers || l.answers.includes(card));
   if (c.slot !== 'word') return false;
   return l.kind === 'dir' && c.dir !== undefined;
 }
@@ -121,13 +129,30 @@ export function labelTarget(w: World): ObjState | null {
   const p = w.player;
   if (p.mode !== '2d' || !p.onGround) return null;
   let best: ObjState | null = null;
+  let self: ObjState | null = null;
   let bd = INTERACT_RANGE;
   for (const o of w.objs) {
     if (!o.def.label || !isActiveIn(w, o, '2d') || labelCovered(w, o)) continue;
+    // v0.4 第五章 5-1：自己的標籤「你」最低優先 (範圍內有別的標籤 → 讓位)；縮小時搆不到的標籤不算
+    if (o.def.label.self) { self = o; continue; }
+    if (outOfReach(w, o)) continue;
     const d = distanceTo(w, o);
     if (d <= bd) { bd = d; best = o; }
   }
-  return best;
+  // 在縮影裡：外面的標籤都不算 (只剩自己的標籤；「這裡太窄，變不回去」)
+  if (w.ext.mini && self) return self;
+  return best ?? (self && !reachBlocked(w) ? self : null);
+}
+
+/** v0.4 第五章 5-1 縮小 (Player.scale < 1) 時搆不到的標籤：標籤物件的底比你的頭頂高 0.3 以上 (桌上的齒輪、縮影) */
+export function outOfReach(w: World, o: ObjState): boolean {
+  const k = w.player.scale ?? 1;
+  return k < 1 && !o.def.label?.self && o.y > w.player.y + PLAYER_H * k + 0.3;
+}
+
+/** 縮小時範圍內有搆不到的標籤 (按 E = 「太小了，搆不到」；自己的標籤也先讓位，離開桌邊才打得開) */
+function reachBlocked(w: World): boolean {
+  return w.objs.some(o => !!o.def.label && !o.def.label.self && isActiveIn(w, o, '2d') && !labelCovered(w, o) && outOfReach(w, o) && distanceTo(w, o) <= INTERACT_RANGE);
 }
 
 /** 字卡匣裡的卡 (持有的字卡，依 id 排序；貼出去的不在匣裡) */
@@ -157,8 +182,14 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
     return;
   }
   const sized = CARDS[cmd.card].slot === 'scale';
+  // v0.4 第五章 不收尺度卡的方槽 (縮影本身)：說明、卡片退回
+  if (sized && o.def.label?.refuse) {
+    say(w, o.def.label.refuse);
+    w.events.push({ t: 'card', label: cmd.label, ok: false });
+    return;
+  }
   // 量 (N23)：放大前卡牆檢查——放不下 → 卡片退回 (同無效字的回饋)
-  if (sized && !canResize(w, o, SCALE_CARDS[cmd.card])) {
+  if (sized && !o.def.label?.self && !canResize(w, o, SCALE_CARDS[cmd.card])) {
     say(w, 'msg.scale.noRoom');
     w.events.push({ t: 'card', label: cmd.label, ok: false });
     return;
@@ -167,7 +198,8 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
   for (const old of cardsOn(w, cmd.label)) addItem(w, old, 1);
   addItem(w, cmd.card, -1);
   setCards(w, cmd.label, [cmd.card]);
-  if (sized) { rescale(w); say(w, SCALE_CARDS[cmd.card] > 1 ? 'msg.scale.da' : 'msg.scale.xiao'); }
+  if (sized && o.def.label?.self) say(w, 'msg.scale.self');
+  else if (sized) { rescale(w); say(w, SCALE_CARDS[cmd.card] > 1 ? 'msg.scale.da' : 'msg.scale.xiao'); }
   else if (!solveBlank(w, o)) say(w, 'msg.label.written');
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
@@ -193,8 +225,14 @@ function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
   const cur = cardsOn(w, cmd.label);
   if (!cur.includes(cmd.card)) return;
   const sized = CARDS[cmd.card]?.slot === 'scale';
+  // v0.4 第五章 自己的「小」：站在縮影裡 / 長回去會撞到東西 → 取不下 (mechanics/attic selfGrowOk)
+  if (sized && o.def.label?.self && !selfGrowOk(w)) {
+    say(w, 'msg.scale.tooTight');
+    w.events.push({ t: 'card', label: cmd.label, ok: false });
+    return;
+  }
   // 取下「小」= 長回原尺寸：同樣要放得下 (放不下 → 卡片留在標籤上)
-  if (sized && !canResize(w, o, 1)) {
+  if (sized && !o.def.label?.self && !canResize(w, o, 1)) {
     say(w, 'msg.scale.noRoom');
     w.events.push({ t: 'card', label: cmd.label, ok: false });
     return;
@@ -202,7 +240,7 @@ function uncard(w: World, cmd: Extract<WorldCommand, { t: 'uncard' }>): void {
   setCards(w, cmd.label, cur.filter(c => c !== cmd.card));
   addItem(w, cmd.card, 1);
   if (sized) rescale(w);
-  say(w, sized ? 'msg.scale.removed' : 'msg.label.removed');
+  say(w, sized ? (o.def.label?.self ? 'msg.scale.selfBack' : 'msg.scale.removed') : 'msg.label.removed');
   w.events.push({ t: 'card', label: cmd.label, ok: true });
 }
 
@@ -216,7 +254,8 @@ export function writableTarget(w: World): ObjState | null {
   const held = trayCards(w);
   if (attachedCards(w, t).length > 0) return t;
   // v0.4 H1：要量的謎題標籤 (方槽 + noCardText) 在匣裡沒有尺度卡時 = 缺卡 (第二章回來前：手上只有詞卡 / 部件卡，打開匣也沒有一張貼得上)
-  if (t.def.label?.scale && t.def.label.noCardText && !held.some(c => CARDS[c].slot === 'scale')) return null;
+  // v0.4 第五章：方槽有 answers (齒輪只收「小」) → 匣裡沒有它收的卡 = 缺卡 (手上只剩「大」，「小」貼在自己身上)
+  if (t.def.label?.scale && t.def.label.noCardText && !held.some(c => CARDS[c].slot === 'scale' && accepts(t, c))) return null;
   return held.length > 0 ? t : null;
 }
 
@@ -244,6 +283,8 @@ function sayMissingCard(w: World, t: ObjState): void {
 export const labels: Mechanic = {
   id: 'labels',
   interactFallback: w => {
+    // v0.4 第五章 5-1 縮小時，範圍內的標籤都在桌上 (搆不到)、而且沒有搆得到的 → 說明
+    if (w.player.mode === '2d' && w.player.onGround && !labelTarget(w) && reachBlocked(w)) { say(w, 'msg.scale.tooSmall'); return true; }
     const miss = missingCardTarget(w);
     if (miss) { sayMissingCard(w, miss); return true; }
     const t = writableTarget(w);

@@ -24,6 +24,7 @@ import { bookWallModel, deskModel, innerShelfModel } from './mezz';
 import { foldCordModel, inkStepModel, rootPlateModel } from './cellar';
 import { inkLockModel, inkMarkModel, inkPipeModel, inkValveModel, markCaseModel } from './ink';
 import { archiveScareModel, chartBoardModel, lastDrawerModel, notesDeskModel, sealCabinetModel, symbolKeyModel, symbolLockModel } from './archive';
+import { miniCubeModel, miniGearModel, selfTagModel, starScaleModel, workbenchModel } from './attic';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
 
@@ -75,7 +76,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 4-3 封存書庫：符號櫃、符號鍵、畫到一半的展開圖、封存櫃、驚嚇 (暗場與殘影)
   symbolLock: symbolLockModel, symbolKey: symbolKeyModel, chartBoard: chartBoardModel, sealCabinet: sealCabinetModel, archiveScare: archiveScareModel,
   // 4-4 最後的抽屜：殘影 (追逐 2；同追逐 1 的剪影)、爸爸的筆記、最後一個抽屜 (墨閘 = 墨線鎖模型)、4-4a 的旗標物件 (不畫)
-  hatchChaser: chaserModel, notesDesk: notesDeskModel, lastDrawer: lastDrawerModel, chaseMark: () => ({ root: new THREE.Group() })
+  hatchChaser: chaserModel, notesDesk: notesDeskModel, lastDrawer: lastDrawerModel, chaseMark: () => ({ root: new THREE.Group() }),
+  // 5-1 天窗間：桌上的縮影、卡在它底層的齒輪、觀星儀的刻度盤、標籤「你」、工作桌
+  miniCube: miniCubeModel, miniGear: miniGearModel, starScale: starScaleModel, selfTag: selfTagModel, workbench: workbenchModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

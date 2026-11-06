@@ -32,7 +32,8 @@ export interface ShotDef {
   audio?: readonly AudioCue[];
 }
 
-export interface CutsceneTrigger { afterClear?: string; beforeFirst?: string; ending?: 'A' | 'B' }
+/** onRoom = afterClear 那一關是章內的房間通關 (第五章 5-1)：在房間通關畫面按「繼續探索」時播 (不是「前往下一章」) */
+export interface CutsceneTrigger { afterClear?: string; beforeFirst?: string; ending?: 'A' | 'B'; onRoom?: boolean }
 
 export interface CutsceneDef {
   id: CutsceneId;

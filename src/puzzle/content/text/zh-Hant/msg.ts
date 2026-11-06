@@ -59,6 +59,9 @@ export const msg = {
   'msg.dial.layerHere': '整層樓連你一起轉了過去。',
   'msg.dial.slice': '那一片轉了過去。',
   'msg.dial.sliceHere': '整片房間連你一起轉了過去。',
+  // v0.4 第五章 縮影的頂 / 底 (在縮影裡轉，外面的房子跟著轉)
+  'msg.dial.miniHere': '縮影的頂層轉了一下。抬頭——天窗間跟著轉了。',
+  'msg.dial.mini': '縮影的底層轉了一下。腳下很深的地方，有東西跟著轉了。',
   'msg.dial.slidHere': '房間連你一起滑進了空格。',
   // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
   'msg.cord.pulled': '繩子拉下去，停住了。',
@@ -82,6 +85,12 @@ export const msg = {
   'msg.scale.xiao': '量過了。它照著刻度，縮小了。',
   'msg.scale.removed': '尺度卡取了下來。它回到原來的大小。',
   'msg.scale.noRoom': '這裡放不下。',
+  // v0.4 第五章 5-1 你自己的標籤「你」(縮小 0.4)
+  'msg.scale.self': '量過了。你照著刻度，縮小了。',
+  'msg.scale.selfBack': '尺度卡取了下來。你回到原來的大小。',
+  'msg.scale.tooTight': '這裡太窄，變不回去。先離開縮影。',
+  'msg.scale.tooSmall': '你太小了，搆不到桌上。走遠一點，才看得到自己的標籤。',
+  'msg.scale.doorSmall': '縮成這樣，門把搆不到。',
   // 謎題標籤前按 E、匣裡沒有卡：卡貼在別的標籤上 (關卡自己的缺卡指路見 label.noCardText)
   'msg.label.cardElsewhere': '{card}還貼在別的標籤上。先去把它取下來。',
   // 字卡匣關著時按 1～3 / X：說明怎麼打開

@@ -181,6 +181,8 @@ export class PuzzleScene {
     const vy = (p.y - this.lastY) / sdt;
     this.lastX = p.x; this.lastY = p.y; this.lastZ = p.z;
     this.player.root.position.set(p.x, p.y, is2d ? PLAYER_2D : p.z);
+    // v0.4 第五章 5-1 縮小 (標籤「你」貼「小」)：外觀照倍率
+    this.player.root.scale.setScalar(p.scale ?? 1);
     this.player.update({ speed: speed > 8 ? 0 : speed, grounded: p.onGround, vy, facing: p.facing, mode: renderMode, t, dt });
   }
 }

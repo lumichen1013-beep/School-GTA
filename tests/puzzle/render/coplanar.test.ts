@@ -10,6 +10,7 @@ import { porch } from '../../../src/puzzle/content/levels/ch1/1-1-porch';
 import { shelf } from '../../../src/puzzle/content/levels/ch2/2-1-shelf';
 import { deep, mezz, print, reading } from '../../../src/puzzle/content/levels/ch2/rooms';
 import { THEMES } from '../../../src/puzzle/render/themes';
+import { runScript } from '../../../src/puzzle/devtools/runScript';
 import { bed, depths, gallery, night, nursery } from '../../../src/puzzle/content/levels/ch3/rooms';
 import { archive, drawer, furnace, hall, sealed, well } from '../../../src/puzzle/content/levels/ch4/rooms';
 import { east, engine, landing, meadow, north, sky, walkA, west } from '../../../src/puzzle/content/levels/ch5/rooms';
@@ -516,5 +517,21 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
       view.update('2d', 1 / 60, 1, cams.active('2d'));
       view.dispose();
     }
+  });
+
+  it('5-1 的狀態 (縮影的頂 / 底轉過、齒輪縮小平躺在桌上、星圖對上刻度、你縮小) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const w = newWorld(sky);
+    const layout = { sky: [1, 1, 2], walkA: [1, 2, 2], north: [1, 0, 1], west: [0, 1, 1], meadow: [1, 1, 1], east: [2, 1, 1], landing: [1, 2, 1], engine: [1, 1, 0] } as const;
+    w.ext = { cube: { links: {}, at: [1, 1, 2], layout, rots: { sky: 1, engine: 3 } }, dial: { active: true }, unlocked: [], labels: { gear: ['card.xiao'], self: ['card.xiao'] } };
+    const view = new PuzzleScene(w, THEMES.attic);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 10; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    for (const id of ['gear', 'starScale', 'mini']) w.byId.get(id)!.used = true;
+    runScript(w, [{ wait: 0.1 }]);
+    for (let i = 10; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, [sky.bounds.minX + 3, sky.bounds.maxX - 3])).toEqual([]);
+    w.player.mode = '2d';
+    view.update('2d', 1 / 60, 3, cams.active('2d'));
+    view.dispose();
   });
 });

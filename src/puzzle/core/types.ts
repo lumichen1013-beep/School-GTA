@@ -109,6 +109,8 @@ export interface Player {
   /** 進入 2D 前記下的 z */
   z3d: number;
   facing: number;
+  /** v0.4 第五章 5-1 玩家的尺寸倍率 (標籤「你」貼「小」= 0.4；外觀與碰撞箱、跳躍照比例)；沒有 = 1 */
+  scale?: number;
 }
 
 export interface World {
@@ -159,6 +161,8 @@ export interface WorldExt {
     /** 控制盤章節：全章此刻的房 ↔ 房接通 (glyph = 出門那一側門旁的活字) 與各房格位 */
     graph?: ReadonlyArray<{ room: string; door: ObjId; to: string; glyph?: string }>;
     layout?: Readonly<Record<string, readonly [number, number, number]>>;
+    /** v0.4 第五章 控制盤章節：各房此刻的朝向 (ORIENTS 序號；5-1a 星圖對刻度讀它) */
+    rots?: Readonly<Record<string, number>>;
   };
   labels?: Record<string, string[]>;
   /** 章節旗標 (唯讀；例：演出過的驚嚇 scare:*) */
@@ -167,6 +171,8 @@ export interface WorldExt {
   dial?: { active: boolean };
   /** v0.4 控制盤章節：此刻已解開的鎖扣 (組 id；章節層寫入、外觀只讀：第四章年輪根盤的根結) */
   unlocked?: readonly string[];
+  /** v0.4 第五章 5-1：人此刻在縮影裡 (縮小、站在縮影上；mechanics/attic 每步寫入)：轉動模式只列縮影的頂層 / 底層 (DialDef.miniOnly) */
+  mini?: boolean;
 }
 
 /**

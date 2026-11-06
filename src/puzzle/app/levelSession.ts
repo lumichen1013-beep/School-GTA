@@ -261,8 +261,11 @@ export class LevelSession {
     const spun = (layer || slice) && (r.state.cube?.rot[r.state.room] ?? 0) !== beforeRot;
     const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1] || before[2] !== after[2]);
     const here = moved || spun;
+    // v0.4 第五章 縮影的頂 / 底 (miniOnly)：在縮影裡轉，外面的房子跟著轉
+    const mini = c.t === 'turn' && !!r.spec.cube?.dial?.miniOnly?.includes(c.turn.group);
     const done = c.t === 'undo' ? 'msg.dial.undone'
-      : layer ? (here ? 'msg.dial.layerHere' : 'msg.dial.layer')
+      : mini ? (here ? 'msg.dial.miniHere' : 'msg.dial.mini')
+        : layer ? (here ? 'msg.dial.layerHere' : 'msg.dial.layer')
         : slice ? (here ? 'msg.dial.sliceHere' : 'msg.dial.slice')
           : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
     if (!moved) { say(this.world, done); return; }

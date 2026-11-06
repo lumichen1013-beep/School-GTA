@@ -57,9 +57,9 @@ describe('映射完整性', () => {
     n.chase('quiet'); // 沒在追 → 不動
     expect(n.stats().context).toBe('turn');
   });
-  it('過場：CUTSCENES 裡每個音訊提示都有對映 (序章 23 個 + cs:ch2 新增 pages.turn / leaves = 25；cs:night 新增 paper.tear / birds / kettle = 28)；對到的音效都存在；鏡頭音樂只指向存在的鏡頭', () => {
+  it('過場：CUTSCENES 裡每個音訊提示都有對映 (序章 23 個 + cs:ch2 新增 pages.turn / leaves = 25；cs:night 新增 paper.tear / birds / kettle = 28；cs:attic 新增 switch.view / chord = 30)；對到的音效都存在；鏡頭音樂只指向存在的鏡頭', () => {
     const cues = CUTSCENES.flatMap(c => c.shots.flatMap(s => (s.audio ?? []).map(a => a.cue)));
-    expect(new Set(cues).size).toBe(28);
+    expect(new Set(cues).size).toBe(30);
     expect(cues.filter(c => !(c in CUE_MAP))).toEqual([]);
     for (const [cue, as] of Object.entries(CUE_MAP)) {
       expect(as.length, cue).toBeGreaterThan(0);

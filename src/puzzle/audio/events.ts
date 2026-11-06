@@ -112,7 +112,7 @@ export const SHOT_MUSIC: Readonly<Record<string, Readonly<Record<number, readonl
 };
 
 /** 過場 → 配樂 (沒列的過場 = 目前章節的配樂、安靜情境) */
-export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:ch2': 'ch2', 'cs:ch3': 'ch3', 'cs:night': 'ch4', 'cs:endA': 'endA', 'cs:endB': 'endB' };
+export const CUTSCENE_SCORE: Readonly<Record<string, ScoreId>> = { 'cs:prologue': 'prologue', 'cs:ch2': 'ch2', 'cs:ch3': 'ch3', 'cs:night': 'ch4', 'cs:attic': 'ch5', 'cs:endA': 'endA', 'cs:endB': 'endB' };
 
 /** 過場 (calmTension) 降一半音量的音效 (分鏡 2.5：cs:night 的低頻長音與撕紙聲) */
 export const CALM_HALF: readonly string[] = ['sfx.cs.paper.tear', 'sfx.cs.wood.groan', 'sfx.cs.circle.hum'];
@@ -228,7 +228,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 4-3：符號櫃、封存櫃
   symbolLock: 'sfx.drawer.open', sealCabinet: 'sfx.latch.open',
   // 4-4：爸爸的筆記、最後一個抽屜、梯口轉開 (墨閘 = inkLock)
-  notesDesk: 'sfx.note.read', lastDrawer: 'sfx.drawer.open', chaseMark: 'sfx.latch.open'
+  notesDesk: 'sfx.note.read', lastDrawer: 'sfx.drawer.open', chaseMark: 'sfx.latch.open',
+  // 第五章 5-1：星圖對上刻度 (溫和的亮燈聲)、齒輪掉出軌道 (卡榫打開)、縮影的底層轉過 (轉動聲)
+  starScale: 'sfx.lamp.on', miniGear: 'sfx.latch.open', miniCube: 'sfx.dial.turn'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

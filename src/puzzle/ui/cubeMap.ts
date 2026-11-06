@@ -9,6 +9,9 @@ export type MapLink = 'room' | 'wall' | 'frame';
 export interface MapCell { x: number; y: number; kind: 'room' | 'empty' | 'solid' | 'corridor'; room: string | null; name: string; short?: string; current: boolean; piece?: { px: number; py: number; drawing: string }; beam?: Side[] }
 /** via = 接通時通道的型別 (兩側較窄者；拱門對拱門才是 arch) */
 export interface MapDoor { room: string; door: string; x: number; y: number; side: Side; kind: DoorKind; link: MapLink; via?: 'door' | 'arch' }
+/** v0.4 第五章 格子小於這個 (px；手機的三層展開圖)：房名較小、記號畫完再重寫一次房名、格內屋框只畫記號 */
+const SMALL_CELL = 72;
+
 /** inCell = 寫在格內 (v0.4 第五章 三層並排：東 / 西兩側的屋框在層與層之間的空欄，寫在外面會壓到隔壁層) */
 export interface MapFrame { x: number; y: number; side: Side; kind: FrameKind; name: string; inCell?: boolean }
 export interface MapPreview {
@@ -422,7 +425,8 @@ export class CubeMapOverlay {
     const oy = mt + (H - mt - mb - size * m.rows) / 2;
     const cx = (x: number) => ox + (x + 0.5) * size;
     const cy = (y: number) => oy + (y + 0.5) * size;
-    const nameSize = Math.max(14, Math.min(22, size * 0.15));
+    // 格子小 (手機的三層展開圖，< 72 px)：房名字級下限 11 (原 14 會頂到門 / 梯口記號)
+    const nameSize = Math.max(size < SMALL_CELL ? 11 : 14, Math.min(22, size * 0.15));
     const tp = t?.preview ?? null;
 
     // 轉動模式的預覽：直接畫轉後的樣子 (格、門)；移動的房間加藍色虛線框，虛線箭頭由原位指向新位置
@@ -450,6 +454,8 @@ export class CubeMapOverlay {
     }
     if (tp) {
       for (const d of tp.doors) this.door(g, d, cx(d.x), cy(d.y), size, 1);
+      // 格子小：門 / 梯口記號畫完再描紙色邊重寫一次房名 (記號不蓋字)
+      if (size < SMALL_CELL) for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'text', true);
       // v0.4 第五章 星環盤：被轉的那一片 (三層裡的格子) 描藍色虛線框
       if (tp.slab) {
         g.save();
@@ -492,6 +498,7 @@ export class CubeMapOverlay {
     // 預覽中會改變的門 (同一格) 只畫轉後的樣子，不與現況疊在一起
     const replaced = (d: MapDoor) => !!m.preview?.doors.some(p => p.door === d.door && p.room === d.room && p.x === d.x && p.y === d.y);
     for (const d of m.doors) if (!replaced(d)) this.door(g, d, cx(d.x), cy(d.y), size, 1);
+    if (size < SMALL_CELL) for (const c of cells) this.cell(g, c, ox + c.x * size, oy + c.y * size, size, nameSize, font, m.legend.you, 'text', true);
 
     const pv = m.preview;
     if (pv?.moved) {
@@ -808,6 +815,15 @@ export class CubeMapOverlay {
     g.font = font;
     // v0.4 第五章 三層並排的東 / 西屋框 (落在層間的空欄)：寫在格內那一側的邊上 (直書兩三字太擠 → 縮字橫寫，貼著那一側)
     if (f.inCell) {
+      // 格子小 (手機)：只畫「☼」記號 (名字寫進去會壓到房名)
+      if (s < SMALL_CELL) {
+        g.font = font.replace(/\d+px/, `${Math.max(10, Math.round(s * 0.16))}px`);
+        g.textBaseline = 'bottom';
+        g.textAlign = dx > 0 ? 'right' : 'left';
+        g.fillText('\u263C', cx + dx * (s / 2 - 6), cy + s / 2 - 5);
+        g.restore();
+        return;
+      }
       const px = Math.max(9, Math.round(s * 0.12));
       g.font = font.replace(/\d+px/, `${px}px`);
       g.textBaseline = 'bottom';

@@ -4,7 +4,7 @@ import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World, Wor
 import { createWorld, type WorldOptions } from './world';
 import {
   addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, localSide, OPPOSITE, rotateSide, sameCell,
-  type Cell, type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DoorInfo, type Side, type Turn, type TurnBlockCube
+  type Cell, type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DialJamDef, type DoorInfo, type Side, type Turn, type TurnBlockCube
 } from './cube';
 import { boxAt, clamp, objBox, overlaps } from './geometry';
 import { solidsFor } from './presence';
@@ -176,7 +176,7 @@ function cubeExt(spec: ChapterSpec, state: ChapterState, labels: Readonly<Record
     return [{ room: l.from.room, door: l.from.door, to: l.to.room, ...(d?.glyph ? { glyph: d.glyph } : {}) }];
   });
   const layout = Object.fromEntries(Object.entries(state.cube.pos).map(([r, c]) => [r, [c[0], c[1], c[2]] as const]));
-  return { ...base, graph, layout };
+  return { ...base, graph, layout, rots: { ...state.cube.rot } };
 }
 
 /** 轉動後只更新門的接法 (標籤 / 旗標是 World 的即時狀態，不覆寫；門牌以即時標籤算) */
@@ -483,6 +483,26 @@ export function groupHidden(spec: ChapterSpec, state: ChapterState, group: strin
   return (spec.cube?.dial?.locks ?? []).some(l => l.group === group && !!l.rooms && !l.rooms.includes(state.room));
 }
 
+/** v0.4 第五章 人此刻在縮影裡 (mechanics/attic 寫入 World.ext.mini) */
+export const inMini = (w: World): boolean => !!w.ext.mini;
+
+/** v0.4 第五章 這一組此刻在轉動模式裡 (縮影裡 = 只有 miniOnly 的組；縮影外 = 只有不是 miniOnly 的組) */
+export function groupInReach(spec: ChapterSpec, group: string, world: World): boolean {
+  const mini = spec.cube?.dial?.miniOnly?.includes(group) ?? false;
+  return mini === inMini(world);
+}
+
+/** v0.4 第五章 5-1b 這一組此刻被卡住 (DialDef.jams：解開的旗標還沒成立)；回傳那一筆 (沒卡 = undefined) */
+export function groupJam(spec: ChapterSpec, state: ChapterState, group: string, world?: World): DialJamDef | undefined {
+  return (spec.cube?.dial?.jams ?? []).find(j => j.group === group && jamActive(j, state.cube, () => !!j.until && !lockOpen(j.until, spec, state, world)));
+}
+
+/** 一筆 DialDef.jams 此刻卡著 (home：那間房不在 at；until：untilShut() = 旗標還沒成立)；validateDial 共用 */
+export function jamActive(j: DialJamDef, cube: CubeState | null, untilShut: () => boolean): boolean {
+  if (j.home) { const c = cube?.pos[j.home.room]; if (!c || !sameCell(c, j.home.at)) return true; }
+  return j.until !== undefined && untilShut();
+}
+
 /** 新解開的鎖扣寫回 state.unlocked (R 會還原)，並清空回退堆疊 (拿到旗標 = 本段結束)；added = 這次新解開的組 */
 export function refreshUnlocks(cs: ChapterSession): { cs: ChapterSession; added: string[] } {
   if (!isDialChapter(cs.spec)) return { cs, added: [] };
@@ -566,8 +586,10 @@ function tryTurn(cs: ChapterSession, t: Turn): { cube: CubeState; turns: { left:
   const def = spec.cube;
   if (!def || !state.cube || !isDialChapter(spec)) return { blocked: 'noCube' };
   if (!state.dial) return { blocked: 'noDial' };
-  if (!def.dial?.groups.some(g => g.id === t.group) || def.dial.miniOnly?.includes(t.group)) return { blocked: 'noGroup' };
+  // v0.4 第五章 縮影：縮影裡只轉得到縮影的頂 / 底 (miniOnly)，縮影外轉不到它們
+  if (!def.dial?.groups.some(g => g.id === t.group) || !groupInReach(spec, t.group, world)) return { blocked: 'noGroup' };
   if (isLocked(spec, state, t.group, world)) return { blocked: 'locked' };
+  if (groupJam(spec, state, t.group, world)) return { blocked: 'jammed' };
   const why = dialCheck(cs, t);
   if (why) return { blocked: why };
   const turns = state.turns ?? { left: turnBudgetFor(spec, state, world), undo: [] };
@@ -584,6 +606,13 @@ function tryTurn(cs: ChapterSession, t: Turn): { cube: CubeState; turns: { left:
 export function dialTurn(cs: ChapterSession, t: Turn): ChapterSession | { blocked: DialBlock } {
   const r = tryTurn(cs, t);
   if ('blocked' in r) return r;
+  // v0.4 第五章 5-1b DialDef.marks：這一組第一次轉成功 → 當前房的那個物件 used (doneFlag → done；外殼清空回退堆疊)
+  for (const m of cs.spec.cube!.dial!.marks ?? []) {
+    const o = m.group === t.group ? cs.world.byId.get(m.obj) : undefined;
+    if (!o || o.used) continue;
+    o.used = true;
+    if (o.def.doneFlag) cs.world.events.push({ t: 'done', flag: o.def.doneFlag });
+  }
   return afterTurn(cs, r.cube, { left: r.turns.left - 1, undo: [...r.turns.undo, { group: t.group, dir: t.dir }] });
 }
 

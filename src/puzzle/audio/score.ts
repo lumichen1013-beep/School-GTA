@@ -227,6 +227,11 @@ export function clearPhrase(s: Score): NoteEvent[] {
   return out;
 }
 
+/** v0.4 第五章 E♭ 分層：三扇窗 (5-2 東窗 / 5-3 西窗 / 5-4 北窗) 的完成旗標 */
+export const CH5_WINDOWS: readonly string[] = ['5-2', '5-3', '5-4'];
+/** 第五章配樂的層數 = 三扇窗的完成數 (0～3；規格「第五章共用規則」音訊) */
+export const ch5Stage = (done: ReadonlySet<string>): number => CH5_WINDOWS.filter(f => done.has(f)).length;
+
 // ── 強度 (規格 9.1 強度曲線；moodTypes 建好後改讀 LevelEntry.mood) ──
 
 const INTENSITY: Readonly<Record<string, 0 | 1 | 2 | 3>> = {

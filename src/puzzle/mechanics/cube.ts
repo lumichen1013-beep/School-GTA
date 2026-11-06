@@ -144,6 +144,8 @@ export const cube: Mechanic = {
       usableWhenUsed: true,
       interact: (w, o) => {
         if (o.used && o.def.type === 'cubeDoor' && o.def.kind === 'chapter') return;
+        // v0.4 第五章 5-1 縮小了 (標籤「你」貼著「小」)：門把搆不到 (不換房；變回原尺寸再走)
+        if ((w.player.scale ?? 1) < 1) { say(w, 'msg.scale.doorSmall'); return; }
         if (o.def.type === 'cubeDoor' && o.def.hole) { if (doorLink(w, o).to === 'room') w.events.push({ t: 'door', door: o.def.id }); return; }
         const l = doorLink(w, o);
         if (l.to === 'room') w.events.push({ t: 'door', door: o.def.id });

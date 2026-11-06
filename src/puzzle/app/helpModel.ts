@@ -20,6 +20,8 @@ export interface HelpContext {
   turnMode: boolean;
   /** 章節過場 / 旁白進行中 (不出小提示) */
   busy: boolean;
+  /** v0.4 觸控裝置 (粗指標)：小提示都是鍵盤操作 (方向鍵 / Enter / H…)，觸控不顯示 (手機上會壓住「藏寶圖」模式標籤) */
+  touch?: boolean;
 }
 
 export interface HelpView {
@@ -47,7 +49,7 @@ export function deriveHelpView(open: boolean, ctx: HelpContext, text: Text, b: B
 
 /** 此刻該說的一次性小提示 (說過的不再說；過場中不說)：字卡匣 / 轉動模式優先於「怎麼打開操作說明」 */
 export function pendingTip(seen: readonly string[], ctx: HelpContext): TipId | null {
-  if (!ctx.inLevel || ctx.busy) return null;
+  if (!ctx.inLevel || ctx.busy || ctx.touch) return null;
   if (ctx.trayOpen && !seen.includes('cards')) return 'cards';
   if (ctx.turnMode && !seen.includes('turn')) return 'turn';
   if (!ctx.mapOpen && !ctx.trayOpen && !ctx.turnMode && !seen.includes('help')) return 'help';

@@ -4,7 +4,7 @@ import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
 import { addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, isBlocked, rotateSide, SIDES, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn, type TurnGroup } from '../core/cube';
-import { activeInk, chapterLinks, dialBlocked, groupHidden, inkPaths, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { activeInk, chapterLinks, dialBlocked, groupHidden, groupInReach, groupJam, inMini, inkPaths, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
@@ -281,7 +281,8 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const def = spec.cube!;
   const cube = state.cube!;
   // v0.4 第五章：鎖扣限定房間、人不在那幾間房的組不列 (例：不在東窗沒有「東窗的窗框」)
-  const all = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id) && !groupHidden(spec, state, g.id));
+  // v0.4 第五章 縮影 (5-1a)：人在縮影裡只列縮影的頂 / 底 (miniOnly)；縮影外不列它們
+  const all = (def.dial?.groups ?? []).filter(g => groupInReach(spec, g.id, cs.world) && !groupHidden(spec, state, g.id));
   const groups = all.filter(g => g.kind !== 'slideCell');
   const headers: TurnHeader[] = [];
   /** 標頭的名稱 (不含「鎖著」)：說明列用 */
@@ -360,7 +361,13 @@ function ringHeaders(cs: ChapterSession, text: Text, groups: readonly TurnGroup[
   }
   for (const g of groups.filter(x => x.kind === 'spin')) {
     const room = g.room ? text(spec.rooms[g.room]?.shortKey ?? spec.rooms[g.room]?.titleKey ?? g.room) : '';
-    rings.push({ name: g.room ? text('ui.turn.ring.frame', { room }) : text('ui.turn.ring.face', { part: text(PART_KEYS[g.axis ?? 'z'][Math.min(2, g.index)]) }), kind: 'spin' });
+    const mini = def.dial?.miniOnly?.includes(g.id);
+    rings.push({
+      name: g.room ? text('ui.turn.ring.frame', { room })
+        : mini ? text('ui.turn.ring.mini', { part: text(g.index === 0 ? 'ui.turn.mini.bottom' : 'ui.turn.mini.top') })
+          : text('ui.turn.ring.face', { part: text(PART_KEYS[g.axis ?? 'z'][Math.min(2, g.index)]) }),
+      kind: 'spin'
+    });
     add(rings.length - 1, [g]);
   }
   return { rings, heads };
@@ -378,7 +385,7 @@ function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['sele
   const g = sel ? all.find(x => x.id === sel.group) : undefined;
   const blocked = sel && g ? dialBlocked(cs, sel as Turn) : null;
   let preview: TurnModeModel['preview'] = null;
-  let caption = text(slide ? 'ui.turn.hintSlide' : rings ? 'ui.turn.hintRing' : 'ui.turn.hint');
+  let caption = text(slide ? 'ui.turn.hintSlide' : inMini(cs.world) ? 'ui.turn.hintMini' : rings ? 'ui.turn.hintRing' : 'ui.turn.hint');
   if (sel && g) {
     const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index, def.dims[2]);
     if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: blockText(cs, text, sel.group, blocked) });
@@ -411,7 +418,9 @@ function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['sele
 /** 轉不動的說明：鎖住的組若有自己的說明 (DialLock.text；第四章「下圈年輪被樹根結住了。」) 用它，否則照 DIAL_BLOCK_MSG */
 export function dialBlockKey(cs: ChapterSession, group: string | undefined, blocked: string): string {
   const lock = blocked === 'locked' && group !== undefined ? cs.spec.cube?.dial?.locks.find(l => l.group === group && l.text) : undefined;
-  return lock?.text ?? DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG];
+  // v0.4 第五章 5-1b 卡住的組 (DialDef.jams) 的專屬說明
+  const jam = blocked === 'jammed' && group !== undefined ? groupJam(cs.spec, cs.state, group, cs.world) : undefined;
+  return lock?.text ?? jam?.text ?? DIAL_BLOCK_MSG[blocked as keyof typeof DIAL_BLOCK_MSG];
 }
 const blockText = (cs: ChapterSession, text: Text, group: string, blocked: string): string => text(dialBlockKey(cs, group, blocked));
 

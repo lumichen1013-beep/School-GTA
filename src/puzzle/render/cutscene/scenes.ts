@@ -1,4 +1,4 @@
-// 序章 12 鏡、cs:ch2 三鏡、cs:ch3 三鏡與 cs:night 六鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
+// 序章 12 鏡、cs:ch2 三鏡、cs:ch3 三鏡、cs:night 六鏡與 cs:attic 四鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
 // 顏色一律取自主題 (render/themes)；畫面內的字由 labels 傳入 (文字表)；時間 t = 鏡頭秒數 (含轉場)
 import type { Palette } from '../themes';
 import {
@@ -1672,6 +1672,144 @@ const nightFlip: SceneDraw = s => {
   vignette(s, 450, 330, 240, 'rgba(8,6,4,A)', 0.55);
 };
 
+// ── cs:attic 閣樓前「三扇天窗」(4 鏡)：天窗間、梁上的字條、三層展開圖、時間戳卡 (光敏：星光只緩慢浮動、不閃爍) ──
+
+/** 閣樓的色 (規格「第五章共用規則」閣樓主題色板) */
+const ATTIC = { wall: '#7a6650', wall2: '#5a4a3a', roof: '#5e4b3a', beam: '#4a3828', floor: '#8a7258', floor2: '#7c664e', night: '#1f2547', star: '#e6e9f2', dust: '#f2dda6', gold: '#c9b27f' };
+
+/** 斜屋頂的閣樓剪紙 (屋面從兩側斜到中脊、椽一根根、三扇天窗 (星空)、地板)；beam = 星光柱的強度 0～1 */
+function atticRoom(s: SceneCtx, beam: number): void {
+  const { g, view } = s;
+  g.fillStyle = ATTIC.wall; g.fillRect(view.x0 - 80, 300, view.x1 - view.x0 + 160, 260);
+  g.fillStyle = ATTIC.floor; g.fillRect(view.x0 - 80, 520, view.x1 - view.x0 + 160, B(s) - 520);
+  g.fillStyle = ATTIC.floor2;
+  for (let y = 548; y < B(s); y += 56) g.fillRect(view.x0 - 80, y, view.x1 - view.x0 + 160, 24);
+  // 屋面 (兩片往中脊收)
+  cut(g, roughPoly([[L(s), 330], [450, 40], [R(s), 330], [R(s), view.y0 - 80], [L(s), view.y0 - 80]], 3101, 1.4), ATTIC.roof, { shadow: 6, lw: 3 });
+  g.strokeStyle = ATTIC.beam; g.lineWidth = 9;
+  for (let k = -4; k <= 4; k++) { g.beginPath(); g.moveTo(450 + k * 110, 40 + Math.abs(k) * 72); g.lineTo(450 + k * 150, 330); g.stroke(); }
+  cut(g, roughRect(L(s), 318, R(s) - L(s), 22, 3102, 1), ATTIC.beam, { shadow: 4, lw: 2 });
+  // 三扇天窗 (屋面上的方窗；窗外深靛星空)
+  const wins: Pt[] = [[250, 150], [450, 90], [650, 150]];
+  for (const [i, [x, y]] of wins.entries()) {
+    cut(g, roughRect(x - 46, y - 36, 92, 72, 3110 + i, 0.8), ATTIC.night, { shadow: 3, lw: 3 });
+    g.fillStyle = ATTIC.star;
+    const r = rng(3120 + i);
+    for (let k = 0; k < 9; k++) { g.beginPath(); g.arc(x - 38 + r() * 76, y - 28 + r() * 56, 1.2 + r() * 1.4, 0, TAU); g.fill(); }
+    g.strokeStyle = ATTIC.beam; g.lineWidth = 4; g.beginPath(); g.moveTo(x, y - 36); g.lineTo(x, y + 36); g.stroke();
+  }
+  // 天花板的星圖 (金線連成的星座)
+  g.strokeStyle = 'rgba(201,178,127,0.7)'; g.lineWidth = 1.6;
+  const c = rng(3130);
+  for (let k = 0; k < 3; k++) { g.beginPath(); let x = 120 + k * 260 + c() * 40, y = 230 + c() * 40; g.moveTo(x, y); for (let j = 0; j < 4; j++) { x += 30 + c() * 30; y += (c() - 0.5) * 40; g.lineTo(x, y); } g.stroke(); }
+  // 三道星光 (從三扇天窗斜落到三個不同的地方；只緩慢增強，不閃爍)
+  if (beam > 0) {
+    const ends: Pt[] = [[170, 600], [470, 640], [760, 600]];
+    additive(g, () => {
+      for (const [i, [x, y]] of wins.entries()) {
+        const gr = g.createLinearGradient(x, y, ends[i][0], ends[i][1]);
+        gr.addColorStop(0, `rgba(242,221,166,${(0.32 * beam).toFixed(3)})`);
+        gr.addColorStop(1, 'rgba(242,221,166,0)');
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(x - 34, y + 30); g.lineTo(x + 34, y + 30); g.lineTo(ends[i][0] + 50, ends[i][1]); g.lineTo(ends[i][0] - 50, ends[i][1]); g.closePath(); g.fill();
+      }
+    });
+  }
+  // 觀星儀 (三個交叉的星環 + 中心綠石) 與工作桌上的縮影
+  g.save(); g.translate(330, 470);
+  g.strokeStyle = '#b08a4a'; g.lineWidth = 5;
+  for (const [rx, ry, a] of [[52, 52, 0], [52, 18, 0.5], [18, 52, -0.4]] as const) { g.beginPath(); g.ellipse(0, 0, rx, ry, a, 0, TAU); g.stroke(); }
+  g.fillStyle = '#5aa06a'; g.beginPath(); g.arc(0, 0, 8, 0, TAU); g.fill();
+  cut(g, roughRect(-8, 52, 16, 50, 3140, 0.4), '#6b5038', { shadow: 2, lw: 1.6 });
+  g.restore();
+  cut(g, roughRect(540, 470, 190, 18, 3141, 0.8), '#6e4a30', { shadow: 4, lw: 2 });
+  for (const x of [552, 712]) cut(g, roughRect(x, 488, 12, 60, 3142 + x, 0.4), '#5a3e28', { shadow: 2, lw: 1.4 });
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cut(g, roughRect(600 + i * 16, 422 + j * 16, 15, 15, 3150 + i * 3 + j, 0.3), '#c9a878', { shadow: 0, lw: 1.2 });
+  motes(g, 120, 140, 660, 420, 18, s.t, 3160, ATTIC.dust, 2, s.reduce);
+}
+
+/** cs:attic 鏡 1：閣樓的三扇天窗、三道星光落在三個不同的地方 (由下往上緩搖：星光 2 秒緩緩出現) */
+const atticBeams: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#2a2420'], [1, '#3a2e24']]));
+  layer(s, 1, () => atticRoom(s, s.reduce ? 1 : smooth(0.6, 2.6, s.t)), [450, 330]);
+  vignette(s, 450, 330, 260, 'rgba(10,8,6,A)', 0.5);
+};
+
+/** cs:attic 鏡 2：梁上一張爸爸的字條 (正常字跡；「北邊」後面的問號是後來補上的較深墨色) */
+const atticNote: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#3a2e24'], [1, '#2a2018']]));
+  layer(s, 1, () => {
+    // 粗梁
+    cut(g, roughRect(L(s), 140, R(s) - L(s), 90, 3201, 1.6), ATTIC.beam, { shadow: 8, lw: 3 });
+    woodGrain(g, L(s), R(s), 150, 220, 3202, 'rgba(20,10,4,0.3)');
+    // 圖釘與字條
+    cut(g, roughPoly([[200, 214], [700, 206], [712, 470], [196, 478]], 3203, 1.2), '#ecdcb6', { shadow: 10, lw: 2.4 });
+    g.fillStyle = '#a5452d'; g.beginPath(); g.arc(452, 226, 9, 0, TAU); g.fill();
+    // 兩行字 (正常字跡)；「北邊……是誰」後面的問號是後來補上的 (較深的墨、稍大)
+    const l2 = s.labels.line2 ?? '';
+    serif(g, s.labels.line1 ?? '', 250, 320, 30, INK, { align: 'left' });
+    serif(g, l2, 250, 390, 30, INK, { align: 'left' });
+    g.font = '700 30px serif';
+    serif(g, s.labels.mark ?? '', 254 + g.measureText(l2).width + 6, 392, 34, '#1a1008', { align: 'left', weight: 700 });
+  }, [450, 340]);
+  vignette(s, 450, 340, 250, 'rgba(10,6,2,A)', 0.55);
+};
+
+/** 展開圖的一層 (3×3 格；rooms[y][x] = 'room' / 'walk' / '')；windows = 那一層錯開一格的窗門 (格位 + 斷線方向) */
+function mapLayer(g: CanvasRenderingContext2D, x0: number, y0: number, s: number, cells: readonly string[], name: string): void {
+  serif(g, name, x0 + 1.5 * s, y0 - 14, 20, INK);
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const kind = cells[y][x];
+    const px = x0 + x * s, py = y0 + y * s;
+    if (kind === '.') { g.strokeStyle = 'rgba(58,38,24,0.4)'; g.setLineDash([5, 5]); g.lineWidth = 1.4; g.strokeRect(px + 4, py + 4, s - 8, s - 8); g.setLineDash([]); continue; }
+    if (kind === '=') { g.fillStyle = '#8a6a48'; g.fillRect(px + s * 0.22, py + s * 0.42, s * 0.56, s * 0.16); continue; }
+    cut(g, roughRect(px + 4, py + 4, s - 8, s - 8, 3300 + x + y * 3 + x0, 0.4), kind === 'W' ? '#f7e7c4' : '#f1e7d2', { shadow: 0, lw: 2.4 });
+    if (kind === 'W') {
+      // 窗的房：一扇門錯開了一格 (房內側的斷線 + ×)
+      g.strokeStyle = '#a5452d'; g.lineWidth = 3; g.setLineDash([5, 4]);
+      g.beginPath(); g.moveTo(px + s * 0.3, py + 10); g.lineTo(px + s * 0.7, py + 10); g.stroke(); g.setLineDash([]);
+      g.beginPath(); g.moveTo(px + s / 2 - 6, py + 16); g.lineTo(px + s / 2 + 6, py + 28); g.moveTo(px + s / 2 + 6, py + 16); g.lineTo(px + s / 2 - 6, py + 28); g.stroke();
+      g.fillStyle = '#1f2547'; g.fillRect(px + s * 0.34, py + s * 0.5, s * 0.32, s * 0.22);
+    }
+  }
+}
+
+/** cs:attic 鏡 3：藏寶圖紙上的 3×3×3 展開圖 (三層並排)；三扇窗的門各自錯開一格；天窗外是星圖 (鏡頭由左往右平移) */
+const atticMap: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#f1e7d2'], [1, '#e2d6bc']]));
+  layer(s, 1, () => {
+    // 星圖的天窗 (上緣；星點 + 金線，不是夜空的漸層)
+    cut(g, roughRect(150, 60, 600, 110, 3401, 1), '#ece0c4', { shadow: 3, lw: 2 });
+    g.strokeStyle = 'rgba(176,138,74,0.8)'; g.lineWidth = 1.6;
+    const r = rng(3402);
+    let px = 180, py = 120;
+    g.beginPath(); g.moveTo(px, py);
+    for (let k = 0; k < 14; k++) { px += 36 + r() * 10; py = 90 + r() * 60; g.lineTo(px, py); }
+    g.stroke();
+    g.fillStyle = INK;
+    for (let k = 0; k < 24; k++) { g.beginPath(); g.arc(170 + r() * 560, 76 + r() * 80, 1.6 + r() * 1.6, 0, TAU); g.fill(); }
+    const S = 64;
+    mapLayer(g, 90, 250, S, ['...', '.R.', '.=.'], s.labels.top ?? '');
+    mapLayer(g, 350, 250, S, ['=W.', 'WRW', '.R='], s.labels.mid ?? '');
+    mapLayer(g, 610, 250, S, ['...', '=R.', '...'], s.labels.bottom ?? '');
+  }, [450, 350]);
+  vignette(s, 450, 350, 300, 'rgba(60,40,20,A)', 0.25);
+};
+
+/** cs:attic 鏡 4：時間戳卡 (深靛紙、淡入淡出；字幕即卡上的字) */
+const atticStamp: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#1f2547'], [1, '#141830']]));
+  g.fillStyle = 'rgba(230,233,242,0.7)';
+  const r = rng(3501);
+  for (let k = 0; k < 60; k++) { g.beginPath(); g.arc(view.x0 + r() * (view.x1 - view.x0), view.y0 + r() * (view.y1 - view.y0) * 0.8, 0.8 + r() * 1.4, 0, TAU); g.fill(); }
+  cut(g, roughRect(300, 290, 300, 90, 3502, 1.2), '#ecdcb6', { shadow: 8, lw: 2.4 });
+  g.strokeStyle = 'rgba(58,38,24,0.5)'; g.lineWidth = 2; g.strokeRect(316, 304, 268, 62);
+};
+
 /** 未登錄 sceneId 的退回畫面：素紙 */
 export const blankScene: SceneDraw = s => fillView(s, vGrad(s.g, s.view.y0, s.view.y1, [[0, s.pal.bgTop], [1, s.pal.bgBottom]]));
 
@@ -1700,5 +1838,9 @@ export const PAPER_SCENES: Readonly<Record<string, SceneDraw>> = {
   'night.dawn': nightDawn,
   'night.tear': nightTear,
   'night.morning': nightMorning,
-  'night.flip': nightFlip
+  'night.flip': nightFlip,
+  'attic.beams': atticBeams,
+  'attic.note': atticNote,
+  'attic.map': atticMap,
+  'attic.stamp': atticStamp
 };

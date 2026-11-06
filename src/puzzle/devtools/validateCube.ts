@@ -1,7 +1,7 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
 import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, localSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
-import { inkPaths, lightPaths, lightState, type LightHit } from '../core/chapter';
+import { inkPaths, jamActive, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
 import type { CH1_MODEL } from '../content/cubes/ch1';
@@ -174,6 +174,8 @@ export interface DialPuzzle {
    * (3-4b：「小」要從夜溫室親手帶到深處；規格「≤ 10 步內閂住時的排列」)
    */
   span?: number;
+  /** v0.4 第五章 這一組轉成功的那一刻完成 (5-1b：縮影的底層第一次轉；人在 p.room、前置齊、卡片條件成立) */
+  turn?: string;
 }
 
 /**
@@ -216,6 +218,11 @@ export interface DialModel {
    * (兩側都封 = 兩扇門各一筆)；dialModelOf 由各房的 cubeDoor 自動組出
    */
   doorLocks?: readonly DialDoorLock[];
+  /**
+   * v0.4 第五章 縮影 (P10；規格「5-1 天窗間（細化）」抽象模型)：card 此刻成立 (例 'xiao@self' = 「小」貼在你身上) = 縮小——
+   * 穿不過門；人在 room 時轉得到 DialDef.miniOnly 的組 (沒有 mini = miniOnly 的組不進模型)。DialDef.jams (組被卡住) 依旗標判定
+   */
+  mini?: { room: string; card?: string };
 }
 
 /** both = 兩面都封 (cubeDoor.sealed.both)：人也不能從對面經這扇門走進來 */
@@ -387,16 +394,19 @@ interface Arrangements {
 }
 
 /** 控制盤能轉到的所有魔方排列 (不管鎖扣；BFS)；超過 limit → overflow */
-function arrangementsOf(def: CubeDef, limit: number): Arrangements {
-  const groups = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id));
+function arrangementsOf(def: CubeDef, limit: number, withMini = false): Arrangements {
+  const groups = (def.dial?.groups ?? []).filter(g => withMini || !def.dial?.miniOnly?.includes(g.id));
   const opts = groups.flatMap(g => turnDirs(def, g.id).map(dir => ({ group: g.id, dir })));
   const s0 = initialCube(def);
   // 第五章 走廊格同類合併 (cubeKey 帶 def)；沒有走廊格的魔方 = 原樣
   const index = new Map<string, number>([[cubeKey(s0, def), 0]]);
   const states = [s0];
   const next: number[] = [];
+  // v0.4 第五章 只看排列的卡住 (DialDef.jams 的 home，沒有 until)：那個排列下這一組轉不動 (縮影對不上房子)
+  const homeJams = (def.dial?.jams ?? []).filter(j => j.home && j.until === undefined);
   for (let a = 0; a < states.length; a++) {
     for (const o of opts) {
+      if (homeJams.some(j => j.group === o.group && jamActive(j, states[a], () => false))) { next.push(-1); continue; }
       const r = applyTurn(def, states[a], o);
       if (isBlocked(r)) { next.push(-1); continue; }
       const k = cubeKey(r, def);
@@ -483,10 +493,18 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   // 卡榫：依旗標決定哪些房卡住 (旗標組合 → 卡住的房；沒有 jams = 永遠空)
   const jamMemo = new Map<number, Set<string>>();
   const jamsAt = (f: number, c: number): Set<string> => { const key = f * C + c; let j = jamMemo.get(key); if (!j) { j = jammedRooms(m, flagSet(f), ref => cs.at(c, ref)); jamMemo.set(key, j); } return j; };
+  // v0.4 第五章 組被卡住 (DialDef.jams；旗標還沒成立)
+  const groupJams = (def.dial?.jams ?? []).map(j => ({ j, i: j.until === undefined ? -2 : pid.get(j.until) ?? -1 }));
   const optJammed = (a: number, o: number, f: number, c: number): boolean => {
+    if (groupJams.some(({ j, i }) => j.group === arr.opts[o].group && jamActive(j, arr.states[a], () => i === -1 || (i >= 0 && (f & (1 << i)) === 0)))) return true;
     const j = jamsAt(f, c);
     return j.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => j.has(r));
   };
+  // v0.4 第五章 縮影：縮小 (mini.card 成立) = 穿不過門；miniOnly 的組只在縮小、人在 mini.room 時轉得到
+  const miniOnly = new Set(def.dial?.miniOnly ?? []);
+  const small = (c: number): boolean => !!m.mini?.card && cs.at(c, m.mini.card);
+  const optOutOfReach = (o: number, r: number, c: number): boolean => miniOnly.has(arr.opts[o].group) && !((small(c) || !m.mini?.card) && rooms[r] === m.mini?.room);
+  const turnPuzzles = m.puzzles.map((p, i) => ({ p, i })).filter(x => x.p.turn !== undefined);
   const finish = pid.get(m.finish) ?? -1;
   const dialRoom = rooms.indexOf(def.dial?.entry.room ?? '');
   const start = rooms.indexOf(m.start);
@@ -513,11 +531,11 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     succStart.push(succ.length);
     if (finish >= 0 && f & (1 << finish)) continue;
     const add = (x: number, isEntry = false) => { const i = visit(x, isEntry); if (i >= 0) succ.push(i); };
-    for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f), c), true);
+    if (!small(c)) for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f), c), true);
     if (!d && r === dialRoom) add(enc(a, r, f, 1, budgetOf(rooms[r], f), c), entry[n] === 1);
     const flags = flagSet(f);
     m.puzzles.forEach((p, i) => {
-      if (f & (1 << i) || rooms[r] !== p.room) return;
+      if (f & (1 << i) || rooms[r] !== p.room || p.turn !== undefined) return;
       if (!goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref))) return;
       if (!p.needs.every(q => flags.has(q))) early.add(p.id);
       const f2 = f | (1 << i);
@@ -526,8 +544,15 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     if (d && k > 0) {
       for (let o = 0; o < arr.opts.length; o++) {
         const a2 = arr.next[a * arr.opts.length + o];
-        if (a2 < 0 || optLocked(o, f, r) || optJammed(a, o, f, c)) continue;
-        add(enc(a2, r, f, d, k - 1, c));
+        if (a2 < 0 || optLocked(o, f, r) || optJammed(a, o, f, c) || optOutOfReach(o, r, c)) continue;
+        // v0.4 第五章 轉成功即完成的題 (p.turn)：人在 p.room、前置齊、卡片條件成立
+        let f2 = f;
+        for (const { p, i } of turnPuzzles) {
+          if (f & (1 << i) || p.turn !== arr.opts[o].group || rooms[r] !== p.room || (p.card && !cs.at(c, p.card))) continue;
+          if (!p.needs.every(q => flags.has(q))) { early.add(p.id); continue; }
+          f2 |= 1 << i;
+        }
+        add(enc(a2, r, f2, d, k - 1, c));
       }
     }
     // 拿 / 放尺度卡 (不耗墨、不改排列；同一房內)
@@ -569,6 +594,10 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
   const jamsOf = (c: number): Set<string> => { let j = jamMemo.get(c); if (!j) { j = jammedRooms(m, flags, ref => cs.at(c, ref)); jamMemo.set(c, j); } return j; };
   const jammed = (a: number, o: number, c: number): boolean => { const jams = jamsOf(c); return jams.size > 0 && roomsIn(def, arr.states[a], arr.opts[o].group).some(r => jams.has(r)); };
   const plates = platesFor(m, flags);
+  // v0.4 第五章 組被卡住 (DialDef.jams) / 縮影 (miniOnly 只在縮小、人在 mini.room 時；縮小穿不過門)
+  const groupJammed = (a: number, o: number): boolean => (def.dial?.jams ?? []).some(j => j.group === arr.opts[o].group && jamActive(j, arr.states[a], () => !flags.has(j.until!)));
+  const miniOnly = new Set(def.dial?.miniOnly ?? []);
+  const small = (c: number): boolean => !!m.mini?.card && cs.at(c, m.mini.card);
   // 不耗步數的動作可達的 (房, 卡片位置) 組合：穿門 + 拿放尺度卡 (編碼 'room#c'，排序)
   const conf = (room: string, c: number): string => `${room}#${c}`;
   const split = (x: string): [string, number] => { const i = x.lastIndexOf('#'); return [x.slice(0, i), Number(x.slice(i + 1))]; };
@@ -578,12 +607,14 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
     const q = [...from];
     while (q.length) {
       const [r, c] = split(q.shift()!);
-      const next = [...areaPairs(m, ls, flags).filter(([fr]) => fr === r).map(([, tr]) => conf(tr, c)), ...cs.moves(c, r, flags).map(c2 => conf(r, c2))];
+      const next = [...(small(c) ? [] : areaPairs(m, ls, flags).filter(([fr]) => fr === r).map(([, tr]) => conf(tr, c))), ...cs.moves(c, r, flags).map(c2 => conf(r, c2))];
       for (const x of next) if (!seen.has(x)) { seen.add(x); q.push(x); }
     }
     return [...seen].sort();
   };
-  const solved = (a: number, rs: readonly string[]) => rs.some(x => { const [r, c] = split(x); return r === p.room && goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref)); });
+  const solved = (a: number, rs: readonly string[]) => p.turn === undefined && rs.some(x => { const [r, c] = split(x); return r === p.room && goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref)); });
+  // v0.4 第五章 轉成功即完成 (p.turn)：這一步轉的就是那一組、轉的時候人在 p.room (卡片條件成立)
+  const solvedBy = (o: number, free: readonly string[]) => p.turn === arr.opts[o].group && free.some(x => { const [r, c] = split(x); return r === p.room && (!p.card || cs.at(c, p.card)); });
   const perDepth = Math.max(1, Math.floor(cap / Math.max(1, budget)));
   const lengths: number[] = [];
   const multisets = new Map<string, number>();
@@ -594,9 +625,10 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
     let found = 0;
     const seq: number[] = [];
     const onPath = new Set<string>([`${a0}|${start.join(',')}`]);
+    let lastFree: readonly string[] = [];
     const dfs = (a: number, rs: string[]): boolean => {
       if (seq.length === depth) {
-        if (!solved(a, rs)) return true;
+        if (!solved(a, rs) && !(seq.length > 0 && solvedBy(seq[seq.length - 1], lastFree))) return true;
         lengths.push(depth);
         const ms = seq.map(o => `${arr.opts[o].group}:${arr.opts[o].dir}`).sort().join(' ');
         if (!multisets.has(ms)) multisets.set(ms, depth);
@@ -604,10 +636,11 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
         if (found >= perDepth) { sampled = true; return false; }
         return true;
       }
-      if (seq.length > 0 && solved(a, rs)) return true; // 較短就解開了：屬於較淺的層
+      if (seq.length > 0 && (solved(a, rs) || solvedBy(seq[seq.length - 1], lastFree))) return true; // 較短就解開了：屬於較淺的層
       for (let o = 0; o < arr.opts.length; o++) {
-        if (!usable[o]) continue;
-        const free = rs.filter(x => !jammed(a, o, split(x)[1]) && (!lockRooms[o] || lockRooms[o]!.has(split(x)[0])));
+        if (!usable[o] || groupJammed(a, o)) continue;
+        const mo = miniOnly.has(arr.opts[o].group);
+        const free = rs.filter(x => !jammed(a, o, split(x)[1]) && (!lockRooms[o] || lockRooms[o]!.has(split(x)[0])) && (!mo || (split(x)[0] === m.mini?.room && (small(split(x)[1]) || !m.mini?.card))));
         if (!free.length) continue;
         const a2 = arr.next[a * arr.opts.length + o];
         if (a2 < 0) continue;
@@ -615,7 +648,10 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
         const key = `${a2}|${rs2.join(',')}`;
         if (onPath.has(key)) continue;
         onPath.add(key); seq.push(o);
+        const prevFree = lastFree;
+        lastFree = free;
         const go = dfs(a2, rs2);
+        lastFree = prevFree;
         seq.pop(); onPath.delete(key);
         if (!go) return false;
       }
@@ -638,7 +674,7 @@ export function validateDial(model: DialModel): DialReport {
   const ids = new Set(m.puzzles.map(p => p.id));
   for (const p of m.puzzles) for (const q of p.needs) if (!ids.has(q)) issues.push(`puzzle ${p.id} needs unknown ${q}`);
   if (!ids.has(m.finish)) issues.push(`finish ${m.finish} is not a puzzle`);
-  const arr = arrangementsOf(def, limit);
+  const arr = arrangementsOf(def, limit, !!m.mini);
   if (arr.overflow) { issues.push(`arrangements exceed maxStates (${limit}): factor = cube arrangements`); return { ...empty, arrangements: arr.states.length }; }
   const pid = new Map(m.puzzles.map((p, i) => [p.id, i]));
   const budgetOf = (room: string, f: number): number => {
@@ -748,7 +784,7 @@ export function validateDial(model: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   // 區 (areas) 的預算 = 所在房的基礎預算 (validateDial 也會自動補)

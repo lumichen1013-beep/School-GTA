@@ -76,7 +76,7 @@ const LAYER_BASE: Readonly<Record<Layer, number>> = { pad: 0.07, bass: 0.06, mel
  * 情境 × 強度 × 減弱緊張 → 各層增益。強度 0 = 只有墊音與低音；1 = + 旋律；2 = + 琶音 / 質感；3 = + 脈動。
  * calm：脈動 0、低音 (低頻衝擊) 降 6 dB。scorePulse = 這份配樂有沒有脈動層 (第三章輕脈動：強度 ≥ 1 就有)
  */
-export function layerMix(ctx: MusicContext, intensity: number, calm: boolean, scorePulse = false): Record<Layer, number> {
+export function layerMix(ctx: MusicContext, intensity: number, calm: boolean, scorePulse = false, stage: number | null = null): Record<Layer, number> {
   const i = Math.min(3, Math.max(0, Math.round(intensity)));
   const on = (cond: boolean, v: number) => (cond ? v : 0);
   const g: Record<Layer, number> = {
@@ -89,6 +89,13 @@ export function layerMix(ctx: MusicContext, intensity: number, calm: boolean, sc
   };
   // 琶音在強度 1 也輕輕出現 (旋律以外的動態)，強度 2 起全量
   if (i === 1) g.arp = LAYER_BASE.arp * 0.5;
+  // v0.4 第五章 E♭ 分層 (規格「第五章共用規則」音訊)：stage = 三扇窗的完成數；0 = 墊音 + 低音，≥ 1 琶音 (harp)、≥ 2 質感 (glock)、3 旋律 (圖紙主題全句)
+  if (stage !== null) {
+    const n = Math.min(3, Math.max(0, Math.round(stage)));
+    g.arp = n >= 1 ? LAYER_BASE.arp : 0;
+    g.texture = n >= 2 ? LAYER_BASE.texture : 0;
+    g.melody = n >= 3 ? LAYER_BASE.melody : 0;
+  }
   switch (ctx) {
     case 'turn': g.melody *= 0.4; g.arp = LAYER_BASE.arp * 1.3; g.texture = LAYER_BASE.texture; break;
     case 'tension': g.melody = 0; g.arp *= 0.5; g.pad *= 0.8; g.pulse = LAYER_BASE.pulse; break;

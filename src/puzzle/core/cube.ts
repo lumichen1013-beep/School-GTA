@@ -68,13 +68,22 @@ export interface DialLock {
   /** v0.4 第五章 只在人在這幾間房時轉得動 (until 成立之後也一樣；不在這些房 = 鎖著、轉動模式不列；例：東窗的窗框只在東窗轉) */
   rooms?: readonly string[];
 }
+/** 卡住的組 (DialDef.jams)：until = 這個旗標成立前卡住；home = 那間房此刻不在 at 時卡住 */
+export interface DialJamDef { group: string; until?: string; home?: { room: string; at: Cell }; text?: string }
 export interface DialDef {
   /** 魔方儀所在房與物件 id (3D 啟動) */
   entry: { room: string; obj: string };
   groups: readonly TurnGroup[];
   locks: readonly DialLock[];
-  /** 只有縮影裡轉得到的組 (第五章；控制盤不列出) */
+  /** 只有縮影裡轉得到的組 (第五章；控制盤不列出；人在縮影裡 (World.ext.mini) 時只列這些組) */
   miniOnly?: readonly string[];
+  /**
+   * v0.4 第五章 卡住的組 (楔形；text = 說明)：until 的旗標還沒成立 (5-1b：縮影底層的軌道被桌上的齒輪卡住)，或 home 那間房此刻不在 at
+   * (縮影對不上房子：天窗間不在頂面心時，縮影的頂 / 底都轉不動)。與第三章「房裡的東西伸進軌道」不同：卡的是這一組本身
+   */
+  jams?: ReadonlyArray<DialJamDef>;
+  /** v0.4 第五章 5-1b 這一組第一次轉成功 → 當前房的 obj 記為 used (doneFlag 成立 → done 事件；例：縮影的底層轉過一次) */
+  marks?: ReadonlyArray<{ group: string; obj: ObjId }>;
 }
 
 /**

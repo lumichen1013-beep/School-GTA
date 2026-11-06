@@ -3,6 +3,7 @@ import { prologue } from './prologue';
 import { ch2 } from './ch2';
 import { ch3 } from './ch3';
 import { night } from './night';
+import { attic } from './attic';
 
 export type { CutsceneDef, CutsceneId, ShotDef, CutTransition } from '../cutsceneTypes';
 
@@ -17,7 +18,7 @@ export const REDUCED_TRANSITION_SEC = 0.6;
  * 過場登錄表 (順序 = 回憶頁順序)。新增過場 = content/cutscenes/<id>.ts + 文字表 cs-<id>.ts + 這裡加一行
  * (+ render/cutscene/scenes 的 sceneId 繪製函式)。
  */
-export const CUTSCENES: readonly CutsceneDef[] = [prologue, ch2, ch3, night];
+export const CUTSCENES: readonly CutsceneDef[] = [prologue, ch2, ch3, night, attic];
 
 export const cutsceneById = (id: string): CutsceneDef | undefined => CUTSCENES.find(c => c.id === id);
 export const PROLOGUE_ID: CutsceneId = 'cs:prologue';

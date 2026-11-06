@@ -47,10 +47,13 @@ export function memoryEntries(s: Save, defs: readonly CutsceneDef[] = CUTSCENES)
  * 進 levelId 之前要先播的章末過場 (cutscenes-v0.1 3；規格 6「第三章骨架與銜接」)：某個 afterClear 過場的觸發關已通關、還沒看過，
  * 而且那一關章末的「繼續」就是 levelId (例：cs:ch2 = 2-5 通關 → 前往 3-1)。通關畫面的「繼續」與選單進關共用；沒有 = undefined
  */
-export function cutsceneBeforeLevel(s: Save, levelId: string, defs: readonly CutsceneDef[] = CUTSCENES, chapters = CHAPTERS): CutsceneDef | undefined {
+export function cutsceneBeforeLevel(s: Save, levelId: string, defs: readonly CutsceneDef[] = CUTSCENES, chapters = CHAPTERS, kind: 'room' | 'chapter' = 'chapter'): CutsceneDef | undefined {
   const seen = seenCutscenes(s);
   return defs.find(d => {
     const at = d.trigger.afterClear;
-    return at !== undefined && s.cleared.includes(at) && !seen.includes(d.id) && nextAfterClear(at, 'chapter', chapters) === levelId;
+    if (at === undefined || !s.cleared.includes(at) || seen.includes(d.id)) return false;
+    // v0.4 第五章 onRoom (cs:attic)：只在那一關的房間通關畫面按「繼續探索」時 (kind 'room'、繼續 = 同一關)
+    if (d.trigger.onRoom) return kind === 'room' && at === levelId;
+    return kind === 'chapter' && nextAfterClear(at, 'chapter', chapters) === levelId;
   });
 }

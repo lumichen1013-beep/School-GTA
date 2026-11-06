@@ -8,10 +8,11 @@ export function objBox(o: ObjState): Box {
   return { min: [o.x - w / 2, o.y, o.z - d / 2], max: [o.x + w / 2, o.y + h, o.z + d / 2] };
 }
 
-export function boxAt(x: number, y: number, z: number): Box {
-  return { min: [x - PLAYER_HW, y, z - PLAYER_HW], max: [x + PLAYER_HW, y + PLAYER_H, z + PLAYER_HW] };
+/** 玩家盒 (x、z = 中心，y = 腳底)；k = 尺寸倍率 (v0.4 第五章 5-1 縮小 0.4；預設 1) */
+export function boxAt(x: number, y: number, z: number, k = 1): Box {
+  return { min: [x - PLAYER_HW * k, y, z - PLAYER_HW * k], max: [x + PLAYER_HW * k, y + PLAYER_H * k, z + PLAYER_HW * k] };
 }
-export const playerBox = (p: Player): Box => boxAt(p.x, p.y, p.z);
+export const playerBox = (p: Player): Box => boxAt(p.x, p.y, p.z, p.scale ?? 1);
 
 /** 嚴格相交；2D 壓平模式完全忽略 z (所有物體視為同一平面) */
 export function overlaps(a: Box, b: Box, mode: Mode): boolean {
@@ -52,15 +53,15 @@ export function sweepAxis(box: Box, axis: 0 | 1 | 2, delta: number, solids: ObjS
 }
 
 /** 位於 (x,y,z) 的玩家腳下的支撐物 (頂面約等於腳底且投影重疊) */
-export function supportsAt(w: World, x: number, y: number, z: number, mode: Mode): ObjState[] {
-  const pb = boxAt(x, y - 0.05, z);
+export function supportsAt(w: World, x: number, y: number, z: number, mode: Mode, k = 1): ObjState[] {
+  const pb = boxAt(x, y - 0.05, z, k);
   return solidsFor(w, mode).filter(s => {
     const sb = objBox(s);
     return Math.abs(sb.max[1] - y) < 0.02 && overlaps(pb, sb, mode);
   });
 }
 
-export const supportsOf = (w: World, p: Player, mode: Mode): ObjState[] => supportsAt(w, p.x, p.y, p.z, mode);
+export const supportsOf = (w: World, p: Player, mode: Mode): ObjState[] => supportsAt(w, p.x, p.y, p.z, mode, p.scale ?? 1);
 
 export const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 export const toV3 = (x: number, y: number, z: number): V3 => [x, y, z];
