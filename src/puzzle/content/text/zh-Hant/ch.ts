@@ -3,5 +3,6 @@ export const ch = {
   'ch.1.title': '第一章　玄關',
   'ch.2.title': '第二章　書房',
   'ch.3.title': '第三章　溫室',
-  'ch.4.title': '第四章　地下室'
+  'ch.4.title': '第四章　地下室',
+  'ch.5.title': '第五章　閣樓'
 } as const;

@@ -3,8 +3,8 @@ import type { ObjState, World } from '../core/types';
 import type { Text } from '../text/text';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
 import { isActiveIn } from '../core/presence';
-import { addSide, applyOp, applyTurn, cellContent, inCube, isBlocked, rotateSide, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn } from '../core/cube';
-import { activeInk, chapterLinks, dialBlocked, inkPaths, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
+import { addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, isBlocked, rotateSide, SIDES, turnDirs, type Cell, type CubeDef, type CubeOp, type CubeState, type FrameKind, type Side, type Turn, type TurnGroup } from '../core/cube';
+import { activeInk, chapterLinks, dialBlocked, groupHidden, inkPaths, isDialChapter, isLocked, lightPaths, sessionUncovered, turnBudgetFor, type ChapterCommand, type ChapterSession } from '../core/chapter';
 import type { Mode } from '../core/types';
 import type { LoopInput } from './loop';
 import { leverOp, TURN_BLOCK_MSG, WORD_KEYS, type LeverWord } from '../mechanics/cube';
@@ -36,7 +36,8 @@ export function previewLever(w: World): ObjState | null {
 const FRAME_KEYS: Readonly<Record<string, string>> = {
   porch: 'ui.map.frame.porch', chapterExit: 'ui.map.frame.chapterExit', skylight: 'ui.map.frame.skylight', study: 'ui.map.frame.study',
   hall: 'ui.map.frame.hall', greenhouse: 'ui.map.frame.greenhouse', cellar: 'ui.map.frame.cellar',
-  greenhouseStair: 'ui.map.frame.greenhouseStair', attic: 'ui.map.frame.attic'
+  greenhouseStair: 'ui.map.frame.greenhouseStair', attic: 'ui.map.frame.attic',
+  cellarLadder: 'ui.map.frame.cellarLadder', starE: 'ui.map.frame.starE', starW: 'ui.map.frame.starW', starN: 'ui.map.frame.starN'
 };
 const frameName = (text: Text, kind: FrameKind, to: string | undefined): string => text(FRAME_KEYS[to ?? kind] ?? FRAME_KEYS[kind]);
 
@@ -72,7 +73,11 @@ export function deriveCubeMap(cs: ChapterSession, text: Text, preview?: { op: Cu
   return {
     title: text('ui.map.title'),
     cols: mapCols(def), rows: def.dims[1], cells, doors,
-    frames: def.frame.filter(f => multi || f.at[2] === layer).map(f => ({ x: f.at[0] + panelX(def, f.at[2]), y: f.at[1], side: f.side, kind: f.kind, name: frameName(text, f.kind, f.to) })),
+    // v0.4 第五章 三層並排：東 / 西兩側的屋框落在層與層之間的空欄 → 寫在格內 (inCell)，不壓到隔壁層
+    frames: def.frame.filter(f => multi || f.at[2] === layer).map(f => ({
+      x: f.at[0] + panelX(def, f.at[2]), y: f.at[1], side: f.side, kind: f.kind, name: frameName(text, f.kind, f.to),
+      ...(def.dims[2] > 2 && (f.side === 'E' || f.side === 'W') ? { inCell: true } : {})
+    })),
     ...(multi ? { layers: layerPanels(def, text) } : {}),
     preview: pv,
     hint: text('ui.map.hint'),
@@ -167,9 +172,11 @@ export function mapLight(def: CubeDef, cube: CubeState, layer: number, uncovered
 export const panelX = (def: CubeDef, z: number): number => (def.dims[2] > 1 ? (def.dims[2] - 1 - z) * (def.dims[0] + 1) : 0);
 /** 展開圖的欄數 (多層 = 各層並排 + 層間的空欄) */
 const mapCols = (def: CubeDef): number => def.dims[0] * def.dims[2] + Math.max(0, def.dims[2] - 1);
-/** 各層的名稱與起始欄 (只有兩層的魔方有名稱：上層 / 下層) */
+/** 各層的名稱與起始欄 (兩層：上層 / 下層 (第四章)；v0.4 第五章 三層：頂層 / 中層 / 底層) */
 function layerPanels(def: CubeDef, text: Text): Array<{ x: number; w: number; name: string }> {
-  return Array.from({ length: def.dims[2] }, (_, k) => def.dims[2] - 1 - k).map(z => ({ x: panelX(def, z), w: def.dims[0], name: text(z === def.dims[2] - 1 ? 'ui.map.layer.upper' : 'ui.map.layer.lower') }));
+  const L = def.dims[2];
+  const key = (z: number) => (L === 3 ? ['ui.map.layer.bottom', 'ui.map.layer.mid', 'ui.map.layer.top'][z] : z === L - 1 ? 'ui.map.layer.upper' : 'ui.map.layer.lower');
+  return Array.from({ length: L }, (_, k) => L - 1 - k).map(z => ({ x: panelX(def, z), w: def.dims[0], name: text(key(z)) }));
 }
 /** 多層魔方：所有層的格與門 (依位移並排)；單層：只畫 layer 那一層 (原樣) */
 function layoutAll(cs: ChapterSession, text: Text, cube: CubeState, layer: number): { cells: MapCell[]; doors: MapDoor[] } {
@@ -195,7 +202,14 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
   for (let y = 0; y < def.dims[1]; y++) {
     for (let x = 0; x < def.dims[0]; x++) {
       const c = cellContent(def, cube, [x, y, layer]);
-      const kind = c === 'empty' || c === 'solid' ? c : 'room';
+      // v0.4 第五章 走廊格 (梁上走道)：畫成一段木梁 (beam = 連到哪幾個鄰格：此刻的面心鄰格)
+      const corridor = !!def.corridors?.includes(c);
+      const kind = c === 'empty' || c === 'solid' ? c : corridor ? 'corridor' : 'room';
+      if (kind === 'corridor') {
+        const shortKey = spec.rooms[c]?.shortKey;
+        cells.push({ x, y, kind, room: c, name: name(c), ...(shortKey ? { short: text(shortKey) } : {}), current: false, beam: beamSides(def, [x, y, layer]) });
+        continue;
+      }
       const fp = kind === 'room' ? spec.rooms[c]?.decor?.find(d => d.kind === 'floorPiece') : undefined;
       const piece = fp && typeof fp.px === 'number' && typeof fp.py === 'number' && typeof fp.drawing === 'string' ? { px: fp.px, py: fp.py, drawing: fp.drawing } : undefined;
       // 實心格的名稱：魔方資料的 label (第三章：工具間 / 水塔)；沒有 = 「實心」
@@ -209,11 +223,18 @@ function layout(cs: ChapterSession, text: Text, cube: CubeState, layer: number):
     .filter(d => cube.pos[d.room]?.[2] === layer && (!d.hole || ls.some(k => k.from.room === d.room && k.from.door === d.door)))
     .map(d => {
       const l = ls.find(k => k.from.door === d.door && k.from.room === d.room);
-      const base = { room: d.room, door: d.door, x: cube.pos[d.room][0], y: cube.pos[d.room][1], side: d.side, kind: d.kind };
+      // 門的方向 = 此刻的世界方位 (房間轉過 / 傾倒也對；core/cube rotateSide)
+      const base = { room: d.room, door: d.door, x: cube.pos[d.room][0], y: cube.pos[d.room][1], side: rotateSide(d.side, cube.rot[d.room] ?? 0), kind: d.kind };
       if (!l) return { ...base, link: 'wall' as const };
       return 'frame' in l.to ? { ...base, link: 'frame' as const } : { ...base, link: 'room' as const, via: l.kind };
     });
   return { cells, doors };
+}
+
+/** 走廊格連到的鄰格 (世界方位)：在魔方內、是面心格 (三個座標恰有兩個在中間) 的那幾側 */
+function beamSides(def: CubeDef, at: Cell): Side[] {
+  const mid = (c: Cell) => c.filter((v, i) => v === (def.dims[i] - 1) / 2).length === 2;
+  return SIDES.filter(s => { const c = addSide(at, s); return inCube(def, c) && mid(c); });
 }
 
 /** 目前該顯示哪個拉桿的預覽 (2D、附近有拉桿) */
@@ -236,8 +257,17 @@ export function turnTab(cs: ChapterSession, text: Text, active: boolean, overlay
 const sameTurn = (a: { group: string; dir: TurnDir } | null, b: { group: string; dir: TurnDir }): boolean => !!a && a.group === b.group && a.dir === b.dir;
 
 const GROUP_KEYS: Readonly<Record<TurnHeader['kind'], string>> = {
-  row: 'ui.turn.group.row', col: 'ui.turn.group.col', slideCell: 'ui.turn.group.cell', layer: 'ui.turn.group.layer', slice: 'ui.turn.group.slice'
+  row: 'ui.turn.group.row', col: 'ui.turn.group.col', slideCell: 'ui.turn.group.cell', layer: 'ui.turn.group.layer', slice: 'ui.turn.group.slice', spin: 'ui.turn.group.spin'
 };
+/** v0.4 第五章 星環盤：軸的名稱 (東西軸 / 南北軸 / 上下軸) 與片的名稱 (index 0 / 1 / 2) */
+const AXIS_KEYS: Readonly<Record<'x' | 'y' | 'z', string>> = { x: 'ui.turn.ring.x', y: 'ui.turn.ring.y', z: 'ui.turn.ring.z' };
+const PART_KEYS: Readonly<Record<'x' | 'y' | 'z', readonly string[]>> = {
+  x: ['ui.turn.part.west', 'ui.turn.part.mid', 'ui.turn.part.east'],
+  y: ['ui.turn.part.north', 'ui.turn.part.mid', 'ui.turn.part.south'],
+  z: ['ui.turn.part.bottom', 'ui.turn.part.mid', 'ui.turn.part.top']
+};
+/** 星環盤的鎖：星釘 (形狀與卡住的楔形不同) */
+const STAR_GLYPH = '\u2726';
 /** 一組的顯示名稱 (第 1 列 / 第 2 行 / 第 1 層…) */
 const groupName = (text: Text, kind: TurnHeader['kind'], index: number, layers = 1): string =>
   kind === 'layer' && layers === 2 ? text(index === 1 ? 'ui.turn.layer.upper' : 'ui.turn.layer.lower') : text(GROUP_KEYS[kind], { n: index + 1 });
@@ -250,11 +280,19 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const { spec, state } = cs;
   const def = spec.cube!;
   const cube = state.cube!;
-  const all = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id));
+  // v0.4 第五章：鎖扣限定房間、人不在那幾間房的組不列 (例：不在東窗沒有「東窗的窗框」)
+  const all = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id) && !groupHidden(spec, state, g.id));
   const groups = all.filter(g => g.kind !== 'slideCell');
   const headers: TurnHeader[] = [];
   /** 標頭的名稱 (不含「鎖著」)：說明列用 */
   const names = new Map<string, string>();
+  // v0.4 第五章 星環盤 (切片 / 原地轉)：標頭不畫在格子旁，改列在轉動卡片上的星環盤 (每軸一列、每個原地轉一列)
+  const ring = groups.some(g => g.kind === 'slice' || g.kind === 'spin');
+  if (ring) {
+    const { rings, heads } = ringHeaders(cs, text, groups, sel, names);
+    headers.push(...heads);
+    return finishTurnMode(cs, text, sel, all, headers, names, rings);
+  }
   for (const g of groups) {
     const locked = isLocked(spec, state, g.id, cs.world);
     for (const dir of turnDirs(def, g.id)) {
@@ -282,12 +320,65 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const layer = cube.pos[state.room]?.[2] ?? 0;
   const slide = all.some(g => g.kind === 'slideCell');
   if (slide) headers.push(...slideHeaders(cs, text, sel, layer, names));
+  return finishTurnMode(cs, text, sel, all, headers, names);
+}
+
+/**
+ * v0.4 第五章 星環盤的列與鈕 (純函式)：三軸 (東西 / 南北 / 上下) 依序一列、列內依片序 × ↺ ↻；每個原地轉 (spin：窗框…) 各一列。
+ * 鎖住 = 星釘、卡住 = 楔形 (形狀區分)；at.side = 'ring'、ring = 第幾列第幾顆
+ */
+function ringHeaders(cs: ChapterSession, text: Text, groups: readonly TurnGroup[], sel: TurnModeModel['selected'], names: Map<string, string>): { rings: NonNullable<TurnModeModel['rings']>; heads: TurnHeader[] } {
+  const { spec, state } = cs;
+  const def = spec.cube!;
+  const rings: NonNullable<TurnModeModel['rings']> = [];
+  const heads: TurnHeader[] = [];
+  const add = (row: number, list: readonly TurnGroup[]) => {
+    let col = 0;
+    for (const g of list) {
+      const locked = isLocked(spec, state, g.id, cs.world);
+      const axis = g.axis ?? 'z';
+      const part = g.kind === 'slice' ? text(PART_KEYS[axis][Math.min(2, g.index)] ?? 'ui.turn.part.mid') : '';
+      const groupLabel = g.kind === 'slice' ? text('ui.turn.slice', { axis: text(AXIS_KEYS[axis]), part }) : rings[row].name;
+      for (const dir of turnDirs(def, g.id)) {
+        const jam = !locked && dialBlocked(cs, { group: g.id, dir }) === 'jammed';
+        const plain = text('ui.turn.header', { group: groupLabel, dir: text(dir === 1 ? 'ui.turn.dir.cw' : 'ui.turn.dir.ccw') });
+        names.set(`${g.id}|${dir}`, plain);
+        heads.push({
+          group: g.id, kind: g.kind, dir, state: locked ? 'locked' : jam ? 'jammed' : 'ok', at: { side: 'ring', i: row }, ring: { row, col: col++ },
+          glyph: dir === 1 ? '\u21BB' : '\u21BA', ...(part ? { sub: part } : {}), ...(locked ? { mark: STAR_GLYPH } : {}),
+          label: locked ? text('ui.turn.headerLocked', { name: plain }) : jam ? text('ui.turn.headerJammed', { name: plain }) : plain,
+          selected: sameTurn(sel, { group: g.id, dir })
+        });
+      }
+    }
+  };
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const list = groups.filter(g => g.kind === 'slice' && (g.axis ?? 'z') === axis).sort((a, b) => a.index - b.index);
+    if (!list.length) continue;
+    rings.push({ name: text(AXIS_KEYS[axis]), kind: 'axis' });
+    add(rings.length - 1, list);
+  }
+  for (const g of groups.filter(x => x.kind === 'spin')) {
+    const room = g.room ? text(spec.rooms[g.room]?.shortKey ?? spec.rooms[g.room]?.titleKey ?? g.room) : '';
+    rings.push({ name: g.room ? text('ui.turn.ring.frame', { room }) : text('ui.turn.ring.face', { part: text(PART_KEYS[g.axis ?? 'z'][Math.min(2, g.index)]) }), kind: 'spin' });
+    add(rings.length - 1, [g]);
+  }
+  return { rings, heads };
+}
+
+/** 轉動模式的共同收尾：墨量、選取的預覽 (轉後的格與門、移動的房間；星環盤另框出那一片的格子)、說明列 */
+function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected'], all: readonly TurnGroup[], headers: TurnHeader[], names: Map<string, string>, rings?: TurnModeModel['rings']): TurnModeModel {
+  const { spec, state } = cs;
+  const def = spec.cube!;
+  const cube = state.cube!;
+  const layer = cube.pos[state.room]?.[2] ?? 0;
+  const slide = all.some(g => g.kind === 'slideCell');
   const max = turnBudgetFor(spec, state, cs.world);
   const left = state.turns?.left ?? max;
   const g = sel ? all.find(x => x.id === sel.group) : undefined;
   const blocked = sel && g ? dialBlocked(cs, sel as Turn) : null;
   let preview: TurnModeModel['preview'] = null;
-  let caption = text(slide ? 'ui.turn.hintSlide' : 'ui.turn.hint');
+  let caption = text(slide ? 'ui.turn.hintSlide' : rings ? 'ui.turn.hintRing' : 'ui.turn.hint');
   if (sel && g) {
     const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index, def.dims[2]);
     if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: blockText(cs, text, sel.group, blocked) });
@@ -300,7 +391,9 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
         const moves = Object.keys(cube.pos).filter(room => (multi || cube.pos[room][2] === layer) && (cube.pos[room][0] !== r.pos[room][0] || cube.pos[room][1] !== r.pos[room][1] || (multi && (cube.rot[room] ?? 0) !== (r.rot[room] ?? 0))))
           .map(room => { const dx = panelX(def, cube.pos[room][2]); return { room, name: text(spec.rooms[room]?.titleKey ?? room), from: [cube.pos[room][0] + dx, cube.pos[room][1]] as [number, number], to: [r.pos[room][0] + dx, r.pos[room][1]] as [number, number] }; });
         const light = mapLight(def, r, layer, sessionUncovered(cs));
-        preview = { cells: after.cells, doors: after.doors, moves, ...(light ? { light } : {}) };
+        // 星環盤：被轉的那一片 (三層裡的格子；含空格) 描框
+        const slab = rings ? cellsOf(def, cube, sel.group).map(c => [c[0] + panelX(def, c[2]), c[1]] as [number, number]) : null;
+        preview = { cells: after.cells, doors: after.doors, moves, ...(light ? { light } : {}), ...(slab ? { slab } : {}) };
       }
       caption = text('ui.turn.preview', { what: label });
     }
@@ -309,8 +402,9 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
     headers, selected: sel && g ? sel : null, preview, ink: { left, max }, canUndo: (state.turns?.undo.length ?? 0) > 0,
     blocked: blocked ?? null, blockedText: blocked && sel ? blockText(cs, text, sel.group, blocked) : null,
     caption,
-    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? 'ui.turn.keysSlide' : 'ui.turn.keys') },
-    ...(slide ? { cells: layout(cs, text, cube, layer).cells } : {})
+    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? 'ui.turn.keysSlide' : rings ? 'ui.turn.keysRing' : 'ui.turn.keys') },
+    ...(slide ? { cells: layout(cs, text, cube, layer).cells } : {}),
+    ...(rings ? { rings } : {})
   };
 }
 
@@ -428,6 +522,7 @@ export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeIn
   // 滑動章節 (第三章)：方向鍵與點格子另有規則；列 / 行章節點格子不做事
   if (m.cells) return reduceSlide(sel, input, m);
   if (input.t === 'cell') return { sel, ...none };
+  if (m.rings) return { sel: ringStep(sel, input, m), ...none };
   const groups = [...new Set(m.headers.map(h => h.group))];
   if (!groups.length) return { sel, ...none };
   const dirsOf = (g: string) => m.headers.filter(h => h.group === g).map(h => h.dir);
@@ -441,6 +536,25 @@ export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeIn
   const same = groups.filter(g => m.headers.find(h => h.group === g)!.kind === kind);
   const j = same.indexOf(sel.group);
   return { sel: pick(same[(j + input.d + same.length) % same.length]), ...none };
+}
+
+/**
+ * v0.4 第五章 星環盤的方向鍵：↑↓ = 換一列 (循環；停在同一個位置，不夠就最後一顆)、←→ = 列內換一顆 (循環)；
+ * 還沒選：↓ / ← / → = 第一列 (→ 第一顆、← 最後一顆)、↑ = 最後一列
+ */
+function ringStep(sel: Sel, input: Extract<TurnModeInput, { t: 'step' }>, m: TurnModeModel): Sel {
+  const rows = (m.rings ?? []).map((_, r) => m.headers.filter(h => h.ring?.row === r).sort((a, b) => a.ring!.col - b.ring!.col)).filter(r => r.length);
+  if (!rows.length) return sel;
+  const pick = (h: TurnHeader): Sel => ({ group: h.group, dir: h.dir });
+  const cur = sel ? m.headers.find(h => sameTurn(sel, h)) : undefined;
+  const ri = cur ? rows.findIndex(r => r.includes(cur)) : -1;
+  if (ri < 0) {
+    if (input.axis === 'v') return pick((input.d > 0 ? rows[0] : rows[rows.length - 1])[0]);
+    return pick(input.d > 0 ? rows[0][0] : rows[0][rows[0].length - 1]);
+  }
+  const ci = rows[ri].indexOf(cur!);
+  if (input.axis === 'v') { const r = rows[(ri + input.d + rows.length) % rows.length]; return pick(r[Math.min(ci, r.length - 1)]); }
+  return pick(rows[ri][(ci + input.d + rows[ri].length) % rows[ri].length]);
 }
 
 /** 方向軸的上一幀值 (轉動模式把「剛按下的方向」當成一步選取) */

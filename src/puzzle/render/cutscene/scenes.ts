@@ -1,4 +1,4 @@
-// 序章 12 鏡、cs:ch2 三鏡與 cs:ch3 三鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
+// 序章 12 鏡、cs:ch2 三鏡、cs:ch3 三鏡與 cs:night 六鏡的剪紙分鏡：虛擬座標安全區 900 × 700，構圖重點在安全區內 (字幕帶在安全區下方)
 // 顏色一律取自主題 (render/themes)；畫面內的字由 labels 傳入 (文字表)；時間 t = 鏡頭秒數 (含轉場)
 import type { Palette } from '../themes';
 import {
@@ -1460,6 +1460,218 @@ const ch3Sink: SceneDraw = s => {
   vignette(s, 450, 340, 220, 'rgba(8,6,4,A)', 0.55);
 };
 
+// ── cs:night 撕圖那晚 (6 鏡；回憶)：光敏規則 = 天色 4 秒緩變、紙裂 1.2 秒，都不閃爍、無閃光 ──
+
+/** 回憶的泛黃剪紙色 (低飽和) */
+const NIGHT_SEP = { paper: '#ecdcb6', wall: '#a88a62', wall2: '#9a7c56', floor: '#8a6e4a', floor2: '#7e6342', dark: '#5a4430', ink: 'rgba(58,38,24,0.82)' };
+
+/** 爸爸的筆記本 (攤開；右頁的字寫到一半就斷了：最後一行 = labels.line + 破折號) */
+function openNotebook(s: SceneCtx, x: number, y: number, k: number, cutLine: boolean): void {
+  const { g } = s;
+  cut(g, roughPoly([[x - 300 * k, y - 190 * k], [x, y - 206 * k], [x + 300 * k, y - 190 * k], [x + 290 * k, y + 190 * k], [x, y + 176 * k], [x - 290 * k, y + 190 * k]], 2101, 1.4), NIGHT_SEP.paper, { shadow: 10, lw: 2.4 });
+  g.strokeStyle = 'rgba(58,38,24,0.4)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x, y - 206 * k); g.lineTo(x, y + 176 * k); g.stroke();
+  // 左頁：魔法陣草圖與日期
+  g.save(); g.translate(x - 150 * k, y - 10 * k); g.scale(1, 0.5); sigil(g, 90 * k, 'rgba(44,63,176,0.55)', 2); g.restore();
+  for (let i = 0; i < 3; i++) scribble(g, x - 250 * k, y + (100 + i * 22) * k, 160 * k, 2110 + i, '#5a4030', 1.6);
+  // 右頁：一行一行的字，最後一行停在一半
+  for (let i = 0; i < 5; i++) scribble(g, x + 30 * k, y + (-150 + i * 34) * k, 230 * k, 2120 + i, '#5a4030', 1.8);
+  if (cutLine) {
+    serif(g, `${s.labels.line ?? ''}——`, x + 30 * k, y + 40 * k, 24 * k, INK, { align: 'left' });
+    // 斷掉之後是空白 (兩道很淡的格線)
+    g.strokeStyle = 'rgba(120,90,60,0.18)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(x + 30 * k, y + (82 + i * 34) * k); g.lineTo(x + 270 * k, y + (82 + i * 34) * k); g.stroke(); }
+  }
+}
+
+/** cs:night 鏡 1：4-4 抽屜裡的筆記，字寫到一半就斷了 (翻頁後緩推到斷掉的那一行) */
+const nightNotes: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#3e2c20'], [1, '#2a1e16']]));
+  woodGrain(g, L(s), R(s), view.y0, B(s), 2100, 'rgba(20,10,4,0.25)');
+  layer(s, 1, () => {
+    // 抽屜的木框 (畫面下緣)
+    cut(g, roughRect(60, 470, 780, 160, 2102, 1.2), '#5a3e28', { shadow: 6, lw: 2.4 });
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(80, 490, 740, 20);
+    openNotebook(s, 450, 300, 1, true);
+  }, [560, 340]);
+  vignette(s, 450, 320, 240, 'rgba(10,6,2,A)', 0.55);
+};
+
+/** 深夜書房的回憶 (泛黃剪紙)：窗 (天色 = sky：0 深藍 → 1 灰白)、桌上攤開的老宅圖、魔法陣 (始終是暗的) 與站在中央的爸爸 */
+function memoryStudy(s: SceneCtx, sky: number, figureAlpha = 1): void {
+  const { g, view } = s;
+  g.fillStyle = NIGHT_SEP.wall; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, 560 - view.y0);
+  g.fillStyle = NIGHT_SEP.wall2;
+  for (let x = Math.floor((view.x0 - 80) / 104) * 104; x < view.x1 + 80; x += 104) g.fillRect(x, view.y0 - 80, 52, 480 - view.y0 + 80);
+  g.fillStyle = NIGHT_SEP.floor; g.fillRect(view.x0 - 80, 480, view.x1 - view.x0 + 160, view.y1 - 400);
+  g.fillStyle = NIGHT_SEP.floor2;
+  for (let y = 480; y < view.y1 + 80; y += 68) g.fillRect(view.x0 - 80, y + 34, view.x1 - view.x0 + 160, 34);
+  // 窗：天色由深藍緩緩變灰白 (sky 0 → 1；呼叫端保證是連續的緩變，不閃爍)
+  const top = mixHex(0x1f2547, 0xcfd2cc, sky), bot = mixHex(0x2e3a5e, 0xe8e2d0, sky);
+  const sg = g.createLinearGradient(0, 90, 0, 330);
+  sg.addColorStop(0, top); sg.addColorStop(1, bot);
+  cut(g, roughRect(600, 90, 200, 240, 2201, 1), sg, { shadow: 6, lw: 3 });
+  g.strokeStyle = NIGHT_SEP.dark; g.lineWidth = 5;
+  g.beginPath(); g.moveTo(700, 90); g.lineTo(700, 330); g.moveTo(600, 210); g.lineTo(800, 210); g.stroke();
+  // 書桌與攤開的老宅圖
+  cut(g, roughRect(80, 380, 300, 26, 2202, 1), '#6e5034', { shadow: 5, lw: 2 });
+  cut(g, roughRect(96, 404, 18, 110, 2203, 0.6), '#5a4028', { shadow: 3, lw: 1.6 });
+  cut(g, roughRect(344, 404, 18, 110, 2204, 0.6), '#5a4028', { shadow: 3, lw: 1.6 });
+  cut(g, roughPoly([[120, 384], [330, 378], [340, 368], [126, 372]], 2205, 0.5, 1e9), NIGHT_SEP.paper, { shadow: 2, lw: 1.6 });
+  // 地上的魔法陣 (刻紋始終是暗的)
+  carvedSigil(g, 470, 560, 150, 0.32, 0);
+  // 爸爸 (年輕一點的剪影) 站在圖案中央
+  standingFigure(g, 470, 556, 230, NIGHT_SEP.dark, 2206, { alpha: figureAlpha, outline: '#3a2618' });
+}
+
+/** hex 色混合 (k 0..1) → css 顏色 */
+function mixHex(a: number, b: number, k: number): string { return mix(a, b, k); }
+
+/** cs:night 鏡 2：很多年前的深夜書房 (泛黃剪紙；墨水暈開進入、極慢緩推) */
+const nightStudy: SceneDraw = s => {
+  const { g, view } = s;
+  fillView(s, '#7a6248');
+  layer(s, 1, () => memoryStudy(s, 0), [470, 420]);
+  // 低飽和：整張蓋一層泛黃
+  g.fillStyle = 'rgba(160,120,70,0.18)'; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, view.y1 - view.y0 + 160);
+  vignette(s, 470, 380, 260, 'rgba(30,18,8,A)', 0.6);
+};
+
+/** cs:night 鏡 3：魔法陣始終是暗的；窗外由深藍慢慢變成灰白 (天色 4 秒內緩變；減弱動態 = 直接是天亮) */
+const nightDawn: SceneDraw = s => {
+  const { g, view, t } = s;
+  const sky = s.reduce ? 1 : smooth(0.4, 4.4, t);
+  fillView(s, '#7a6248');
+  layer(s, 1, () => memoryStudy(s, sky), [470, 420]);
+  g.fillStyle = `rgba(160,120,70,${(0.18 - 0.06 * sky).toFixed(3)})`; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, view.y1 - view.y0 + 160);
+  vignette(s, 470, 380, 260, 'rgba(30,18,8,A)', 0.6 - 0.15 * sky);
+};
+
+/** 老宅圖 (爸爸畫了多年的那張)：六塊沿摺痕的格子 (2 × 3)；split 0..1 = 裂開的距離 */
+function houseMap(g: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, split: number): void {
+  const cw = w / 3, ch = h / 2;
+  const r = rng(2301);
+  for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++) {
+    const dx = (col - 1) * 46 * split + (r() - 0.5) * 10 * split, dy = (row - 0.5) * 40 * split + (r() - 0.5) * 8 * split;
+    const rot = (r() - 0.5) * 0.18 * split;
+    const x = cx - w / 2 + col * cw, y = cy - h / 2 + row * ch;
+    g.save();
+    g.translate(x + cw / 2 + dx, y + ch / 2 + dy);
+    g.rotate(rot);
+    cut(g, roughRect(-cw / 2, -ch / 2, cw, ch, 2310 + row * 3 + col, split > 0.05 ? 2.4 : 0.8), NIGHT_SEP.paper, { shadow: 6, lw: 2 });
+    // 圖上的房間格線與一角的圖案
+    g.strokeStyle = 'rgba(58,38,24,0.55)'; g.lineWidth = 1.6;
+    g.strokeRect(-cw / 2 + 16, -ch / 2 + 16, cw - 32, ch - 32);
+    g.beginPath(); g.moveTo(-cw / 2 + 16, 0); g.lineTo(cw / 2 - 16, 0); g.stroke();
+    if ((row + col) % 2 === 0) { g.save(); g.scale(1, 0.6); sigil(g, 22, 'rgba(44,63,176,0.45)', 1.2); g.restore(); }
+    g.restore();
+  }
+  // 摺痕 (還沒裂時)
+  if (split < 0.05) {
+    g.strokeStyle = 'rgba(120,90,60,0.4)'; g.lineWidth = 1.4; g.setLineDash([6, 6]);
+    g.beginPath(); g.moveTo(cx - w / 6, cy - h / 2); g.lineTo(cx - w / 6, cy + h / 2); g.moveTo(cx + w / 6, cy - h / 2); g.lineTo(cx + w / 6, cy + h / 2); g.moveTo(cx - w / 2, cy); g.lineTo(cx + w / 2, cy); g.stroke();
+    g.setLineDash([]);
+  }
+}
+
+/** cs:night 鏡 4：爸爸拿起畫了多年的老宅圖；紙沿著摺痕慢慢裂成六塊 (1.2 秒、慢、無閃光) */
+const nightTear: SceneDraw = s => {
+  const { g, view, t } = s;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#8a7050'], [1, '#6a5038']]));
+  const split = s.reduce ? 1 : smooth(1.4, 2.6, t);
+  layer(s, 1, () => {
+    // 兩隻手 (剪影，捏著紙的上緣兩角)
+    for (const sx of [-1, 1]) cut(g, roughPoly([[450 + sx * 250, 170], [450 + sx * 300, 120], [450 + sx * 340, 140], [450 + sx * 290, 200]], 2320 + sx, 0.8), NIGHT_SEP.dark, { shadow: 4, lw: 2 });
+    houseMap(g, 450, 330, 520, 300, split);
+  }, [450, 330]);
+  g.fillStyle = 'rgba(160,120,70,0.16)'; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, view.y1 - view.y0 + 160);
+  vignette(s, 450, 330, 250, 'rgba(30,18,8,A)', 0.55);
+};
+
+/** cs:night 鏡 5：早晨的廚房剪紙——爸爸站在門口向房間裡喊；你的小剪影從被窩坐起 (靜止；晨光由左緩亮) */
+const nightMorning: SceneDraw = s => {
+  const { g, view, t } = s;
+  const light = s.reduce ? 1 : smooth(0, 5, t);
+  fillView(s, '#cdb68e');
+  layer(s, 1, () => {
+    // 牆、地板、左邊的窗 (晨光)
+    g.fillStyle = '#d8c39a'; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, 560 - view.y0);
+    g.fillStyle = '#b89a6c'; g.fillRect(view.x0 - 80, 480, view.x1 - view.x0 + 160, view.y1 - 400);
+    cut(g, roughRect(70, 120, 170, 210, 2401, 1), '#f6ecd0', { shadow: 5, lw: 3 });
+    g.strokeStyle = '#8a6a48'; g.lineWidth = 4; g.beginPath(); g.moveTo(155, 120); g.lineTo(155, 330); g.stroke();
+    // 廚房一角：爐台與水壺
+    cut(g, roughRect(270, 380, 160, 100, 2402, 1), '#9a7a54', { shadow: 4, lw: 2 });
+    cut(g, roughEllipse(330, 366, 30, 18, 2403, 0.8), '#7a8a8e', { shadow: 2, lw: 1.8 });
+    // 門框與門口的爸爸 (向房間裡喊)
+    cut(g, roughRect(470, 160, 150, 330, 2404, 1), '#8a6a48', { shadow: 6, lw: 2.6 });
+    g.fillStyle = '#6e5636'; g.fillRect(484, 174, 122, 316);
+    standingFigure(g, 545, 488, 240, '#5a4430', 2405, { lean: 0.06, outline: '#3a2618' });
+    // 房間裡的床與坐起來的你 (小剪影)
+    cut(g, roughRect(660, 420, 220, 70, 2406, 1), '#a8875e', { shadow: 5, lw: 2.2 });
+    cut(g, roughRect(640, 380, 30, 110, 2407, 0.6), '#8a6a48', { shadow: 3, lw: 1.8 });
+    cut(g, roughPoly([[670, 420], [880, 412], [884, 440], [668, 444]], 2408, 0.6, 1e9), '#e8dcc0', { shadow: 2, lw: 1.6 });
+    standingFigure(g, 712, 432, 110, '#6e5636', 2409, { outline: '#3a2618' });
+  }, [450, 330]);
+  // 晨光：由左緩亮 (一道斜的暖光；不閃爍)
+  const lg = g.createLinearGradient(view.x0, 0, 700, 0);
+  lg.addColorStop(0, `rgba(255,236,190,${(0.38 * light).toFixed(3)})`);
+  lg.addColorStop(1, 'rgba(255,236,190,0)');
+  g.fillStyle = lg; g.fillRect(view.x0 - 80, view.y0 - 80, view.x1 - view.x0 + 160, view.y1 - view.y0 + 160);
+  vignette(s, 450, 330, 280, 'rgba(40,26,12,A)', 0.4);
+};
+
+/** 剖面方塊：閣樓 (斜屋頂、三扇天窗) / 根窖 (樹根與抽屜) */
+function nightBlock(g: CanvasRenderingContext2D, pal: Palette, kind: 'attic' | 'cellar', x: number, y: number, w: number, h: number, seed: number): void {
+  if (kind === 'attic') {
+    cut(g, roughPoly([[x, y + h * 0.3], [x + w / 2, y - h * 0.25], [x + w, y + h * 0.3], [x + w, y + h], [x, y + h]], seed, 1.2), '#c9a878', { shadow: 8, lw: 3 });
+    for (const k of [0.22, 0.5, 0.78]) cut(g, roughRect(x + w * k - 18, y + h * 0.36, 36, 30, seed + 1 + k * 10, 0.4), '#1f2547', { shadow: 0, lw: 1.6 });
+    g.fillStyle = '#e6e9f2'; for (const k of [0.2, 0.52, 0.8]) { g.beginPath(); g.arc(x + w * k, y + h * 0.44, 2.2, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(58,38,24,0.5)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x + w * 0.1, y + h * 0.8); g.lineTo(x + w * 0.9, y + h * 0.8); g.stroke();
+  } else {
+    cut(g, roughRect(x, y, w, h, seed, 1.2), '#7a7066', { shadow: 8, lw: 3 });
+    g.strokeStyle = '#5a4636'; g.lineCap = 'round';
+    for (let i = 0; i < 5; i++) { g.lineWidth = 5 - (i % 3); g.beginPath(); g.moveTo(x + 20 + i * (w - 40) / 4, y); g.quadraticCurveTo(x + 30 + i * (w - 40) / 4, y + h * 0.3, x + 14 + i * (w - 40) / 4, y + h * 0.5); g.stroke(); }
+    for (let k = 0; k < 4; k++) cut(g, roughRect(x + 24 + k * (w - 48) / 4, y + h * 0.62, (w - 48) / 4 - 8, h * 0.26, seed + 2 + k, 0.3), hex(pal.shelfDark), { shadow: 0, lw: 1.2 });
+  }
+}
+
+/** cs:night 鏡 6：回到現在——筆記邊緣的撕痕特寫 → 拉遠成剖面魔方，根窖那一層往上翻、接上觀星閣樓 (層轉 3 秒，無震動) */
+const nightFlip: SceneDraw = s => {
+  const { g, pal, view, t } = s;
+  const tt = s.reduce ? 8 : t;
+  fillView(s, vGrad(g, view.y0, view.y1, [[0, '#262838'], [0.6, '#2a2620'], [1, '#1a1612']]));
+  // 第一段字幕 (約 5 秒)：筆記的撕痕特寫 (之後淡出)
+  const close = 1 - smooth(4.4, 5.4, tt);
+  if (close > 0) {
+    layer(s, 1, () => {
+      g.save(); g.globalAlpha = close;
+      const pts: Pt[] = [[160, 120], [740, 120]];
+      for (let i = 0; i <= 12; i++) pts.push([740 - i * 48, 520 + (i % 2 ? 18 : -14)]);
+      cut(g, roughPoly(pts, 2501, 1.6), NIGHT_SEP.paper, { shadow: 10, lw: 2.4 });
+      for (let i = 0; i < 6; i++) scribble(g, 220, 170 + i * 50, 440, 2510 + i, '#5a4030', 1.8);
+      g.restore();
+    }, [450, 330]);
+  }
+  // 剖面魔方：上 = 閣樓、下 = 根窖；根窖那一層往上翻、接到閣樓下面 (繞橫軸，縱向壓扁再展開)
+  const k = smooth(5.4, 8.4, tt);
+  const show = smooth(4.6, 5.4, tt);
+  if (show > 0) {
+    layer(s, 1, () => {
+      g.save(); g.globalAlpha = show;
+      const W = 300, H = 150;
+      nightBlock(g, pal, 'attic', 450 - W / 2, 90, W, H, 2520);
+      const y = 470 - (470 - (90 + H)) * k;
+      const squash = Math.max(0.12, Math.abs(Math.cos(k * Math.PI)));
+      g.save(); g.translate(450, y + H / 2); g.scale(1, squash);
+      nightBlock(g, pal, 'cellar', -W / 2, -H / 2, W, H, 2530);
+      g.restore();
+      g.restore();
+    }, [450, 330]);
+  }
+  vignette(s, 450, 330, 240, 'rgba(8,6,4,A)', 0.55);
+};
+
 /** 未登錄 sceneId 的退回畫面：素紙 */
 export const blankScene: SceneDraw = s => fillView(s, vGrad(s.g, s.view.y0, s.view.y1, [[0, s.pal.bgTop], [1, s.pal.bgBottom]]));
 
@@ -1482,5 +1694,11 @@ export const PAPER_SCENES: Readonly<Record<string, SceneDraw>> = {
   'ch2.swap': ch2Swap,
   'ch3.depths': ch3Depths,
   'ch3.diary': ch3Diary,
-  'ch3.sink': ch3Sink
+  'ch3.sink': ch3Sink,
+  'night.notes': nightNotes,
+  'night.study': nightStudy,
+  'night.dawn': nightDawn,
+  'night.tear': nightTear,
+  'night.morning': nightMorning,
+  'night.flip': nightFlip
 };

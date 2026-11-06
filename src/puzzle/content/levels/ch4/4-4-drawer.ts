@@ -66,7 +66,7 @@ export const drawer: LevelDef = {
     { id: '4-4b', titleKey: 'lvl.4-4.puzzle.b' },
     { id: '4-4', titleKey: 'lvl.4-4.puzzle.door' }
   ],
-  nextKey: 'lvl.ch4.drawer.next',
+  nextKey: 'lvl.4-4.next',
   theme: 'cellar',
   // 每次穿門進房補滿 8 滴墨；4-4b 完成前 4 (P4：整段 轉開梯口 → 疊回開墨閘 → 轉到章門 最短 3 + 1)
   turnBudget: { base: 8, puzzles: { '4-4b': 4 } },

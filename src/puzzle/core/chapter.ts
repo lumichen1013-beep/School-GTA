@@ -3,7 +3,7 @@
 import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World, WorldExt } from './types';
 import { createWorld, type WorldOptions } from './world';
 import {
-  addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, OPPOSITE, rotateSide, sameCell,
+  addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, localSide, OPPOSITE, rotateSide, sameCell,
   type Cell, type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DoorInfo, type Side, type Turn, type TurnBlockCube
 } from './cube';
 import { boxAt, clamp, objBox, overlaps } from './geometry';
@@ -470,10 +470,17 @@ export function unlockedGroups(spec: ChapterSpec, state: ChapterState, world?: W
   return locks.filter(l => known.has(l.group) || lockOpen(l.until, spec, state, world)).map(l => l.group);
 }
 
-/** 這一組此刻是否鎖著 (有鎖扣且還沒解開) */
+/** 這一組此刻是否鎖著 (有鎖扣且還沒解開；v0.4 第五章 DialLock.rooms：解開了也只在人在那幾間房時轉得動) */
 export function isLocked(spec: ChapterSpec, state: ChapterState, group: string, world?: World): boolean {
-  const locks = spec.cube?.dial?.locks ?? [];
-  return locks.some(l => l.group === group) && !unlockedGroups(spec, state, world).includes(group);
+  const locks = (spec.cube?.dial?.locks ?? []).filter(l => l.group === group);
+  if (!locks.length) return false;
+  if (locks.some(l => l.rooms && !l.rooms.includes(state.room))) return true;
+  return !unlockedGroups(spec, state, world).includes(group);
+}
+
+/** v0.4 第五章 這一組此刻不在轉動模式裡列出 (鎖扣限定了房間、人不在那幾間房；例：不在東窗時沒有「東窗的窗框」) */
+export function groupHidden(spec: ChapterSpec, state: ChapterState, group: string): boolean {
+  return (spec.cube?.dial?.locks ?? []).some(l => l.group === group && !!l.rooms && !l.rooms.includes(state.room));
 }
 
 /** 新解開的鎖扣寫回 state.unlocked (R 會還原)，並清空回退堆疊 (拿到旗標 = 本段結束)；added = 這次新解開的組 */
@@ -627,9 +634,6 @@ declare module './types' {
     light?: { hits: ReadonlyArray<LightHit> };
   }
 }
-
-/** 本地門位 → 魔方上的方位 (rot 順時針) 的反向：魔方方位 → 本地 */
-const localSide = (s: Side, rot: number): Side => rotateSide(s, (4 - (rot % 4)) % 4);
 
 /**
  * 天窗的光路 (純函式、確定性)：每扇天窗 (屋框 skylight，依 def.frame 順序) 從那一側照進那一格，逐格傳播——

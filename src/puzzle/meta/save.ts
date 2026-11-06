@@ -1,5 +1,5 @@
 import type { AbilityId } from '../core/types';
-import type { Cell, CubeState } from '../core/cube';
+import { isRot, type Cell, type CubeState } from '../core/cube';
 import type { ObjSnapshot, RoomSnapshot, TurnRec } from '../core/chapter';
 import { isRecord, type KeyValueStorage } from './storage';
 
@@ -101,12 +101,13 @@ function sanitizeObj(v: unknown): ObjSnapshot | null {
 export function sanitizeChapter(v: unknown): ChapterSave | null {
   if (!isRecord(v) || !isRecord(v.cube) || !isRecord(v.cube.pos) || !isRecord(v.cube.rot) || !isRecord(v.rooms) || !isRecord(v.at)) return null;
   const pos: Record<string, Cell> = {};
-  const rot: Record<string, 0 | 1 | 2 | 3> = {};
+  const rot: Record<string, number> = {};
   for (const [room, c] of Object.entries(v.cube.pos)) {
     if (!isCell(c)) return null;
     pos[room] = [c[0], c[1], c[2]];
+    // v0.4 第五章 朝向 0～23 (core/cube ORIENTS；舊存檔只有 0～3，照讀)；其餘 = 0
     const r = v.cube.rot[room];
-    rot[room] = r === 1 || r === 2 || r === 3 ? r : 0;
+    rot[room] = isRot(r) ? r : 0;
   }
   const rooms: Record<string, RoomSnapshot> = {};
   for (const [room, snap] of Object.entries(v.rooms)) {

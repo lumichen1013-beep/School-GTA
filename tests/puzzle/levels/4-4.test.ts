@@ -64,7 +64,7 @@ describe('4-4 最後的抽屜：資料', () => {
     expect(validateEntry(levelById('4-4')!, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect(drawer.puzzles!.map(q => [q.id, TEXT(q.titleKey)])).toEqual([['4-4a', '4-4a 殘影走的那扇門'], ['4-4b', '4-4b 最後一個抽屜'], ['4-4', '追逐・章門']]);
     expect([levelById('4-4')!.unlock.after, CH4.levels['4-4'], drawer.turnBudget, TEXT(drawer.narrationKey), TEXT(drawer.nextKey)])
-      .toEqual([['4-3'], 'drawer', { base: 8, puzzles: { '4-4b': 4 } }, '爸爸的筆記寫到那一晚，就停了。', '地下室往上翻了。第五章　閣樓——還在路上。']);
+      .toEqual([['4-3'], 'drawer', { base: 8, puzzles: { '4-4b': 4 } }, '爸爸的筆記寫到那一晚，就停了。', '地下室往上翻了。']); // 第五章骨架：拿掉「第五章　閣樓——還在路上。」
     expect(layoutDepthIssues(drawer)).toEqual([]);
   });
 
@@ -155,7 +155,7 @@ describe('4-4b 最後一個抽屜 (P4 / P15)', () => {
     cs = turn2d(cs, T('L0', -1));
     expect([cs.state.cube!.pos.drawer.slice(0, 2), hatchChaseRun(cs.world).phase, cs.state.turns!.left]).toEqual([[1, 0], 'idle', 1]);
     runScript(cs.world, [{ place: [12.9, 0, 0], mode: '3d' }, { wait: 0.05 }, { act: 'interact' }]);
-    expect([cs.world.cleared, get(cs, 'chapterE').used, nextAfterClear('4-4', 'chapter', CHAPTERS)]).toEqual([true, true, null]);
+    expect([cs.world.cleared, get(cs, 'chapterE').used, nextAfterClear('4-4', 'chapter', CHAPTERS)]).toEqual([true, true, '5-1']); // 第五章骨架：前往第五章　閣樓
     const save = recordClear({ ...defaultSave(), cleared: ['3-4'] }, '4-4', cs.world, Object.keys(CH4.levels));
     expect(save.cleared.slice(-4)).toEqual(['4-1', '4-2', '4-3', '4-4']);
   });

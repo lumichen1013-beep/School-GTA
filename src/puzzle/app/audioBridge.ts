@@ -14,7 +14,7 @@ import type { LevelSession } from './levelSession';
 
 /** 「轉不動 / 不能進轉動模式 / 推不過去」的訊息 key → 低沉的「咚」 */
 // v0.4 第四章：鎖扣的專屬說明 (下圈年輪被樹根結住了。) 同「這一排鎖著。」的拒絕音
-const DENY_KEYS: ReadonlySet<string> = new Set([...Object.values(TURN_BLOCK_MSG), ...Object.values(DIAL_BLOCK_MSG), ...Object.values(TURN_MODE_DENY_MSG), ...Object.values(TRANSFER_BLOCK_MSG), 'lvl.ch4.locked']);
+const DENY_KEYS: ReadonlySet<string> = new Set([...Object.values(TURN_BLOCK_MSG), ...Object.values(DIAL_BLOCK_MSG), ...Object.values(TURN_MODE_DENY_MSG), ...Object.values(TRANSFER_BLOCK_MSG), 'lvl.ch4.locked', 'lvl.ch5.locked']);
 
 export type AudioScreen = 'menu' | 'level' | 'clear' | 'cutscene' | 'other';
 

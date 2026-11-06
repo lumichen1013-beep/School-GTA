@@ -10,6 +10,10 @@ import {
   atticStairDecor, cabinetsDecor, crateStackDecor, deskDecor, drawerWallDecor, greenhouseStairDecor, inkFurnaceDecor, inkTroughDecor, ironRackDecor, lanternDecor,
   longTableDecor, puddleDecor, rootCeilingDecor, rootKnotDecor, rootWallDecor, sealsDecor, shelfRowDecor, stoneRailDecor, wallPipesDecor, wellMouthDecor
 } from './cellar';
+import {
+  ancientTreeDecor, atticRoofDecor, atticWindowDecor, blanketDecor, canvasPileDecor, floorDrawingDecor, gearWallDecor, grassDecor, leavesDecor, postsDecor,
+  railingDecor, skyWindowDecor, starCeilingDecor, starChartDecor, stoneTableDecor, telescopeDecor, trunksDecor
+} from './attic';
 import type { DecorFactory } from './types';
 
 export type { DecorCtx, DecorFactory, DecorPart } from './types';
@@ -35,7 +39,12 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   // 根窖書庫 (第四章；只在實景)：天花板的根、石壁的根、銅管、墨爐、墨槽、鐵架、檔案櫃 / 抽屜牆、長桌、書桌、封條、積水、油燈、井口、石欄、石階 / 木梯、木箱堆、一排一模一樣的書架
   rootCeiling: rootCeilingDecor, rootWall: rootWallDecor, rootKnot: rootKnotDecor, wallPipes: wallPipesDecor, inkFurnace: inkFurnaceDecor, inkTrough: inkTroughDecor,
   ironRack: ironRackDecor, cabinets: cabinetsDecor, drawerWall: drawerWallDecor, longTable: longTableDecor, desk: deskDecor, seals: sealsDecor, puddle: puddleDecor,
-  lantern: lanternDecor, wellMouth: wellMouthDecor, stoneRail: stoneRailDecor, greenhouseStair: greenhouseStairDecor, atticStair: atticStairDecor, crateStack: crateStackDecor, shelfRow: shelfRowDecor
+  lantern: lanternDecor, wellMouth: wellMouthDecor, stoneRail: stoneRailDecor, greenhouseStair: greenhouseStairDecor, atticStair: atticStairDecor, crateStack: crateStackDecor, shelfRow: shelfRowDecor,
+  // 觀星閣樓 (第五章；只在實景，窗框兩個視角都畫)：斜屋頂與椽樑、立柱、天窗與塵光、星圖天花板、牆上的窗、星表、望遠鏡、舊箱、帆布箱堆、欄杆、毯子、齒輪牆、重畫的展開圖
+  atticRoof: atticRoofDecor, posts: postsDecor, skyWindow: skyWindowDecor, starCeiling: starCeilingDecor, atticWindow: atticWindowDecor, starChart: starChartDecor,
+  telescope: telescopeDecor, trunks: trunksDecor, canvasPile: canvasPileDecor, railing: railingDecor, blanket: blanketDecor, gearWall: gearWallDecor, floorDrawing: floorDrawingDecor,
+  // 林心草地 (終章 6-1 骨架版)：古樹、草地、石台、落葉
+  ancientTree: ancientTreeDecor, grass: grassDecor, stoneTable: stoneTableDecor, leaves: leavesDecor
 };
 
 /** 整個房間的裝飾：root = 全部；only3d = 僅現實顯示；occluders = 擋視線時淡出 */

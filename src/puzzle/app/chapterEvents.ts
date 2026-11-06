@@ -45,6 +45,9 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     if (!l || l.to !== 'room') return { kind: 'none' };
     // v0.4 第四章 封住的門 (墨線鎖 / 收起來的折疊梯)：旗標還沒成立 → 說明、不換房
     if (o.def.type === 'cubeDoor' && o.def.sealed && !doneFlags(cs.spec, cs.state, w).has(o.def.sealed.until)) { say(w, o.def.sealed.text); return { kind: 'blocked' }; }
+    // v0.4 第五章 兩面都封的門 (sealed.both：機關的星釘門)：對面那扇門封著 → 從這一側也穿不過去 (說對面那扇門的話)
+    const far = cs.spec.rooms[l.room]?.objects.find(x => x.id === l.door);
+    if (far?.type === 'cubeDoor' && far.sealed?.both && !doneFlags(cs.spec, cs.state, w).has(far.sealed.until)) { say(w, far.sealed.text); return { kind: 'blocked' }; }
     // v0.4 H1：到達處被實體占住 (例：夾層的書櫃堵住洞) → 在這一房說那個實體的話、不換房
     const blocked = doorArrival(cs, e.door);
     if (blocked) { say(w, blocked.blockText ?? 'msg.cube.doorBlocked'); return { kind: 'blocked' }; }

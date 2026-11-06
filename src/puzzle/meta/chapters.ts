@@ -85,7 +85,7 @@ export const entryNarrationKey = (spec: ChapterSpec, state: ChapterState): strin
 const SCALE_CARD_IDS: readonly string[] = ['card.da', 'card.xiao'];
 
 /**
- * v0.4 H1 補發尺度卡 (規格「H1 夾層（細化）」怎麼進 2)：存檔能力有 scale、這一章 cc.scaleCards (只有第二章)、
+ * v0.4 H1 補發尺度卡 (規格「H1 夾層（細化）」怎麼進 2)：存檔能力有 scale、這一章 cc.scaleCards (第二章、第五章)、
  * 章節道具與標籤上都沒有那張卡 → 補進 state.items (各一張)；granted = 這次補的卡 (非空 → 開章後 HUD 說一次 msg.cards.scaleBack)。
  * 之後卡片就是一般章節道具 (存檔 / R 照舊)；不改傳入的 state
  */

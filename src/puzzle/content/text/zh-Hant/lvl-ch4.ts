@@ -13,7 +13,6 @@ export const lvlCh4 = {
   'lvl.ch4.sealed.short': '封存',
   'lvl.ch4.placeholder.narration': '這裡的東西被封起來了。封住的，不只是東西。',
   'lvl.ch4.placeholder.next': '地下室',
-  'lvl.ch4.drawer.next': '地下室往上翻了。第五章　閣樓——還在路上。',
   'lvl.ch4.doorN': '北門',
   'lvl.ch4.doorS': '南門',
   'lvl.ch4.doorE': '東門',

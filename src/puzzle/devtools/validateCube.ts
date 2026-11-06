@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, rotateSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, localSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
 import { inkPaths, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
@@ -218,7 +218,8 @@ export interface DialModel {
   doorLocks?: readonly DialDoorLock[];
 }
 
-export interface DialDoorLock { room: string; door: string; until: string }
+/** both = 兩面都封 (cubeDoor.sealed.both)：人也不能從對面經這扇門走進來 */
+export interface DialDoorLock { room: string; door: string; until: string; both?: boolean }
 
 export interface DialArea { id: string; room: string; doors: readonly string[]; opensWhen?: string }
 
@@ -229,11 +230,12 @@ export interface DialArea { id: string; room: string; doors: readonly string[]; 
 export function areaPairs(m: Pick<DialModel, 'areas' | 'doorLocks'>, ls: readonly Link[], flags: ReadonlySet<string>): Array<[string, string]> {
   const areas = m.areas ?? [];
   const sealed = (room: string, door: string): boolean => (m.doorLocks ?? []).some(k => k.room === room && k.door === door && !flags.has(k.until));
+  const sealedIn = (room: string, door: string): boolean => (m.doorLocks ?? []).some(k => k.both && k.room === room && k.door === door && !flags.has(k.until));
   const areaOf = (room: string, door: string): DialArea | undefined => areas.find(a => a.room === room && a.doors.includes(door));
   const out: Array<[string, string]> = [];
   for (const l of ls) {
     if (!('room' in l.to)) continue;
-    if (sealed(l.from.room, l.from.door)) continue;
+    if (sealed(l.from.room, l.from.door) || sealedIn(l.to.room, l.to.door)) continue;
     const to = areaOf(l.to.room, l.to.door);
     if (to?.opensWhen !== undefined && !flags.has(to.opensWhen)) continue;
     out.push([areaOf(l.from.room, l.from.door)?.id ?? l.from.room, to?.id ?? l.to.room]);
@@ -320,8 +322,8 @@ function hitsAt(def: CubeDef, s: CubeState, uncovered: readonly string[] = []): 
   return h;
 }
 
-/** 光的方位 (魔方方位) → 房間本地 (rot 順時針的反向) */
-const localHits = (hits: readonly LightHit[], rot: number): LightHit[] => (rot ? hits.map(h => ({ ...h, from: rotateSide(h.from, (4 - rot) % 4) })) : [...hits]);
+/** 光的方位 (魔方方位) → 房間本地 (core/cube localSide：同一張朝向表) */
+const localHits = (hits: readonly LightHit[], rot: number): LightHit[] => (rot ? hits.map(h => ({ ...h, from: localSide(h.from, rot) })) : [...hits]);
 /** 每個排列的墨流匯點 (所有源頭都開著；以魔方定義分開記) */
 const inkMemo = new WeakMap<CubeDef, WeakMap<CubeState, Record<string, Side[]>>>();
 function inkAt(def: CubeDef, s: CubeState): Record<string, Side[]> {
@@ -389,14 +391,15 @@ function arrangementsOf(def: CubeDef, limit: number): Arrangements {
   const groups = (def.dial?.groups ?? []).filter(g => !def.dial?.miniOnly?.includes(g.id));
   const opts = groups.flatMap(g => turnDirs(def, g.id).map(dir => ({ group: g.id, dir })));
   const s0 = initialCube(def);
-  const index = new Map<string, number>([[cubeKey(s0), 0]]);
+  // 第五章 走廊格同類合併 (cubeKey 帶 def)；沒有走廊格的魔方 = 原樣
+  const index = new Map<string, number>([[cubeKey(s0, def), 0]]);
   const states = [s0];
   const next: number[] = [];
   for (let a = 0; a < states.length; a++) {
     for (const o of opts) {
       const r = applyTurn(def, states[a], o);
       if (isBlocked(r)) { next.push(-1); continue; }
-      const k = cubeKey(r);
+      const k = cubeKey(r, def);
       let i = index.get(k);
       if (i === undefined) {
         if (states.length >= limit) return { states, opts, next: Int32Array.from(next), overflow: true };
@@ -468,10 +471,12 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     return w;
   };
   const locks = def.dial?.locks ?? [];
-  const optLocked = (o: number, f: number): boolean => {
+  // v0.4 第五章 DialLock.rooms：人不在那幾間房 = 鎖著 (解開了也一樣)
+  const optLocked = (o: number, f: number, r: number): boolean => {
     const g = arr.opts[o].group;
     if (forcedLocked.has(g)) return true;
     const ls = locks.filter(l => l.group === g);
+    if (ls.some(l => l.rooms && !l.rooms.includes(rooms[r]))) return true;
     return ls.length > 0 && !ls.some(l => { const i = pid.get(l.until); return i !== undefined && (f & (1 << i)) !== 0; });
   };
   const flagSet = (f: number): Set<string> => new Set(m.puzzles.filter((_, i) => f & (1 << i)).map(p => p.id));
@@ -521,7 +526,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     if (d && k > 0) {
       for (let o = 0; o < arr.opts.length; o++) {
         const a2 = arr.next[a * arr.opts.length + o];
-        if (a2 < 0 || optLocked(o, f) || optJammed(a, o, f, c)) continue;
+        if (a2 < 0 || optLocked(o, f, r) || optJammed(a, o, f, c)) continue;
         add(enc(a2, r, f, d, k - 1, c));
       }
     }
@@ -557,6 +562,8 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
   const def = m.cube;
   const locks = def.dial?.locks ?? [];
   const usable = arr.opts.map(o => { const ls = locks.filter(l => l.group === o.group); return ls.length === 0 || ls.some(l => flags.has(l.until)); });
+  // v0.4 第五章 DialLock.rooms：這一組只在人在那幾間房時轉得動 (null = 不限)
+  const lockRooms = arr.opts.map(o => { const ls = locks.filter(l => l.group === o.group && l.rooms); return ls.length ? new Set(ls.flatMap(l => l.rooms!)) : null; });
   const cs = cardSpaceOf(m);
   const jamMemo = new Map<number, Set<string>>();
   const jamsOf = (c: number): Set<string> => { let j = jamMemo.get(c); if (!j) { j = jammedRooms(m, flags, ref => cs.at(c, ref)); jamMemo.set(c, j); } return j; };
@@ -600,7 +607,7 @@ function enumerate(m: DialModel, arr: Arrangements, p: DialPuzzle, a0: number, r
       if (seq.length > 0 && solved(a, rs)) return true; // 較短就解開了：屬於較淺的層
       for (let o = 0; o < arr.opts.length; o++) {
         if (!usable[o]) continue;
-        const free = rs.filter(x => !jammed(a, o, split(x)[1]));
+        const free = rs.filter(x => !jammed(a, o, split(x)[1]) && (!lockRooms[o] || lockRooms[o]!.has(split(x)[0])));
         if (!free.length) continue;
         const a2 = arr.next[a * arr.opts.length + o];
         if (a2 < 0) continue;
@@ -748,6 +755,6 @@ export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelD
   for (const a of extra.areas ?? []) if (!(a.id in budgets) && budgets[a.room]) budgets[a.id] = { budget: budgets[a.room].budget };
   // 封住的門 (cubeDoor.sealed)：沒另給 doorLocks 時由關卡資料組出
   const doorLocks: DialDoorLock[] = [];
-  for (const [id, lv] of Object.entries(rooms)) for (const o of lv.objects) if (o.type === 'cubeDoor' && o.sealed) doorLocks.push({ room: id, door: o.id, until: o.sealed.until });
+  for (const [id, lv] of Object.entries(rooms)) for (const o of lv.objects) if (o.type === 'cubeDoor' && o.sealed) doorLocks.push({ room: id, door: o.id, until: o.sealed.until, ...(o.sealed.both ? { both: true } : {}) });
   return { cube, doors: chapterDoors(rooms), start, rooms: budgets, puzzles, finish, ...(doorLocks.length ? { doorLocks } : {}), ...extra };
 }

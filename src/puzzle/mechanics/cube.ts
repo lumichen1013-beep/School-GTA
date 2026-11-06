@@ -33,7 +33,11 @@ declare module '../core/types' {
        * v0.4 第四章 封住的門 (墨線鎖、收起來的折疊梯)：until 的旗標此刻還沒成立 → 從這一側穿不過去 (按 E 說 text，不換房；
        * 章節層 app/chapterEvents 依 doneFlags 判定)。兩側都封 = 兩扇門各寫一次 (驗證器 dialModelOf 由此組出 DialModel.doorLocks)
        */
-      sealed?: { until: string; text: TextKey };
+      sealed?: {
+        until: string; text: TextKey;
+        /** v0.4 第五章 兩面都封 (機關的星釘門)：從對面 (任何此刻接到這扇門的門) 也穿不過去、說這裡的 text；validateDial 的 doorLocks.both */
+        both?: boolean;
+      };
     };
     /** 門牌 (只在 2D；label kind 'plate' 掛在這裡) */
     doorPlate: {};

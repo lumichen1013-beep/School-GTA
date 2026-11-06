@@ -255,14 +255,16 @@ export class LevelSession {
     this.saveChapter();
     const after = r.state.cube?.pos[r.state.room];
     const slide = r.spec.cube?.ops === 'slide';
-    // v0.4 第四章 層轉：你這間房換了位置或朝向 (中心格只換朝向) = 連你一起轉
+    // v0.4 第四章 層轉：你這間房換了位置或朝向 (中心格只換朝向) = 連你一起轉；第五章 切片轉 / 原地轉同理
     const layer = r.spec.cube?.ops === 'layer';
-    const spun = layer && (r.state.cube?.rot[r.state.room] ?? 0) !== beforeRot;
-    const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1]);
+    const slice = r.spec.cube?.ops === 'slice';
+    const spun = (layer || slice) && (r.state.cube?.rot[r.state.room] ?? 0) !== beforeRot;
+    const moved = !!before && !!after && (before[0] !== after[0] || before[1] !== after[1] || before[2] !== after[2]);
     const here = moved || spun;
     const done = c.t === 'undo' ? 'msg.dial.undone'
       : layer ? (here ? 'msg.dial.layerHere' : 'msg.dial.layer')
-        : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
+        : slice ? (here ? 'msg.dial.sliceHere' : 'msg.dial.slice')
+          : moved ? (slide ? 'msg.dial.slidHere' : 'msg.dial.turnedHere') : slide ? 'msg.dial.slid' : 'msg.dial.turned';
     if (!moved) { say(this.world, done); return; }
     // 過場方向 = 你這間房的移動方向 (列循環繞回時依轉動方向)
     const dx = after![0] - before![0];

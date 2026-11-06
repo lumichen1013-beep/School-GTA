@@ -14,6 +14,7 @@ import { gallery } from './ch3/3-2-gallery';
 import { night } from './ch3/3-3-night';
 import { depths } from './ch3/3-4-depths';
 import { hall } from './ch4/4-1-hall';
+import { sky } from './ch5/5-1-sky';
 import { furnace } from './ch4/4-2-furnace';
 import { archive } from './ch4/4-3-archive';
 import { drawer } from './ch4/4-4-drawer';
@@ -72,7 +73,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 4-3 封存書庫：第四章第三關 (P11 兩層的讀法、兩股墨、驚嚇)；4-2 通關後開放 (章內：4-1a 的梯口或 4-2a 的西門)
   { id: '4-3', chapter: 4, titleKey: 'lvl.4-3.title', abilities: ['nib'], unlock: { after: ['4-2'] }, load: () => archive },
   // 4-4 最後的抽屜：第四章章末 (追逐 2 = P8 首次、墨閘、章門 = 第四章通關)；4-3 通關後開放
-  { id: '4-4', chapter: 4, titleKey: 'lvl.4-4.title', abilities: ['nib'], unlock: { after: ['4-3'] }, load: () => drawer }
+  { id: '4-4', chapter: 4, titleKey: 'lvl.4-4.title', abilities: ['nib'], unlock: { after: ['4-3'] }, load: () => drawer },
+  // 5-1 天窗間：第五章第一關 (魔方 3×3×3 切片轉、控制盤 = 觀星儀)；第四章章門打開 (4-4 通關) 後開放；能力 = 筆尖 + 比例尺 (第五章要「小」；占位版，謎題逐關加入)
+  { id: '5-1', chapter: 5, titleKey: 'lvl.5-1.title', abilities: ['nib', 'scale'], unlock: { after: ['4-4'] }, load: () => sky }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

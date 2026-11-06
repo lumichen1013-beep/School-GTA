@@ -15,6 +15,7 @@ const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 export function dialModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
   if (d.type === 'dial' && d.chapter === 3) return compassModel(p, d, theme);
   if (d.type === 'dial' && d.chapter === 4) return rootDialModel(p, d, theme);
+  if (d.type === 'dial' && d.chapter === 5) return starDialModel(p, d, theme);
   const { pal } = theme;
   const g = new THREE.Group();
   const standH = d.h * 0.55;
@@ -223,6 +224,74 @@ export function rootDialModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel 
     // 根結：下圈 (L0) 還鎖著才纏著
     knot.visible = !(c.world.ext.unlocked ?? []).includes('L0');
     face.rotation.y = c.world.ext.dial?.active ? -c.t * 0.05 : 0;
+  };
+  return { root: g, update };
+}
+
+/** 觀星儀外圈的星釘：鎖扣組 → 釘的位置 (東 / 西 / 北；three 座標 x = 東、z = 南) */
+const STAR_NAILS: ReadonlyArray<readonly [string, number, number]> = [['SE', 1, 0], ['SW', -1, 0], ['SN', 0, -1]];
+
+/**
+ * 觀星儀 (第五章；story-bible 5.1b)：木製三腳座上三個交叉的黃銅星環 (東西、南北、上下三軸)，中心一顆不動的綠石 (林心)；
+ * 外面一圈水平的外環，被銀釘釘住 (東 / 西 / 北三顆：鎖扣 SE / SW / SN 還沒解開 = 釘著；ext.unlocked 有那一組 = 釘子拔掉)。
+ * 啟動後三個中環輪流慢慢轉 (示意中間片轉得動；只動畫，不影響邏輯)，綠石微微發光；減弱動態不影響 (轉速很慢)
+ */
+export function starDialModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  const brass = { metalness: 0.7, roughness: 0.3 } as const;
+  const cy = d.h * 0.66;
+  const R = Math.min(d.w, d.d) * 0.36;
+  // 三腳座 (木) + 托環
+  const legs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.5;
+    legs.push(placed(new THREE.CylinderGeometry(0.035, 0.05, cy * 1.05, 6), Math.cos(a) * R * 0.55, cy * 0.48, Math.sin(a) * R * 0.55, Math.sin(a) * 0.32, 0, -Math.cos(a) * 0.32));
+  }
+  legs.push(placed(new THREE.CylinderGeometry(0.06, 0.08, cy * 0.5, 10), 0, cy * 0.62, 0));
+  g.add(p.mesh(mergeParts(legs), pal.shelfDark, { map: crateWood(pal), flat: pal.shelfDark }));
+  // 外環 (水平；釘著星釘)
+  const outer = p.mesh(new THREE.TorusGeometry(R * 1.28, 0.03, 8, 40), pal.goldDeep, { ...brass, outline: false });
+  outer.rotation.x = Math.PI / 2;
+  outer.position.y = cy;
+  g.add(outer);
+  // 三個中環：東西軸 (環面朝東西)、南北軸、上下軸
+  const ring = (r: number) => new THREE.TorusGeometry(r, 0.025, 8, 36);
+  const rx = p.mesh(ring(R), pal.brass, brass);
+  rx.rotation.y = Math.PI / 2;
+  const ry = p.mesh(ring(R * 0.92), pal.brass, brass);
+  const rz = p.mesh(ring(R * 0.84), pal.brass, brass);
+  rz.rotation.x = Math.PI / 2;
+  const rings = new THREE.Group();
+  rings.position.y = cy;
+  rings.add(rx, ry, rz);
+  g.add(rings);
+  // 中心的綠石 (林心；不動)
+  const stone = p.mesh(new THREE.IcosahedronGeometry(R * 0.26, 0), 0x3e8a5a, { emissive: 0x3e8a5a, emissiveIntensity: 0.25, roughness: 0.4, unique: true });
+  stone.position.y = cy;
+  g.add(stone);
+  // 星點刻在中環上 (金色小點，一個網格)
+  const dots: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; dots.push(placed(new THREE.SphereGeometry(0.018, 5, 4), Math.cos(a) * R * 1.28, cy + 0.035, Math.sin(a) * R * 1.28)); }
+  g.add(p.mesh(mergeParts(dots), pal.gold, { ...brass, outline: false, shadow: false }));
+  // 星釘 (銀)：鎖扣還沒解開 = 釘著
+  const nails = new Map<string, THREE.Mesh>();
+  for (const [group, sx, sz] of STAR_NAILS) {
+    const n = p.mesh(mergeParts([placed(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6), 0, 0, 0), placed(new THREE.ConeGeometry(0.035, 0.05, 6), 0, 0.08, 0)]), 0xd8dce6, { metalness: 0.8, roughness: 0.25, outline: false });
+    n.position.set(sx * R * 1.28, cy + 0.04, sz * R * 1.28);
+    g.add(n);
+    nails.set(group, n);
+  }
+  const update = (c: ModelCtx) => {
+    const on = !!c.world.ext.dial?.active;
+    const unlocked = c.world.ext.unlocked ?? [];
+    for (const [group, n] of nails) n.visible = !unlocked.includes(group);
+    // 啟動後三個中環輪流慢慢轉 (每 4 秒換一個)
+    if (on) {
+      const k = Math.floor(c.t / 4) % 3;
+      const step = c.dt * 0.6;
+      if (k === 0) rx.rotation.x += step; else if (k === 1) ry.rotation.z += step; else rz.rotation.z += step;
+    }
+    (stone.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 0.55 : 0.25;
   };
   return { root: g, update };
 }

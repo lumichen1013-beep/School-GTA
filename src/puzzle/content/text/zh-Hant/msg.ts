@@ -57,6 +57,8 @@ export const msg = {
   'msg.dial.slid': '那間房滑進了空格。',
   'msg.dial.layer': '那一層轉了過去。',
   'msg.dial.layerHere': '整層樓連你一起轉了過去。',
+  'msg.dial.slice': '那一片轉了過去。',
+  'msg.dial.sliceHere': '整片房間連你一起轉了過去。',
   'msg.dial.slidHere': '房間連你一起滑進了空格。',
   // 順序鎖 (N27)：拉對一條停住、拉錯全部彈回 (無懲罰)
   'msg.cord.pulled': '繩子拉下去，停住了。',

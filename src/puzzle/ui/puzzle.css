@@ -198,6 +198,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 }
 .pz-map.show { display: flex; }
 .pz-map.turning { width: min(96vw, 720px); background: #fdf4e1; }
+/* v0.4 第五章 三層並排的展開圖 (11 欄)：加寬 */
+.pz-map.wide { width: min(96vw, 960px); }
+.pz-map.turning.wide { width: min(97vw, 1180px); }
 .pz-map-head { font-weight: 700; letter-spacing: .3em; font-size: 16px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 30px; position: relative; }
 .pz-map-body { flex: 1; min-height: 0; display: flex; gap: 10px; }
 .pz-map-stage { position: relative; flex: 1; min-width: 0; min-height: 0; }
@@ -235,6 +238,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 .pz-turn-head.locked.sel, .pz-turn-head.jammed.sel { color: var(--ink); background: #f3d9b8; border-style: solid; }
 .pz-turn-head .mark { position: absolute; right: -6px; top: -6px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--ink); background: var(--paper); border: 1.5px solid var(--ink); border-radius: 50%; }
 .pz-turn-btns { display: none; flex-direction: column; justify-content: flex-end; gap: 12px; width: 84px; }
+/* v0.4 第五章 星環盤 (切片 / 原地轉)：每列 = 列名 + 鈕 (片名小字 + ↺ ↻)；橫屏在畫布右側直排、直屏在畫布下方橫排 */
+.pz-turn-rings { display: none; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
+.pz-map.turning .pz-turn-rings.show { display: flex; }
+.pz-ring-row { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.pz-ring-name { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #6b5440; white-space: nowrap; }
+.pz-ring-row.spin .pz-ring-name { color: #2c3fb0; }
+.pz-ring-btns { display: flex; gap: 6px; }
+.pz-turn-head.ring { position: relative; width: 50px; height: 44px; flex-direction: column; gap: 0; }
+.pz-turn-head.ring small { font-size: 10px; line-height: 1; letter-spacing: 0; font-weight: 700; }
+.pz-turn-head.ring b { font-size: 18px; }
 .pz-map.turning .pz-turn-btns { display: flex; }
 .pz-turn-btn {
   min-height: 44px; padding: 0 10px; font-size: 16px; font-weight: 700; letter-spacing: .1em; color: var(--ink); background: var(--paper2);
@@ -251,6 +264,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   .pz-map-body { flex-direction: column; }
   .pz-turn-btns { flex-direction: row; width: auto; justify-content: stretch; }
   .pz-turn-btn { flex: 1; }
+  .pz-turn-rings { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 4px 12px; }
+  .pz-ring-row { align-items: center; gap: 2px; }
+  .pz-turn-head.ring { width: 46px; height: 40px; }
+  /* 第五章 三層並排 + 星環盤：直屏拉高卡片 (星環盤占掉的高度還給展開圖)、收起圖例 */
+  .pz-map.turning.wide { height: 68vh; }
+  .pz-map.turning.wide .pz-map-legend { display: none; }
 }
 @media (max-width: 600px), (pointer: coarse) { .pz-map-keys { display: none; } }
 /* 橫屏矮螢幕 (手機橫放)：轉動模式的卡片拉高到狀態列以下的全部高度 (移動鍵此時本來就停用)，收起圖例與鍵盤說明 */

@@ -29,7 +29,7 @@ beforeAll(() => {
 describe('過場剪紙分鏡 (render/cutscene)', () => {
   it('每個過場鏡頭的 sceneId 都有繪製函式；畫面字 (labels) 的 key 都在文字表', () => {
     const ids = CUTSCENES.flatMap(c => c.shots.map(s => s.art.sceneId));
-    expect(ids.length).toBe(18); // 序章 12 + cs:ch2 3 + cs:ch3 3
+    expect(ids.length).toBe(24); // 序章 12 + cs:ch2 3 + cs:ch3 3 + cs:night 6
     expect(ids.filter(id => !(id in PAPER_SCENES))).toEqual([]);
     const labels = CUTSCENES.flatMap(c => c.shots.flatMap(s => Object.values(s.art.labels ?? {})));
     expect(labels.filter(k => !(k in zhHant))).toEqual([]);

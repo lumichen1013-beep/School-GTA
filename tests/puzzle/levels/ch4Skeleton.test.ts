@@ -120,7 +120,7 @@ describe('第四章骨架：六間占位房', () => {
       expect([id, l.theme, l.turnBudget]).toEqual([id, 'cellar', id === 'drawer' ? { base: 8, puzzles: { '4-4b': 4 } } : { base: 8 }]); // 4-4 細化：抽屜 4-4b 完成前墨 4 (P4)
     }
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX])).toEqual([[-12, 12], [-5, 5], [-14, 14], [-10, 10], [-14, 14], [-6, 6]]);
-    expect([TEXT(hall.narrationKey), TEXT(furnace.narrationKey), TEXT(drawer.nextKey)]).toEqual(['一模一樣的書架，排得太整齊了。', '牆上的影子，慢了半拍。', '地下室往上翻了。第五章　閣樓——還在路上。']); // 4-2 細化：墨爐間的旁白
+    expect([TEXT(hall.narrationKey), TEXT(furnace.narrationKey), TEXT(drawer.nextKey)]).toEqual(['一模一樣的書架，排得太整齊了。', '牆上的影子，慢了半拍。', '地下室往上翻了。']); // 4-2 細化：墨爐間的旁白；第五章骨架：4-4 通關文字
   });
 
   it('梯口的進房站位 (doorSpawn)：梯口前方 0.9 (往觀眾)；地板梯口站在活板門前、梯子站在梯子前', () => {
@@ -298,7 +298,7 @@ describe('第三章存檔接著第四章、cs:ch3', () => {
   it('cs:ch3：觸發 = 3-4 通關後第一次前往 4-1 (看過就不再播)；三鏡、總長 20～45 秒；逐字稿照 cutscenes-v0.1', () => {
     const cut = cutsceneById('cs:ch3')!;
     expect([cut.trigger, cut.shots.map(s => s.art.kind === 'paper' && s.art.sceneId), CUTSCENES.map(c => c.id)]).toEqual([
-      { afterClear: '3-4' }, ['ch3.depths', 'ch3.diary', 'ch3.sink'], ['cs:prologue', 'cs:ch2', 'cs:ch3']
+      { afterClear: '3-4' }, ['ch3.depths', 'ch3.diary', 'ch3.sink'], ['cs:prologue', 'cs:ch2', 'cs:ch3', 'cs:night'] // 第五章骨架：cs:night
     ]);
     expect(cut.shots.flatMap(s => s.lines.map(k => TEXT(k)))).toEqual(['燈架停了。人影沒有再追來。', '手記第三頁：', '「守門的影子，只攔，不傷。」', '老宅轉了第三次，整個往下沉。', '樹根，從天花板垂了下來。']);
     const sec = planCutscene(cut, TEXT, { speed: 'normal', reduceMotion: false, name: '阿青' }).totalSec;
@@ -306,6 +306,6 @@ describe('第三章存檔接著第四章、cs:ch3', () => {
     const save = { ...defaultSave(), cleared: ['3-1', '3-2', '3-3', '3-4'] };
     expect([nextAfterClear('3-4', 'chapter', CHAPTERS), cutsceneBeforeLevel(save, '4-1')?.id, cutsceneBeforeLevel(defaultSave(), '4-1')]).toEqual(['4-1', 'cs:ch3', undefined]);
     expect(cutsceneBeforeLevel(recordCutscene(save, 'cs:ch3', false), '4-1')).toBeUndefined();
-    expect(nextAfterClear('4-1', 'chapter', CHAPTERS)).toBeNull(); // 第五章占位：第四章通關沒有「前往」
+    expect(nextAfterClear('4-1', 'chapter', CHAPTERS)).toBe('5-1'); // 第五章骨架：第四章通關 → 前往第五章 (原 null：第五章占位)
   });
 });

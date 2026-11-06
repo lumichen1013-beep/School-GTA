@@ -13,6 +13,8 @@ import { CH3_CUBE } from './ch3';
 import { bed, depths, gallery, night, nursery } from '../levels/ch3/rooms';
 import { CH4_CUBE } from './ch4';
 import { archive, drawer, furnace, hall, sealed, well } from '../levels/ch4/rooms';
+import { CH5_CUBE } from './ch5';
+import { east, engine, landing, meadow, north, sky, walkA, walkB, walkC, walkD, west } from '../levels/ch5/rooms';
 import { PROTO_DIAL_ROOMS } from '../levels/proto/dial';
 import { TEST_DIAL_CHAPTER, TEST_DIAL_CUBE } from './test-dial';
 
@@ -29,7 +31,7 @@ export interface CubeChapter {
   legacy?: typeof CH1_LEGACY;
   /**
    * v0.4 H1：回到本章時補發尺度卡 (存檔能力 scale、章節道具與標籤上都沒有那張卡 → 補進章節道具；meta/chapters grantScaleCards)。
-   * 只有第二章 (夾層的書櫃要量)；第一章不補 (8 節「新能力不進舊關」)、第三章本來就有
+   * 第二章 (夾層的書櫃要量)、第五章 (5-1a 的「小」；規格「第五章骨架與銜接」)；第一章不補 (8 節「新能力不進舊關」)、第三章本來就有
    */
   scaleCards?: boolean;
 }
@@ -42,7 +44,13 @@ export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   { chapter: 3, cube: CH3_CUBE, rooms: { nursery, night, gallery, bed, depths }, start: { room: 'nursery', door: 'doorW' }, levels: { '3-1': 'nursery', '3-2': 'gallery', '3-3': 'night', '3-4': 'depths' } },
   // 第四章 地下室 (v0.4 控制盤、層轉)：4-1 根窖走廊、根井 (裝飾房)、4-2 墨爐間、4-3 封存書庫、4-4 最後的抽屜為占位版 (逐關取代)、H3 封存室占位 (沒有門)；
   // 從溫室深處章門外的石階進 4-1 根窖走廊北門
-  { chapter: 4, cube: CH4_CUBE, rooms: { hall, well, furnace, archive, drawer, sealed }, start: { room: 'hall', door: 'doorN' }, levels: { '4-1': 'hall', '4-2': 'furnace', '4-3': 'archive', '4-4': 'drawer' } }
+  { chapter: 4, cube: CH4_CUBE, rooms: { hall, well, furnace, archive, drawer, sealed }, start: { room: 'hall', door: 'doorN' }, levels: { '4-1': 'hall', '4-2': 'furnace', '4-3': 'archive', '4-4': 'drawer' } },
+  // 第五章 閣樓 (v0.4 控制盤、切片轉)：樓梯口 (裝飾房)、5-1 天窗間、5-2 東窗、5-3 西窗、5-4 北窗、5-5 最後的機關、6-1 林心草地為占位版 (逐關取代)、
+  // 梁上走道 A～D (走廊格)；從地下室的木梯進樓梯口南門；第五章要「大」「小」尺度卡 (scaleCards)
+  {
+    chapter: 5, cube: CH5_CUBE, rooms: { landing, sky, east, west, north, engine, meadow, walkA, walkB, walkC, walkD },
+    start: { room: 'landing', door: 'doorS' }, levels: { '5-1': 'sky' }, scaleCards: true
+  }
 ];
 
 /** 【原型占位】開發用的魔方 (不在正式章節；只從選單的開發入口進入)：M-Dial 控制盤原型 */

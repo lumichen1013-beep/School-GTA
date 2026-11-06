@@ -1260,6 +1260,10 @@ export function resolveLabel(base: string, cards: readonly string[]): { text: st
 
 > 實作註記 (2026-11-06，第四章骨架與銜接)：照上方設計註記實作 (細節與數字見規格「第四章骨架與銜接」實作註記)。另加：`LevelDef.shortKey` (展開圖小格子的短名)、`World.ext.unlocked` (已解開的鎖扣；`ext.dial` 形狀不變)、`DialLock.text`、`app/cubeMapModel.dialBlockKey`、`ui/cubeMap` 的上下疊版面 (`stackModel` / `stackTurn` / `stackLight`；只在疊起來格子較大時採用)、梯口的 [E] 動詞 (`hudModel`)、層轉訊息 `msg.dial.layer*`。
 
+#### 7.4.9 M1 第五章：閣樓（規格 6「第五章魔方與門位」「第五章共用規則」「第五章骨架與銜接」；逐關開發）
+
+> 實作註記 (2026-11-06，第五章骨架與銜接)：細節與數字見規格「第五章骨架與銜接」實作註記。**核心** `core/cube`：朝向表 `ORIENTS` (24 種；`rotateSide` / `localSide` / `turnRot` / `isRot`)、`TurnKind 'spin'` (`TurnGroup.room`)、`CubeDef.corridors` (走廊格；`links` 穿過走廊)、`CubeDef.frame[].wall` (窗：門朝著它 = 牆)、`DialLock.rooms`、`cubeKey(s, def)` (走廊格同類合併)；`core/chapter`：`isLocked` 查 `rooms`、`groupHidden`；`mechanics/cube`：`cubeDoor.sealed.both` (兩面都封；`app/chapterEvents` 查對面那扇門、`validateDial` `DialDoorLock.both`)。`CubeState.rot` 的型別由 `0|1|2|3` 放寬為 `number` (0～23)；存檔 (`meta/save`) 以 `isRot` 驗證。**外殼** `app/cubeMapModel`：門的方向改用世界方位、走廊格 `MapCell.kind 'corridor'` (`beam`)、三層的層名、`MapFrame.inCell`、星環盤 (`ringHeaders` / `finishTurnMode` / `ringStep`；`TurnModeModel.rings`、`TurnHeader.ring / sub / mark`、`TurnPreview.slab`)；`ui/cubeMap`：星環盤 DOM (`.pz-turn-rings`)、走廊格的木梁、格內屋框、`Stack.per` (直屏時三層可排成兩層一排 + 一層)、三層時卡片加寬 (`.wide`)。**呈現**：`render/themes/attic`、`meadow`、`render/decor/attic` (17 種)、`render/models/dial` 的 `starDialModel`、`render/cutscene/scenes` 的 cs:night 六鏡。依賴矩陣不變 (meta/save 只多 import core/cube 的 `isRot`)。
+
 ## 8. 取捨與風險
 
 | # | 取捨 / 風險 | 決定與理由 |

@@ -12,6 +12,7 @@ import { deep, mezz, print, reading } from '../../../src/puzzle/content/levels/c
 import { THEMES } from '../../../src/puzzle/render/themes';
 import { bed, depths, gallery, night, nursery } from '../../../src/puzzle/content/levels/ch3/rooms';
 import { archive, drawer, furnace, hall, sealed, well } from '../../../src/puzzle/content/levels/ch4/rooms';
+import { east, engine, landing, meadow, north, sky, walkA, west } from '../../../src/puzzle/content/levels/ch5/rooms';
 
 /** node 沒有 canvas：程序化紋理畫在吞掉所有呼叫的假 2D context 上 */
 function stubCanvas(): void {
@@ -495,5 +496,25 @@ describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 
     w.player.mode = '2d';
     view.update('2d', 1 / 60, 2, cams.active('2d'));
     view.dispose();
+  });
+});
+
+describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋頂與椽樑、天窗與塵光、牆上的窗、舊箱、觀星儀、梯口) 與林心草地', () => {
+  beforeAll(stubCanvas);
+
+  it('七間房 + 走道的 3D 場景 (閣樓 / 林心主題) 鏡頭看得到的面沒有共面 (含已啟動的觀星儀、星釘拔掉一顆)；藏寶圖畫得出來', () => {
+    const layout = { sky: [1, 1, 2], walkA: [1, 2, 2], north: [1, 0, 1], west: [0, 1, 1], meadow: [1, 1, 1], east: [2, 1, 1], landing: [1, 2, 1], engine: [1, 1, 0] } as const;
+    for (const [room, link] of [[landing, 'room'], [sky, 'room'], [sky, 'wall'], [east, 'wall'], [west, 'wall'], [north, 'wall'], [engine, 'wall'], [meadow, 'wall'], [walkA, 'wall']] as const) {
+      const w = newWorld(room);
+      const links = Object.fromEntries(room.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, link === 'room' ? { to: 'room' as const, room: 'x', door: 'y', kind: 'door' as const } : { to: 'wall' as const }]));
+      w.ext = { cube: { links, at: [1, 1, 2], layout }, dial: { active: true }, unlocked: ['SE'] };
+      const view = new PuzzleScene(w, room.theme === 'meadow' ? THEMES.meadow : THEMES.attic);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, link, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, link, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
   });
 });
