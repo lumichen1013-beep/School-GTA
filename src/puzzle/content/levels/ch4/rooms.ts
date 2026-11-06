@@ -63,29 +63,8 @@ export { furnace } from './4-2-furnace';
 /** 4-3 封存書庫 (下層西邊)：完整檔在 4-3-archive.ts */
 export { archive } from './4-3-archive';
 
-/**
- * 4-4 最後的抽屜 (下層東邊)：西門 (↔ 墨爐間東門；墨線鎖)、天花板梯口 (寬梯：木箱落得進來)、東章門 (要房間的銅鑰匙 key.cellar；只接 [1,0,0] 北側屋框)。
- * 後景一排檔案櫃與最後一個抽屜 ｜ 中景爸爸的書桌與椅子 (面向抽屜) ｜ 前景章門前往上的木梯腳、積水、紙籤
- */
-export const drawer = room('drawer', -14, 14, [
-  door('W', 'door', -13.8, inkSealed('ink.E')),
-  hatch('U', 'arch', -6.0, -4.4),
-  // 樹根管線 (外觀)：天花板 → 西門 (墨流回墨爐的東門)
-  { id: 'pipeDrawer', type: 'inkPipe', when: 'through', path: '-5.0,5.6,-4.7 -9.6,4.4,-4.7 -13.6,1.8,-1.2', x: -9.3, y: 1.8, z: -3.0, w: 0.3, h: 3.8, d: 0.3, visible: '3d', solid: false },
-  // 4-1c：天花板梯口正下方的根結踏板 (木箱從走廊落下來就壓在上面)
-  { id: 'rootPlate', type: 'rootPlate', doneFlag: '4-1c', solvedText: 'lvl.4-1.plate.solved', x: -6.0, y: 0, z: -2.4, w: 2.4, h: 0.08, d: 1.4, visible: 'both', solid: false, labelKey: 'lvl.4-1.plate' },
-  door('E', 'chapter', 13.8, { key: 'key.cellar' }),
-  plaque('plaqueDrawer', 'lvl.ch4.drawer.plaque', 3.6, 0.8, 3.0)
-], [
-  { kind: 'cabinets', x: 2.4, z: -4.2, n: 5, rot: 0, seed: 231 },
-  { kind: 'rootCeiling', x: 0, w: 26, seed: 233 },
-  { kind: 'desk', x: 1.6, z: -1.2, rot: Math.PI },
-  { kind: 'stool', x: 1.6, z: 0.2, rot: 0 },
-  { kind: 'atticStair', x: 12.4, z: 3.2 },
-  { kind: 'puddle', x: -3.4, z: 2.6, w: 2.2, d: 1.2 },
-  { kind: 'lantern', x: 1.6, y: 3.4, z: -1.2 },
-  { kind: 'lantern', x: -9.0, y: 3.6, z: 0.6 }
-], { nextKey: 'lvl.ch4.drawer.next' });
+/** 4-4 最後的抽屜 (下層東邊；章末)：完整檔在 4-4-drawer.ts */
+export { drawer } from './4-4-drawer';
 
 /** H3 封存室 (下層南邊；隱藏房占位)：沒有門 (梯口被樹根封住；本版進不去) */
 export const sealed = room('sealed', -6, 6, [], [

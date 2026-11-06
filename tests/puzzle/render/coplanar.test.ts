@@ -482,4 +482,18 @@ describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 
     view.update('2d', 1 / 60, 2, cams.active('2d'));
     view.dispose();
   });
+
+  it('4-4 的狀態 (筆記拿走、墨閘化開、最後一個抽屜拉開、殘影在藏寶圖裡) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const w = newWorld(drawer);
+    w.ext = { cube: { links: { hatchU: { to: 'room' } }, at: [2, 1, 0], layout: { hall: [2, 1, 1], well: [1, 1, 1], furnace: [1, 1, 0], archive: [0, 1, 0], drawer: [2, 1, 0], sealed: [1, 2, 0] } }, dial: { active: true }, unlocked: ['L0'], ink: { through: true, sinks: [] } };
+    const view = new PuzzleScene(w, THEMES.cellar);
+    const cams = new PuzzleCameras(w);
+    for (let i = 0; i < 10; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    for (const id of ['rootPlate', 'notesDesk', 'gate', 'lastDrawer', 'ladderCut', 'hatchChaser']) w.byId.get(id)!.used = true;
+    for (let i = 10; i < 70; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+    expect(zFightPairs(view.scene, [drawer.bounds.minX + 3, drawer.bounds.maxX - 3])).toEqual([]);
+    w.player.mode = '2d';
+    view.update('2d', 1 / 60, 2, cams.active('2d'));
+    view.dispose();
+  });
 });

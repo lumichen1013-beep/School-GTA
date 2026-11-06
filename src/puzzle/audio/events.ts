@@ -226,7 +226,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 4-2：墨爐閥、墨線鎖、墨痕、爐邊小櫃 (玻璃眼 = sensor)
   inkValve: 'sfx.lever.pull', inkLock: 'sfx.door.unseal', inkMark: 'sfx.lamp.on', markCase: 'sfx.drawer.open',
   // 4-3：符號櫃、封存櫃
-  symbolLock: 'sfx.drawer.open', sealCabinet: 'sfx.latch.open'
+  symbolLock: 'sfx.drawer.open', sealCabinet: 'sfx.latch.open',
+  // 4-4：爸爸的筆記、最後一個抽屜、梯口轉開 (墨閘 = inkLock)
+  notesDesk: 'sfx.note.read', lastDrawer: 'sfx.drawer.open', chaseMark: 'sfx.latch.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

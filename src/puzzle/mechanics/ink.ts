@@ -13,8 +13,8 @@ declare module '../core/types' {
   interface ObjKinds {
     /** 墨爐閥：useText = 轉開時、usedText = 已經開著時 */
     inkValve: { usedText: TextKey };
-    /** 墨線鎖：side = 收墨的匯點 (本地門位)；dryText = 還沒收到墨時按 E 的說明 */
-    inkLock: { side: Side; solvedText: TextKey; dryText: TextKey; openText: TextKey };
+    /** 墨線鎖：side = 收墨的匯點 (本地門位)；dryText = 還沒收到墨時按 E 的說明；after = 這個物件 used 之後才收得到墨 (4-4b 墨閘：梯子斷過一次、根繩鬆了) */
+    inkLock: { side: Side | 'through'; solvedText: TextKey; dryText: TextKey; openText: TextKey; after?: ObjId };
     /** 墨痕：墨流過這間房就顯出 (used) */
     inkMark: {};
     /** 爐邊小櫃：veil = 要先塗開的淡墨；room 在 at [行, 列] → 彈開；wrongAt = 錯的那一格 (說 wrongText) */
@@ -40,13 +40,16 @@ function caseAt(w: World, room: string, at: readonly [number, number], wrongAt?:
   return null;
 }
 
+/** 墨流過這間房 (side 'through' 的墨線鎖 = 4-4b 抽屜的墨閘) */
+const inkPassed = (w: World): boolean => !!w.ext.ink?.through;
+
 /** 每間房的「錯格」已說過 (同一個世界、同一次停在錯格只說一次) */
 const wrongSaid = new WeakMap<World, Set<ObjId>>();
 
 function update(w: World): void {
   for (const o of w.objs) {
     if (o.gone) continue;
-    if (o.def.type === 'inkLock' && !o.used && (w.ext.ink?.sinks ?? []).includes(o.def.side)) {
+    if (o.def.type === 'inkLock' && !o.used && (!o.def.after || !!w.byId.get(o.def.after)?.used) && (o.def.side === 'through' ? inkPassed(w) : (w.ext.ink?.sinks ?? []).includes(o.def.side))) {
       o.used = true;
       say(w, o.def.solvedText);
       if (o.def.doneFlag) w.events.push({ t: 'done', flag: o.def.doneFlag });

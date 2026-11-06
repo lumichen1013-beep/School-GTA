@@ -13,6 +13,8 @@ export const obj = {
   'obj.inkLock.verb': '看',
   'obj.markCase.verb': '看',
   'obj.symbolKey.verb': '按',
+  'obj.notesDesk.verb': '拿',
+  'obj.lastDrawer.verb': '拉開',
   'obj.hatch.down.verb': '爬下去',
   'obj.cord.verb': '拉',
   'obj.hook.verb': '取下',

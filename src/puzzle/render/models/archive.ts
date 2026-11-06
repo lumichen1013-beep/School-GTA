@@ -107,3 +107,21 @@ export function archiveScareModel(): PropModel {
     }
   };
 }
+
+/** 4-4 爸爸的筆記：桌上一本攤開的筆記 (拿走 = 不畫) */
+export function notesDeskModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  const book = p.mesh(mergeParts([placed(box(d.w * 0.48, 0.03, d.d), -d.w * 0.25, 0.015, 0, 0, 0, 0.04), placed(box(d.w * 0.48, 0.03, d.d), d.w * 0.25, 0.015, 0, 0, 0, -0.04)]), pal.paperNote, { outline: false });
+  g.add(book);
+  return { root: g, update: (c: ModelCtx) => { book.visible = !c.obj.used; } };
+}
+
+/** 4-4 最後一個抽屜：檔案櫃的一格抽屜 (黃銅把手)；拉開 = 往外 0.35 */
+export function lastDrawerModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
+  const g = new THREE.Group();
+  const front = new THREE.Group();
+  front.add(p.mesh(mergeParts([placed(box(d.w, d.h, 0.05), 0, d.h / 2, d.d / 2)]), 0x66705e, { metalness: 0.35, roughness: 0.55 }));
+  front.add(p.mesh(mergeParts([placed(box(0.2, 0.04, 0.04), 0, d.h / 2, d.d / 2 + 0.04)]), pal.brass, { metalness: 0.7, roughness: 0.3, outline: false }));
+  g.add(front);
+  return { root: g, update: (c: ModelCtx) => { front.position.z = approach(front.position.z, c.obj.used ? 0.35 : 0, c.dt * 3); } };
+}

@@ -117,3 +117,32 @@ export const CH4_ZONE43 = {
   start: 'hall',
   finish: 'ch4.archive'
 };
+
+/** 走廊的地板梯口此刻接著抽屜 (追逐 2 的殘影沿這道梯子下來；4-4b 的墨也從這裡落進抽屜) */
+const hallOnDrawer = (s: CubeState): boolean => belowHall(s) === 'drawer';
+/** 抽屜在下層北邊 [1,0,0] (章門只接這一格的北側屋框) */
+const drawerHome = (s: CubeState): boolean => !!s.pos.drawer && s.pos.drawer[0] === 1 && s.pos.drawer[1] === 0;
+
+/**
+ * 4-4 區的抽象模型 (devtools/validateDial；規格 6「4-4 最後的抽屜（細化）」4-4 區抽象模型)：起點同 4-2 區 (4-1c、4-1b 已成立；墨爐閥在模型裡視為已開；
+ * 4-2a / ink.E 照列 = 墨爐的兩扇門可以化開，人才不會被關在抽屜外)。
+ * 題：4-4a.notes = 梯子接著走廊時拿到爸爸的筆記 (教學：不需轉動)；4-4a = 把梯口轉開 (P8 首次：殘影下不來；需 notes)；
+ * gate = 墨流過抽屜 (走廊又疊回抽屜上 = 墨閘；需 4-4a)；4-4b = 墨閘開過、梯口又轉開 (殘影又會下來)、抽屜在北邊 (章門接上；P4：需 gate)；
+ * 終點 ch4.drawer = 4-4b、人在抽屜 (章門要鑰匙 = 4-4b 給)
+ */
+export const CH4_ZONE44 = {
+  cube: CH4_CUBE,
+  puzzles: [
+    { id: '4-1c', room: 'hall', needs: [], teaching: true },
+    { id: '4-1b', room: 'archive', needs: [], teaching: true },
+    { id: '4-2a', room: 'furnace', needs: [], teaching: true, ink: { side: 'W' } },
+    { id: 'ink.E', room: 'furnace', needs: [], teaching: true, ink: { side: 'E' } },
+    { id: '4-4a.notes', room: 'drawer', needs: ['4-1c'], teaching: true, goal: (s, f) => f.has('4-1c') && hallOnDrawer(s) },
+    { id: '4-4a', room: 'drawer', needs: ['4-4a.notes'], goal: (s, f) => f.has('4-4a.notes') && !hallOnDrawer(s) },
+    { id: 'gate', room: 'drawer', needs: ['4-4a'], teaching: true, goal: (s, f) => f.has('4-4a') && hallOnDrawer(s) },
+    { id: '4-4b', room: 'drawer', needs: ['gate'], goal: (s, f) => f.has('gate') && !hallOnDrawer(s) && drawerHome(s) },
+    { id: 'ch4.drawer', room: 'drawer', needs: ['4-4b'], teaching: true, goal: (_s, f) => f.has('4-4b') }
+  ] as readonly ZonePuzzle[],
+  start: 'hall',
+  finish: 'ch4.drawer'
+};

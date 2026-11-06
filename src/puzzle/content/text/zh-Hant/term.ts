@@ -72,6 +72,9 @@ export const term = {
   'term.scrap.4': '老宅圖殘片',
   'term.scrap.3': '老宅圖殘片',
   'term.chart': '爸爸的展開圖',
+  'term.notes.father': '爸爸的筆記',
+  'term.key.cellar': '房間的銅鑰匙',
+  'term.diary.4': '手記第四頁',
   'term.num.1': '一',
   'term.num.2': '兩',
   'term.num.3': '三'

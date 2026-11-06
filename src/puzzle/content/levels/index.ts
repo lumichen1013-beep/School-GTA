@@ -16,6 +16,7 @@ import { depths } from './ch3/3-4-depths';
 import { hall } from './ch4/4-1-hall';
 import { furnace } from './ch4/4-2-furnace';
 import { archive } from './ch4/4-3-archive';
+import { drawer } from './ch4/4-4-drawer';
 
 /** 線性解鎖：after 中的關卡全部通關才開放 (規格 8；5-5 = after ['5-2','5-3','5-4']) */
 export interface Unlock { after: readonly string[] }
@@ -69,7 +70,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 4-2 墨爐間：第四章第二關 (墨流 P15 首次、光往下、顯影)；4-1 通關後開放 (章內：開場經根井的根梯就到得了)
   { id: '4-2', chapter: 4, titleKey: 'lvl.4-2.title', abilities: ['nib'], unlock: { after: ['4-1'] }, load: () => furnace },
   // 4-3 封存書庫：第四章第三關 (P11 兩層的讀法、兩股墨、驚嚇)；4-2 通關後開放 (章內：4-1a 的梯口或 4-2a 的西門)
-  { id: '4-3', chapter: 4, titleKey: 'lvl.4-3.title', abilities: ['nib'], unlock: { after: ['4-2'] }, load: () => archive }
+  { id: '4-3', chapter: 4, titleKey: 'lvl.4-3.title', abilities: ['nib'], unlock: { after: ['4-2'] }, load: () => archive },
+  // 4-4 最後的抽屜：第四章章末 (追逐 2 = P8 首次、墨閘、章門 = 第四章通關)；4-3 通關後開放
+  { id: '4-4', chapter: 4, titleKey: 'lvl.4-4.title', abilities: ['nib'], unlock: { after: ['4-3'] }, load: () => drawer }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

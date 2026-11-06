@@ -67,13 +67,13 @@ const spin = (...ts: Turn[]): CubeState => ts.reduce<CubeState>((s, t) => { cons
 
 describe('第四章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第四章 (地下室主題、levels 4-1)；LevelEntry 4-1 (筆尖、前置 3-4)；CUBE_CHAPTERS chapter 4 (六間房、從走廊北門進)', () => {
-    expect(CHAPTERS.find(c => c.id === 4)).toEqual({ id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1', '4-2', '4-3'] }); // 4-2 / 4-3 登錄
+    expect(CHAPTERS.find(c => c.id === 4)).toEqual({ id: 4, titleKey: 'ch.4.title', theme: 'cellar', levels: ['4-1', '4-2', '4-3', '4-4'] }); // 4-2～4-4 登錄
     expect([TEXT('ch.4.title'), THEMES.cellar.id]).toEqual(['第四章　地下室', 'cellar']);
     const e = levelById('4-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([4, ['nib'], ['3-4'], hall, '根窖走廊']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect([cubeChapterOf('4-1'), CH4.cube, CH4.start, CH4.levels, Object.keys(CH4.rooms).sort()])
-      .toEqual([CH4, CH4_CUBE, { room: 'hall', door: 'doorN' }, { '4-1': 'hall', '4-2': 'furnace', '4-3': 'archive' }, ['archive', 'drawer', 'furnace', 'hall', 'sealed', 'well']]);
+      .toEqual([CH4, CH4_CUBE, { room: 'hall', door: 'doorN' }, { '4-1': 'hall', '4-2': 'furnace', '4-3': 'archive', '4-4': 'drawer' }, ['archive', 'drawer', 'furnace', 'hall', 'sealed', 'well']]);
   });
 
   it('CH4_CUBE：3×3×2 層轉、控制盤；S0 (上層：走廊在北邊、根井在中心；下層：書庫 西 / 墨爐 中 / 抽屜 東 / 封存室 南)；沒有實心格；屋框；L0 / L1、L0 鎖到 4-1c', () => {
@@ -117,7 +117,7 @@ describe('第四章骨架：六間占位房', () => {
       const issues = validateLevel(l, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, abilities: ['nib'] });
       expect([id, issues.map(i => i.code)]).toEqual([id, id === 'sealed' ? ['level.noExit'] : []]);
       if (id !== 'sealed') expect([id, layoutDepthIssues(l)]).toEqual([id, []]);
-      expect([id, l.theme, l.turnBudget]).toEqual([id, 'cellar', { base: 8 }]);
+      expect([id, l.theme, l.turnBudget]).toEqual([id, 'cellar', id === 'drawer' ? { base: 8, puzzles: { '4-4b': 4 } } : { base: 8 }]); // 4-4 細化：抽屜 4-4b 完成前墨 4 (P4)
     }
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX])).toEqual([[-12, 12], [-5, 5], [-14, 14], [-10, 10], [-14, 14], [-6, 6]]);
     expect([TEXT(hall.narrationKey), TEXT(furnace.narrationKey), TEXT(drawer.nextKey)]).toEqual(['一模一樣的書架，排得太整齊了。', '牆上的影子，慢了半拍。', '地下室往上翻了。第五章　閣樓——還在路上。']); // 4-2 細化：墨爐間的旁白
@@ -200,7 +200,7 @@ describe('第四章骨架：年輪根盤與層轉', () => {
   it('梯口穿行：↻ → 爬下到抽屜 (站在梯子前) → 從抽屜爬上回走廊；↺ → 爬下到封存書庫 (門：窄梯)；轉不動的原因：沒啟動 / 下層鎖著 / 墨乾', () => {
     let cs = ok(dialTurn(in2d(activated()), T('L1', 1)));
     cs = through(cs, 'hatchD');
-    expect([cs.state.room, cs.state.door, cs.world.player.x, +cs.world.player.z.toFixed(3), cs.state.turns!.left]).toEqual(['drawer', 'hatchU', -6, -3.3, 8]);
+    expect([cs.state.room, cs.state.door, cs.world.player.x, +cs.world.player.z.toFixed(3), cs.state.turns!.left]).toEqual(['drawer', 'hatchU', -6, -3.3, 4]); // 4-4 細化：抽屜 4-4b 完成前墨 4
     cs = through(cs, 'hatchU');
     expect([cs.state.room, cs.state.door]).toEqual(['hall', 'hatchD']);
     cs = ok(dialTurn(ok(dialTurn(in2d(cs), T('L1', -1))), T('L1', -1)));
