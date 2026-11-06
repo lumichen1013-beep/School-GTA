@@ -139,7 +139,7 @@ describe('3-4 溫室深處：資料與驗證器', () => {
     expect(validateEntry(levelById('3-4')!, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect(depths.puzzles!.map(q => [q.id, TEXT(q.titleKey)])).toEqual([['3-4a', '3-4a 月下的花窗'], ['3-4b', '3-4b 長進軌道的根'], ['3-4', '追逐・章門']]);
     expect([levelById('3-4')!.unlock.after, levelById('3-4')!.chapter, CH3.levels['3-4'], CH3.rooms.depths, depths.bounds, depths.theme, depths.turnBudget])
-      .toEqual([['3-3'], 3, 'depths', depths, { minX: -10, maxX: 62, minZ: -5, maxZ: 5 }, 'greenhouse', { base: 8, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }]);
+      .toEqual([['3-3'], 3, 'depths', depths, { minX: -10, maxX: 62, minZ: -5, maxZ: 5 }, 'greenhouse', { base: 10, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }]);
     expect([TEXT(depths.titleKey), TEXT(depths.narrationKey), TEXT(depths.nextKey), nextAfterClear('3-4', 'chapter', CHAPTERS)])
       .toEqual(['溫室深處', '羅盤的把手磨亮了。有人轉過它，很多次。', '溫室往下沉了。第四章　地下室——還在路上。', null]);
     // 3-3c 的高台 / 筆記一頁座標不動；章門 id 不變、在長廊盡頭；彩繪玻璃資料不變
@@ -193,16 +193,16 @@ describe('validateDial：3-4 區 (CH3_ZONE34_CORE / CH3_ZONE34)', () => {
   const core = dialModelOf(CH3_ZONE34_CORE.cube, CH3.rooms, CH3_ZONE34_CORE.puzzles, CH3_ZONE34_CORE.start, CH3_ZONE34_CORE.finish, { jams: CH3_ZONE34_CORE.jams });
   const full = dialModelOf(CH3_ZONE34.cube, CH3.rooms, CH3_ZONE34.puzzles, CH3_ZONE34.start, CH3_ZONE34.finish, { jams: CH3_ZONE34.jams, cards: CH3_ZONE34.cards });
   const per = (rep: ReturnType<typeof validateDial>) => rep.perPuzzle.map(p => [p.id, p.shortest, p.second, p.solutions, p.distinct, p.budget, p.issues]);
-  it('核心 (只要 3-4a；深處一直卡著)：可達排列 360、狀態 37,153、卡死 0、需要 R / 換房補墨 3,732；3-4a.light 最短 2；3-4a 6 / 8 / 8 / 5 / 8 (= 設計)', () => {
+  it('核心 (只要 3-4a；深處一直卡著；深處預算 10)：可達排列 360、狀態 55,684、卡死 0、需要 R / 換房補墨 4,816；3-4a.light 最短 2；3-4a 從 S0 起算 8 / 10 / 37 / 5 / 10 (最短 8 < 預算)', () => {
     const r = validateDial(core);
-    expect([r.arrangements, r.states, r.needsRestart, r.solvable, r.deadlocks, r.issues, r.budgetBypass]).toEqual([360, 37153, 3732, true, [], [], []]);
-    expect(per(r)).toEqual([['3-4a.light', 2, 3, 30, 14, 8, []], ['3-4a', 6, 8, 8, 5, 8, []], ['ch3.depths.core', 0, null, 1, 1, 8, []]]);
+    expect([r.arrangements, r.states, r.needsRestart, r.solvable, r.deadlocks, r.issues, r.budgetBypass]).toEqual([360, 55684, 4816, true, [], [], []]);
+    expect(per(r)).toEqual([['3-4a.light', 2, 3, 119, 26, 10, []], ['3-4a', 8, 10, 37, 5, 10, []], ['ch3.depths.core', 0, null, 1, 1, 10, []]]);
   });
-  it('整區 (含 3-4b；「小」的位置進模型)：可達排列 2,520、狀態 386,992 (< 2×10⁶)、卡死 0；3-4b 最短 8、次短 9 (列舉上限 10：要換房帶卡)、本質不同 16', () => {
+  it('整區 (含 3-4b；「小」的位置進模型；深處預算 10)：可達排列 2,520、狀態 783,538 (< 2×10⁶)、卡死 0；3-4a 從 S0 8 / 10；3-4b 最短 8、次短 9 (列舉上限 10：要換房帶卡)、本質不同 16', () => {
     const r = validateDial(full);
-    expect([r.arrangements, r.states, r.needsRestart, r.solvable, r.deadlocks, r.issues, r.budgetBypass]).toEqual([2520, 386992, 54035, true, [], [], []]);
+    expect([r.arrangements, r.states, r.needsRestart, r.solvable, r.deadlocks, r.issues, r.budgetBypass]).toEqual([2520, 783538, 104862, true, [], [], []]);
     expect(per(r)).toEqual([
-      ['3-4a.light', 2, 3, 96, 26, 8, []], ['3-4a', 6, 8, 8, 5, 8, []], ['3-4b', 8, 9, 105, 16, 10, []], ['ch3.depths', 0, null, 1, 1, 8, []]
+      ['3-4a.light', 2, 3, 430, 63, 10, []], ['3-4a', 8, 10, 40, 5, 10, []], ['3-4b', 8, 9, 105, 16, 10, []], ['ch3.depths', 0, null, 1, 1, 10, []]
     ]);
   });
   it('拿掉關鍵要素 → 無解：長廊沒有稜鏡 / 夜溫室沒有玻璃 → 3-4a；溫床沒有稜鏡 → 3-4a、3-4b；「小」永遠在巨盆 → 3-4b；單調近似 (沒有 cards) 會報假卡死 (記錄)', () => {
@@ -220,7 +220,7 @@ describe('validateDial：3-4 區 (CH3_ZONE34_CORE / CH3_ZONE34)', () => {
     const keepCard = validateDial({ ...full, cards: [{ id: 'xiao', start: 'bigPot', slots: { bigPot: { room: 'night' } } }] });
     expect([keepCard.solvable, keepCard.perPuzzle.find(p => p.id === '3-4b')!.shortest]).toEqual([false, null]);
     const mono = validateDial({ ...full, cards: undefined, puzzles: full.puzzles.map(p => (p.id === '3-4b' ? { ...p, card: undefined } : p)), jams: [{ room: 'depths', until: '3-4b' }, { room: 'night', from: '3-4a' }] });
-    expect([mono.solvable, mono.issues]).toEqual([false, ['1454 entry snapshots cannot finish (listed 20)']]);
+    expect([mono.solvable, mono.issues]).toEqual([false, ['1482 entry snapshots cannot finish (listed 20)']]);
     expect(CH3_CARDS34).toEqual([{ id: 'xiao', start: 'bigPot', slots: { bigPot: { room: 'night' }, giantRoot: { room: 'depths', after: '3-4a' } } }]);
   });
 });
@@ -249,7 +249,7 @@ describe('3-4a 月下的花窗 (P5 / P6)：花窗架、九格花窗', () => {
     const r = turns(cs, A6);
     cs = r.cs;
     expect([r.done, cs.world.msg, pos(cs, 'nursery'), cs.state.turns!.left, isPassable(cs.world, get(cs, 'chaseGate'))])
-      .toEqual([['3-4a'], '月光穿過三間房，落在花窗上。墨線連成一個「許」字。木架彈開一格，長廊的柵門也開了。', '12', 2, true]);
+      .toEqual([['3-4a'], '月光穿過三間房，落在花窗上。墨線連成一個「許」字。木架彈開一格，長廊的柵門也開了。', '12', 4, true]);
     cs = play(cs, [{ walkTo: [4.6, -3.2] }, { wait: 0.1 }, { act: 'interact' }]).cs;
     expect([hasItem(cs.world, 'key.greenhouse'), hasItem(cs.world, 'diary.3'), get(cs, 'latticeBox').gone, cs.world.msg])
       .toEqual([true, true, true, '木架裡是一把房間的銅鑰匙，和許問津的手記第三頁：「守門的影子，只攔，不傷。」']);
@@ -259,11 +259,11 @@ describe('3-4a 月下的花窗 (P5 / P6)：花窗架、九格花窗', () => {
     expect([get(cs, 'lattice').used, cs.world.msg]).toEqual([true, '「許」字在花窗上亮著。']);
   });
 
-  it('解法二 (從 L 形 8 步：…溫床 ◀、夜溫室 ▶、溫床 ▶)；從 S0 直接排 8 步 (墨剛好用完)', () => {
+  it('解法二 (從 L 形 8 步：…溫床 ◀、夜溫室 ▶、溫床 ▶)；從 S0 直接排 8 步 (預算 10，剩 2)', () => {
     let r = turns(install(open(L_SHAPE)).cs, A8);
-    expect([r.done, pos(r.cs, 'nursery'), pos(r.cs, 'bed'), r.cs.state.turns!.left]).toEqual([['3-4a'], '12', '11', 0]);
+    expect([r.done, pos(r.cs, 'nursery'), pos(r.cs, 'bed'), r.cs.state.turns!.left]).toEqual([['3-4a'], '12', '11', 2]);
     r = turns(install(open(S0)).cs, A_S0);
-    expect([r.done, r.cs.state.turns!.left]).toEqual([['3-4a'], 0]);
+    expect([r.done, r.cs.state.turns!.left]).toEqual([['3-4a'], 2]);
   });
 
   it('錯誤嘗試：只接光不管圖 (2 種排列) / 只排圖不管光 (5 種) 各自的回饋；以為玻璃片來自哪間房就放在那格 (苗圃 / 長廊 / 夜溫室) → 圖不對', () => {
@@ -345,7 +345,7 @@ describe('3-4b 長進軌道的根 (P3 / P6)：唯一的「小」', () => {
     const r = shrinkFirst(after34a());
     let cs = r.cs;
     expect([r.nightJam, r.depthsFree, r.done, pos(cs, 'depths'), pos(cs, 'bed'), pos(cs, 'night'), cs.state.turns!.left]).toEqual([
-      'jammed', null, ['3-4b'], '11', '01', '00', 8
+      'jammed', null, ['3-4b'], '11', '01', '00', 10
     ]);
     expect(cs.world.msg).toBe('光照透了苔蘚，窗上浮出爸爸的字：「這扇窗，我等了好多年。」字還是濕的。筆尖一碰，墨又滿了。');
     expect([get(cs, 'mossW').used, get(cs, 'giantRoot').used, [...sessionUncovered(cs)]]).toEqual([true, true, ['depths.W']]);
@@ -353,7 +353,7 @@ describe('3-4b 長進軌道的根 (P3 / P6)：唯一的「小」', () => {
     runScript(cs.world, [...to3d(cs.world), { place: [61.0, 0, 4.0] }, { wait: 0.1 }, { act: 'interact' }]);
     expect([cs.world.msg, cs.world.cleared]).toEqual(['門後是牆。', false]);
     cs = turns(cs, [T('c4', 'S'), T('c7', 'E')]).cs;
-    expect([pos(cs, 'depths'), cs.state.turns!.left]).toEqual(['22', 6]);
+    expect([pos(cs, 'depths'), cs.state.turns!.left]).toEqual(['22', 8]);
     runScript(cs.world, [{ act: 'interact' }]);
     expect([cs.world.cleared, get(cs, 'chapterS').used, clearedRooms(SPEC, cs.state, cs.world).includes('depths')]).toEqual([true, true, true]);
   });
@@ -368,7 +368,7 @@ describe('3-4b 長進軌道的根 (P3 / P6)：唯一的「小」', () => {
     cs = walk(walk(cs, 'nursery'), 'depths');
     const r = label2d(cs, -9.0, card('scale:giantRoot', 'card.xiao'));
     const t = play(r.cs, [{ wait: 1 / 30 }]);
-    expect([[...r.done, ...t.done], get(t.cs, 'mossW').used, pos(t.cs, 'depths'), t.cs.state.turns!.left]).toEqual([['3-4b'], true, '22', 8]);
+    expect([[...r.done, ...t.done], get(t.cs, 'mossW').used, pos(t.cs, 'depths'), t.cs.state.turns!.left]).toEqual([['3-4b'], true, '22', 10]);
   });
 
   it('錯誤嘗試：巨根貼「大」(長大了、還卡著)；光只穿過一間房 (溫床在天窗下、深處在它東邊) → 說一次；縮了根 (苔窗露出) 但光還沒排 → 暗', () => {
@@ -640,6 +640,11 @@ describe('反例：只用 2D / 只用 3D、盲轉取樣', () => {
     const fromL = rate(cubeOf(L_SHAPE), 8, ['depths'], latticeGoal), fromS0 = rate(cubeOf(S0), 8, ['depths'], latticeGoal);
     const moss = rate(cubeOf(SOLVED), 8, ['night'], mossGoal), noCard = rate(cubeOf(SOLVED), 8, ['depths'], s => mossGoal(s) && false);
     expect([fromL, fromS0, moss < 0.01, noCard]).toEqual([0.004, 0, true, 0]);
+  });
+  it('3-4a (盲轉 10 步 = 深處預算 10)：從 L 形起點 0.001、從 S0 0；3-4b 卡已在巨根上隨機轉 10 步 0.014 (< 2%)', () => {
+    const fromL = rate(cubeOf(L_SHAPE), 10, ['depths'], latticeGoal), fromS0 = rate(cubeOf(S0), 10, ['depths'], latticeGoal);
+    const moss = rate(cubeOf(SOLVED), 10, ['night'], mossGoal);
+    expect([fromL, fromS0, moss]).toEqual([0.001, 0, 0.014]);
   });
 });
 

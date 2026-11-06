@@ -102,8 +102,8 @@ export const depths: LevelDef = {
   ],
   nextKey: 'lvl.3-4.next',
   theme: 'greenhouse',
-  // 每次穿門進房補滿 8 滴墨；3-4b 閂住的那一刻也補滿 (苔窗上的字還是濕的；規格「3-4 溫室深處（細化）」)
-  turnBudget: { base: 8, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' },
+  // 每次穿門進房補滿 10 滴墨 (使用者決定 2026-11-06：3-4a 從開場 S0 起算最短 8 < 預算)；3-4b 閂住的那一刻也補滿 (苔窗上的字還是濕的；規格「3-4 溫室深處（細化）」)
+  turnBudget: { base: 10, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' },
   decor,
   objects
 };

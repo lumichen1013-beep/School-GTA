@@ -137,10 +137,10 @@ export const CH3_CARDS34 = [
 ] as const;
 
 /**
- * 3-4 區的抽象模型 (devtools/validateDial；規格 6「3-4 溫室深處（細化）」3-4 區抽象模型)：九格滑動、預算各房 8；尺度卡「小」的位置進模型 (cards)。
+ * 3-4 區的抽象模型 (devtools/validateDial；規格 6「3-4 溫室深處（細化）」3-4 區抽象模型)：九格滑動、預算各房 8、深處 10 (2026-11-06)；尺度卡「小」的位置進模型 (cards)。
  * 起點 S0、人在苗圃；3-1～3-3 以「三片玻璃到手、『小』在巨盆上」抽象 (苗圃已鬆開)。
  * 題：3-4a.light = 深處北窗有穿過三間房的光 (不是題：只當多解列舉的起點，玩家最常先接上的就是 3-2b 的 L 形)；
- * 3-4a = 光 + 花窗的六格 (需 3-4a.light)；3-4b = 「小」在巨根上、深處西窗有穿過兩間房的光 (苔窗露出)、完成時墨補滿 (需 3-4a)；
+ * 3-4a = 光 + 花窗的六格 (不需 3-4a.light：多解列舉從開場 S0 起算，最短 8 < 深處預算 10)；3-4b = 「小」在巨根上、深處西窗有穿過兩間房的光 (苔窗露出)、完成時墨補滿 (需 3-4a)；
  * 終點 ch3.depths = 3-4a、3-4b 都完成、深處在章門格、人在深處。
  * 卡榫：深處 until 3-4b (巨根；「小」貼在巨根上時不卡)、夜溫室 (巨盆被推進軌道；「小」在巨盆上時不卡)
  */
@@ -148,7 +148,7 @@ export const CH3_ZONE34 = {
   cube: CH3_CUBE,
   puzzles: [
     { id: '3-4a.light', room: 'depths', needs: [], teaching: true, light: { from: 'N', via: 3 } },
-    { id: '3-4a', room: 'depths', needs: ['3-4a.light'], light: { from: 'N', via: 3 }, goal: (s, f) => f.has('3-4a.light') && latticeMatch(s) },
+    { id: '3-4a', room: 'depths', needs: [], light: { from: 'N', via: 3 }, goal: s => latticeMatch(s) },
     { id: '3-4b', room: 'depths', needs: ['3-4a'], card: 'xiao@giantRoot', light: { from: 'W', via: 2, uncovered: ['depths.W'] }, refill: true, span: 10, goal: (_s, f) => f.has('3-4a') },
     { id: 'ch3.depths', room: 'depths', needs: ['3-4a', '3-4b'], teaching: true, goal: (s, f) => f.has('3-4a') && f.has('3-4b') && depthsHome(s) }
   ] as readonly ZonePuzzle[],

@@ -103,7 +103,7 @@ describe('第三章骨架：五間占位房', () => {
     const S = depths.objects.find(o => o.id === 'chapterS')!;
     expect(S.type === 'cubeDoor' && S.key).toBe('key.greenhouse');
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX, l.turnBudget, l.theme])).toEqual([
-      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8, puzzles: { '3-3b': 4 } }, 'greenhouseNight'], [-10, 62, { base: 8, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
+      [-6, 8, { base: 8 }, 'greenhouse'], [-10, 10, { base: 8 }, 'greenhouse'], [-12, 12, { base: 8, puzzles: { '3-3b': 4 } }, 'greenhouseNight'], [-10, 62, { base: 10, refillOn: ['3-4b'], refillText: 'lvl.3-4.refill' }, 'greenhouse'], [-6, 6, { base: 8 }, 'greenhouse']
     ]);
   });
 
@@ -137,7 +137,7 @@ describe('第三章骨架：S0 連接表', () => {
     let cs = play(start(), [{ wait: 0.1 }, { walkTo: [null, 0] }, { walkTo: [7.3, null] }, { act: 'interact' }]);
     expect([cs.state.room, cs.state.door]).toEqual(['night', 'archW']);
     cs = through(through(cs, 'archE'), 'doorS');
-    expect([cs.state.room, cs.state.door, cs.state.turns!.left]).toEqual(['depths', 'archN', 8]);
+    expect([cs.state.room, cs.state.door, cs.state.turns!.left]).toEqual(['depths', 'archN', 10]);
     cs = play(cs, [{ wait: 0.1 }, { place: [61.0, 0, 4.0] }, { wait: 0.1 }, { act: 'interact' }]); // 3-4 細化：章門在長廊盡頭 (x 61.0)
     expect([cs.state.room, cs.world.cleared, cs.world.msgKey]).toEqual(['depths', false, 'msg.cube.chapterLocked']);
     const back = play(start(), [{ wait: 0.1 }, { walkTo: [-5.3, 0] }, { act: 'interact' }]);
@@ -185,10 +185,10 @@ describe('第三章骨架：園丁羅盤與滑動', () => {
 });
 
 describe('validateDial：第三章 (無卡榫)', () => {
-  it('苗圃、深處都鬆開時可達排列 2,520 (規格 5.4.9)；終點「苗圃滑到天窗下」有解、抽象狀態 80,621、卡死 0；無問題', () => {
+  it('苗圃、深處都鬆開時可達排列 2,520 (規格 5.4.9)；終點「苗圃滑到天窗下」有解、抽象狀態 85,661 (深處預算 10)、卡死 0；無問題', () => {
     const goal = { id: 'ch3.skel', room: 'nursery', needs: [], teaching: true, goal: (s: { pos: Record<string, readonly number[]> }) => s.pos.nursery[0] === 0 && s.pos.nursery[1] === 0 };
     const r = validateDial(dialModelOf(CH3_CUBE, CH3.rooms, [goal], 'nursery', 'ch3.skel'));
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([2520, 80621, true, []]);
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks]).toEqual([2520, 85661, true, []]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
     expect(r.perPuzzle.map(p => [p.id, p.shortest, p.second, p.budget])).toEqual([['ch3.skel', 1, 2, 8]]);
   });

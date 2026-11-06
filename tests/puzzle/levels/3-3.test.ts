@@ -175,13 +175,13 @@ describe('validateDial：3-3 區 (CH3_ZONE33)', () => {
   const per = (rep: typeof r) => rep.perPuzzle.map(p => [p.id, p.shortest, p.second, p.solutions, p.distinct, p.budget, p.issues]);
   it('可達排列 360、抽象狀態 < 2×10⁶、有解、卡死 0 (含 R)；預算繞過 = 3-3b (暗房型仍可在苗圃先轉好再走進來；同 2-3b 列為已知)', () => {
     expect([r.arrangements, r.states < 2e6, r.solvable, r.deadlocks, r.issues, r.lockIssues, r.entryIssues]).toEqual([360, true, true, [], [], [], []]);
-    expect([r.states, r.needsRestart]).toEqual([98735, 12211]);
+    expect([r.states, r.needsRestart]).toEqual([105359, 12733]);
     expect(r.budgetBypass).toEqual(['3-3b: doable with < 3 turns per visit to night (refill by changing rooms)']);
   });
   it('每題 (最短 / 次短 / 序列 / 本質不同 / 預算)：3-3a 1 / 1 / 96 / 34 / 8；3-3b 3 / 3 / 6 / 4 / 4 (預算 = 3 + 1)；3-3c.grow 6 / 6 / 23 / 12 / 8', () => {
     expect(per(r)).toEqual([
       ['3-1b.shrink', 0, null, 1, 1, 8, []], ['3-1b', 1, 2, 22, 16, 8, []], ['3-3a', 1, 1, 96, 34, 8, []], ['3-3b.shrink', 0, null, 1, 1, 8, []],
-      ['3-3b', 3, 3, 6, 4, 4, []], ['3-3c.grow', 6, 6, 23, 12, 8, []], ['3-3c', 0, null, 1, 1, 8, []], ['ch3.night', 0, null, 1, 1, 8, []]
+      ['3-3b', 3, 3, 6, 4, 4, []], ['3-3c.grow', 6, 6, 23, 12, 8, []], ['3-3c', 0, null, 1, 1, 10, []], ['ch3.night', 0, null, 1, 1, 8, []]
     ]);
   });
   it('拿掉量 (巨盆不縮：夜溫室從 3-3a 起一直卡著) → 3-3b 無解 (excluded = 不縮 = 無解)；拿掉對齊 (苗圃一直卡著) → 3-3a 無解', () => {

@@ -139,16 +139,16 @@ describe('validateDial：3-2 區 (CH3_ZONE32；DialPuzzle.light = 同一個 ligh
   const m = dialModelOf(CH3_ZONE32.cube, CH3.rooms, CH3_ZONE32.puzzles, CH3_ZONE32.start, CH3_ZONE32.finish, { jams: CH3_ZONE32.jams });
   const r = validateDial(m);
   const per = (rep: typeof r) => rep.perPuzzle.map(p => [p.id, p.shortest, p.second, p.solutions, p.distinct, p.budget, p.issues]);
-  it('3-1b 之前 (苗圃、深處都卡著)：可達排列 20、抽象狀態 2,563、有解、卡死 0 (含 R)、需要 R 的狀態 391；無問題 → 3-2 不需要 3-1b', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([20, 2563, true, [], 391]);
+  it('3-1b 之前 (苗圃、深處都卡著)：可達排列 20、抽象狀態 2,723 (深處預算 10)、有解、卡死 0 (含 R)、需要 R 的狀態 415；無問題 → 3-2 不需要 3-1b', () => {
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([20, 2723, true, [], 415]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
   });
   it('每題 (最短 / 次短 / 序列 / 本質不同)：3-2a 2 / 4 / 4 / 4 (教學)；3-2b 2 / 4 / 3 / 3 (≥ 2，D16 ③)；預算 8', () => {
     expect(per(r)).toEqual([['3-2a', 2, 4, 4, 4, 8, []], ['3-2b', 2, 4, 3, 3, 8, []], ['ch3.gallery', 0, null, 1, 1, 8, []]]);
   });
-  it('苗圃鬆開後 (3-1b 之後)：360 排列、48,649 狀態、卡死 0；3-2a 2 / 3 / 69 / 27、3-2b 2 / 3 / 37 / 16', () => {
+  it('苗圃鬆開後 (3-1b 之後)：360 排列、51,529 狀態、卡死 0；3-2a 2 / 3 / 69 / 27、3-2b 2 / 3 / 37 / 16', () => {
     const free = validateDial({ ...m, jams: [{ room: 'depths' }] });
-    expect([free.arrangements, free.states, free.solvable, free.deadlocks, free.needsRestart]).toEqual([360, 48649, true, [], 4971]);
+    expect([free.arrangements, free.states, free.solvable, free.deadlocks, free.needsRestart]).toEqual([360, 51529, true, [], 5211]);
     expect(per(free)).toEqual([['3-2a', 2, 3, 69, 27, 8, []], ['3-2b', 2, 3, 37, 16, 8, []], ['ch3.gallery', 0, null, 1, 1, 8, []]]);
   });
   it('拿掉玻璃 / 稜鏡 (捷徑檢查 ④)：夜溫室沒有玻璃 → 兩題都無解；溫床沒有稜鏡、長廊沒有西窗 → 3-2b 無解 (3-2a 照樣可解)', () => {

@@ -159,8 +159,8 @@ describe('3-1 苗圃：資料與驗證器', () => {
 describe('validateDial：3-1 區 (卡榫 jams)', () => {
   const m = dialModelOf(CH3_ZONE31.cube, CH3.rooms, CH3_ZONE31.puzzles, CH3_ZONE31.start, CH3_ZONE31.finish, { jams: CH3_ZONE31.jams });
   const r = validateDial(m);
-  it('可達排列 360 (苗圃鬆開後；鬆開前 20)、抽象狀態 15,139、有解、卡死 0 (含 R)、需要 R 的狀態 1,347；無問題', () => {
-    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([360, 15139, true, [], 1347]);
+  it('可達排列 360 (苗圃鬆開後；鬆開前 20)、抽象狀態 15,939 (深處預算 10)、有解、卡死 0 (含 R)、需要 R 的狀態 1,419；無問題', () => {
+    expect([r.arrangements, r.states, r.solvable, r.deadlocks, r.needsRestart]).toEqual([360, 15939, true, [], 1419]);
     expect([r.issues, r.budgetBypass, r.lockIssues, r.entryIssues]).toEqual([[], [], [], []]);
   });
   it('每題 (最短 / 次短 / 序列 / 本質不同)：3-1a、3-1b.shrink 不需轉動；3-1b 最短 1 (苗圃 ▲)、次短 2、序列 22、本質不同 16；預算 8', () => {
