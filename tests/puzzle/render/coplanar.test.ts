@@ -436,4 +436,20 @@ describe('渲染：深度打架 (共面)：第四章地下室的六間占位房 
       view.dispose();
     }
   });
+
+  it('4-1 的狀態 (拉繩拉下 / 折疊梯放下、根結踏板壓下與落在上面的木箱) 3D 鏡頭看得到的面沒有共面；藏寶圖 (只畫在圖上的台階) 畫得出來', () => {
+    const layout = { hall: [2, 1, 1], well: [1, 1, 1], furnace: [1, 1, 0], archive: [0, 1, 0], drawer: [2, 1, 0], sealed: [1, 2, 0] } as const;
+    for (const [room, prep] of [[archive, (w: ReturnType<typeof newWorld>) => { w.byId.get('foldCord')!.used = true; }], [drawer, (w: ReturnType<typeof newWorld>) => { w.byId.get('rootPlate')!.used = true; }]] as const) {
+      const w = newWorld(room);
+      w.ext = { cube: { links: {}, at: [0, 1, 0], layout }, dial: { active: true }, unlocked: ['L0'] };
+      prep(w);
+      const view = new PuzzleScene(w, THEMES.cellar);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 30; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([room.id, zFightPairs(view.scene, [room.bounds.minX + 3, room.bounds.maxX - 3])]).toEqual([room.id, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 1, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

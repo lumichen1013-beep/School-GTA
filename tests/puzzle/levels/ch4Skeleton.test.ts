@@ -105,7 +105,7 @@ describe('第四章骨架：六間占位房', () => {
     expect(doors(hall)).toEqual([['doorN', 'N', 'door', -9, -4.8, null], ['doorS', 'S', 'door', 6, 4.8, null], ['hatchD', 'D', 'arch', -2, 1.6, null]]);
     expect(doors(well)).toEqual([['doorN', 'N', 'door', 0, -4.8, null], ['ladderD', 'D', 'door', 2, 1.2, null]]);
     expect(doors(furnace)).toEqual([['ladderU', 'U', 'door', 0, -4.4, null], ['doorW', 'W', 'door', -13.8, 0, '4-2a'], ['doorE', 'E', 'door', 13.8, 0, 'ink.E']]);
-    expect(doors(archive)).toEqual([['doorE', 'E', 'door', 9.8, 0, '4-2a'], ['hatchU', 'U', 'door', -4, -4.4, null]]);
+    expect(doors(archive)).toEqual([['doorE', 'E', 'door', 9.8, 0, '4-2a'], ['hatchU', 'U', 'door', -4, -4.4, '4-1b']]); // 4-1 細化：書庫的折疊梯收著 (4-1b 拉下前爬不上去)
     expect(doors(drawer)).toEqual([['doorW', 'W', 'door', -13.8, 0, 'ink.E'], ['hatchU', 'U', 'arch', -6, -4.4, null], ['chapterE', 'E', 'chapter', 13.8, 0, null]]);
     expect(doors(sealed)).toEqual([]);
     const ch = drawer.objects.find(o => o.id === 'chapterE')!;
@@ -254,21 +254,25 @@ describe('第四章骨架：validateDial', () => {
   const model = (puzzles: Parameters<typeof dialModelOf>[2], finish: string) => dialModelOf(CH4_CUBE, CH4.rooms, puzzles, 'hall', finish);
   it('只開上層 (下層一直鎖著)：可達排列 4；終點「走廊在抽屜正上方」有解、卡死 0；封住的門由 cubeDoor.sealed 組出 (doorLocks)', () => {
     const goal = { id: 'ch4.skel', room: 'hall', needs: [], teaching: true, goal: (s: CubeState) => s.pos.hall[0] === s.pos.drawer[0] && s.pos.hall[1] === s.pos.drawer[1] };
-    const m = model([goal], 'ch4.skel');
+    // 4-1 細化：書庫的折疊梯 (4-1b) 收著時爬不上去 → 模型加上 4-1b (走進書庫即可拉下)
+    const m = model([goal, { id: '4-1b', room: 'archive', needs: [], teaching: true }], 'ch4.skel');
     expect(m.doorLocks).toEqual([
-      { room: 'furnace', door: 'doorW', until: '4-2a' }, { room: 'furnace', door: 'doorE', until: 'ink.E' }, { room: 'archive', door: 'doorE', until: '4-2a' }, { room: 'drawer', door: 'doorW', until: 'ink.E' }
+      { room: 'furnace', door: 'doorW', until: '4-2a' }, { room: 'furnace', door: 'doorE', until: 'ink.E' }, { room: 'archive', door: 'doorE', until: '4-2a' },
+      { room: 'archive', door: 'hatchU', until: '4-1b' }, { room: 'drawer', door: 'doorW', until: 'ink.E' } // 4-1 細化：書庫的折疊梯
     ]);
     const r = validateDial(m);
     expect([r.arrangements, r.solvable, r.deadlocks, r.issues, r.entryIssues]).toEqual([4, true, [], [], []]);
     expect(r.lockIssues).toEqual(['lock L0: condition 4-1c is not a puzzle in the model']);
-    expect(r.perPuzzle.map(p => [p.id, p.shortest, p.second, p.budget])).toEqual([['ch4.skel', 1, 3, 8]]);
+    expect(r.perPuzzle.map(p => [p.id, p.shortest, p.second, p.budget])).toEqual([['ch4.skel', 1, 3, 8], ['4-1b', 1, 3, 8]]);
   });
   it('4-1c 解開下層 (骨架以「走廊在抽屜正上方、人在走廊」代表)：兩層全開 16 種排列；終點「抽屜轉到北邊 (章門)」有解、卡死 0；直徑 4', () => {
     const unlock = { id: '4-1c', room: 'hall', needs: [], teaching: true, goal: (s: CubeState) => s.pos.hall[0] === s.pos.drawer[0] && s.pos.hall[1] === s.pos.drawer[1] };
     const exit = { id: 'ch4.exit', room: 'hall', needs: ['4-1c'], teaching: true, goal: (s: CubeState, f: ReadonlySet<string>) => f.has('4-1c') && s.pos.drawer[0] === 1 && s.pos.drawer[1] === 0 };
-    const r = validateDial(model([unlock, exit], 'ch4.exit'));
+    // 4-1 細化：書庫的折疊梯 (4-1b) 收著時從書庫爬不上去 → 模型要有 4-1b (走進書庫即可拉下)，否則走進書庫 = 卡死
+    const ladder = { id: '4-1b', room: 'archive', needs: [], teaching: true };
+    const r = validateDial(model([unlock, ladder, exit], 'ch4.exit'));
     expect([r.arrangements, r.solvable, r.deadlocks, r.issues, r.lockIssues, r.entryIssues]).toEqual([16, true, [], [], [], []]);
-    expect(r.perPuzzle.map(p => [p.id, p.shortest, p.budget])).toEqual([['4-1c', 1, 8], ['ch4.exit', 1, 8]]);
+    expect(r.perPuzzle.map(p => [p.id, p.shortest, p.budget])).toEqual([['4-1c', 1, 8], ['4-1b', 1, 8], ['ch4.exit', 1, 8]]);
     // 直徑：從 S0 到任一排列最多 4 步 (每層最多 2)
     let worst = 0;
     for (let u = 0; u < 4; u++) for (let l = 0; l < 4; l++) worst = Math.max(worst, Math.min(u, 4 - u) + Math.min(l, 4 - l));

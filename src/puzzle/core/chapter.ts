@@ -89,8 +89,8 @@ export interface ChapterSession {
 
 /** 轉不動的原因：魔方本身 (notEmpty / outOfCube / noRoom)、本章沒有魔方、不是轉自己所在的房、門口有東西卡著 */
 export type TurnBlock = CubeBlock | 'noCube' | 'notHere' | 'doorway';
-/** 推不過拱門的原因：這扇門此刻不是拱門對拱門 (門 / 牆 / 屋框)、對面拱門內側被占住 (或沒有地板) */
-export type TransferBlock = 'notArch' | 'occupied';
+/** 推不過拱門的原因：這扇門此刻不是拱門對拱門 (門 / 牆 / 屋框)、對面拱門內側被占住 (或沒有地板)；v0.4 第四章 up = 想把可推物從天花板梯口推上去 */
+export type TransferBlock = 'notArch' | 'occupied' | 'up';
 
 /** 進門後站的位置：門內側 0.9 (依門位往房內退) */
 const SPAWN_IN = 0.9;
@@ -303,13 +303,17 @@ export function transferObject(cs: ChapterSession, obj: ObjId, door: ObjId, opts
   const dst = target?.objects.find(d => d.id === link.door);
   const di = spec.doors.find(d => d.room === link.room && d.door === link.door);
   if (!dst || !di) return { blocked: 'notArch' };
+  // v0.4 第四章 梯口 (U / D)：只能往下落 (從地板梯口 D 進、到對面的天花板梯口 U)；落點 = 對面梯口前方 (往觀眾) ARRIVE_GAP + 半深，x 沿梯口寬保持偏移
+  const vertical = di.side === 'U' || di.side === 'D';
+  if (vertical && di.side !== 'U') return { blocked: 'up' };
   const along = di.side === 'N' || di.side === 'S';
-  const half = (along ? dst.w : dst.d) / 2;
-  const lateral = clamp(along ? o.x - src.x : o.z - src.z, -half, half);
-  const reach = ARRIVE_GAP + (along ? o.def.d : o.def.w) / 2;
+  const half = (along || vertical ? dst.w : dst.d) / 2;
+  const lateral = clamp(along || vertical ? o.x - src.x : o.z - src.z, -half, half);
+  const reach = ARRIVE_GAP + (along || vertical ? o.def.d : o.def.w) / 2;
   const b = target.bounds;
   const pos = { x: dst.x, y: o.y, z: dst.z };
-  if (along) { pos.x = clamp(dst.x + lateral, b.minX + o.def.w / 2, b.maxX - o.def.w / 2); pos.z = di.side === 'S' ? dst.z - dst.d / 2 - reach : dst.z + dst.d / 2 + reach; }
+  if (vertical) { pos.x = clamp(dst.x + lateral, b.minX + o.def.w / 2, b.maxX - o.def.w / 2); pos.z = dst.z + dst.d / 2 + reach; }
+  else if (along) { pos.x = clamp(dst.x + lateral, b.minX + o.def.w / 2, b.maxX - o.def.w / 2); pos.z = di.side === 'S' ? dst.z - dst.d / 2 - reach : dst.z + dst.d / 2 + reach; }
   else { pos.z = clamp(dst.z + lateral, b.minZ + o.def.d / 2, b.maxZ - o.def.d / 2); pos.x = di.side === 'E' ? dst.x - dst.w / 2 - reach : dst.x + dst.w / 2 + reach; }
   // 目標房此刻的樣子 (快照 + 跨房物件 + 即時標籤；尺寸先依標籤重算) 裡，到達處要空著、底下要有地板
   const next = clone(state);

@@ -30,7 +30,10 @@ function hatchModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     const w = d.w, h = d.h;
     const wood = [placed(box(0.09, h, 0.09), -w / 2 + 0.05, h / 2, 0), placed(box(0.09, h, 0.09), w / 2 - 0.05, h / 2, 0)];
     for (let y = 0.35; y < h - 0.1; y += 0.38) wood.push(placed(box(w - 0.1, 0.05, 0.07), 0, y, 0));
-    g.add(p.mesh(mergeParts(wood), pal.shelf, { map: crateWood(pal), flat: pal.shelf }));
+    // 4-1b 折疊梯：封著 (sealed) 且同一房的拉繩還沒拉 = 收在天花板上 (只剩上面三成)；拉下 = 整支放下
+    const ladder = p.mesh(mergeParts(wood), pal.shelf, { map: crateWood(pal), flat: pal.shelf });
+    g.add(ladder);
+    const foldable = d.type === 'cubeDoor' && !!d.sealed;
     // 天花板上的梯口框 (方框 + 往上的暗洞)
     const fw = w + 0.5;
     const frame = [placed(box(fw, 0.12, 0.14), 0, h + 0.06, -0.3), placed(box(fw, 0.12, 0.14), 0, h + 0.06, 0.5), placed(box(0.14, 0.12, 0.8), -fw / 2, h + 0.06, 0.1), placed(box(0.14, 0.12, 0.8), fw / 2, h + 0.06, 0.1)];
@@ -40,7 +43,15 @@ function hatchModel(p: Painter, d: ObjDef, { pal }: Theme): PropModel {
     hole.rotation.x = Math.PI / 2;
     hole.position.set(0, h + 0.01, 0.1);
     g.add(hole);
-    return { root: g };
+    let folded: boolean | null = null;
+    const update = (c: ModelCtx) => {
+      const now = foldable && !c.world.objs.some(o => o.def.type === 'foldCord' && o.used);
+      if (now === folded) return;
+      folded = now;
+      ladder.scale.y = now ? 0.3 : 1;
+      ladder.position.y = now ? h * 0.7 : 0;
+    };
+    return { root: g, update };
   }
   // D：活板門
   const w = d.w, dd = d.d;

@@ -21,6 +21,7 @@ import { chaseGateModel, giantRootModel, latticeBoxModel, latticeModel, oldCompa
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import { chaserModel } from './chaser';
 import { bookWallModel, deskModel, innerShelfModel } from './mezz';
+import { foldCordModel, inkStepModel, rootPlateModel } from './cellar';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
 
@@ -64,7 +65,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 追逐 1：守衛殘影 (只在藏寶圖)
   chaser: chaserModel,
   // H1 夾層：只在實景的書牆、後面那面書櫃 (小書桌 = diaryStand look 'desk')
-  bookWall: bookWallModel, innerShelf: innerShelfModel
+  bookWall: bookWallModel, innerShelf: innerShelfModel,
+  // 4-1 根窖走廊：書庫的拉繩、只畫在圖上的台階、抽屜的根結踏板 (折疊梯 = 梯口模型)
+  foldCord: foldCordModel, inkStep: inkStepModel, rootPlate: rootPlateModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

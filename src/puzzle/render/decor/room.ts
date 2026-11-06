@@ -24,7 +24,8 @@ const PUSH_2D = 0.8;
 function wallSide(p: Painter, { pal, room2d: BG2D }: Theme, len: number, stone = false): THREE.Group {
   const g = new THREE.Group();
   const tex = stone ? stoneBlocks(pal, len / 2.4, WALL_H / 1.0) : wallpaper(pal, len / 1.2, WALL_H / 1.2);
-  const paper = p.mesh(new THREE.PlaneGeometry(len, WALL_H), 0xffffff, { map: tex, flat: BG2D.paper, flatMap: true, outline: false });
+  // 藏寶圖照舊是素紙 (石紋只在實景)
+  const paper = p.mesh(new THREE.PlaneGeometry(len, WALL_H), 0xffffff, { map: tex, flat: BG2D.paper, flatMap: !stone, outline: false });
   paper.position.y = WALL_H / 2;
   const wains = p.mesh(box(len, 1.1, 0.06), pal.wainscot, { flat: BG2D.wainscot, outline: false });
   wains.position.set(0, 0.55, 0.03);

@@ -27,6 +27,8 @@ declare module '../core/types' {
       glyph?: TextKey;
       /** 門上刻的圖 (折線，外觀；2-5 章門 = 老宅立面圖) */
       carving?: string;
+      /** v0.4 第四章 第一次穿過這扇門 (梯口) 時在到達的房間說的話 (例：4-1a 第一次爬下地板梯口)；doneFlag (ObjBase) 同時閂住 */
+      passText?: TextKey;
       /**
        * v0.4 第四章 封住的門 (墨線鎖、收起來的折疊梯)：until 的旗標此刻還沒成立 → 從這一側穿不過去 (按 E 說 text，不換房；
        * 章節層 app/chapterEvents 依 doneFlags 判定)。兩側都封 = 兩扇門各寫一次 (驗證器 dialModelOf 由此組出 DialModel.doorLocks)
@@ -79,7 +81,7 @@ export const TURN_BLOCK_MSG: Readonly<Record<TurnBlock, TextKey>> = {
 };
 
 /** 推不過拱門的原因 → 訊息 key */
-export const TRANSFER_BLOCK_MSG: Readonly<Record<TransferBlock, TextKey>> = { notArch: 'msg.cube.doorOnly', occupied: 'msg.cube.archBlocked' };
+export const TRANSFER_BLOCK_MSG: Readonly<Record<TransferBlock, TextKey>> = { notArch: 'msg.cube.doorOnly', occupied: 'msg.cube.archBlocked', up: 'msg.cube.hatchUpCrate' };
 
 /** 屋框：大門 / 來時的走廊 (門有 frameText) → 只提示；章門走廊 → 有鑰匙就打開 (本章通關)，沒有就鎖著 */
 function frameDoor(w: World, o: ObjState, frame: string): void {
@@ -112,7 +114,11 @@ function archCrossing(w: World): void {
       now.add(o.def.id);
       if (prev?.has(o.def.id)) continue;
       const l = links[d.def.id];
-      if (l?.to === 'room' && l.kind === 'arch') w.events.push({ t: 'objCross', obj: o.def.id, door: d.def.id });
+      const side = d.def.type === 'cubeDoor' ? d.def.side : 'N';
+      // v0.4 第四章 梯口：天花板梯口 (U) 一律推不上去；地板梯口 (D) 窄 = 「梯口太窄」、下面是土 = 「梯口下面是土」
+      if (side === 'U') say(w, 'msg.cube.hatchUpCrate');
+      else if (l?.to === 'room' && l.kind === 'arch') w.events.push({ t: 'objCross', obj: o.def.id, door: d.def.id });
+      else if (side === 'D') say(w, l?.to === 'room' ? 'msg.cube.hatchNarrow' : 'msg.cube.hatchDown');
       else say(w, l?.to === 'room' ? 'msg.cube.doorOnly' : 'msg.cube.archWall');
     }
   }
@@ -130,7 +136,10 @@ export const cube: Mechanic = {
     lever: { verbKey: 'obj.lever.verb', interact: (w, o) => { w.events.push({ t: 'turnRequest', lever: o.def.id }); } },
     cubeDoor: {
       verbKey: 'obj.cubeDoor.verb',
+      // v0.4 第四章：梯口第一次穿過就閂住 (used = 4-1a)，之後照樣要穿得過；章門打開 (used) 之後維持原樣 (不再互動)
+      usableWhenUsed: true,
       interact: (w, o) => {
+        if (o.used && o.def.type === 'cubeDoor' && o.def.kind === 'chapter') return;
         if (o.def.type === 'cubeDoor' && o.def.hole) { if (doorLink(w, o).to === 'room') w.events.push({ t: 'door', door: o.def.id }); return; }
         const l = doorLink(w, o);
         if (l.to === 'room') w.events.push({ t: 'door', door: o.def.id });

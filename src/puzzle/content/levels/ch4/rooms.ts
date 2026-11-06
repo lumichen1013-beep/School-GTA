@@ -80,7 +80,10 @@ export const furnace = room('furnace', -14, 14, [
  */
 export const archive = room('archive', -10, 10, [
   door('E', 'door', 9.8, inkSealed('4-2a')),
-  hatch('U', 'door', -4.0, -4.4),
+  // 4-1b：天花板梯口的折疊梯收著 (拉繩拉下之前爬不上去)；拉繩只在藏寶圖、要站上只畫在圖上的台階才搆得到
+  hatch('U', 'door', -4.0, -4.4, { sealed: { until: '4-1b', text: 'lvl.4-1.ladder.folded' } }),
+  { id: 'foldCord', type: 'foldCord', doneFlag: '4-1b', useText: 'msg.cellar.cord', x: -3.0, y: 2.6, z: -3.9, w: 0.2, h: 0.5, d: 0.2, visible: 'both', solid: false, interactable: true, interactIn: '2d', labelKey: 'lvl.4-1.cord' },
+  { id: 'inkStep', type: 'inkStep', x: -2.2, y: 0, z: -3.6, w: 1.2, h: 1.4, d: 1.0, visible: '2d', solid: true, labelKey: 'lvl.4-1.inkStep' },
   plaque('plaqueArchive', 'lvl.ch4.archive.plaque', 2.4, 0.8, 3.0)
 ], [
   { kind: 'drawerWall', x: 3.0, w: 9.0, h: 3.2, seed: 221 },
@@ -100,6 +103,8 @@ export const archive = room('archive', -10, 10, [
 export const drawer = room('drawer', -14, 14, [
   door('W', 'door', -13.8, inkSealed('ink.E')),
   hatch('U', 'arch', -6.0, -4.4),
+  // 4-1c：天花板梯口正下方的根結踏板 (木箱從走廊落下來就壓在上面)
+  { id: 'rootPlate', type: 'rootPlate', doneFlag: '4-1c', solvedText: 'lvl.4-1.plate.solved', x: -6.0, y: 0, z: -2.4, w: 2.4, h: 0.08, d: 1.4, visible: 'both', solid: false, labelKey: 'lvl.4-1.plate' },
   door('E', 'chapter', 13.8, { key: 'key.cellar' }),
   plaque('plaqueDrawer', 'lvl.ch4.drawer.plaque', 3.6, 0.8, 3.0)
 ], [

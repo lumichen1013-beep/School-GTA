@@ -220,7 +220,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 3-3 夜溫室：半座天平停在正中間 (秤盤落定)、巨盆被推進軌道 (拖過石板；驚嚇聲另由 scare:handprint 播)、拿到筆記一頁 (撿到的紙聲另由道具欄決定)
   balanceHalf: 'sfx.plate.press', bigPot: 'sfx.crate.push', page: 'sfx.note.read',
   // 3-4 溫室深處：三片玻璃嵌進花窗架 (卡榫打開的聲音)、「許」字亮起 (溫和的亮燈聲；苔窗是 sensor，沿用上面的 sfx.lamp.on)、長廊的柵門打開
-  paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on', chaseGate: 'sfx.gate.open'
+  paneFrame: 'sfx.latch.open', lattice: 'sfx.lamp.on', chaseGate: 'sfx.gate.open',
+  // 第四章 4-1：折疊梯的拉繩、根結踏板
+  foldCord: 'sfx.cord.pull', rootPlate: 'sfx.plate.press'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

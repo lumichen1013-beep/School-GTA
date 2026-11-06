@@ -6,6 +6,7 @@ import type { Side } from '../core/cube';
 import { activateDial, clearUndo, doneFlags, doorArrival, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
+import { pressOnLanding } from '../mechanics/cellar';
 
 export type ChapterStep =
   | { kind: 'none' }
@@ -47,7 +48,12 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     // v0.4 H1：到達處被實體占住 (例：夾層的書櫃堵住洞) → 在這一房說那個實體的話、不換房
     const blocked = doorArrival(cs, e.door);
     if (blocked) { say(w, blocked.blockText ?? 'msg.cube.doorBlocked'); return { kind: 'blocked' }; }
-    return { kind: 'enter', next: enterRoom(cs, l.room, l.door, opts) };
+    // v0.4 第四章 第一次穿過這扇門 (4-1a 的地板梯口)：閂住 (doneFlag) 並在到達的房間說 passText
+    const first = o.def.type === 'cubeDoor' && !!o.def.doneFlag && !o.used;
+    if (first) o.used = true;
+    const next = enterRoom(cs, l.room, l.door, opts);
+    if (first && o.def.type === 'cubeDoor' && o.def.passText) say(next.world, o.def.passText);
+    return { kind: 'enter', next };
   }
   if (e.t === 'turnRequest') {
     const o = w.byId.get(e.lever);
@@ -60,8 +66,11 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
   if (e.t === 'objCross') {
     const r = transferObject(cs, e.obj, e.door, opts);
     if ('blocked' in r) { say(w, TRANSFER_BLOCK_MSG[r.blocked]); return { kind: 'blocked' }; }
-    say(w, 'msg.cube.crossed');
-    return { kind: 'state', cs: r };
+    const src = w.byId.get(e.door);
+    say(w, src?.def.type === 'cubeDoor' && src.def.side === 'D' ? 'msg.cube.dropped' : 'msg.cube.crossed');
+    // v0.4 第四章 4-1c：落進別的房間就壓住那裡的根結踏板 → 鎖扣立刻解開 (不必等人走進去)
+    const landed = pressOnLanding(r, e.obj);
+    return { kind: 'state', cs: landed.flag ? refreshUnlocks(landed.cs).cs : r };
   }
   if (e.t === 'flag') return { kind: 'state', cs: noteFlag(cs, e.flag) };
   if (e.t === 'dialActivate') {
