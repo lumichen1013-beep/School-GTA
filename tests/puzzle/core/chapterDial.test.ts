@@ -117,9 +117,12 @@ describe('控制盤：轉動與阻擋順序', () => {
     jcs.world.byId.get('aCrate')!.x = 5.4; // 同時壓在門口
     expect(dialTurn(jcs, { group: 'row0', dir: 1 })).toEqual({ blocked: 'jammed' });
     // 門口卡著：下列的 d 房 (不是當前房；快照裡) 木箱壓在東門上 → 下列轉不動；當前房木箱推上門口 → 上列轉不動
+    // (開章 / 進房時 clearDoorways 會把壓在門位上的可推物歸位，所以快照在開章之後才放上去)
     const st = newChapterState(SPEC, 'a', null);
     st.rooms.d = { objs: [{ id: 'dCrate', x: 5.4, y: 0, z: 0, gone: false, used: false, touched: false }], flags: [] };
-    const dcs = activateDial(open(st));
+    expect(open(st).state.rooms.d.objs[0]).toMatchObject({ id: 'dCrate', x: 0, z: 0 });
+    const dcs = activateDial(open());
+    dcs.state.rooms.d = st.rooms.d;
     expect(dialTurn(dcs, { group: 'row1', dir: 1 })).toEqual({ blocked: 'doorway' });
     expect(isLocked(SPEC, dcs.state, 'row1', dcs.world)).toBe(false);
     expect('blocked' in dialTurn(cs, { group: 'row1', dir: 1 })).toBe(false);

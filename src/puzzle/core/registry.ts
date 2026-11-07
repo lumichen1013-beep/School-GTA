@@ -1,4 +1,4 @@
-import type { ObjState, World } from './types';
+import type { Box, ObjState, World } from './types';
 import type { WorldCommand } from './actions';
 
 export type MechanicId = string;
@@ -34,6 +34,8 @@ export interface Mechanic {
   blocksTrack?(w: World): boolean;
   /** v0.4 存在條件：此刻這個物件不在場 (OR 合成；例：屋框書牆的某一段只在房間位於那一行時存在，mechanics/shelf) */
   hidden?(w: World, o: ObjState): boolean;
+  /** 可推物不能推進的區域 (合併；core/push 已在裡面的不能推得更深；例：魔方門的門前淨空區，mechanics/cube) */
+  pushKeepOut?(w: World, crate: ObjState): readonly Box[];
 }
 
 export interface CompiledMechanics {
@@ -47,6 +49,7 @@ export interface CompiledMechanics {
   readonly command: readonly Mechanic[];
   readonly blocksTrack: readonly Mechanic[];
   readonly hidden: readonly Mechanic[];
+  readonly pushKeepOut: readonly Mechanic[];
 }
 
 /** 編譯機制表：重複的機制 id / 物件類型 → 拋錯 */
@@ -71,6 +74,7 @@ export function compileMechanics(list: readonly Mechanic[]): CompiledMechanics {
     interactFallback: list.filter(m => m.interactFallback),
     command: list.filter(m => m.command),
     blocksTrack: list.filter(m => m.blocksTrack),
-    hidden: list.filter(m => m.hidden)
+    hidden: list.filter(m => m.hidden),
+    pushKeepOut: list.filter(m => m.pushKeepOut)
   };
 }

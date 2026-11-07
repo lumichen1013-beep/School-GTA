@@ -29,6 +29,8 @@ export const msg = {
   'msg.cube.doorOnly': '對面是一扇門，只容得下人。箱子過不去。',
   'msg.cube.archWall': '拱門後面是牆。',
   'msg.cube.archBlocked': '拱門那一頭被擋住了。',
+  // 門前淨空區：箱子推不進門口 (門口要留給人走)
+  'msg.cube.doorClear': '門口得留給人走，箱子推不過去。',
   // v0.4 H1：人穿門 / 洞前查到達處 (被實體占住、那個實體沒有 blockText 時)
   'msg.cube.doorBlocked': '門的另一邊被堵住了。',
   'msg.cube.mapOnly2d': '展開圖只畫在[[term.mode2d]]上。',

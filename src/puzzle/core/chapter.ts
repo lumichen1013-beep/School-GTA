@@ -137,6 +137,61 @@ export function doorSpawn(level: LevelDef, door: ObjId, side: Side): { x: number
   return { x: clamp(x, b.minX + PLAYER_HW, b.maxX - PLAYER_HW), y: o.y, z: clamp(z, b.minZ + PLAYER_HW, b.maxZ - PLAYER_HW) };
 }
 
+/** 門前淨空區的深度 (門內緣往房內)：涵蓋穿門的站位 (SPAWN_IN 0.9 + 玩家半寬 0.3) 再留 0.3 */
+export const DOOR_CLEAR = 1.5;
+
+/**
+ * 門前淨空區 = 門位盒子往房內延伸 DOOR_CLEAR (梯口 U / D 往觀眾，同 doorSpawn)；寬、高同門位。
+ * 門 / 章門的淨空區可推物推不進來 (mechanics/cube pushKeepOut；拱門、梯口、洞位照舊)；測試以它檢查擺設不擋門
+ */
+export function doorClearBox(o: Pick<ObjDef, 'x' | 'y' | 'z' | 'w' | 'h' | 'd'>, side: Side): Box {
+  const b: Box = { min: [o.x - o.w / 2, o.y, o.z - o.d / 2], max: [o.x + o.w / 2, o.y + o.h, o.z + o.d / 2] };
+  if (side === 'E') b.min[0] -= DOOR_CLEAR;
+  else if (side === 'W') b.max[0] += DOOR_CLEAR;
+  else if (side === 'S') b.min[2] -= DOOR_CLEAR;
+  else b.max[2] += DOOR_CLEAR; // N、U、D
+  return b;
+}
+
+const defBox = (d: Pick<ObjDef, 'w' | 'h' | 'd'>, x: number, y: number, z: number): Box =>
+  ({ min: [x - d.w / 2, y, z - d.d / 2], max: [x + d.w / 2, y + d.h, z + d.d / 2] });
+
+/**
+ * 卡在門口的可推物歸位 (使用者回報「印房進不去」：舊版可以把鉛字盤推到東門前，轉動「門口有東西卡著」、穿門「被堵住」，印房從此進不去)：
+ * 每間房的可推物 (快照位置) 壓在門位上，或占住任一扇門 (含洞位) 的穿門站位 → 回到關卡資料的原位 (跨房物件回原房)。就地修改並回傳 state
+ */
+export function clearDoorways(spec: ChapterSpec, state: ChapterState): ChapterState {
+  if (!spec.cube) return state;
+  for (const room of Object.keys(spec.rooms)) {
+    const objs = roomObjects(spec, state, room);
+    const level = { ...spec.rooms[room], objects: objs };
+    const doors = spec.doors.filter(d => d.room === room).flatMap(d => {
+      const o = objs.find(x => x.id === d.door);
+      if (!o) return [];
+      const at = doorSpawn(level, d.door, d.side);
+      return [defBox(o, o.x, o.y, o.z), boxAt(at.x, at.y, at.z)];
+    });
+    for (const d of objs) {
+      if (!d.pushable) continue;
+      const snap = state.rooms[room]?.objs.find(s => s.id === d.id);
+      if (snap?.gone) continue;
+      const box = defBox(d, snap?.x ?? d.x, snap?.y ?? d.y, snap?.z ?? d.z);
+      if (!doors.some(b => overlaps(box, b, '3d'))) continue;
+      const home = originRoom(spec, d.id)!;
+      const def = spec.rooms[home].objects.find(o => o.id === d.id)!;
+      if (home !== room) {
+        delete state.moved[d.id];
+        const here = state.rooms[room];
+        if (here) here.objs = here.objs.filter(s => s.id !== d.id);
+      }
+      const hs = state.rooms[home];
+      const s = hs?.objs.find(x => x.id === d.id);
+      if (s) { s.x = def.x; s.y = def.y; s.z = def.z; }
+    }
+  }
+  return state;
+}
+
 /** 此刻讀作「間」的門 (`room.door`；門牌標籤上貼著指定的部件卡)；labels 未給 = 章節狀態的標籤 */
 export function activePlates(spec: ChapterSpec, labels: Readonly<Record<string, readonly string[]>>): Set<string> {
   const out = new Set<string>();
@@ -259,7 +314,7 @@ export function captureState(cs: ChapterSession): ChapterState {
 
 /** 依狀態開一章 (新章或讀檔)：建出所在房間，記下進房快照 */
 export function openChapter(spec: ChapterSpec, state: ChapterState, opts: WorldOptions): ChapterSession {
-  const st = clone(state);
+  const st = clearDoorways(spec, clone(state));
   const world = loadRoom(spec, st, opts);
   // 控制盤章節：沒有墨量紀錄 (新進房 / 讀到缺欄的存檔) → 補滿到這間房的預算；有 (房內讀檔) → 照存檔，不補墨 (規格 8)
   if (isDialChapter(spec) && !st.turns) st.turns = { left: turnBudgetFor(spec, st, world), undo: [] };
@@ -362,8 +417,10 @@ export function arrivalBlocker(spec: ChapterSpec, state: ChapterState, opts: Wor
   const level = spec.rooms[state.room];
   const di = state.door === null ? undefined : spec.doors.find(d => d.room === state.room && d.door === state.door);
   if (!level || !di) return null;
-  const probe = probeRoom(spec, { ...clone(state), door: null }, opts);
-  const at = doorSpawn({ ...level, objects: roomObjects(spec, state, state.room) }, di.door, di.side);
+  // 卡在門口的可推物先歸位 (同 openChapter；讀檔時的到達處校正也用這個結果)
+  const st = clearDoorways(spec, { ...clone(state), door: null });
+  const probe = probeRoom(spec, st, opts);
+  const at = doorSpawn({ ...level, objects: roomObjects(spec, st, state.room) }, di.door, di.side);
   const box = boxAt(at.x, at.y, at.z);
   return solidsFor(probe, '3d').find(s => overlaps(objBox(s), box, '3d'))?.def.id ?? null;
 }

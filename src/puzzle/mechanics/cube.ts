@@ -1,7 +1,7 @@
 import type { Mechanic } from '../core/registry';
-import type { DoorLinkState, ItemId, LevelDef, ObjId, ObjState, TextKey, World } from '../core/types';
+import type { Box, DoorLinkState, ItemId, LevelDef, ObjId, ObjState, TextKey, World } from '../core/types';
 import type { CubeOp, DoorInfo, DoorKind, Side } from '../core/cube';
-import type { TransferBlock, TurnBlock } from '../core/chapter';
+import { doorClearBox, type TransferBlock, type TurnBlock } from '../core/chapter';
 import { hasItem, say } from '../core/world';
 import { objBox, overlaps } from '../core/geometry';
 
@@ -100,33 +100,67 @@ function frameDoor(w: World, o: ObjState, frame: string): void {
 
 /** 每個世界上一步壓在拱門上的可推物 (只在「推進去的那一刻」發事件 / 說明一次；不入快照，換房即重建) */
 const inArch = new WeakMap<World, ReadonlySet<ObjId>>();
+/** 每個世界上一步頂在門前淨空區邊上的「可推物|門」(只在剛頂到時說明一次) */
+const atClear = new WeakMap<World, ReadonlySet<string>>();
+
+/**
+ * 此刻的門前淨空區 (core/chapter doorClearBox)：只有人過得去的牆上的門 (門、章門；N / S / E / W)。
+ * 拱門與梯口照舊 (推進去 = 跨房或說明，門口卡著時 T 物歸原處)；洞位沒有 (不在場時是牆)。
+ * 離房後還壓在門位 / 穿門站位上的可推物由 core/chapter clearDoorways 在進房 / 讀檔時歸位
+ */
+function clearZones(w: World): { door: ObjState; box: Box }[] {
+  const out: { door: ObjState; box: Box }[] = [];
+  for (const d of w.objs) {
+    if (d.def.type !== 'cubeDoor' || d.gone || d.def.hole || d.def.kind === 'arch' || d.def.side === 'U' || d.def.side === 'D') continue;
+    out.push({ door: d, box: doorClearBox({ ...d.def, x: d.x, y: d.y, z: d.z }, d.def.side) });
+  }
+  return out;
+}
 
 /**
  * 可推物被推進拱門 (箱子壓到拱門的門位上)：拱門對拱門 → objCross (外殼 → transferObject)；
- * 對面是門 → 只有人能過 (規格 5.4.1 型別取較窄者)；門後是牆 → 說明。都只在剛推進去時一次
+ * 對面是門 → 只有人能過 (規格 5.4.1 型別取較窄者)；門後是牆 → 說明。都只在剛推進去時一次。
+ * 門 / 章門前的淨空區 (pushKeepOut)：箱子頂到邊上時說明一次 (門口要留給人走)
  */
 function archCrossing(w: World): void {
   const links = w.ext.cube?.links;
-  if (!links) return;
-  const prev = inArch.get(w);
-  const now = new Set<ObjId>();
-  for (const d of w.objs) {
-    if (d.def.type !== 'cubeDoor' || d.def.kind !== 'arch' || d.gone) continue;
-    const db = objBox(d);
-    for (const o of w.objs) {
-      if (!o.def.pushable || o.gone || !overlaps(objBox(o), db, '3d')) continue;
-      now.add(o.def.id);
-      if (prev?.has(o.def.id)) continue;
-      const l = links[d.def.id];
-      const side = d.def.type === 'cubeDoor' ? d.def.side : 'N';
-      // v0.4 第四章 梯口：天花板梯口 (U) 一律推不上去；地板梯口 (D) 窄 = 「梯口太窄」、下面是土 = 「梯口下面是土」
-      if (side === 'U') say(w, 'msg.cube.hatchUpCrate');
-      else if (l?.to === 'room' && l.kind === 'arch') w.events.push({ t: 'objCross', obj: o.def.id, door: d.def.id });
-      else if (side === 'D') say(w, l?.to === 'room' ? 'msg.cube.hatchNarrow' : 'msg.cube.hatchDown');
-      else say(w, l?.to === 'room' ? 'msg.cube.doorOnly' : 'msg.cube.archWall');
+  if (links) {
+    const prev = inArch.get(w);
+    const now = new Set<ObjId>();
+    for (const d of w.objs) {
+      if (d.def.type !== 'cubeDoor' || d.def.kind !== 'arch' || d.gone) continue;
+      const db = objBox(d);
+      for (const o of w.objs) {
+        if (!o.def.pushable || o.gone || !overlaps(objBox(o), db, '3d')) continue;
+        now.add(o.def.id);
+        if (prev?.has(o.def.id)) continue;
+        const l = links[d.def.id];
+        const side = d.def.type === 'cubeDoor' ? d.def.side : 'N';
+        // v0.4 第四章 梯口：天花板梯口 (U) 一律推不上去；地板梯口 (D) 窄 = 「梯口太窄」、下面是土 = 「梯口下面是土」
+        if (side === 'U') say(w, 'msg.cube.hatchUpCrate');
+        else if (l?.to === 'room' && l.kind === 'arch') w.events.push({ t: 'objCross', obj: o.def.id, door: d.def.id });
+        else if (side === 'D') say(w, l?.to === 'room' ? 'msg.cube.hatchNarrow' : 'msg.cube.hatchDown');
+        else say(w, l?.to === 'room' ? 'msg.cube.doorOnly' : 'msg.cube.archWall');
+      }
+    }
+    inArch.set(w, now);
+  }
+  // 頂到淨空區：箱子往四周擴 0.05 碰得到 (第一步 = 剛進房，不說)
+  const before = atClear.get(w);
+  const touching = new Set<string>();
+  const zones = clearZones(w);
+  for (const o of w.objs) {
+    if (!o.def.pushable || o.gone) continue;
+    const b = objBox(o);
+    const near: Box = { min: [b.min[0] - 0.05, b.min[1], b.min[2] - 0.05], max: [b.max[0] + 0.05, b.max[1], b.max[2] + 0.05] };
+    for (const z of zones) {
+      if (!overlaps(near, z.box, '3d')) continue;
+      const key = `${o.def.id}|${z.door.def.id}`;
+      touching.add(key);
+      if (before && !before.has(key)) say(w, 'msg.cube.doorClear');
     }
   }
-  inArch.set(w, now);
+  atClear.set(w, touching);
 }
 
 /**
@@ -157,6 +191,8 @@ export const cube: Mechanic = {
     doorPlate: {}
   },
   afterPhysics: archCrossing,
+  // 門前淨空區：可推物推不進去 (使用者回報「印房進不去」：鉛字盤被推到東門前，轉動卡住、穿門被堵)
+  pushKeepOut: w => clearZones(w).map(z => z.box),
   // 洞位：對面的「間」接上時才在場
   hidden: (w, o) => o.def.type === 'cubeDoor' && !!o.def.hole && doorLink(w, o).to !== 'room'
 };
