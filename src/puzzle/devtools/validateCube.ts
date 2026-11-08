@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { acrossEdge, applyOp, applyTurn, cellsOf, converge, cubeKey, doorOpenFor, sameCell, initialCube, isBlocked, links, localSide, starlight, turnDirs, type StarState, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { acrossEdge, applyOp, applyTurn, cellsOf, converge, slitOf, cubeKey, doorOpenFor, sameCell, initialCube, isBlocked, links, localSide, starlight, turnDirs, type StarState, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
 import { inkPaths, jamActive, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
@@ -152,6 +152,8 @@ export interface GoalCtx {
   /** v0.4 第五章 5-5 星光 (core/cube starlight；封住的門以此組旗標判定) 與三道光落在同一點 (converge) */
   star(): StarState;
   converge(): boolean;
+  /** v0.4 第五章 這扇窗此刻的窗縫 (core/cube slitOf：v = 直、h = 橫) */
+  slit(room: string): 'v' | 'h';
 }
 
 /** 一題 (抽象)：在 room 完成；needs = 設計上的前置題 (多解列舉從「前置剛湊齊」的狀態出發)；goal = 魔方排列的條件 (沒給 = 走到那間房即可完成) */
@@ -234,6 +236,11 @@ export interface DialModel {
   startCube?: CubeState;
   /** v0.4 第五章 5-5 開章時魔方儀已經啟動 (觀星儀在 5-1 啟動過；⑩ 入口檢查不適用) */
   dialOn?: boolean;
+  /**
+   * v0.4 第五章 5-5c 墨不進模型 (每次進房墨都夠：轉動不扣墨、狀態不記墨)：排列多 (中間片 + 兩個窗框 98,304) 時把狀態壓在 2×10⁶ 內；
+   * 每段轉動是否在一次進房的墨之內另以 ⑦ 多解列舉 (步數上限 = 房間預算) 驗證
+   */
+  inkless?: boolean;
 }
 
 /** both = 兩面都封 (cubeDoor.sealed.both)：人也不能從對面經這扇門走進來 */
@@ -360,7 +367,7 @@ function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet
   if (p.ink && !(inkAt(m.cube, s)[p.room] ?? []).includes(p.ink.side)) return false;
   if (!p.goal) return true;
   const ls = () => links(m.cube, s, m.doors, platesFor(m, flags));
-  return p.goal(s, flags, { links: ls, across: (room, side) => acrossEdge(m.cube, s, room, side), star: () => starlight(m.cube, s, ls(), m.doors, doorOpenFor(m.doors, flags)), converge: () => converge(m.cube, s) });
+  return p.goal(s, flags, { links: ls, across: (room, side) => acrossEdge(m.cube, s, room, side), star: () => starlight(m.cube, s, ls(), m.doors, doorOpenFor(m.doors, flags)), converge: () => converge(m.cube, s), slit: room => slitOf(s, room) });
 }
 
 export interface DialPuzzleReport {
@@ -457,8 +464,9 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const P = m.puzzles.length;
   const F = 1 << P;
   const pid = new Map(m.puzzles.map((p, i) => [p.id, i]));
-  const maxInk = Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
+  const maxInk = m.inkless ? 0 : Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
   const K = maxInk + 1;
+  const ink = (x: number): number => (m.inkless ? 0 : x);
   const cs = cardSpaceOf(m);
   const C = cs.size;
   const enc = (a: number, r: number, f: number, d: number, k: number, c = 0): number => ((((a * R + r) * F + f) * C + c) * 2 + d) * K + k;
@@ -521,7 +529,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const finish = pid.get(m.finish) ?? -1;
   const dialRoom = rooms.indexOf(def.dial?.entry.room ?? '');
   const start = rooms.indexOf(m.start);
-  const s0 = enc(0, start, 0, m.dialOn ? 1 : 0, budgetOf(m.start, 0), cs.start);
+  const s0 = enc(0, start, 0, m.dialOn ? 1 : 0, ink(budgetOf(m.start, 0)), cs.start);
   const index = new Map<number, number>([[s0, 0]]);
   const order = [s0];
   const entry: number[] = [1];
@@ -544,17 +552,17 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
     succStart.push(succ.length);
     if (finish >= 0 && f & (1 << finish)) continue;
     const add = (x: number, isEntry = false) => { const i = visit(x, isEntry); if (i >= 0) succ.push(i); };
-    if (!small(c)) for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, budgetOf(rooms[r2], f), c), true);
-    if (!d && r === dialRoom) add(enc(a, r, f, 1, budgetOf(rooms[r], f), c), entry[n] === 1);
+    if (!small(c)) for (const r2 of walks(a, f)[r]) add(enc(a, r2, f, d, ink(budgetOf(rooms[r2], f)), c), true);
+    if (!d && r === dialRoom) add(enc(a, r, f, 1, ink(budgetOf(rooms[r], f)), c), entry[n] === 1);
     const flags = flagSet(f);
     m.puzzles.forEach((p, i) => {
       if (f & (1 << i) || rooms[r] !== p.room || p.turn !== undefined) return;
       if (!goalHolds(m, p, arr.states[a], flags, ref => cs.at(c, ref))) return;
       if (!p.needs.every(q => flags.has(q))) early.add(p.id);
       const f2 = f | (1 << i);
-      add(enc(a, r, f2, d, p.refill ? budgetOf(rooms[r], f2) : k, c));
+      add(enc(a, r, f2, d, p.refill ? ink(budgetOf(rooms[r], f2)) : k, c));
     });
-    if (d && k > 0) {
+    if (d && (m.inkless || k > 0)) {
       for (let o = 0; o < arr.opts.length; o++) {
         const a2 = arr.next[a * arr.opts.length + o];
         if (a2 < 0 || optLocked(o, f, r) || optJammed(a, o, f, c) || optOutOfReach(o, r, c)) continue;
@@ -565,7 +573,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
           if (!p.needs.every(q => flags.has(q))) { early.add(p.id); continue; }
           f2 |= 1 << i;
         }
-        add(enc(a2, r, f2, d, k - 1, c));
+        add(enc(a2, r, f2, d, m.inkless ? 0 : k - 1, c));
       }
     }
     // 拿 / 放尺度卡 (不耗墨、不改排列；同一房內)
@@ -720,7 +728,7 @@ export function validateDial(model: DialModel): DialReport {
   const rooms = Object.keys(m.rooms);
   const R = rooms.length;
   const F = 1 << m.puzzles.length;
-  const maxInk = Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
+  const maxInk = m.inkless ? 0 : Math.max(0, ...rooms.map(r => Math.max(m.rooms[r].budget, ...Object.values(m.rooms[r].p4 ?? {}))));
   const K = maxInk + 1;
   const C = cardSpaceOf(m).size;
   const dec = (x: number) => { const k = x % K; x = (x - k) / K; const d = x % 2; x = (x - d) / 2; const c = x % C; x = (x - c) / C; const f = x % F; x = (x - f) / F; const r = x % R; return { a: (x - r) / R, r, f, d, k, c }; };
@@ -797,7 +805,7 @@ export function validateDial(model: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini' | 'startCube' | 'dialOn'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini' | 'startCube' | 'dialOn' | 'inkless'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   // 區 (areas) 的預算 = 所在房的基礎預算 (validateDial 也會自動補)

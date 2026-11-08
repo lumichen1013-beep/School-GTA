@@ -252,7 +252,8 @@ export class PuzzleApp {
         const def = e.load();
         const cc = cubeChapterOf(e.id);
         const room = s.kind === 'room';
-        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? chapterClearAlso(cc.levels) : []));
+        // v0.4 第五章 5-5：房間通關也一併記入 (LevelDef.clearAlso = 第五章的五間房)
+        if (this.session) this.commit(recordClear(this.save, e.id, this.session.world, cc && !room ? chapterClearAlso(cc.levels) : room ? def.clearAlso ?? [] : []));
         // 通關畫面是模態的：收起展開圖 / 轉動模式 / 字卡匣 (在轉動模式裡完成的題，例 3-1b)；底下的世界照常推進但不收玩家輸入 (frame)
         this.session?.closeOverlays();
         // 繼續：章門打開 → 下一章的第一關 (「前往第二章　書房」)；章內的房間通關 → 回到本章 (「繼續探索」)

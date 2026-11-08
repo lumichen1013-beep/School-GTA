@@ -23,6 +23,9 @@ const objects: ObjDef[] = [
   // ── 後景：北窗 (窗前的紙籤照舊)、窗台角上的天窗銘文 (北；許問津；只在實景；5-5c 引用)、窗框旁的劇情字條 ──
   plaque('window', 'lvl.ch5.north.window', 0, 1.2, -4.85, 'both', 'lvl.ch5.north.windowLabel'),
   plaque('inscriptionN', 'lvl.5-4.inscription', 1.6, 0.9, -4.6, '3d', 'lvl.5-4.inscription.label'),
+  // v0.4 5-5c 窗縫儀 (窗邊一片黃銅框的小窗格：中央一道直縫、窗外的地平線依此刻朝向畫成橫或直)
+  { id: 'slitPane', type: 'slitPane', room: 'north', vText: 'lvl.5-5.slit.v', hText: 'lvl.5-5.slit.h', skyText: 'lvl.5-5.slit.sky', darkText: 'lvl.5-5.slit.dark',
+    x: 3.2, y: 0.8, z: -4.7, w: 0.5, h: 0.8, d: 0.05, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-5.slit' },
   { ...noteBase, id: 'noteStory', x: -2.6, y: 1.3, z: -4.4, mount: undefined, textKey: 'lvl.5-4.note.story' },
   // ── 中景：吊秤 (秤繩從地板垂下去；3D 按 E = 此刻吊著哪一間、哪一頭重) 與盤上的背包 (名詞標籤帶方槽) ──
   { id: 'scale', type: 'hangScale', hook: 'D', pans: ['bag'], want: 'level', doneFlag: '5-4',

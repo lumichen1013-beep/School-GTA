@@ -23,7 +23,7 @@ const objects: ObjDef[] = [
   // v0.4 5-5a 洞位 (平常不在場；機關的門牌讀作「間」、走道那一頭正對這一面時才接上)
   door('N', 'door', 7.6, { id: 'holeN', hole: true, labelKey: 'lvl.ch2.hole' }),
   door('W', 'door', -11.8, { id: 'holeW', hole: true, labelKey: 'lvl.ch2.hole' }),
-  hatch('D', 'door', 0, 1.6, { labelKey: 'lvl.5-1.hatchD', ...sealedBy('5-5c', 'lvl.5-1.floorSealed') }),
+  hatch('D', 'door', 0, 1.6, { labelKey: 'lvl.5-1.hatchD', ...sealedBy('5-5c', 'lvl.5-1.floorSealed'), doneFlag: 'meadow.arrive', passText: 'lvl.5-5.meadow.arrive' }),
   // ── 後景：觀星儀 (控制盤；只開三條中間片) 與底座旁的刻度盤 (5-1a：星圖對上刻度) ──
   { id: 'dial', type: 'dial', chapter: 5, useText: 'lvl.5-1.dial.activated', readyText: 'lvl.5-1.dial.ready',
     x: -3.0, y: 0, z: -3.6, w: 1.6, h: 1.6, d: 1.2, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-1.dial' },

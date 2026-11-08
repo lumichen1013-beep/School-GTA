@@ -592,7 +592,7 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
     }
   });
 
-  it('5-5 的狀態 (機關：光槽全暗 / 亮兩道 / 三道閂住、門牌貼「日」、殘影在場) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+  it('5-5 的狀態 (機關：光槽全暗 / 亮兩道 / 三道閂住、門牌貼「日」、殘影在場、焦點上的紙與三道光、驚嚇) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
     const cases: Array<[string[], boolean, string[]]> = [[[], false, []], [['east', 'north'], false, ['card.ri']], [['east', 'west', 'north'], true, ['card.ri']]];
     for (const [reach, used, plate] of cases) {
       const w = newWorld(engine);
@@ -600,6 +600,11 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
         starlight: { lit: reach, reach, behind: [], linked: reach, via: {}, slits: { east: 'v', west: 'v', north: 'v' }, faces: { east: 'E', west: 'W', north: 'N' }, converge: false } };
       w.byId.get('slots')!.used = used;
       w.byId.get('chaser')!.used = used;
+      // 5-5c：紙放在焦點上、三道光落下 (東窗偏一格)、驚嚇的三道殘影
+      w.byId.get('chaseCut')!.used = used;
+      w.byId.get('focus')!.touched = used;
+      w.byId.get('scare')!.used = used;
+      w.ext.starlight = { ...w.ext.starlight!, good: used ? ['west', 'north'] : [] };
       const view = new PuzzleScene(w, THEMES.attic);
       const cams = new PuzzleCameras(w);
       for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));

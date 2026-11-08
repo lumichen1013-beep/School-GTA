@@ -32,6 +32,9 @@ const objects: ObjDef[] = [
     } },
   // 窗台角上的天窗銘文 (東；許問津；只在實景；5-5c 引用)
   plaque('inscriptionE', 'lvl.5-2.inscription', 9.5, 0.9, 2.6, '3d', 'lvl.5-2.inscription.label'),
+  // v0.4 5-5c 窗縫儀 (窗邊一片黃銅框的小窗格：中央一道直縫、窗外的地平線依此刻朝向畫成橫或直)
+  { id: 'slitPane', type: 'slitPane', room: 'east', vText: 'lvl.5-5.slit.v', hText: 'lvl.5-5.slit.h', skyText: 'lvl.5-5.slit.sky', darkText: 'lvl.5-5.slit.dark',
+    x: 8.6, y: 0.8, z: -3.6, w: 0.5, h: 0.8, d: 0.05, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-5.slit' },
   // 書案上的星表匣 (三張詞卡；只在實景打開)
   { id: 'starCase', type: 'starCase', cards: ['card.tai', 'card.di', 'card.chui'], useText: 'lvl.5-2.case.open', emptyText: 'lvl.5-2.case.empty',
     x: 5.6, y: DESK_H, z: -1.0, w: 0.6, h: 0.32, d: 0.42, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-2.case' },

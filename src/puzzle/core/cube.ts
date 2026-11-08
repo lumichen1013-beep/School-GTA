@@ -97,6 +97,8 @@ export interface DialDef {
   redraw?: { room: string; when: string; flag: string; cube: CubeState; text?: string };
   /** v0.4 第五章 5-5c 收束之後：after 成立 → 所有組都轉不動、轉動模式不列 (text = 說明) */
   freeze?: { after: string; text?: string };
+  /** v0.4 第五章 5-5c 第五次轉動：on 這一題完成 (done 事件) 的那一刻 → 魔方排回 S0 (core/chapter collapseCube) */
+  collapse?: { on: string };
 }
 
 /**

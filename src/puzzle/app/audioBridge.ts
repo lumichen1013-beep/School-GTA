@@ -8,7 +8,7 @@ import { cubeChapterOf } from '../content/cubes';
 import type { Settings } from '../meta/settings';
 import type { Text } from '../text/text';
 import { showSoundSettings, type SoundSettingsModel } from '../ui/screens/sound';
-import { LevelObserver, WebAudioManager, ch5Stage, levelIntensity, worldEventActions, type LevelSnap } from '../audio';
+import { LevelObserver, WebAudioManager, bossStage, ch5Stage, levelIntensity, worldEventActions, type LevelSnap } from '../audio';
 import type { CutsceneEvent } from './cutscene';
 import type { LevelSession } from './levelSession';
 
@@ -25,6 +25,7 @@ export class AudioBridge {
   private observer = new LevelObserver(DENY_KEYS);
   private session: LevelSession | null = null;
   private room: string | null = null;
+  private bpm = 60;
   /** 目前的 World (R / 換房 = 新的 World：追逐情境收掉，同 mechanics/chase 的重置) */
   private world: object | null = null;
   private levelId: string | null = null;
@@ -98,8 +99,12 @@ export class AudioBridge {
       const lid = cc ? Object.entries(cc.levels).find(([, r]) => r === room)?.[0] : undefined;
       this.manager.setIntensity(levelIntensity(lid ?? this.levelId ?? ''));
     }
-    // v0.4 第五章 E♭ 分層：三扇窗的完成數 (章節狀態的旗標；不在第五章 = 不分層)
-    this.manager.setStage(cs.spec.chapter === 5 ? ch5Stage(doneFlags(cs.spec, cs.state, session.world)) : null);
+    // v0.4 第五章 E♭ 分層：三扇窗的完成數 (章節狀態的旗標；不在第五章 = 不分層)；5-5 最後的機關 = Boss 三階段 (分層 + 脈動速度)
+    const done = cs.spec.chapter === 5 ? doneFlags(cs.spec, cs.state, session.world) : null;
+    const boss = done && room === 'engine' ? bossStage(done) : null;
+    this.manager.setStage(done ? boss?.stage ?? ch5Stage(done) : null);
+    const bpm = boss?.bpm ?? 60;
+    if (bpm !== this.bpm) { this.bpm = bpm; this.manager.setPulseBpm?.(bpm); }
     this.manager.setContext(session.isTurnMode || session.isMapOpen ? 'turn' : 'explore');
     this.manager.apply(this.observer.update(snapshot(session)));
   }

@@ -77,6 +77,9 @@ export interface Fx {
 export const CUBE_FX = {
   turn: 1.0,
   reduced: 0.6,
+  /** v0.4 5-5c 第五次轉動 (收束)：1.2 秒、畫面以中心緩緩轉過一個小角度再回正 (減弱動態 = reduced 淡入淡出) */
+  collapse: 1.2,
+  collapseDeg: 14,
   door: 0.5,
   /** 轉動時畫面往滑動方向位移的幅度 (畫面寬 / 高的比例) */
   shift: 0.08,
@@ -95,8 +98,10 @@ const easeInOut = (k: number): number => (k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) 
  * dir = null：換房 — 遮罩淡入淡出。reduce (減弱動態)：只有遮罩淡入淡出、不位移不晃動
  */
 export function cssCubeFx(stage: HTMLElement, veil: HTMLElement, dir: string | null, reduce: boolean): Fx {
-  const duration = dir === null ? CUBE_FX.door : reduce ? CUBE_FX.reduced : CUBE_FX.turn;
-  const move = dir !== null && !reduce ? FX_DIR[dir] ?? null : null;
+  const collapse = dir === 'collapse';
+  const duration = dir === null ? CUBE_FX.door : reduce ? CUBE_FX.reduced : collapse ? CUBE_FX.collapse : CUBE_FX.turn;
+  const move = dir !== null && !reduce && !collapse ? FX_DIR[dir] ?? null : null;
+  const spin = collapse && !reduce;
   let t = 0;
   let swapped = false;
   const reset = (): void => {
@@ -118,6 +123,8 @@ export function cssCubeFx(stage: HTMLElement, veil: HTMLElement, dir: string | n
         const py = move[1] * off * CUBE_FX.shift * stage.clientHeight + (move[0] !== 0 ? jit : 0);
         stage.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px) scale(${(1 - 0.03 * cover).toFixed(3)})`;
       }
+      // 第五次轉動：整張畫面繞中心轉過去再回正 (不晃動、不閃爍)
+      if (spin) stage.style.transform = `rotate(${(Math.sin(Math.PI * k) * CUBE_FX.collapseDeg).toFixed(2)}deg) scale(${(1 - 0.05 * cover).toFixed(3)})`;
       const swapNow = !swapped && k >= 0.5;
       if (swapNow) swapped = true;
       const done = t >= duration;

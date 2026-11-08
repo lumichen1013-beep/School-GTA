@@ -646,6 +646,17 @@ function dialCheck(cs: ChapterSession, t: Turn): DialBlock | null {
   return null;
 }
 
+/**
+ * v0.4 第五章 5-5c 收束 (第五次轉動；DialDef.collapse)：所有房間與走道回到 S0 的位置與朝向、回退堆疊清空 (墨不變)、當前房的門接法重算
+ */
+export function collapseCube(cs: ChapterSession): ChapterSession {
+  const def = cs.spec.cube;
+  if (!def || !cs.state.cube) return cs;
+  const state: ChapterState = { ...cs.state, cube: initialCube(def), ...(cs.state.turns ? { turns: { ...cs.state.turns, undo: [] } } : {}) };
+  writeLinks(cs.spec, state, cs.world);
+  return { ...cs, state };
+}
+
 /** 轉成功後寫回：新魔方排列、墨量與堆疊、當前房的門接法 */
 function afterTurn(cs: ChapterSession, cube: CubeState, turns: { left: number; undo: TurnRec[] }): ChapterSession {
   const state: ChapterState = { ...cs.state, cube, turns };

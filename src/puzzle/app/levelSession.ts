@@ -3,7 +3,7 @@ import type { AbilityId, GameEvent, Mode, World } from '../core/types';
 import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
 import type { Side } from '../core/cube';
-import { applyChapterCommand, captureState, clearUndo, clearedRooms, dialBlocked, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { applyChapterCommand, captureState, clearUndo, clearedRooms, dialBlocked, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState, frozen } from '../core/chapter';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
@@ -37,7 +37,7 @@ export interface SessionContext {
   /** 本關呈現主題 (關卡 theme ?? 章節 theme) */
   theme: Theme;
   /** 章節過場 (轉動 dir / 換房 null)；外殼決定減弱動態 */
-  fx?(dir: Side | null): Fx;
+  fx?(dir: Side | 'collapse' | null): Fx;
   /** 展開圖疊層 (在魔方上的關卡才用) */
   map?: CubeMapOverlay;
   /** 字卡匣 (N22) */
@@ -183,7 +183,7 @@ export class LevelSession {
     if (this.onCube) this.hooks.onChapterSave?.(captureState(this.cs));
   }
 
-  private startFx(dir: Side | null, onSwap: () => void): void {
+  private startFx(dir: Side | 'collapse' | null, onSwap: () => void): void {
     const fx = this.ctx.fx?.(dir);
     if (!fx) { onSwap(); return; }
     this.fx = { fx, onSwap };
@@ -215,7 +215,8 @@ export class LevelSession {
       if (r.kind === 'turn') {
         this.cs = r.cs;
         this.saveChapter();
-        this.startFx(r.dir, () => say(this.world, 'msg.cube.turned'));
+        // v0.4 5-5c 第五次轉動：過場中段不另說話 (留著三道光落下的那一句)
+        this.startFx(r.dir, () => { if (r.dir !== 'collapse') say(this.world, 'msg.cube.turned'); });
         return all;
       }
     }
@@ -242,6 +243,9 @@ export class LevelSession {
   toggleTurnMode(): void {
     if (!isDialChapter(this.cs.spec)) return;
     if (this.turnMode) { this.turnMode = false; this.turnSel = null; return; }
+    // v0.4 第五章 5-5c 收束之後：魔方再也轉不動
+    const freeze = this.cs.spec.cube?.dial?.freeze;
+    if (freeze && frozen(this.cs.spec, this.cs.state, this.world)) { say(this.world, freeze.text ?? 'msg.dial.frozen'); return; }
     const why = turnModeDenied(this.world, this.overlay);
     if (why) { say(this.world, TURN_MODE_DENY_MSG[why]); return; }
     this.enterTurnMode();

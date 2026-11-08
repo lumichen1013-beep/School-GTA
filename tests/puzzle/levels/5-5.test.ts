@@ -2,19 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { LEVELS, levelById } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
 import { CUBE_CHAPTERS } from '../../../src/puzzle/content/cubes';
-import { CH5_AFTER51, CH5_CUBE, CH5_REDRAW, CH5_ZONE55A, ch5Zone55a, ch5Zone55b, faceOf } from '../../../src/puzzle/content/cubes/ch5';
+import { CH5_AFTER51, CH5_CUBE, CH5_MIDDLE_CUBE, CH5_REDRAW, CH5_ZONE55A, ch5Zone55a, ch5Zone55b, ch5Zone55c, faceOf } from '../../../src/puzzle/content/cubes/ch5';
 import { engineChaseRun } from '../../../src/puzzle/mechanics/engine';
 import { east, engine, landing, north, sky, west } from '../../../src/puzzle/content/levels/ch5/rooms';
 import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 import { DEFAULT_MECHANICS, chapterSpecOf } from '../../../src/puzzle/mechanics';
 import { findTarget } from '../../../src/puzzle/core/interact';
-import { applyTurn, cubeKey, isBlocked, links, slitOf, type CubeState, type Turn } from '../../../src/puzzle/core/cube';
-import { activePlates, dialTurn, doneFlags, openChapter, restartRoom, type ChapterSession, type ChapterState } from '../../../src/puzzle/core/chapter';
+import { applyTurn, cubeKey, initialCube, isBlocked, links, slitOf, type CubeState, type Turn } from '../../../src/puzzle/core/cube';
+import { activePlates, chapterLinks, clearedRooms, dialBlocked, dialTurn, doneFlags, groupHidden, openChapter, restartRoom, type ChapterSession, type ChapterState } from '../../../src/puzzle/core/chapter';
 import type { GameEvent } from '../../../src/puzzle/core/types';
 import { applyChapterEvent } from '../../../src/puzzle/app/chapterEvents';
 import { chapterStart } from '../../../src/puzzle/meta/chapters';
 import { defaultSave } from '../../../src/puzzle/meta/save';
 import { LevelObserver, type LevelSnap } from '../../../src/puzzle/audio/events';
+import { bossStage } from '../../../src/puzzle/audio/score';
 import { runScript, type Cmd } from '../../../src/puzzle/devtools/runScript';
 import { layoutDepthIssues, validateEntry, validateLevel } from '../../../src/puzzle/devtools/validateLevel';
 import { dialModelOf, validateDial } from '../../../src/puzzle/devtools/validateCube';
@@ -86,6 +87,21 @@ const after55a = (calm = false): ChapterSession => {
   if (calm) cs.world.rt.calm = true;
   return turn(cs, ...seq(A));
 };
+/** 沿此刻接通的門走到 room (最短的一串門；封住的門照樣擋) */
+function walk(cs: ChapterSession, room: string): ChapterSession {
+  const ls = chapterLinks(cs.spec, cs.state.cube!, cs.world.ext.labels ?? cs.state.labels).filter(l => 'room' in l.to && l.from.room !== 'meadow' && l.to.room !== 'meadow');
+  const prev = new Map<string, { from: string; door: string }>([[cs.state.room, { from: '', door: '' }]]);
+  const q = [cs.state.room];
+  while (q.length) { const r = q.shift()!; for (const l of ls) if (l.from.room === r && 'room' in l.to && !prev.has(l.to.room)) { prev.set(l.to.room, { from: r, door: l.from.door }); q.push(l.to.room); } }
+  if (!prev.has(room)) throw new Error(`${cs.state.room} -> ${room}: no path`);
+  const doors: string[] = [];
+  for (let r = room; r !== cs.state.room; r = prev.get(r)!.from) doors.unshift(prev.get(r)!.door);
+  return doors.reduce((c, d) => through(c, d), cs);
+}
+/** 實景：對焦點按 E */
+const FOCUS: Cmd[] = [{ walkTo: [0, 1.6] }, { expect: w => expect(findTarget(w)?.def.id).toBe('focus'), label: '焦點' }, { act: 'interact' }];
+/** 5-5b 完成 (解法 A 的終局 → 東西軸 ↻ → 上下軸 ↺：北窗的光從北門的「間」照進來)、人在機關 */
+const after55b = (calm = false): ChapterSession => turn(after55a(calm), T('X1', 1), T('Z1', -1));
 /** 藏寶圖裡原地等 (秒) */
 const wait = (cs: ChapterSession, sec: number) => play(cs, [{ wait: sec }]);
 
@@ -320,16 +336,104 @@ describe('5-5b 殘影守門 (P8 / P6；追逐 3)', () => {
   }, 300_000);
 });
 
+describe('5-5c 收束 (P12 / P1)、驚嚇、第五次轉動', () => {
+  it('焦點：5-5b 之前光還沒落下 (只說淺槽)；之後放上可寫的手記頁 → 每扇窗一句；照爸爸那段 (三扇都直、在原面) = 東西兩扇偏一格', () => {
+    let cs = play(in3d(after55a()), FOCUS);
+    expect([cs.world.msg, cs.world.inv['page.blank'], get(cs, 'focus').touched]).toEqual(['底盤中央有一個淺淺的槽，像是放一張紙的大小。', 1, false]);
+    cs = play(in3d(after55b()), FOCUS);
+    expect([cs.world.msg, cs.world.inv['page.blank'] ?? 0, get(cs, 'focus').touched]).toEqual(['你把那頁手記攤在底盤正中央。東窗沒有光落下來。西窗的光落在紙上。北窗的光落在紙邊，偏了一格。', 0, true]);
+    // 爸爸那段 = S0 的樣子 (三扇窗都在原面、窗縫都是直的)：只有北窗對
+    const st = chapterStart(defaultSave(), SPEC, CH5.start);
+    const engineSnap = { objs: [['slots', true, false], ['chaseCut', true, false], ['focus', false, true]].map(([id, used, touched]) => ({ id: id as string, x: 0, y: 0, z: 0, gone: false, used: used as boolean, touched: touched as boolean })), flags: [] };
+    const dad = in3d(openChapter(SPEC, { ...st, cube: initialCube(CH5_CUBE), room: 'engine', door: null, dial: true, flags: ['ch5.redraw'], rooms: { ...clone(WINDOWS_DONE), engine: engineSnap } }, OPTS));
+    const d = play(dad, FOCUS);
+    expect([d.world.msg, get(d, 'focus').used]).toEqual(['東窗的光落在紙邊，偏了一格。西窗的光落在紙邊，偏了一格。北窗的光落在紙上。', false]);
+  });
+
+  it('解法：東西軸 ↻ → 南北軸 ↺ → 走到西窗、窗框 ↺ (窗縫儀「…橫著」) → 走回機關 → 東西軸 ↻ = 三道光落在同一點 → 手記第五頁、5-5c、房間通關；第五次轉動 = 排回 S0、轉動模式收起、頭頂的梯口通往林心', () => {
+    let cs = play(in3d(after55b()), FOCUS);
+    cs = turn(cs, T('X1', 1), T('Y1', -1));
+    cs = walk(cs, 'west');
+    cs = turn(cs, T('SW', -1));
+    cs = play(in3d(cs), [{ walkTo: [-8.6, -2.8] }, { expect: w => expect(findTarget(w)?.def.id).toBe('slitPane'), label: '窗縫儀' }, { act: 'interact' }]);
+    expect(cs.world.msg).toBe('窗縫和窗外的地平線疊在一起，橫著。');
+    cs = in3d(walk(cs, 'engine'));
+    cs = turn(cs, T('X1', 1));
+    cs = play(cs, [{ wait: 0.1 }]);
+    const flags = doneFlags(cs.spec, cs.state, cs.world);
+    expect([get(cs, 'focus').used, cs.world.inv['diary.5'], flags.has('5-5c'), clearedRooms(cs.spec, cs.state, cs.world)[0]]).toEqual([true, 1, true, 'engine']);
+    expect(cs.world.msg).toBe('三道光落在同一點。紙上慢慢浮出字來——許問津的手記，第五頁。');
+    // 第五次轉動：所有房間與走道回到 S0；轉動模式收起
+    expect(cubeKey(cs.state.cube!)).toBe(cubeKey(initialCube(CH5_CUBE)));
+    expect([dialBlocked(cs, T('X1', 1)), groupHidden(cs.spec, cs.state, 'X1', cs.world), TEXT('msg.dial.frozen')]).toEqual(['locked', true, '魔方已經收束了。']);
+    // S0：機關的南北門朝著空格 (門後是牆)，唯一的路是頭頂的梯口 → 林心 (到達時說終章的旁白)
+    expect([cs.world.ext.cube!.links.doorN, cs.world.ext.cube!.links.doorS]).toEqual([{ to: 'wall' }, { to: 'wall' }]);
+    const m = through(cs, 'hatchU');
+    expect([m.state.room, m.world.msg]).toEqual(['meadow', '天快亮了。最深處，是一片草地。']);
+    expect([engine.clearAlso, levelById('5-5')!.unlock.after]).toEqual([['5-1', '5-2', '5-3', '5-4'], ['5-2', '5-3', '5-4']]);
+  });
+
+  it('驚嚇 (本章唯一一次)：5-5b 完成後在藏寶圖安靜 20 秒 → 三道殘影 (scare:engine 記在章節旗標；R 不重演)；不到 20 秒不演出', () => {
+    let cs = wait(after55b(), 15);
+    expect(get(cs, 'scare').used).toBe(false);
+    cs = wait(cs, 6);
+    expect([get(cs, 'scare').used, cs.state.flags.includes('scare:engine')]).toEqual([true, true]);
+    const r = wait(restartRoom(cs, OPTS), 25);
+    expect([r.state.flags.includes('scare:engine'), get(r, 'scare').used]).toEqual([true, false]);
+  });
+
+  it('窗縫儀：5-1 完成後的排列 = 三扇窗都在原面、窗縫直 (「…地平線，橫著穿過它」)；看不見星星 / 朝天上的說法', () => {
+    const at = (cube: CubeState, room: string) => {
+      const st = chapterStart(defaultSave(), SPEC, CH5.start);
+      const cs = in3d(openChapter(SPEC, { ...st, cube: clone(cube), room, door: null, dial: true }, OPTS));
+      const p = get(cs, 'slitPane');
+      const r = play(cs, [{ walkTo: [p.x, p.z + 0.8] }, { act: 'interact' }]);
+      return r.world.msg;
+    };
+    expect(at(CH5_AFTER51, 'east')).toBe('窗縫直直地立著；窗外的地平線，橫著穿過它。');
+    // 重畫後：西窗在南面 (看不見星星)；北窗在西面
+    expect([at(CH5_REDRAW, 'west'), faceOf(CH5_REDRAW, 'west')]).toEqual(['窗外是暗的，看不見星星。', 'S']);
+    // 5-5a 完成時北窗在頂面 (朝著天上)
+    expect(at(apply(CH5_REDRAW, seq(A)), 'north')).toBe('窗朝著天上，窗外只有星星。');
+  });
+});
+
+describe('5-5c validateDial (CH5_ZONE55C) 與拿掉要素', () => {
+  const B_END = () => apply(CH5_REDRAW, seq(`${A} X1+ Z1-`));
+  const run = (z: ReturnType<typeof ch5Zone55c>) => validateDial(dialModelOf(z.cube, CH5.rooms, z.puzzles, z.start, z.finish, { startCube: z.startCube, plates: z.plates, dialOn: z.dialOn, inkless: z.inkless }));
+  it('中間片 + 東西兩窗的窗框 (只在窗房)；墨不進模型：排列 98,304、狀態 < 2×10⁶、卡死 0；5-5c 最短 4 / 次短 4、本質不同 ≥ 2', () => {
+    const r = run(ch5Zone55c(B_END()));
+    expect([r.solvable, r.arrangements, r.deadlocks, r.needsRestart, r.issues, r.lockIssues, r.entryIssues]).toEqual([true, 98304, [], 0, [], [], []]);
+    expect(r.states).toBeLessThan(2_000_000);
+    const p = r.perPuzzle.find(x => x.id === '5-5c')!;
+    expect([p.shortest, p.second, p.issues]).toEqual([4, 4, []]);
+    expect(p.distinct).toBeGreaterThanOrEqual(2);
+  }, 300_000);
+
+  it('只有中間片 → 無解；照爸爸那段 (三扇都看得見星星、三扇都直) 排得出來 (陷阱是真的)，但和「三道光」沒有交集', () => {
+    expect(run(ch5Zone55c(B_END(), CH5_MIDDLE_CUBE)).solvable).toBe(false);
+    expect(run(ch5Zone55c(B_END(), undefined, (_s, _f, ctx) => ctx.star().lit.length === 3 && ['east', 'west', 'north'].every(w => ctx.slit!(w) === 'v'))).solvable).toBe(true);
+    expect(run(ch5Zone55c(B_END(), undefined, (_s, _f, ctx) => ctx.converge() && ['east', 'west', 'north'].every(w => ctx.slit!(w) === 'v'))).solvable).toBe(false);
+  }, 600_000);
+});
+
 describe('5-5 音訊', () => {
-  it('USED_ON：三道光槽同時亮', () => {
+  it('Boss 三階段：5-5a 長音墊 + 慢脈動 → 5-5b 脈動加快 → 5-5c + 琶音 → 收束 (全部)', () => {
+    expect([[], ['5-5a'], ['5-5a', '5-5b'], ['5-5a', '5-5b', '5-5c']].map(f => bossStage(new Set(f)))).toEqual([
+      { stage: 0, bpm: 60 }, { stage: 0, bpm: 72 }, { stage: 1, bpm: 72 }, { stage: 3, bpm: 60 }
+    ]);
+  });
+  it('USED_ON：三道光槽同時亮、三道光落在同一點', () => {
     const W = {};
     const s = (objs: LevelSnap['objs']): LevelSnap => ({
       world: W, room: 'engine', mode: '3d', player: { x: 0, y: 0, z: 0, vy: 0, onGround: true }, inv: {}, objs, cube: '', ink: 10,
       mapOpen: false, turnMode: false, trayOpen: false, busy: false, msgSeq: 0, msgKey: ''
     });
-    const o = (used: boolean) => ({ id: 'slots', type: 'starSlots', used, gone: false, x: 0, z: 0 });
-    const ob = new LevelObserver();
-    ob.update(s([o(false)]));
-    expect(ob.update(s([o(true)])).filter(a => a.kind === 'sfx').map(a => a.kind === 'sfx' && a.id)).toContain('sfx.lamp.on');
+    for (const [type, id] of [['starSlots', 'sfx.lamp.on'], ['starFocus', 'sfx.puzzle.solved']]) {
+      const o = (used: boolean) => ({ id: 'x', type, used, gone: false, x: 0, z: 0 });
+      const ob = new LevelObserver();
+      ob.update(s([o(false)]));
+      expect(ob.update(s([o(true)])).filter(a => a.kind === 'sfx').map(a => a.kind === 'sfx' && a.id)).toContain(id);
+    }
   });
 });

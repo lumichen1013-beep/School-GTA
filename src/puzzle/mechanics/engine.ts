@@ -8,10 +8,16 @@
 //   被追上 (2D、x 重疊、低於 1.2) = 回檢查點 (離那扇門較遠的一側)、重新從預兆開始。from 斷開 → 殘影被拉回 (end)；同一刻另一扇窗的星光照得進機關
 //   (reach 有別的窗) → cut used = 5-5b + cutText；沒有 = darkText (之後 from 再接上就重來)。calm = 不出現，斷開 + 第二道光照樣成立。
 //   位置 = 時間的純函式 (固定步長、不讀亂數與時鐘)
+// - 焦點 (starFocus；5-5c)：after 物件 used (5-5b) 才有光落下；3D 按 E：手上有手記頁 → 放上去 (touched = 紙在槽裡；手上的那頁用掉)；之後 = 每扇窗一句
+//   (看不見星星 / 偏了一格 / 落在紙上)。紙在槽裡、三道光落在同一點 (ext.starlight.converge)、人在機關 → used + item (手記第五頁) + solvedText + doneFlag (5-5c；收束)
+// - 驚嚇 (engineScare；推導物件、只在藏寶圖)：after 物件 used (5-5b) 之後、人在藏寶圖、這一次進房相對安靜 delay 秒 → used (外觀演出三道殘影) +
+//   章節旗標 scare:<id> (R 不重演)；旗標已在 = 不演出
+// - 窗縫儀 (slitPane；三扇窗房)：3D 按 E = 這扇窗此刻的窗縫 (直 / 橫) 與窗外 (看不見星星 / 朝著天上)；外觀讀 ext.starlight
 import type { Mechanic } from '../core/registry';
-import type { ObjId, ObjState, TextKey, World } from '../core/types';
+import type { ItemId, ObjId, ObjState, TextKey, World } from '../core/types';
 import type { Side, Slit } from '../core/cube';
-import { say } from '../core/world';
+import { addItem, say } from '../core/world';
+import { scareFlag } from './coats';
 
 declare module '../core/types' {
   interface ObjKinds {
@@ -25,13 +31,26 @@ declare module '../core/types' {
       from: string; trigger: ObjId; cut: ObjId; omenSec: number; enterSec: number; speed: number; assistAfter: number; assistFactor: number;
       checkpoints: readonly number[]; checkZ: number; omenText: TextKey; caughtText: TextKey; cutText: TextKey; darkText: TextKey; flag: string;
     };
+    /**
+     * 焦點：after = 光開始落下的旗標物件 (5-5b)；page = 放上去的道具 (可寫的手記頁)、item = 照出來的道具 (手記第五頁)；order = 狀態句的窗序；
+     * names = 窗房 → 名字；emptyText (還沒放紙)、placeText、onText / offText / darkText ({w})、solvedText、doneText
+     */
+    starFocus: {
+      after: ObjId; page: ItemId; item: ItemId; order: readonly string[]; names: Readonly<Record<string, TextKey>>;
+      emptyText: TextKey; placeText: TextKey; onText: TextKey; offText: TextKey; darkText: TextKey; solvedText: TextKey; doneText: TextKey;
+    };
+    /** 驚嚇：after = 這個物件 used 之後；scare = 驚嚇 id；delay = 進房 / 完成之後相對安靜幾秒 */
+    engineScare: { after: ObjId; scare: string; delay: number };
+    /** 窗縫儀：room = 這是哪一扇窗；vText / hText / skyText / darkText */
+    slitPane: { room: string; vText: TextKey; hText: TextKey; skyText: TextKey; darkText: TextKey };
   }
   interface WorldExt {
     /**
      * v0.4 第五章 5-5 星光 (章節層在進房 / 轉動 / 改標籤後寫入；mechanics/engine 只讀)：lit = 看得見星星的窗房、reach = 星光照得進機關的窗、
-     * behind = 星光照到機關門外卻沒接進來的窗、slits = 各窗此刻的窗縫、faces = 各窗此刻在哪一面、converge = 三道光落在同一點
+     * behind = 星光照到機關門外卻沒接進來的窗、linked / via = 和機關連在一起的窗與連過去的門、good = 看得見星星且窗縫對的窗 (三段銘文)、
+     * slits = 各窗此刻的窗縫、faces = 各窗此刻在哪一面、converge = 三道光落在同一點
      */
-    starlight?: { lit: readonly string[]; reach: readonly string[]; behind: readonly string[]; linked: readonly string[]; via: Readonly<Record<string, string>>; slits: Readonly<Record<string, Slit>>; faces: Readonly<Record<string, Side | null>>; converge: boolean };
+    starlight?: { lit: readonly string[]; reach: readonly string[]; behind: readonly string[]; linked: readonly string[]; via: Readonly<Record<string, string>>; good: readonly string[]; slits: Readonly<Record<string, Slit>>; faces: Readonly<Record<string, Side | null>>; converge: boolean };
   }
 }
 
@@ -117,10 +136,74 @@ function updateChaser(w: World, o: ObjState): void {
   }
 }
 
+/** 焦點此刻的狀態句 (每扇窗一句，依 order 接起來) */
+export function focusText(w: World, o: ObjState): string {
+  if (o.def.type !== 'starFocus') return '';
+  const d = o.def;
+  const st = w.ext.starlight;
+  return d.order.map(r => {
+    const name = w.rt.text(d.names[r] ?? r);
+    if (!st?.lit.includes(r)) return w.rt.text(d.darkText, { w: name });
+    return w.rt.text(st.good.includes(r) ? d.onText : d.offText, { w: name });
+  }).join('');
+}
+
+function updateFocus(w: World, o: ObjState): void {
+  if (o.def.type !== 'starFocus' || o.used || !o.touched || !w.byId.get(o.def.after)?.used || !w.ext.starlight?.converge) return;
+  o.used = true;
+  addItem(w, o.def.item, 1);
+  say(w, o.def.solvedText);
+  if (o.def.doneFlag) w.events.push({ t: 'done', flag: o.def.doneFlag });
+}
+
+/** 驚嚇的計時：這一次進房 (World) 第一次看到 after used 的時刻 */
+const scareSince = new WeakMap<ObjState, number>();
+function updateScare(w: World, o: ObjState): void {
+  if (o.def.type !== 'engineScare' || o.used) return;
+  const flag = scareFlag(o.def.scare);
+  if (w.ext.flags?.includes(flag)) return;
+  if (!w.byId.get(o.def.after)?.used) return;
+  if (!scareSince.has(o)) scareSince.set(o, w.time);
+  if (w.player.mode !== '2d' || w.time - scareSince.get(o)! < o.def.delay - 1e-9) return;
+  o.used = true;
+  w.events.push({ t: 'flag', flag });
+}
+
 export const engine: Mechanic = {
   id: 'engine',
   types: {
     engineChaser: {},
+    engineScare: {},
+    starFocus: {
+      verbKey: 'obj.starFocus.verb', usableWhenUsed: true,
+      interact: (w, o) => {
+        if (o.def.type !== 'starFocus') return;
+        const d = o.def;
+        if (o.used) { say(w, d.doneText); return; }
+        if (!o.touched) {
+          if (!w.byId.get(d.after)?.used || (w.inv[d.page] ?? 0) <= 0) { say(w, d.emptyText); return; }
+          o.touched = true;
+          w.inv[d.page] = (w.inv[d.page] ?? 0) - 1;
+          if (!w.inv[d.page]) delete w.inv[d.page];
+          w.msgKey = d.placeText;
+          w.msg = w.rt.text(d.placeText) + focusText(w, o);
+          w.msgSeq++;
+          return;
+        }
+        w.msgKey = d.onText;
+        w.msg = focusText(w, o);
+        w.msgSeq++;
+      }
+    },
+    slitPane: {
+      verbKey: 'obj.slitPane.verb', usableWhenUsed: true,
+      interact: (w, o) => {
+        if (o.def.type !== 'slitPane') return;
+        const st = w.ext.starlight;
+        const f = st?.faces[o.def.room];
+        say(w, !st || !st.lit.includes(o.def.room) ? o.def.darkText : f === 'U' ? o.def.skyText : st.slits[o.def.room] === 'v' ? o.def.vText : o.def.hText);
+      }
+    },
     starSlots: {
       verbKey: 'obj.starSlots.verb', usableWhenUsed: true,
       interact: (w, o) => {
@@ -131,5 +214,12 @@ export const engine: Mechanic = {
       }
     }
   },
-  afterPhysics: w => { updateSlots(w); for (const o of w.objs) if (o.def.type === 'engineChaser') updateChaser(w, o); }
+  afterPhysics: w => {
+    updateSlots(w);
+    for (const o of w.objs) {
+      if (o.def.type === 'engineChaser') updateChaser(w, o);
+      else if (o.def.type === 'starFocus') updateFocus(w, o);
+      else if (o.def.type === 'engineScare') updateScare(w, o);
+    }
+  }
 };

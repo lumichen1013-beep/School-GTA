@@ -238,7 +238,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 5-4 北窗：吊秤平了 (星釘鬆開)
   hangScale: 'sfx.latch.open',
   // v0.4 5-5 最後的機關：三道光槽同時亮 (5-5a)
-  starSlots: 'sfx.lamp.on'
+  starSlots: 'sfx.lamp.on',
+  // 5-5c 三道光落在同一點 (手記第五頁)
+  starFocus: 'sfx.puzzle.solved'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

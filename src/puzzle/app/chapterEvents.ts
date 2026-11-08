@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { WorldOptions } from '../core/world';
 import { say } from '../core/world';
 import type { Side } from '../core/cube';
-import { activateDial, clearUndo, doneFlags, doorArrival, syncInk, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
+import { activateDial, clearUndo, collapseCube, doneFlags, doorArrival, syncInk, enterRoom, isDialChapter, noteFlag, refreshUnlocks, syncLinks, transferObject, turn, turnBudgetFor, type ChapterSession } from '../core/chapter';
 import { doorLink, leverOp, TRANSFER_BLOCK_MSG, TURN_BLOCK_MSG } from '../mechanics/cube';
 import { leverWord } from '../mechanics/labels';
 import { pressOnLanding } from '../mechanics/cellar';
@@ -12,8 +12,8 @@ export type ChapterStep =
   | { kind: 'none' }
   /** 轉不動：已在當前世界說明原因 */
   | { kind: 'blocked' }
-  /** 轉動成功：cs 已更新 (World 不變，只有連接表)；dir = 房間滑動方向 (過場用) */
-  | { kind: 'turn'; cs: ChapterSession; dir: Side }
+  /** 轉動成功：cs 已更新 (World 不變，只有連接表)；dir = 房間滑動方向 (過場用；v0.4 5-5c collapse = 第五次轉動) */
+  | { kind: 'turn'; cs: ChapterSession; dir: Side | 'collapse' }
   /** 換房：next = 目標房間已建好的 session (外殼在過場換畫面點切過去) */
   | { kind: 'enter'; next: ChapterSession }
   /** 章節狀態更新但 World 照舊 (可推物推過拱門、記下旗標、謎題完成 → 解開鎖扣)；外殼寫存檔 */
@@ -84,7 +84,12 @@ export function applyChapterEvent(cs: ChapterSession, e: GameEvent, opts: WorldO
     return { kind: 'dial', cs: activateDial(cs) };
   }
   // v0.4 第四章：旗標可能打開墨爐閥 → 重算當前房的墨
-  if (e.t === 'done') return { kind: 'state', cs: syncInk(refill(refreshUnlocks(clearUndo(cs, [e])).cs, e.flag)) };
+  if (e.t === 'done') {
+    const next = syncInk(refill(refreshUnlocks(clearUndo(cs, [e])).cs, e.flag));
+    // v0.4 第五章 5-5c 收束：魔方排回 S0 (第五次轉動；外殼演出 collapse 過場)
+    if (next.spec.cube?.dial?.collapse?.on === e.flag) return { kind: 'turn', cs: collapseCube(next), dir: 'collapse' };
+    return { kind: 'state', cs: next };
+  }
   // 貼卡 / 取卡 (門牌貼上「日」= 「間」)：重算當前房間的門接法 (World 只更新 ext)
   if (e.t === 'card' && e.ok && cs.spec.cube) return { kind: 'state', cs: syncLinks(cs) };
   return { kind: 'none' };

@@ -3,5 +3,5 @@ export { WebAudioManager, CUTSCENE_TRIM, type AudioManager, type AudioStats, typ
 export { AudioEngine } from './engine';
 export { LevelObserver, worldEventActions, CUE_MAP, type AudioAction, type LevelSnap, type ObjSnap } from './events';
 export { DEFAULT_VOLUMES, type MusicContext, type Volumes } from './mix';
-export { ch5Stage, levelIntensity, scoreForChapter, SCORE_IDS, type ScoreId } from './score';
+export { ch5Stage, bossStage, levelIntensity, scoreForChapter, SCORE_IDS, type ScoreId } from './score';
 export { SFX_IDS } from './sfx';

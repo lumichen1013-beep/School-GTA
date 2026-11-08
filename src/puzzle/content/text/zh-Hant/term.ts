@@ -87,6 +87,7 @@ export const term = {
   'term.page.blank': '可寫的手記頁',
   'term.key.cellar': '房間的銅鑰匙',
   'term.diary.4': '手記第四頁',
+  'term.diary.5': '手記第五頁',
   'term.num.1': '一',
   'term.num.2': '兩',
   'term.num.3': '三'

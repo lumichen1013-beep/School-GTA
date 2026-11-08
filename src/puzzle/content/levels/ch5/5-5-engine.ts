@@ -27,7 +27,8 @@ const objects: ObjDef[] = [
   floor(-14, 14),
   door('N', 'door', -6.0, { ...NAILED, plate: 'plate:engineN' }),
   door('S', 'door', 6.0, { ...NAILED, plate: 'plate:engineS' }),
-  hatch('U', 'door', 0, -4.4, sealedBy('5-5c', 'lvl.ch5.engine.ceilingSealed')),
+  // 天花板梯口 (往核心；收束時化開)：第一次爬上去 = 走進林心 (到達時說終章的旁白)
+  hatch('U', 'door', 0, -4.4, { ...sealedBy('5-5c', 'lvl.ch5.engine.ceilingSealed'), doneFlag: 'meadow.arrive', passText: 'lvl.5-5.meadow.arrive' }),
   // ── 後景：齒輪牆上的三道光槽 (東 / 北 / 西：那扇窗的星光此刻照得進機關 = 亮；三道同時亮 = 5-5a)、北門的門牌、兩張 L1 字條 ──
   { id: 'slots', type: 'starSlots', doneFlag: '5-5a', order: ['east', 'north', 'west'],
     darkText: 'lvl.5-5.slots.dark', someText: 'lvl.5-5.slots.some', behindText: 'lvl.5-5.slots.behind', solvedText: 'lvl.5-5.slots.solved', doneText: 'lvl.5-5.slots.done',
@@ -42,6 +43,14 @@ const objects: ObjDef[] = [
   { id: 'chaseCut', type: 'chaseMark', doneFlag: '5-5b', x: -6.0, y: 2.9, z: -4.6, w: 0.2, h: 0.1, d: 0.2, visible: '3d', solid: false },
   // ── 中景：機關底盤 (被重畫的展開圖；資訊)、5-5c 的 L1 字條 ──
   plaque('base', 'lvl.5-5.base', -2.4, 0.1, 1.6, 'both', 'lvl.ch5.engine.baseLabel'),
+  // 5-5c 焦點 (底盤正中央的黃銅星座 + 放紙的淺槽：三道光落下的那一點；放上可寫的手記頁 → 三道光落在同一點 = 手記第五頁、收束)
+  { id: 'focus', type: 'starFocus', after: 'chaseCut', page: 'page.blank', item: 'diary.5', doneFlag: '5-5c', order: ['east', 'west', 'north'],
+    names: { east: 'lvl.ch5.east.title', west: 'lvl.ch5.west.title', north: 'lvl.ch5.north.title' },
+    emptyText: 'lvl.5-5.focus.empty', placeText: 'lvl.5-5.focus.place', onText: 'lvl.5-5.focus.on', offText: 'lvl.5-5.focus.off', darkText: 'lvl.5-5.focus.dark',
+    solvedText: 'lvl.5-5.focus.solved', doneText: 'lvl.5-5.focus.done',
+    x: 0, y: 0, z: 0.6, w: 0.9, h: 0.06, d: 0.9, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-5.focus' },
+  // 驚嚇 (本章唯一一次)：5-5b 完成後、在藏寶圖安靜 20 秒 → 三道殘影出現在三道光槽前、慢慢淡去 (推導物件，只在藏寶圖；calm = 一道)
+  { id: 'scare', type: 'engineScare', derived: true, after: 'chaseCut', scare: 'engine', delay: 20, x: SLOTS.x, y: 0, z: -3.6, w: SLOTS.gap * 3, h: 1.7, d: 0.6, visible: '2d', solid: false },
   { ...noteBase, id: 'noteC', x: -9.4, z: 0.4, textKey: 'lvl.5-5.note.c' },
   // ── 前景：工具箱 (一盒拆開的活字：部件卡「日」；只在實景拿)、南門的門牌、三張 L2 字條 (空白，進房 4 分鐘浮現) ──
   { id: 'toolbox', type: 'typeCase', gives: ['card.ri'], useText: 'lvl.5-5.toolbox.take', emptyText: 'lvl.5-5.toolbox.empty',
@@ -75,6 +84,8 @@ export const engineRoom: LevelDef = {
   narrationKey: 'lvl.ch5.engine.narration',
   puzzles: [{ id: '5-5a', titleKey: 'lvl.5-5.puzzle.a' }, { id: '5-5b', titleKey: 'lvl.5-5.puzzle.b' }, { id: '5-5c', titleKey: 'lvl.5-5.puzzle.c' }],
   nextKey: 'lvl.5-5.next',
+  // 5-5 通關 = 第五章五間房一併記為通關
+  clearAlso: ['5-1', '5-2', '5-3', '5-4'],
   theme: 'attic',
   // 每次穿門進房補滿 10 滴墨；5-5a 進行中 7 (P4：最短 6 + 1)，完成的那一刻補滿
   turnBudget: { base: 10, puzzles: { '5-5a': 7 }, refillOn: ['5-5a'] },

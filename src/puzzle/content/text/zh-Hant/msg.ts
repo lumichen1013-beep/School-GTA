@@ -50,6 +50,7 @@ export const msg = {
   'msg.dial.turned': '那一排房間滑了過去。',
   'msg.dial.turnedHere': '整排房間連你一起滑了過去。',
   'msg.dial.undone': '退回上一步。墨回來了一滴。',
+  'msg.dial.frozen': '魔方已經收束了。',
   'msg.dial.unlocked': '喀。有鎖扣彈開了。',
   'msg.dial.latch': '喀。',
   // 第三章 (滑動)：點格子 / 方向鍵的說明、滑完的訊息

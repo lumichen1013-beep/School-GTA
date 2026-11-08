@@ -66,6 +66,7 @@ export function starExt(c: CrossRooms, state: ChapterState, labels: Labels, done
   const r = starlight(c.cube, cube, links(c.cube, cube, c.doors, platesOf(c, labels)), c.doors, doorOpenFor(c.doors, done));
   return {
     ...r,
+    good: r.lit.filter(w => st.slits?.[w] === slitOf(cube, w)),
     slits: Object.fromEntries(st.windows.map(w => [w, slitOf(cube, w)])),
     faces: Object.fromEntries(st.windows.map(w => [w, faceOfCell(cube.pos[w])])),
     converge: converge(c.cube, cube)

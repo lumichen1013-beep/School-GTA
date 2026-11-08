@@ -85,6 +85,9 @@ export const CH5_CUBE: CubeDef = {
     // 機關的星釘門：三扇窗都完成 (ch5.windows) 才拔得掉；之後第一次進機關 = 地板被重畫 (5-5a 的固定起點)
     derived: [{ flag: 'ch5.windows', all: ['5-2', '5-3', '5-4'] }],
     redraw: { room: 'engine', when: 'ch5.windows', flag: 'ch5.redraw', cube: CH5_REDRAW, text: 'lvl.5-5.redraw' },
+    // 5-5c 三道光落在同一點 = 第五次轉動 (魔方排回 S0)；之後轉動模式收起 (林心的四個外圈由 6-1 加入)
+    collapse: { on: '5-5c' },
+    freeze: { after: '5-5c', text: 'msg.dial.frozen' },
     groups: [
       ...CH5_MIDDLE,
       { id: 'SE', kind: 'spin', index: 0, room: 'east' },
@@ -296,4 +299,33 @@ export const ch5Zone55b = (start: CubeState) => ({
   dialOn: true,
   start: 'engine',
   finish: '5-5b'
+});
+
+/** 5-5c 區用的魔方：中間片 + 東窗 / 西窗的窗框 (只在那間窗房轉得到；北窗的窗框不需要 = 北縫直，中間片就排得到；縮影的底層只多可達) */
+export const CH5_CONVERGE_CUBE: CubeDef = {
+  ...CH5_CUBE,
+  dial: {
+    ...CH5_CUBE.dial!,
+    groups: [...CH5_MIDDLE, ...CH5_CUBE.dial!.groups.filter(g => g.id === 'SE' || g.id === 'SW')],
+    locks: [{ group: 'SE', until: 'ch5.windows', rooms: ['east'], text: NAILED }, { group: 'SW', until: 'ch5.windows', rooms: ['west'], text: NAILED }],
+    miniOnly: [], jams: [], marks: []
+  }
+};
+
+/**
+ * 5-5c 收束 (devtools/validateDial；規格「5-5 最後的機關（細化）」抽象模型 CH5_ZONE55C)：中間片 + 東西兩窗的窗框；起點 = 5-5b 的一種終局 (start；人在機關)；
+ * 題：ch5.windows (教學：開章即成立；北門的「日」照舊貼著)、5-5c (人在機關、三道光落在同一點 = converge)。墨不進模型 (inkless)
+ */
+export const ch5Zone55c = (start: CubeState, cube: CubeDef = CH5_CONVERGE_CUBE, goal: (s: CubeState, f: ReadonlySet<string>, ctx: Parameters<NonNullable<ZonePuzzle['goal']>>[2]) => boolean = (_s, _f, ctx) => ctx.converge()) => ({
+  cube,
+  puzzles: [
+    { id: 'ch5.windows', room: 'engine', needs: [], teaching: true },
+    { id: '5-5c', room: 'engine', needs: ['ch5.windows'], span: 6, goal }
+  ] as readonly ZonePuzzle[],
+  plates: [{ room: 'engine', door: 'doorN', when: 'ch5.windows' }],
+  startCube: start,
+  dialOn: true,
+  inkless: true,
+  start: 'engine',
+  finish: '5-5c'
 });

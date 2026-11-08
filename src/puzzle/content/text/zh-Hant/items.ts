@@ -6,6 +6,7 @@ export const items = {
   'item.diary.2.desc': '許問津的手記，第二頁。紙角有一圈茶漬。',
   'item.diary.3.desc': '許問津的手記，第三頁。夾過壓花，留著淡淡的綠。',
   'item.diary.4.desc': '許問津的手記，第四頁。紙有點潮，墨暈開了一些。',
+  'item.diary.5.desc': '許問津的手記，第五頁。字是光照出來的，摸起來還有一點溫。',
   'item.tooth.shelf.desc': '銅鑰匙的一枚齒，側邊刻著小小的「一」。',
   'item.tooth.reading.desc': '銅鑰匙的一枚齒，側邊刻著小小的「二」。',
   'item.tooth.manuscripts.desc': '銅鑰匙的一枚齒，側邊刻著小小的「三」。',

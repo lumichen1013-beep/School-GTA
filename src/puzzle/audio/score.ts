@@ -232,6 +232,17 @@ export const CH5_WINDOWS: readonly string[] = ['5-2', '5-3', '5-4'];
 /** 第五章配樂的層數 = 三扇窗的完成數 (0～3；規格「第五章共用規則」音訊) */
 export const ch5Stage = (done: ReadonlySet<string>): number => CH5_WINDOWS.filter(f => done.has(f)).length;
 
+/**
+ * v0.4 5-5 最後的機關的 Boss 三階段 (規格 9.1)：分層 (layerMix 的 stage) 與脈動速度——5-5a = 長音墊 + 慢脈動 (層 0、60 BPM)、
+ * 5-5b = 脈動加快 (層 0、72 BPM；2 秒漸變)、5-5c = + 琶音 (層 1、72 BPM)、收束之後 = 全部收成一個和弦 (層 3、60 BPM；clearPhrase 由通關播)
+ */
+export function bossStage(done: ReadonlySet<string>): { stage: number; bpm: number } {
+  if (done.has('5-5c')) return { stage: 3, bpm: 60 };
+  if (done.has('5-5b')) return { stage: 1, bpm: 72 };
+  if (done.has('5-5a')) return { stage: 0, bpm: 72 };
+  return { stage: 0, bpm: 60 };
+}
+
 // ── 強度 (規格 9.1 強度曲線；moodTypes 建好後改讀 LevelEntry.mood) ──
 
 const INTENSITY: Readonly<Record<string, 0 | 1 | 2 | 3>> = {

@@ -28,6 +28,9 @@ const objects: ObjDef[] = [
   { ...noteBase, id: 'noteStory', x: -2.0, y: 1.3, z: -4.4, mount: undefined, textKey: 'lvl.5-3.note.story' },
   // ── 中景：窗台角上的天窗銘文 (西；爸爸的鉛筆字，劃掉重寫；只在實景；5-5c 引用) ──
   plaque('inscriptionW', 'lvl.5-3.inscription', -9.5, 0.9, 1.8, '3d', 'lvl.5-3.inscription.label'),
+  // v0.4 5-5c 窗縫儀 (窗邊一片黃銅框的小窗格：中央一道直縫、窗外的地平線依此刻朝向畫成橫或直)
+  { id: 'slitPane', type: 'slitPane', room: 'west', vText: 'lvl.5-5.slit.v', hText: 'lvl.5-5.slit.h', skyText: 'lvl.5-5.slit.sky', darkText: 'lvl.5-5.slit.dark',
+    x: -8.6, y: 0.8, z: -3.6, w: 0.5, h: 0.8, d: 0.05, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-5.slit' },
   // ── 前景：字條 (父親的筆記；story-bible 7.3) ──
   { ...noteBase, id: 'noteA', x: -7.6, z: 3.0, textKey: 'lvl.5-3.note.a' },
   { ...noteBase, id: 'noteA2', x: 6.0, z: 1.4, textKey: 'lvl.5-3.note.a2', revealAfter: 240 },

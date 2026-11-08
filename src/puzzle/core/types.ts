@@ -76,6 +76,8 @@ export interface LevelDef {
   narrationKey: TextKey;
   /** 本關謎題 (依解題順序；目前只供文字 / 測試 / 驗證器使用) */
   puzzles?: PuzzleRef[];
+  /** v0.4 第五章 這間房的房間通關一併記為通關的關卡 (5-5 最後的機關 = 5-1～5-4) */
+  clearAlso?: readonly string[];
   /** 通關畫面的「下一間房」文字 */
   nextKey: TextKey;
   /** 呈現主題 id (render/themes)；未給 = 章節主題 */
