@@ -534,4 +534,19 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
     view.update('2d', 1 / 60, 3, cams.active('2d'));
     view.dispose();
   });
+
+  it('5-2 的狀態 (東窗朝下：鏡面與倒影、朝上：星光與地上的字影、詩讀通、星表匣拿過) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    for (const at of [[1, 1, 0], [1, 1, 2], [2, 1, 1]] as const) {
+      const w = newWorld(east);
+      w.ext = { cube: { links: {}, at }, dial: { active: true }, unlocked: ['SE'], labels: { 'poem:east': ['card.di'] } };
+      const view = new PuzzleScene(w, THEMES.attic);
+      const cams = new PuzzleCameras(w);
+      for (const id of ['poem', 'starCase']) w.byId.get(id)!.used = true;
+      for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([at, zFightPairs(view.scene, [east.bounds.minX + 3, east.bounds.maxX - 3])]).toEqual([at, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 3, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

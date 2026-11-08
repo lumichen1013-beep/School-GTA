@@ -132,6 +132,34 @@ export const CH5_ZONE51 = {
   finish: 'ch5.sky'
 };
 
+/** 5-1 完成後的排列 (5-2～5-4 區的起點)：S0 + 天窗間朝向 1 (5-1a 星圖對上刻度) + 機關朝向 1 (5-1b 縮影的底層 ↻ 一次) */
+export const CH5_AFTER51: CubeState = (() => {
+  const pos = Object.fromEntries(CH5_CUBE.cells.map(c => [c.room, c.at]));
+  const rot = Object.fromEntries(CH5_CUBE.cells.map(c => [c.room, 0]));
+  return { pos, rot: { ...rot, sky: 1, engine: 1 } };
+})();
+
+/** 5-2 區用的魔方：中間片 + 東窗的窗框 (SE：5-2 之後、只在東窗) */
+export const CH5_EAST_CUBE: CubeDef = {
+  ...CH5_CUBE,
+  dial: { ...CH5_CUBE.dial!, groups: [...CH5_MIDDLE, CH5_CUBE.dial!.groups.find(g => g.id === 'SE')!], locks: CH5_CUBE.dial!.locks.filter(l => l.group === 'SE'), miniOnly: [], jams: [], marks: [] }
+};
+
+/**
+ * 5-2 區 (devtools/validateDial；規格「5-2 東窗（細化）」抽象模型)：中間片 + 東窗的窗框；起點 = 5-1 完成 (CH5_AFTER51，人在天窗間)。
+ * 題：5-2 = 人在東窗、東窗在底面心 (窗朝下：倒影；詞卡在東窗的星表匣，隨時拿得到 → 不進模型)；SE.turn = 窗框鬆開後在東窗轉一次 (終點)
+ */
+export const CH5_ZONE52 = {
+  cube: CH5_EAST_CUBE,
+  puzzles: [
+    { id: '5-2', room: 'east', needs: [], goal: (s: CubeState) => faceOf(s, 'east') === 'D' },
+    { id: 'SE.turn', room: 'east', needs: ['5-2'], teaching: true, turn: 'SE' }
+  ] as readonly ZonePuzzle[],
+  startCube: CH5_AFTER51,
+  start: 'sky',
+  finish: 'SE.turn'
+};
+
 /** 房間 room 此刻在哪個面 (面心格朝外的方位；不在面心 = null) */
 export function faceOf(s: CubeState, room: string): 'N' | 'S' | 'E' | 'W' | 'U' | 'D' | null {
   const c = s.pos[room];

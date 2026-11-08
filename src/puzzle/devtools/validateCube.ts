@@ -223,6 +223,8 @@ export interface DialModel {
    * 穿不過門；人在 room 時轉得到 DialDef.miniOnly 的組 (沒有 mini = miniOnly 的組不進模型)。DialDef.jams (組被卡住) 依旗標判定
    */
   mini?: { room: string; card?: string };
+  /** v0.4 第五章 開章時的魔方排列 (沒給 = S0；5-2 區 = 5-1 完成後的排列：天窗間與機關原地轉過) */
+  startCube?: CubeState;
 }
 
 /** both = 兩面都封 (cubeDoor.sealed.both)：人也不能從對面經這扇門走進來 */
@@ -394,10 +396,10 @@ interface Arrangements {
 }
 
 /** 控制盤能轉到的所有魔方排列 (不管鎖扣；BFS)；超過 limit → overflow */
-function arrangementsOf(def: CubeDef, limit: number, withMini = false): Arrangements {
+function arrangementsOf(def: CubeDef, limit: number, withMini = false, start?: CubeState): Arrangements {
   const groups = (def.dial?.groups ?? []).filter(g => withMini || !def.dial?.miniOnly?.includes(g.id));
   const opts = groups.flatMap(g => turnDirs(def, g.id).map(dir => ({ group: g.id, dir })));
-  const s0 = initialCube(def);
+  const s0 = start ?? initialCube(def);
   // 第五章 走廊格同類合併 (cubeKey 帶 def)；沒有走廊格的魔方 = 原樣
   const index = new Map<string, number>([[cubeKey(s0, def), 0]]);
   const states = [s0];
@@ -674,7 +676,7 @@ export function validateDial(model: DialModel): DialReport {
   const ids = new Set(m.puzzles.map(p => p.id));
   for (const p of m.puzzles) for (const q of p.needs) if (!ids.has(q)) issues.push(`puzzle ${p.id} needs unknown ${q}`);
   if (!ids.has(m.finish)) issues.push(`finish ${m.finish} is not a puzzle`);
-  const arr = arrangementsOf(def, limit, !!m.mini);
+  const arr = arrangementsOf(def, limit, !!m.mini, m.startCube);
   if (arr.overflow) { issues.push(`arrangements exceed maxStates (${limit}): factor = cube arrangements`); return { ...empty, arrangements: arr.states.length }; }
   const pid = new Map(m.puzzles.map((p, i) => [p.id, i]));
   const budgetOf = (room: string, f: number): number => {
@@ -784,7 +786,7 @@ export function validateDial(model: DialModel): DialReport {
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini' | 'startCube'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   // 區 (areas) 的預算 = 所在房的基礎預算 (validateDial 也會自動補)

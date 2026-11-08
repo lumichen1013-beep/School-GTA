@@ -230,7 +230,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 4-4：爸爸的筆記、最後一個抽屜、梯口轉開 (墨閘 = inkLock)
   notesDesk: 'sfx.note.read', lastDrawer: 'sfx.drawer.open', chaseMark: 'sfx.latch.open',
   // 第五章 5-1：星圖對上刻度 (溫和的亮燈聲)、齒輪掉出軌道 (卡榫打開)、縮影的底層轉過 (轉動聲)
-  starScale: 'sfx.lamp.on', miniGear: 'sfx.latch.open', miniCube: 'sfx.dial.turn'
+  starScale: 'sfx.lamp.on', miniGear: 'sfx.latch.open', miniCube: 'sfx.dial.turn',
+  // 5-2 東窗：詩讀通 (窗框的星釘鬆開)、打開星表匣
+  poemWindow: 'sfx.latch.open', starCase: 'sfx.drawer.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
