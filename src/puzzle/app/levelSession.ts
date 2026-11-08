@@ -3,7 +3,7 @@ import type { AbilityId, GameEvent, Mode, World } from '../core/types';
 import { say } from '../core/world';
 import type { WorldOptions } from '../core/world';
 import type { Side } from '../core/cube';
-import { applyChapterCommand, captureState, clearUndo, clearedRooms, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
+import { applyChapterCommand, captureState, clearUndo, clearedRooms, dialBlocked, isDialChapter, openChapter, refreshUnlocks, restartRoom, type ChapterCommand, type ChapterSession, type ChapterSpec, type ChapterState } from '../core/chapter';
 import { DIAL_BLOCK_MSG, TURN_MODE_DENY_MSG, turnModeDenied } from '../mechanics/dial';
 import { DEFAULT_MECHANICS } from '../mechanics';
 import type { Text } from '../text/text';
@@ -20,7 +20,8 @@ import type { CardTray } from '../ui/cardTray';
 import { LevelLoop } from './loop';
 import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
-import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel } from './cubeMapModel';
+import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduceTurnInstant, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel, type TurnStyle } from './cubeMapModel';
+import type { TurnClick } from '../ui/cubeMap';
 import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
 export interface SessionContext {
@@ -45,6 +46,8 @@ export interface SessionContext {
   onTrayOpen?(): void;
   /** 進入轉動模式時：按著的鍵一律視為放開 (v0.4；mobile-controls 2.5) */
   releaseInput?(): void;
+  /** 轉動方式 (settings.turnMode；每次讀取 = 設定改了立刻生效)；沒給 = instant (預設) */
+  turnStyle?(): TurnStyle;
   /** 世界事件的旁聽 (音訊；只讀，switch 不經過這裡) */
   onWorldEvent?(e: GameEvent): void;
 }
@@ -90,6 +93,8 @@ export class LevelSession {
   /** v0.4 控制盤：轉動模式 (展開圖的「轉」頁籤)、選取的標頭、方向軸上一幀 (剛按下 = 一步)、待送進下一個固定步的章節指令 */
   private turnMode = false;
   private turnSel: TurnModeModel['selected'] = null;
+  /** 直接轉：滑鼠懸停的標頭 (預覽用；不改焦點) */
+  private hoverSel: TurnModeModel['selected'] = null;
   private axes: AxisMemo = { x: 0, z: 0 };
   private chapterQueue: ChapterCommand[] = [];
   /** 魔方儀剛啟動：下一次能進轉動模式時 (切到藏寶圖、站穩) 自動打開展開圖的轉動模式 (規格 5.4.2) */
@@ -115,6 +120,10 @@ export class LevelSession {
   /** 轉動模式是否開著、目前選取的標頭 (開發期自動化驗證用) */
   get isTurnMode(): boolean { return this.turnMode && this.isMapOpen; }
   get turnSelection(): TurnModeModel['selected'] { return this.turnSel; }
+  /** 轉動方式 (settings.turnMode) */
+  get turnStyle(): TurnStyle { return this.ctx.turnStyle?.() ?? 'instant'; }
+  /** 待送進下一個固定步的章節指令數 (開發期自動化驗證用：直接轉一次最多 1 個) */
+  get pendingChapter(): number { return this.chapterQueue.length + this.loop.pendingChapters; }
 
   /** 為目前的 World 建迴圈 / 場景 / 鏡頭 (舊場景釋放)；過場與 HUD 訊息重置 */
   private mount(): void {
@@ -224,16 +233,38 @@ export class LevelSession {
   private enterTurnMode(): void {
     this.turnMode = true;
     this.mapOpen = true;
-    this.turnSel = null;
+    this.hoverSel = null;
+    // 直接轉：鍵盤焦點先放在你所在的那一排 (方向鍵按下去就轉)；先預覽再確認：沒有選取
+    this.turnSel = this.turnStyle === 'instant' ? deriveTurnMode(this.cs, this.ctx.text, null, 'instant').home ?? null : null;
     this.autoTurn = false;
     this.axes = { x: 0, z: 0 };
     this.ctx.releaseInput?.();
   }
 
-  /** 轉動模式的一個輸入 (點標頭 / 確認 / 回退 / 離開；ui 的按鈕與鍵盤共用)：產生的章節指令排進下一個固定步 */
-  turnInput(i: TurnModeInput): void {
+  /**
+   * 轉動模式的一個輸入 (點標頭 / 確認 / 回退 / 離開 / 懸停；ui 的按鈕與鍵盤共用)：產生的章節指令排進下一個固定步。
+   * 直接轉 (instant) 的連續輸入規則：轉場 (fx) 播放中一律忽略 (不排隊)；已有一個轉動 / 回退等著進下一個固定步 → 再來的轉動 / 回退忽略
+   * (一個固定步最多一個章節指令：不會重複扣墨)；轉不動 (鎖著 / 卡住 / 墨乾…) → 當場說明原因、不排指令、不扣墨
+   */
+  turnInput(i: TurnModeInput | TurnClick): void {
     if (!this.turnMode || this.fx) return;
-    const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel);
+    const instant = this.turnStyle === 'instant';
+    if (i.t === 'hover') { this.hoverSel = instant && i.group !== null && i.dir !== undefined ? { group: i.group, dir: i.dir } : null; return; }
+    const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel, this.turnStyle);
+    if (instant) {
+      const r = reduceTurnInstant(this.turnSel, i, m);
+      if (r.note) say(this.world, r.note.key, r.note.params);
+      this.turnSel = r.sel;
+      if (r.exit) { this.turnMode = false; this.turnSel = null; this.hoverSel = null; return; }
+      if (i.t === 'undo' && !m.canUndo) say(this.world, 'msg.dial.nothingToUndo');
+      if (!r.command || this.chapterQueue.length || this.loop.pendingChapters) return;
+      if (r.command.t === 'turn') {
+        const b = dialBlocked(this.cs, r.command.turn);
+        if (b) { say(this.world, dialBlockKey(this.cs, r.command.turn.group, b)); return; }
+      }
+      this.chapterQueue.push(r.command);
+      return;
+    }
     const r = reduceTurnMode(this.turnSel, i, m);
     // 按確認卻轉不動 (鎖著 / 卡住 / 墨乾)：預覽已寫了原因，再用訊息說一次
     if (i.t === 'confirm' && m.blocked) say(this.world, dialBlockKey(this.cs, this.turnSel?.group, m.blocked));
@@ -329,6 +360,8 @@ export class LevelSession {
   /** 推進世界 (固定步長)；input.pressed 中的外殼動作由 app 處理 (map 由這裡處理) */
   update(elapsedSec: number, input: InputFrame): void {
     if (this.fx) {
+      // 轉場中的輸入一律丟棄；方向軸也記下 (轉場中按下、之後仍按著的鍵不會在轉場結束時變成「剛按下」的一步)
+      this.axes = { x: Math.sign(input.moveX), z: Math.sign(input.moveZ) };
       const r = this.fx.fx.tick(Math.min(Math.max(elapsedSec, 0), 1 / 20));
       if (r.swapNow) this.fx.onSwap();
       if (r.done) this.fx = null;
@@ -339,7 +372,7 @@ export class LevelSession {
     if (this.turnMode) {
       // 轉動模式：移動軸、跳躍、世界動作不送進世界 (世界照常推進，規格 Q-AF)；方向鍵選標頭、Enter 確認、Z 回退、Esc / Tab 離開、M 關圖
       if (input.pressed.includes('map')) this.toggleMap();
-      const f = turnModeFrame(input, this.axes);
+      const f = turnModeFrame(input, this.axes, this.turnStyle);
       this.axes = f.axes;
       for (const i of f.inputs) this.turnInput(i);
       this.tapInteract = false;
@@ -447,7 +480,10 @@ export class LevelSession {
     const m = deriveCubeMap(this.cs, text, this.turnMode ? null : previewFor(this.cs));
     if (!m) return null;
     const tab = turnTab(this.cs, text, this.turnMode, this.overlay);
-    return { ...m, ...(tab ? { tab } : {}), ...(this.turnMode ? { turn: deriveTurnMode(this.cs, text, this.turnSel) } : {}) };
+    // 直接轉：預覽 = 滑鼠懸停的那一顆 (沒有 = 鍵盤焦點)
+    const style = this.turnStyle;
+    const sel = style === 'instant' ? this.hoverSel ?? this.turnSel : this.turnSel;
+    return { ...m, ...(tab ? { tab } : {}), ...(this.turnMode ? { turn: deriveTurnMode(this.cs, text, sel, style) } : {}) };
   }
 
   dispose(): void {

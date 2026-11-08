@@ -902,6 +902,8 @@ export function transferObject(cs: ChapterSession, obj: ObjId, via: Link): Chapt
 
 #### 4.16.1 控制盤（v0.4；規格 5.4.1、5.4.9、N32）
 
+**轉動方式（2026-11-08，`settings.turnMode`）**：`app/cubeMapModel` 的 `deriveTurnMode(cs, text, sel, style)`（style 預設 `'confirm'` = 舊模型形狀；`'instant'` 另給 `instant: true` 與鍵盤起始焦點 `home`）、`reduceTurnInstant`（點標頭 / 沿焦點方向的方向鍵 = 一個 `turn` 指令；另一方向 / WASD（`turnModeFrame(…, 'instant')` 的 `via: 'axis'`）= 只換焦點；Enter 不轉）；`reduceTurnMode` 不變（confirm）。`LevelSession.turnInput`：instant 時先查 `dialBlocked`，被擋 → `say` 原因、不排指令（不扣墨）；**連續輸入規則**：轉場（`fx`）中一律忽略、`chapterQueue` 或 `LevelLoop.pendingChapters` 已有指令 → 再來的轉動 / 回退忽略（一個固定步最多一個）；轉場中也更新方向軸記憶（轉場中按下、之後仍按著的鍵不算新的一步）。懸停（`TurnClick` `hover`，只收 `pointerType === 'mouse'`）只改預覽、不改焦點。`validateDial` / BFS 不經過輸入層，數字不受影響。
+
 **界線**：第一章的拉桿路徑（`turnRequest` → `turn(cs, op)` → `applyOp`）**一行不改**；控制盤是平行的新路徑，只在 `CubeDef.control === 'dial'` 的章節啟用。轉動、回退是**章節層指令**（作用在 `ChapterSession`，不進 `World.step`），所以不放進 `WorldCommand`，另立 `ChapterCommand`，由 app 在固定步之間套用（與 `WorldCommand` 一樣「只送進下一個固定步」，可錄製回放）。
 
 ```ts

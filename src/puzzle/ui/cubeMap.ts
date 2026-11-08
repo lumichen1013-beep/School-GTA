@@ -117,6 +117,9 @@ export interface TurnModeModel {
   cells?: MapCell[];
   /** v0.4 第五章 星環盤的列 (軸 / 原地轉)；標頭以 ring.row 對到這裡 */
   rings?: Array<{ name: string; kind: 'axis' | 'spin' }>;
+  /** 直接轉 (settings.turnMode 'instant')：點箭頭 = 直接轉 (沒有「確認」鈕；滑鼠懸停 = 預覽)；home = 鍵盤的起始焦點 */
+  instant?: boolean;
+  home?: { group: string; dir: TurnDir } | null;
 }
 
 const INK = '#3a2618';
@@ -142,7 +145,9 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 };
 
 /** 轉動模式的點擊 (ui 只回呼，不改 session；app 交給 reduceTurnMode → ChapterCommand) */
-export type TurnClick = { t: 'pick'; group: string; dir: TurnDir } | { t: 'cell'; x: number; y: number } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+export type TurnClick = { t: 'pick'; group: string; dir: TurnDir } | { t: 'cell'; x: number; y: number } | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' }
+  /** 滑鼠懸停在標頭上 (直接轉的預覽；group null = 移開)；觸控不送 */
+  | { t: 'hover'; group: string | null; dir?: TurnDir };
 export interface TurnHandlers { tab(): void; input(i: TurnClick): void }
 
 /** 進入轉動模式後這段時間內「確認」無效 (從互動鍵連點穿透；mobile-controls 2.5) */
@@ -278,6 +283,8 @@ export class CubeMapOverlay {
     this.undoBtn.disabled = !t.canUndo;
     this.okBtn.textContent = t.text.confirm;
     this.okBtn.disabled = !t.selected || !!t.blocked;
+    // 直接轉：沒有「確認」鈕 (點箭頭就轉)
+    this.okBtn.hidden = !!t.instant;
   }
 
   /** 標頭箭頭 (DOM 按鈕，疊在畫布上；位置依畫布上格子的實際位置) */
@@ -302,6 +309,7 @@ export class CubeMapOverlay {
       b.style.width = b.style.height = `${Math.round(size)}px`;
       b.addEventListener('click', e => {
         e.preventDefault();
+        if (t!.instant && performance.now() - this.turnSince < CONFIRM_GUARD_MS) return;
         const r = this.stage.getBoundingClientRect();
         const px = (e.clientX - r.left - ox) / size, py = (e.clientY - r.top - oy) / size;
         let best: TurnHeader | null = null;
@@ -344,10 +352,25 @@ export class CubeMapOverlay {
       else { x = ox + cols * size + HEAD_GAP; y = oy + i * (HEAD + HEAD_GAP); }
       b.style.left = `${Math.round(x)}px`;
       b.style.top = `${Math.round(y)}px`;
-      b.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'pick', group: h.group, dir: h.dir }); });
+      this.bindHead(b, h, t!);
       return b;
     });
     this.heads.replaceChildren(...cellBtns, ...btns);
+  }
+
+  /**
+   * 標頭鈕的點擊與懸停：點 = pick (直接轉時 = 轉；進入轉動模式 CONFIRM_GUARD_MS 內不算，避免互動鍵連點穿透)；
+   * 滑鼠懸停 = 預覽 (直接轉；觸控 / 筆不送，避免點一下先預覽再轉的閃爍)
+   */
+  private bindHead(b: HTMLButtonElement, h: TurnHeader, t: TurnModeModel): void {
+    b.addEventListener('click', e => {
+      e.preventDefault();
+      if (t.instant && performance.now() - this.turnSince < CONFIRM_GUARD_MS) return;
+      this.turn?.input({ t: 'pick', group: h.group, dir: h.dir });
+    });
+    if (!t.instant) return;
+    b.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') this.turn?.input({ t: 'hover', group: h.group, dir: h.dir }); });
+    b.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') this.turn?.input({ t: 'hover', group: null }); });
   }
 
   /**
@@ -374,7 +397,7 @@ export class CubeMapOverlay {
         const mark = h.state === 'locked' ? `<i class="mark">${STAR_SVG}</i>` : h.state === 'jammed' ? `<i class="mark">${WEDGE_SVG}</i>` : '';
         b.innerHTML = `${h.sub ? '<small></small>' : ''}<b>${h.glyph}</b>${mark}`;
         if (h.sub) b.querySelector('small')!.textContent = h.sub;
-        b.addEventListener('click', e => { e.preventDefault(); this.turn?.input({ t: 'pick', group: h.group, dir: h.dir }); });
+        this.bindHead(b, h, t);
         btns.append(b);
       }
       line.append(btns);

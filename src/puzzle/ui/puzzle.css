@@ -254,6 +254,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   border: 2px solid var(--ink); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 4px;
 }
 .pz-turn-btn.undo { min-height: 48px; }
+/* 直接轉 (settings.turnMode 'instant')：沒有「確認」鈕 */
+.pz-turn-btn[hidden] { display: none; }
 .pz-turn-btn.ok { min-height: 56px; color: var(--paper); background: var(--inkblue); border-color: var(--inkblue); }
 .pz-turn-btn:disabled { opacity: .45; border-style: dashed; cursor: default; }
 .pz-turn-btn.ok:disabled { color: var(--inkblue); background: transparent; }

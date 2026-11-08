@@ -276,7 +276,7 @@ const groupName = (text: Text, kind: TurnHeader['kind'], index: number, layers =
  * 轉動模式的資料 (純函式，只算不寫：不改 session 也不改 World)：標頭箭頭 (每組 × 方向一顆；鎖住 / 卡住另標)、選取的預覽 (轉後的格與門、移動的房間)、
  * 墨量、能否回退、選到的轉動會不會被擋 (預覽時就顯示原因)
  */
-export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected']): TurnModeModel {
+export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected'], style: TurnStyle = 'confirm'): TurnModeModel {
   const { spec, state } = cs;
   const def = spec.cube!;
   const cube = state.cube!;
@@ -292,7 +292,7 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   if (ring) {
     const { rings, heads } = ringHeaders(cs, text, groups, sel, names);
     headers.push(...heads);
-    return finishTurnMode(cs, text, sel, all, headers, names, rings);
+    return finishTurnMode(cs, text, sel, all, headers, names, style, rings);
   }
   for (const g of groups) {
     const locked = isLocked(spec, state, g.id, cs.world);
@@ -321,7 +321,7 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const layer = cube.pos[state.room]?.[2] ?? 0;
   const slide = all.some(g => g.kind === 'slideCell');
   if (slide) headers.push(...slideHeaders(cs, text, sel, layer, names));
-  return finishTurnMode(cs, text, sel, all, headers, names);
+  return finishTurnMode(cs, text, sel, all, headers, names, style);
 }
 
 /**
@@ -374,7 +374,8 @@ function ringHeaders(cs: ChapterSession, text: Text, groups: readonly TurnGroup[
 }
 
 /** 轉動模式的共同收尾：墨量、選取的預覽 (轉後的格與門、移動的房間；星環盤另框出那一片的格子)、說明列 */
-function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected'], all: readonly TurnGroup[], headers: TurnHeader[], names: Map<string, string>, rings?: TurnModeModel['rings']): TurnModeModel {
+function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['selected'], all: readonly TurnGroup[], headers: TurnHeader[], names: Map<string, string>, style: TurnStyle, rings?: TurnModeModel['rings']): TurnModeModel {
+  const instant = style === 'instant';
   const { spec, state } = cs;
   const def = spec.cube!;
   const cube = state.cube!;
@@ -385,7 +386,9 @@ function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['sele
   const g = sel ? all.find(x => x.id === sel.group) : undefined;
   const blocked = sel && g ? dialBlocked(cs, sel as Turn) : null;
   let preview: TurnModeModel['preview'] = null;
-  let caption = text(slide ? 'ui.turn.hintSlide' : inMini(cs.world) ? 'ui.turn.hintMini' : rings ? 'ui.turn.hintRing' : 'ui.turn.hint');
+  // 直接轉 (settings.turnMode 'instant'，預設)：說明列 / 鍵位改成「點箭頭就轉、懸停看預覽」
+  const sfx = instant ? 'Instant' : '';
+  let caption = text(slide ? `ui.turn.hintSlide${sfx}` : inMini(cs.world) ? 'ui.turn.hintMini' : rings ? `ui.turn.hintRing${sfx}` : `ui.turn.hint${sfx}`);
   if (sel && g) {
     const label = names.get(`${sel.group}|${sel.dir}`) ?? groupName(text, g.kind, g.index, def.dims[2]);
     if (blocked) caption = text('ui.turn.previewBlocked', { what: label, why: blockText(cs, text, sel.group, blocked) });
@@ -409,10 +412,26 @@ function finishTurnMode(cs: ChapterSession, text: Text, sel: TurnModeModel['sele
     headers, selected: sel && g ? sel : null, preview, ink: { left, max }, canUndo: (state.turns?.undo.length ?? 0) > 0,
     blocked: blocked ?? null, blockedText: blocked && sel ? blockText(cs, text, sel.group, blocked) : null,
     caption,
-    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? 'ui.turn.keysSlide' : rings ? 'ui.turn.keysRing' : 'ui.turn.keys') },
+    text: { confirm: text('ui.turn.confirm'), undo: text('ui.turn.undo'), exit: text('ui.turn.exit'), ink: text('ui.turn.ink', { n: left, max }), keys: text(slide ? `ui.turn.keysSlide${sfx}` : rings ? `ui.turn.keysRing${sfx}` : `ui.turn.keys${sfx}`) },
     ...(slide ? { cells: layout(cs, text, cube, layer).cells } : {}),
-    ...(rings ? { rings } : {})
+    ...(rings ? { rings } : {}),
+    ...(instant ? { instant: true, home: slide ? null : homeFocus(cs, headers) } : {})
   };
+}
+
+/**
+ * 直接轉的起始焦點 (鍵盤)：你所在的房間在裡面、可轉的那一組 (控制盤順序第一個)；沒有 → 第一個可轉的組；都鎖著 → 第一顆。
+ * 方向 = 那一組的最後一個方向 (列 = 往右、層 / 切片 = 順時針)
+ */
+function homeFocus(cs: ChapterSession, headers: readonly TurnHeader[]): TurnModeModel['selected'] {
+  const def = cs.spec.cube!;
+  const cube = cs.state.cube!;
+  const at = cube.pos[cs.state.room];
+  const mine = (g: string) => !!at && cellsOf(def, cube, g).some(c => c[0] === at[0] && c[1] === at[1] && c[2] === at[2]);
+  const pick = headers.find(h => h.state === 'ok' && mine(h.group)) ?? headers.find(h => h.state === 'ok') ?? headers[0];
+  if (!pick) return null;
+  const last = [...headers].reverse().find(h => h.group === pick.group)!;
+  return { group: last.group, dir: last.dir };
 }
 
 /** 轉不動的說明：鎖住的組若有自己的說明 (DialLock.text；第四章「下圈年輪被樹根結住了。」) 用它，否則照 DIAL_BLOCK_MSG */
@@ -464,9 +483,12 @@ function slideHeaders(cs: ChapterSession, text: Text, sel: TurnModeModel['select
 
 /** 轉動模式的輸入：點標頭 (pick)、方向鍵 (step：h = ←→、v = ↑↓)、確認、回退、離開 */
 export type TurnModeInput =
-  | { t: 'pick'; group: string; dir: TurnDir } | { t: 'step'; axis: 'h' | 'v'; d: 1 | -1 }
+  | { t: 'pick'; group: string; dir: TurnDir } | { t: 'step'; axis: 'h' | 'v'; d: 1 | -1; via?: 'axis' }
   | { t: 'cell'; x: number; y: number }
   | { t: 'confirm' } | { t: 'undo' } | { t: 'exit' };
+
+/** 轉動方式 (settings.turnMode)：instant = 方向鍵 / 點箭頭直接轉 (預設)；confirm = 選取 → 預覽 → Enter / 確認才轉 (v0.4 舊行為) */
+export type TurnStyle = 'instant' | 'confirm';
 
 /** 轉動模式的說明 (只說明、不轉；外殼以 say 顯示)：key = 文字 key */
 export interface TurnNote { key: string; params?: Readonly<Record<string, string>> }
@@ -547,6 +569,82 @@ export function reduceTurnMode(sel: TurnModeModel['selected'], input: TurnModeIn
   return { sel: pick(same[(j + input.d + same.length) % same.length]), ...none };
 }
 
+/** 一組沿哪個方向鍵轉：列 = ←→、行 = ↑↓、層 / 切片 / 原地轉 = ←→ (← 逆時針、→ 順時針) */
+const turnAxis = (kind: TurnHeader['kind']): 'h' | 'v' => (kind === 'col' ? 'v' : 'h');
+
+/**
+ * 直接轉 (settings.turnMode 'instant') 的狀態轉移 (純函式)：sel = 焦點 (鍵盤選中的那一組與方向；預覽也畫它)。
+ * - 點標頭 (pick) = 直接轉那一顆 (轉不轉得動由外殼先查 dialBlocked：被擋 → 說明原因、不扣墨)
+ * - 方向鍵沿著焦點那一組的方向 (列 ←→、行 ↑↓、層 / 切片 ←→) = 直接轉；另一個方向 = 換到相鄰的同類組 (列 ↔ 列、行 ↔ 行；星環盤 / 層 = 上一 / 下一組)
+ * - WASD (via 'axis') = 只換焦點不轉 (W / A = 上一組、S / D = 下一組，依控制盤順序循環)
+ * - Enter / 確認 = 不做事 (避免舊習慣「方向鍵 + Enter」多轉一次)；回退 / 離開同 reduceTurnMode
+ * - 沒有焦點 (或焦點那一組此刻不在) → 第一個鍵只把焦點放到 home，不轉
+ * - 滑動 (第三章)：方向鍵 = 往那邊滑 (只有一間能滑 = 直接滑；兩間 = 焦點已在其中一間就滑它，否則先選第一間並說明)；
+ *   WASD = 在能往那邊滑的房間之間換焦點；點房間 / 空格：只有一種滑法 = 直接滑，否則換焦點
+ */
+export function reduceTurnInstant(sel: TurnModeModel['selected'], input: TurnModeInput, m: TurnModeModel): Reduced {
+  const none = { command: null, exit: false };
+  const turn = (h: { group: string; dir: TurnDir }): Reduced => ({ sel: { group: h.group, dir: h.dir }, command: { t: 'turn', turn: { group: h.group, dir: h.dir } }, exit: false });
+  if (input.t === 'exit') return { sel: null, command: null, exit: true };
+  if (input.t === 'undo') return { sel, command: m.canUndo ? { t: 'undo' } : null, exit: false };
+  if (input.t === 'confirm') return { sel, ...none };
+  if (input.t === 'pick') {
+    const h = m.headers.find(x => sameTurn({ group: input.group, dir: input.dir }, x));
+    return h ? turn(h) : { sel, ...none };
+  }
+  if (m.cells) return instantSlide(sel, input, m);
+  if (input.t === 'cell') return { sel, ...none };
+  const groups = [...new Set(m.headers.map(h => h.group))];
+  if (!groups.length) return { sel, ...none };
+  const kindOf = (g: string) => m.headers.find(h => h.group === g)!.kind;
+  const dirsOf = (g: string) => m.headers.filter(h => h.group === g).map(h => h.dir);
+  const focus = (g: string, prefer?: TurnDir): Reduced => ({ sel: { group: g, dir: prefer !== undefined && dirsOf(g).includes(prefer) ? prefer : dirsOf(g)[dirsOf(g).length - 1] }, ...none });
+  if (!sel || !groups.includes(sel.group)) {
+    const home = m.home && groups.includes(m.home.group) ? m.home : { group: groups[0], dir: dirsOf(groups[0])[dirsOf(groups[0]).length - 1] };
+    return { sel: home, ...none };
+  }
+  const i = groups.indexOf(sel.group);
+  if (input.via === 'axis') return focus(groups[(i + input.d + groups.length) % groups.length], sel.dir);
+  const kind = kindOf(sel.group);
+  if (input.axis === turnAxis(kind)) {
+    const dirs = dirsOf(sel.group);
+    const dir: TurnDir = dirs.includes(input.d) ? input.d : dirs[0];
+    return turn({ group: sel.group, dir });
+  }
+  // 另一個方向：列 / 行 = 相鄰的同類組；其他 (層、星環盤) = 上一 / 下一組
+  const same = kind === 'row' || kind === 'col' ? groups.filter(g => kindOf(g) === kind) : groups;
+  const j = same.indexOf(sel.group);
+  return focus(same[(j + input.d + same.length) % same.length], sel.dir);
+}
+
+/** 直接轉的滑動 (第三章)：見 reduceTurnInstant */
+function instantSlide(sel: Sel, input: Extract<TurnModeInput, { t: 'step' } | { t: 'cell' }>, m: TurnModeModel): Reduced {
+  const none = { command: null, exit: false };
+  const slides = m.headers.filter(h => h.kind === 'slideCell' && h.cell);
+  const turn = (h: TurnHeader): Reduced => ({ sel: { group: h.group, dir: h.dir }, command: { t: 'turn', turn: { group: h.group, dir: h.dir } }, exit: false });
+  const choose = (list: readonly TurnHeader[]): Reduced => {
+    if (list.length === 1) return turn(list[0]);
+    const cur = list.find(h => sameTurn(sel, h));
+    return cur ? turn(cur) : { sel: { group: list[0].group, dir: list[0].dir }, ...none, note: { key: 'msg.dial.slidePick' } };
+  };
+  if (input.t === 'step') {
+    const list = slides.filter(h => h.dir === STEP_SIDE(input.axis, input.d));
+    if (!list.length) return { sel, ...none, note: { key: 'msg.dial.noDir' } };
+    if (input.via === 'axis') return { sel: cycle(sel, list, true), ...none };
+    return choose(list);
+  }
+  const c = m.cells?.find(k => k.x === input.x && k.y === input.y);
+  if (!c) return { sel, ...none };
+  if (c.kind === 'solid') return { sel, ...none, note: { key: 'msg.dial.solid', params: { name: c.name } } };
+  const list = c.kind === 'room'
+    ? slides.filter(h => h.cell!.x === c.x && h.cell!.y === c.y)
+    : slides.filter(h => { const [dx, dy] = SIDE_STEP[h.dir as 'N' | 'E' | 'S' | 'W']; return h.cell!.x + dx === c.x && h.cell!.y + dy === c.y; });
+  if (!list.length) return { sel, ...none, ...(c.kind === 'room' ? { note: { key: 'msg.dial.noEmpty' } } : {}) };
+  if (list.length === 1) return turn(list[0]);
+  // 兩種以上的滑法：點同一格 = 換下一個焦點 (預覽)，再點箭頭就滑
+  return { sel: cycle(sel, list, true), ...none };
+}
+
 /**
  * v0.4 第五章 星環盤的方向鍵：↑↓ = 換一列 (循環；停在同一個位置，不夠就最後一顆)、←→ = 列內換一顆 (循環)；
  * 還沒選：↓ / ← / → = 第一列 (→ 第一顆、← 最後一顆)、↑ = 最後一列
@@ -573,7 +671,7 @@ export interface AxisMemo { x: number; z: number }
  * 轉動模式中的一幀輸入 (純函式)：移動軸、跳躍與世界動作一律不送進世界 (世界照常推進，規格 Q-AF)；
  * 剛按下的方向 → step、Enter → confirm、undo 鍵 → undo、Esc / 轉動模式鍵 → exit
  */
-export function turnModeFrame(input: InputFrame, prev: AxisMemo): { loop: LoopInput; inputs: TurnModeInput[]; axes: AxisMemo } {
+export function turnModeFrame(input: InputFrame, prev: AxisMemo, style: TurnStyle = 'confirm'): { loop: LoopInput; inputs: TurnModeInput[]; axes: AxisMemo } {
   const inputs: TurnModeInput[] = [];
   const x = Math.sign(input.moveX);
   const z = Math.sign(input.moveZ);
@@ -581,10 +679,12 @@ export function turnModeFrame(input: InputFrame, prev: AxisMemo): { loop: LoopIn
   // 方向鍵 = 新按下的動作 (快速點按也抓得到)；WASD 只有移動軸 → 看軸「剛按下」(同一軸本幀有方向鍵就不重複算)
   const nh = has('navLeft') ? -1 : has('navRight') ? 1 : 0;
   const nv = has('navUp') ? -1 : has('navDown') ? 1 : 0;
+  // 直接轉：只有移動軸 (WASD) 的一步標 via 'axis' (= 只換焦點、不轉)；方向鍵才會轉
+  const via = style === 'instant' ? { via: 'axis' as const } : {};
   if (nh) inputs.push({ t: 'step', axis: 'h', d: nh });
-  else if (x !== 0 && x !== prev.x) inputs.push({ t: 'step', axis: 'h', d: x as 1 | -1 });
+  else if (x !== 0 && x !== prev.x) inputs.push({ t: 'step', axis: 'h', d: x as 1 | -1, ...via });
   if (nv) inputs.push({ t: 'step', axis: 'v', d: nv });
-  else if (z !== 0 && z !== prev.z) inputs.push({ t: 'step', axis: 'v', d: z as 1 | -1 });
+  else if (z !== 0 && z !== prev.z) inputs.push({ t: 'step', axis: 'v', d: z as 1 | -1, ...via });
   if (input.pressed.includes('confirm')) inputs.push({ t: 'confirm' });
   if (input.pressed.includes('undo')) inputs.push({ t: 'undo' });
   if (input.pressed.includes('cancel') || input.pressed.includes('turnMode')) inputs.push({ t: 'exit' });

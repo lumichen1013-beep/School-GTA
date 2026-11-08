@@ -56,10 +56,11 @@ export function pendingTip(seen: readonly string[], ctx: HelpContext): TipId | n
   return null;
 }
 
-/** 小提示的字 (依目前按鍵設定) */
-export function tipText(id: TipId, text: Text, b: Bindings): string {
+/** 小提示的字 (依目前按鍵設定；轉動模式依轉動方式 settings.turnMode：instant = 直接轉的鍵位、confirm = 選取 + 確認) */
+export function tipText(id: TipId, text: Text, b: Bindings, turnStyle: 'instant' | 'confirm' = 'confirm'): string {
   const k = (codes: readonly string[]) => keyLabel(codes[0] ?? '');
   if (id === 'cards') return text('ui.tip.cards', { a: k(b.slot1), b: k(b.slot3), x: k(b.uncard), esc: k(b.cancel) });
+  if (id === 'turn' && turnStyle === 'instant') return text('ui.tip.turnInstant', { w: k(b.up), s: k(b.down), undo: k(b.undo), exit: k(b.turnMode) });
   if (id === 'turn') return text('ui.tip.turn', { ok: k(b.confirm), undo: k(b.undo), exit: k(b.turnMode) });
   return text('ui.tip.help', { key: k(b.help) });
 }

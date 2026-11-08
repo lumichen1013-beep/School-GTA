@@ -48,6 +48,8 @@ export class LevelLoop {
   get isLocked(): boolean { return this.locked; }
   /** 距離下一個固定步的進度 (0～1)，供渲染在 prev 與目前位置之間內插 */
   get alpha(): number { return this.acc / FIXED_DT; }
+  /** 已收下、還沒交出的章節指令數 (下一個固定步才交出；直接轉用來擋「同一步裡第二個轉動」) */
+  get pendingChapters(): number { return this.pendingChapter.length; }
 
   /** 本幀剩下的固定步不再執行 (章節層要換房 / 轉動：世界即將被替換或上鎖) */
   halt(): void {

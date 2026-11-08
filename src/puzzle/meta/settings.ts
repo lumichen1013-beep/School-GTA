@@ -27,12 +27,14 @@ export interface Settings {
   musicVolume: number;
   sfxVolume: number;
   mute: boolean;
+  /** 轉動方式 (v0.4)：instant = 點箭頭 / 方向鍵直接轉 (預設；舊設定缺欄 = instant)；confirm = 選取 → 預覽 → 確認 (舊行為) */
+  turnMode: 'instant' | 'confirm';
 }
 
 export const defaultSettings = (): Settings => ({
   hints: 'timed', guideMode: false, calmTension: false, noteScale: 1, inkPalette: 'default', reduceMotion: false,
   autoAdvance: false, textSpeed: 'normal', skipConfirm: true, keys: {}, helpOpen: false, tipsSeen: [],
-  masterVolume: 0.8, musicVolume: 0.6, sfxVolume: 0.8, mute: false
+  masterVolume: 0.8, musicVolume: 0.6, sfxVolume: 0.8, mute: false, turnMode: 'instant'
 });
 
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts as readonly unknown[]).includes(v) ? v as T : d;
@@ -66,7 +68,8 @@ export function sanitizeSettings(v: unknown): Settings {
     masterVolume: unit(v.masterVolume, d.masterVolume),
     musicVolume: unit(v.musicVolume, d.musicVolume),
     sfxVolume: unit(v.sfxVolume, d.sfxVolume),
-    mute: bool(v.mute, d.mute)
+    mute: bool(v.mute, d.mute),
+    turnMode: oneOf(v.turnMode, ['instant', 'confirm'] as const, d.turnMode)
   };
 }
 

@@ -17,7 +17,7 @@ import { cutsceneById, PROLOGUE_ID, type CutsceneId } from '../content/cutscenes
 import { chapterClearAlso, isUnlocked, levelState, listedInMenu, nextAfterClear, recordClear, startAbilities, type ClearKind } from '../meta/progress';
 import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
-import { buildPuzzleDom } from '../ui/dom';
+import { buildPuzzleDom, fillHelp, type HelpRow } from '../ui/dom';
 import { PuzzleHud } from '../ui/hud';
 import { CubeMapOverlay } from '../ui/cubeMap';
 import { CardTray } from '../ui/cardTray';
@@ -26,6 +26,7 @@ import { showMenu } from '../ui/screens/menu';
 import { showNickname } from '../ui/screens/nickname';
 import { showRestartConfirm, showSkipConfirm } from '../ui/confirm';
 import { showMemories, type CutsceneSettingsModel } from '../ui/screens/memories';
+import { showControlsSettings } from '../ui/screens/controls';
 import { showCutsceneUi, type CutsceneUi } from '../ui/cutscene';
 import { CutsceneCanvas } from '../render/cutscene/canvas';
 import type { ShotFrame } from '../render/cutscene/types';
@@ -85,13 +86,7 @@ export class PuzzleApp {
   private audioBridge = new AudioBridge(this.text, () => this.settings, patch => { this.settings = { ...this.settings, ...patch }; writeSettings(this.storage, this.settings); });
 
   constructor(root: HTMLElement) {
-    buildPuzzleDom(root, this.text, [
-      ...deriveHelp(this.bindings), { keys: this.bindings.map.map(keyLabel), labelKey: 'ui.help.map' },
-      { keys: [this.text('ui.help.cards.keys', { a: keyLabel(this.bindings.slot1[0] ?? ''), b: keyLabel(this.bindings.slot3[0] ?? '') }), keyLabel(this.bindings.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
-      { keys: [keyLabel(this.bindings.turnMode[0] ?? ''), keyLabel(this.bindings.undo[0] ?? '')], labelKey: 'ui.help.turn' },
-      { keys: this.bindings.combine.map(keyLabel), labelKey: 'ui.help.combine' },
-      { keys: this.bindings.help.map(keyLabel), labelKey: 'ui.help.toggle' }
-    ]);
+    buildPuzzleDom(root, this.text, this.helpRows());
     this.hud = new PuzzleHud(this.text);
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
       tab: () => this.session?.toggleTurnMode(),
@@ -126,6 +121,19 @@ export class PuzzleApp {
     requestAnimationFrame(t => this.frame(t));
   }
 
+  /** 操作說明 (H 面板) 的列：依按鍵設定與轉動方式 (settings.turnMode；改設定後 fillHelp 重建) */
+  private helpRows(): HelpRow[] {
+    const b = this.bindings;
+    return [
+      ...deriveHelp(b), { keys: b.map.map(keyLabel), labelKey: 'ui.help.map' },
+      { keys: [this.text('ui.help.cards.keys', { a: keyLabel(b.slot1[0] ?? ''), b: keyLabel(b.slot3[0] ?? '') }), keyLabel(b.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
+      { keys: [keyLabel(b.turnMode[0] ?? ''), keyLabel(b.undo[0] ?? '')], labelKey: 'ui.help.turn' },
+      { keys: ['\u2190\u2192\u2191\u2193'], labelKey: this.settings.turnMode === 'instant' ? 'ui.help.turnInstant' : 'ui.help.turnConfirm' },
+      { keys: b.combine.map(keyLabel), labelKey: 'ui.help.combine' },
+      { keys: b.help.map(keyLabel), labelKey: 'ui.help.toggle' }
+    ];
+  }
+
   /** 目前關卡的世界 (開發期自動化驗證用) */
   get world(): World | null { return this.session?.world ?? null; }
   get current(): Screen { return this.screen; }
@@ -148,6 +156,8 @@ export class PuzzleApp {
   private exit(s: Screen, next: Screen): void {
     this.closeScreen?.();
     this.closeScreen = null;
+    this.closeControls?.();
+    this.closeControls = null;
     switch (s.id) {
       case 'clear': this.hud.hideClear(); if (next.id !== 'level') this.endSession(); break;
       case 'level': if (next.id !== 'clear') this.endSession(); break;
@@ -187,7 +197,8 @@ export class PuzzleApp {
             : this.levelWithCutscene(id)),
           rename: () => this.go({ id: 'nickname' }),
           memories: () => this.go({ id: 'memories' }),
-          sound: () => this.audioBridge.openSettings()
+          sound: () => this.audioBridge.openSettings(),
+          controls: () => this.openControls()
         });
         break;
       case 'memories':
@@ -274,6 +285,7 @@ export class PuzzleApp {
         still: this.reduceMotion(),
         onTrayOpen: () => this.input.releaseAll(),
         releaseInput: () => this.input.releaseAll(),
+        turnStyle: () => this.settings.turnMode,
         onWorldEvent: e => this.audioBridge.worldEvent(e)
       },
       spec, state,
@@ -359,6 +371,16 @@ export class PuzzleApp {
 
   private skipNarration(): void {
     if (this.narrationUntil) { this.narrationUntil = 0; this.hud.hideNarration(); }
+  }
+
+  /** 選單「操作」：操作設定頁 (疊在選單上；離開選單時一併收起) */
+  private closeControls: (() => void) | null = null;
+  private openControls(): void {
+    this.closeControls?.();
+    this.closeControls = showControlsSettings(this.text, { turnMode: this.settings.turnMode }, {
+      change: v => { this.settings = { ...this.settings, ...v }; writeSettings(this.storage, this.settings); fillHelp(document.getElementById('pz-help')!, this.text, this.helpRows()); },
+      back: () => { this.closeControls?.(); this.closeControls = null; }
+    });
   }
 
   private cutsceneSettings(): CutsceneSettingsModel {
@@ -452,7 +474,7 @@ export class PuzzleApp {
     // 已經打開過面板的玩家不需要「怎麼打開操作說明」
     const tip = pendingTip(this.settings.helpOpen ? [...this.settings.tipsSeen, 'help'] : this.settings.tipsSeen, ctx);
     if (!tip) return;
-    this.hud.showTip(tipText(tip, this.text, this.bindings), now, TIP_MS);
+    this.hud.showTip(tipText(tip, this.text, this.bindings, this.settings.turnMode), now, TIP_MS);
     this.settings = { ...this.settings, tipsSeen: [...this.settings.tipsSeen, tip] };
     writeSettings(this.storage, this.settings);
   }
