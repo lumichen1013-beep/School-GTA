@@ -163,7 +163,11 @@ export function cubeDoorModel(p: Painter, d: ObjDef, theme: Theme): PropModel {
       const board = mesh(box(0.42, 0.42, 0.04), pal.shelfDark, { outline: false });
       const face2 = mesh(new THREE.PlaneGeometry(0.34, 0.34), 0xffffff, { map: inscription(pal, c.world.rt.text(glyph), 'carved', 96), flatMap: true, outline: false, shadow: false, unique: true });
       face2.position.z = 0.025;
-      tag.add(board, face2);
+      // 背面也刻一份 (前緣的門朝向鏡頭的是木牌背面)
+      const back = face2.clone();
+      back.position.z = -0.025;
+      back.rotation.y = Math.PI;
+      tag.add(board, face2, back);
       face.add(tag);
     }
     if (tag) tag.visible = c.mode === '3d';
