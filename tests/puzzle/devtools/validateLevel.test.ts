@@ -38,7 +38,7 @@ describe('validateLevel：門廊 1-1', () => {
     expect(validateEntry(LEVELS.find(e => e.id === '1-3')!, reg)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === '2-1')!, reg)).toEqual([]);
     expect(validateEntry(LEVELS.find(e => e.id === 'H1')!, reg)).toEqual([]); // H1 夾層 (隱藏房)：關卡 id H1、房間 id mezz
-    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5', 'H1', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3', '4-4', '5-1', '5-2', '5-3', '5-4']); // 第五章骨架：5-1；5-2 東窗；5-3 西窗；5-4 北窗
+    expect(LEVELS.map(e => e.id)).toEqual(['1-1', '1-2', '1-3', '2-1', '2-2', '2-3', '2-4', '2-5', 'H1', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3', '4-4', '5-1', '5-2', '5-3', '5-4', '5-5']); // 第五章骨架：5-1；5-2 東窗；5-3 西窗；5-4 北窗；5-5 最後的機關
   });
 
   it('沒有封印的門 (unsealed) 不需要打開它的物件；拿掉 unsealed 就回報 ref.exitLocked', () => {

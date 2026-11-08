@@ -33,6 +33,11 @@ export interface CubeDef {
    * 房間的門此刻朝向走廊格 → 接到走廊另一個鄰格裡、有門朝著這格走廊的房 (型別 = 門；links)。光、墨都不經走廊格
    */
   corridors?: readonly string[];
+  /**
+   * v0.4 第五章 5-5 星光 (core/chapter starlight)：windows = 會收星光的窗房、faces = 看得見星星的面 (窗房此刻在這幾面 = 窗外有星)、
+   * target = 星光要照進的房 (機關)。星光沿此刻接通的門逐間傳播 (封住的門不透光)
+   */
+  stars?: { windows: readonly string[]; faces: readonly Side[]; target: string; slits?: Readonly<Record<string, Slit>> };
 }
 
 /**
@@ -84,6 +89,14 @@ export interface DialDef {
   jams?: ReadonlyArray<DialJamDef>;
   /** v0.4 第五章 5-1b 這一組第一次轉成功 → 當前房的 obj 記為 used (doneFlag 成立 → done 事件；例：縮影的底層轉過一次) */
   marks?: ReadonlyArray<{ group: string; obj: ObjId }>;
+  /** v0.4 第五章 推導旗標：all 都成立 → flag 也成立 (core/chapter doneFlags；例：ch5.windows = 三扇窗都完成) */
+  derived?: ReadonlyArray<{ flag: string; all: readonly string[] }>;
+  /**
+   * v0.4 第五章 5-5a 地板被重畫：第一次在 when 成立時進 room (或在 room 讀檔) → 魔方設為 cube、記章節旗標 flag (R / 再進房不重演)、說 text
+   */
+  redraw?: { room: string; when: string; flag: string; cube: CubeState; text?: string };
+  /** v0.4 第五章 5-5c 收束之後：after 成立 → 所有組都轉不動、轉動模式不列 (text = 說明) */
+  freeze?: { after: string; text?: string };
 }
 
 /**
@@ -107,6 +120,8 @@ export interface DoorInfo {
   hole?: boolean;
   /** 門旁 (房內側) 的活字 (2-3c 路線密碼；文字 key) */
   glyph?: string;
+  /** v0.4 第四章起 封住的門 (cubeDoor.sealed.until)：這個旗標成立前穿不過去 (第五章 星光也透不過) */
+  sealed?: string;
 }
 /** 一條接通：門 ↔ 鄰房的門 (kind = 兩側較窄者)，或門 ↔ 屋框 (frame = 屋框的 to ?? kind) */
 export interface Link {
@@ -150,6 +165,57 @@ export function acrossEdge(def: CubeDef, s: CubeState, room: string, side: Side)
   if (sameCell(q, p) || !faceOfCell(q)) return null;
   const corridors = new Set(def.corridors ?? []);
   return Object.keys(s.pos).find(r => !corridors.has(r) && sameCell(s.pos[r], q)) ?? null;
+}
+
+// ── v0.4 第五章 5-5 星光 (規格「5-5 最後的機關（細化）」設計前提) ──
+
+/** 窗縫此刻的方向 (世界方位)：v = 直 (那間房本地的「上」朝世界的上 / 下)、h = 橫 (朝東西南北) */
+export type Slit = 'v' | 'h';
+export const slitOf = (s: CubeState, room: string): Slit => { const u = rotateSide('U', s.rot[room] ?? 0); return u === 'U' || u === 'D' ? 'v' : 'h'; };
+
+/** 星光此刻：lit = 看得見星星的窗房；reach = 星光照得進 target 的窗；behind = 星光照到 target 某扇門外的那一間、卻沒接進來 (門後是牆) */
+export interface StarState { lit: string[]; reach: string[]; behind: string[] }
+
+/** 封住的門 (DoorInfo.sealed) 在這組旗標下是否打開 (洞位、沒封的門 = 開著) */
+export const doorOpenFor = (doors: readonly DoorInfo[], done: ReadonlySet<string>) => (room: string, door: string): boolean => {
+  const d = doors.find(x => x.room === room && x.door === door);
+  return !d?.sealed || done.has(d.sealed);
+};
+
+/**
+ * 星光 (CubeDef.stars；純函式)：窗房此刻在 faces 的一面 = 看得見星星；星光沿此刻接通 (兩側都沒封) 的門逐間傳播，
+ * 傳得到 target 的窗 = reach。ls = 此刻的連接表 (含門牌「間」)、open = 門此刻沒封
+ */
+export function starlight(def: CubeDef, s: CubeState, ls: readonly Link[], doors: readonly DoorInfo[], open: (room: string, door: string) => boolean): StarState {
+  const st = def.stars;
+  if (!st) return { lit: [], reach: [], behind: [] };
+  const lit = st.windows.filter(w => { const f = faceOfCell(s.pos[w]); return !!f && st.faces.includes(f); });
+  const adj = new Map<string, Set<string>>();
+  const add = (a: string, b: string) => { (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b); };
+  for (const l of ls) {
+    if (!('room' in l.to) || !open(l.from.room, l.from.door) || !open(l.to.room, l.to.door)) continue;
+    add(l.from.room, l.to.room); add(l.to.room, l.from.room);
+  }
+  const comp = (from: string): Set<string> => { const seen = new Set([from]); const q = [from]; while (q.length) for (const r of adj.get(q.shift()!) ?? []) if (!seen.has(r)) { seen.add(r); q.push(r); } return seen; };
+  const reach = lit.filter(w => comp(w).has(st.target));
+  // target 的門此刻朝著一格梁上走道、走道那一頭的房 (門後是牆：沒有接上)
+  const outside = doors.filter(d => d.room === st.target && !d.hole && open(d.room, d.door) && !ls.some(l => l.from.room === d.room && l.from.door === d.door)).flatMap(d => {
+    const at = s.pos[st.target];
+    if (!at) return [];
+    const e = addSide(at, rotateSide(d.side, s.rot[st.target] ?? 0));
+    if (!inCube(def, e) || !def.corridors?.includes(cellContent(def, s, e))) return [];
+    const r = acrossEdge(def, s, st.target, d.side);
+    return r ? [r] : [];
+  });
+  const behind = lit.filter(w => !reach.includes(w) && outside.some(r => comp(w).has(r)));
+  return { lit, reach, behind };
+}
+
+/** 三道光落在同一點 (CubeDef.stars.slits)：每扇窗都看得見星星、窗縫都是 slits 要的方向 */
+export function converge(def: CubeDef, s: CubeState): boolean {
+  const st = def.stars;
+  if (!st?.slits) return false;
+  return st.windows.every(w => { const f = faceOfCell(s.pos[w]); return !!f && st.faces.includes(f) && slitOf(s, w) === st.slits![w]; });
 }
 
 // ── v0.4 第五章 朝向 24 種 (規格「第五章共用規則」朝向)：ORIENTS[i] = 本地 N E S W U D 此刻朝向的世界方位 ──
@@ -264,7 +330,11 @@ export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[], pl
     // v0.4 第五章 走廊格：穿過去 = 走廊另一個鄰格裡、有門朝著這格走廊的房 (型別 = 門；不經過門牌 / 洞位)
     if (def.corridors?.includes(other)) {
       const far = corridorLink(def, s, doors, next, d.room);
-      if (far) out.push({ from: { room: d.room, door: d.door }, to: far, kind: 'door' });
+      if (far) { out.push({ from: { room: d.room, door: d.door }, to: far, kind: 'door' }); continue; }
+      // v0.4 第五章 5-5a 門牌「間」穿過走道：另一頭的房那一面沒有門、但有洞位 → 接到洞位 (洞位也回接)
+      if (!plates?.has(`${d.room}.${d.door}`)) continue;
+      const h = corridorLink(def, s, doors, next, d.room, true);
+      if (h) { out.push({ from: { room: d.room, door: d.door }, to: h, kind: 'door' }); back.push({ from: h, to: { room: d.room, door: d.door }, kind: 'door' }); }
       continue;
     }
     const facing = (x: DoorInfo): boolean => x.room === other && rotateSide(x.side, s.rot[other] ?? 0) === OPPOSITE[side];
@@ -283,14 +353,24 @@ export function links(def: CubeDef, s: CubeState, doors: readonly DoorInfo[], pl
   return [...out, ...back];
 }
 
-/** 走廊格 at 的另一頭 (依 SIDES 順序找鄰格：不是 from、不是走廊、有門 (非章門 / 洞位) 朝著這格的房)；沒有 = null */
-function corridorLink(def: CubeDef, s: CubeState, doors: readonly DoorInfo[], at: Cell, from: string): { room: string; door: string } | null {
+/**
+ * 走廊格 at 的另一頭 (依 SIDES 順序找鄰格：不是 from、不是走廊、有門 (非章門 / 洞位) 朝著這格的房)；沒有 = null。
+ * hole = 改找洞位：那一面沒有任何門、但有洞位 (門牌「間」穿過走道)
+ */
+function corridorLink(def: CubeDef, s: CubeState, doors: readonly DoorInfo[], at: Cell, from: string, hole = false): { room: string; door: string } | null {
   for (const side of SIDES) {
     const c = addSide(at, side);
     if (!inCube(def, c)) continue;
     const room = cellContent(def, s, c);
     if (room === from || room === 'empty' || room === 'solid' || def.corridors?.includes(room)) continue;
-    const e = doors.find(x => x.room === room && !x.hole && x.kind !== 'chapter' && rotateSide(x.side, s.rot[room] ?? 0) === OPPOSITE[side]);
+    const facing = (x: DoorInfo) => x.room === room && rotateSide(x.side, s.rot[room] ?? 0) === OPPOSITE[side];
+    if (hole) {
+      if (doors.some(x => facing(x) && !x.hole)) continue;
+      const h = doors.find(x => facing(x) && x.hole);
+      if (h) return { room, door: h.door };
+      continue;
+    }
+    const e = doors.find(x => facing(x) && !x.hole && x.kind !== 'chapter');
     if (e) return { room, door: e.door };
   }
   return null;

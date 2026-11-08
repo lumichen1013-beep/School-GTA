@@ -332,10 +332,11 @@ export const gearWallDecor: DecorFactory = (p, item, { level }) => {
     gears.push(part(new THREE.CylinderGeometry(0.12, 0.12, 0.16, 10), gx, gy, z, Math.PI / 2, 0, 0));
   }
   const slots: THREE.BufferGeometry[] = [];
-  for (const k of [-1, 0, 1]) slots.push(part(box(0.18, 2.4, 0.04), x0 + k * 3.4, 2.0, z + 0.11));
+  // slots = 0：光槽由物件畫 (5-5 starSlots)
+  if (num(item, 'slots', 3) > 0) for (const k of [-1, 0, 1]) slots.push(part(box(0.18, 2.4, 0.04), x0 + k * 3.4, 2.0, z + 0.11));
   const g = new THREE.Group();
   g.add(p.mesh(merge(gears), BRASS, { metalness: 0.65, roughness: 0.35, outline: false }));
-  g.add(p.mesh(merge(slots), 0xf2dda6, { emissive: 0xf2dda6, emissiveIntensity: 0.35, outline: false, shadow: false }));
+  if (slots.length) g.add(p.mesh(merge(slots), 0xf2dda6, { emissive: 0xf2dda6, emissiveIntensity: 0.35, outline: false, shadow: false }));
   return { root: g, only3d: [g] };
 };
 

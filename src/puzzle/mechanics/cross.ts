@@ -6,7 +6,7 @@
 //   room / titleKey = 那間房、at = 本房此刻的格；那一格沒有房 = 只寫 at (秤繩垂著)
 import type { ObjDef, ObjId, WorldExt } from '../core/types';
 import type { ChapterState } from '../core/chapter';
-import { acrossEdge, links } from '../core/cube';
+import { acrossEdge, converge, doorOpenFor, faceOfCell, links, slitOf, starlight } from '../core/cube';
 import { defWeight, protrusionsInto, type CrossRooms } from './scale';
 
 type Labels = Readonly<Record<string, readonly string[]>>;
@@ -54,11 +54,29 @@ export function balanceExt(c: CrossRooms, room: string, state: ChapterState, lab
   return out;
 }
 
-/** ChapterSpec.derive (app 注入) */
-export const deriveQuery = (c: CrossRooms) => (room: string, state: ChapterState, labels: Labels): Partial<WorldExt> => {
+/** 此刻讀作「間」的門 (門牌標籤上貼著部件卡；core/chapter activePlates 的同一條件) */
+const platesOf = (c: CrossRooms, labels: Labels): Set<string> =>
+  new Set(c.doors.filter(d => d.plate && (labels[d.plate.label] ?? []).includes(d.plate.card)).map(d => `${d.room}.${d.door}`));
+
+/** v0.4 5-5 星光 (CubeDef.stars；沒有 = undefined)：core/cube starlight + 各窗的窗縫 / 所在面 + 三道光是否落在同一點 */
+export function starExt(c: CrossRooms, state: ChapterState, labels: Labels, done: ReadonlySet<string>): WorldExt['starlight'] {
+  const st = c.cube?.stars;
+  if (!st || !c.cube || !state.cube) return undefined;
+  const cube = state.cube;
+  const r = starlight(c.cube, cube, links(c.cube, cube, c.doors, platesOf(c, labels)), c.doors, doorOpenFor(c.doors, done));
+  return {
+    ...r,
+    slits: Object.fromEntries(st.windows.map(w => [w, slitOf(cube, w)])),
+    faces: Object.fromEntries(st.windows.map(w => [w, faceOfCell(cube.pos[w])])),
+    converge: converge(c.cube, cube)
+  };
+}
+
+/** ChapterSpec.derive (app 注入)；done = 此刻成立的旗標 (封住的門透不透光) */
+export const deriveQuery = (c: CrossRooms) => (room: string, state: ChapterState, labels: Labels, done: ReadonlySet<string> = new Set()): Partial<WorldExt> => {
   if (!state.cube) return {};
   const protrude = protrusionsInto(c, room, state.cube, labels, r => usedIn(state, r));
   const balance = balanceExt(c, room, state, labels);
   // 沒有的欄位寫 undefined (清掉上一次的結果；toEqual 視同沒有)
-  return { balance: Object.keys(balance).length ? balance : undefined, protrude: protrude.length ? protrude : undefined };
+  return { balance: Object.keys(balance).length ? balance : undefined, protrude: protrude.length ? protrude : undefined, starlight: starExt(c, state, labels, done) };
 };

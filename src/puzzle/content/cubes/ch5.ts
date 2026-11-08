@@ -40,6 +40,20 @@ export function skyAligned(s: CubeState): boolean {
     && Object.entries(CH5_ALIGN.home).every(([r, c]) => at(r, c) && (s.rot[r] ?? 0) === 0);
 }
 
+/**
+ * 5-5a 地板被重畫 (規格「5-5 最後的機關（細化）」設計前提)：三扇窗都完成之後第一次走進機關，閣樓被排成這個樣子 (DialDef.redraw)。
+ * = 5-1 完成後的排列 (CH5_AFTER51) → 西窗的窗框 ↻ → 縮影的底層 ↺ → 東西軸 ↺ → 上下軸 ↺ → 東西軸 ↺ → 上下軸 ↻ → 東西軸 ↻
+ * (天窗間在頂面、機關在底面 (朝向 0)；東窗在北面、西窗在南面 (看不見星星)、北窗在西面、樓梯口在東面；機關南門 ↔ 梁上走道 ↔ 西窗南門)。
+ * content 只能 import 核心型別 → 以資料寫出 (由 levels/5-5 以 applyTurn 重算驗證)
+ */
+export const CH5_REDRAW: CubeState = {
+  pos: {
+    sky: [1, 1, 2], walkA: [1, 2, 0], walkC: [0, 0, 1], north: [0, 1, 1], west: [1, 2, 1], meadow: [1, 1, 1],
+    east: [1, 0, 1], landing: [2, 1, 1], walkD: [2, 2, 1], walkB: [0, 1, 0], engine: [1, 1, 0]
+  },
+  rot: { sky: 1, walkA: 20, walkC: 0, north: 17, west: 18, meadow: 3, east: 3, landing: 17, walkD: 0, walkB: 0, engine: 0 }
+};
+
 /** 星釘 (外圈的星環被銀釘釘住) 的說明 */
 const NAILED = 'lvl.ch5.locked';
 
@@ -64,8 +78,13 @@ export const CH5_CUBE: CubeDef = {
     { at: [1, 0, 1], side: 'N', kind: 'skylight', to: 'starN', wall: true }
   ],
   corridors: ['walkA', 'walkB', 'walkC', 'walkD'],
+  // 5-5 星光：三扇窗在東 / 西 / 北面或頂面 = 看得見星星；星光沿接通的門照進機關。5-5c 三道光落在同一點 = 東縫橫、西縫橫、北縫直 (三段天窗銘文)
+  stars: { windows: ['east', 'west', 'north'], faces: ['E', 'W', 'N', 'U'], target: 'engine', slits: { east: 'h', west: 'h', north: 'v' } },
   dial: {
     entry: { room: 'sky', obj: 'dial' },
+    // 機關的星釘門：三扇窗都完成 (ch5.windows) 才拔得掉；之後第一次進機關 = 地板被重畫 (5-5a 的固定起點)
+    derived: [{ flag: 'ch5.windows', all: ['5-2', '5-3', '5-4'] }],
+    redraw: { room: 'engine', when: 'ch5.windows', flag: 'ch5.redraw', cube: CH5_REDRAW, text: 'lvl.5-5.redraw' },
     groups: [
       ...CH5_MIDDLE,
       { id: 'SE', kind: 'spin', index: 0, room: 'east' },
@@ -240,3 +259,24 @@ export const CH5_ZONE_SKELETON = {
     finish: `reach.${room}`
   })
 };
+
+/**
+ * 5-5a 地板被重畫 (devtools/validateDial；規格「5-5 最後的機關（細化）」抽象模型 CH5_ZONE55A)：在機關裡只轉得到中間片 (窗框要在窗房、
+ * 縮影要在天窗間)；起點 = 重畫後的排列 CH5_REDRAW、人在機關。題：ch5.windows (三扇窗都完成：開章即成立的教學旗標，星釘門因此開著)、
+ * plate (部件卡「日」貼在 plate 那扇門的門牌 = 讀作「間」；工具箱在機關、隨時拿得到)、5-5a (三扇窗都看得見星星、星光都照得進機關；P4 墨 7)。
+ * plate = null → 不改門牌 (驗「不改門牌則無解」)；'doorS' → 貼在南門
+ */
+export const ch5Zone55a = (plate: 'doorN' | 'doorS' | null = 'doorN') => ({
+  cube: CH5_MIDDLE_CUBE,
+  puzzles: [
+    { id: 'ch5.windows', room: 'engine', needs: [], teaching: true },
+    ...(plate ? [{ id: 'plate', room: 'engine', needs: [], teaching: true }] : []),
+    { id: '5-5a', room: 'engine', needs: plate ? ['ch5.windows', 'plate'] : ['ch5.windows'], refill: true, goal: (_s: CubeState, _f: ReadonlySet<string>, ctx) => ctx.star().reach.length === 3 }
+  ] as readonly ZonePuzzle[],
+  plates: plate ? [{ room: 'engine', door: plate, when: 'plate' }] : [],
+  startCube: CH5_REDRAW,
+  dialOn: true,
+  start: 'engine',
+  finish: '5-5a'
+});
+export const CH5_ZONE55A = ch5Zone55a();

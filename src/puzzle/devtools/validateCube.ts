@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { acrossEdge, applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, localSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { acrossEdge, applyOp, applyTurn, cellsOf, converge, cubeKey, doorOpenFor, sameCell, initialCube, isBlocked, links, localSide, starlight, turnDirs, type StarState, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
 import { inkPaths, jamActive, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
@@ -149,6 +149,9 @@ export interface GoalCtx {
   links(): readonly Link[];
   /** v0.4 第五章 5-4 吊秤：這間房此刻本地 side 那格稜另一頭的面心房 (core/cube acrossEdge；content 只能 import 核心型別) */
   across(room: string, side: Side): string | null;
+  /** v0.4 第五章 5-5 星光 (core/cube starlight；封住的門以此組旗標判定) 與三道光落在同一點 (converge) */
+  star(): StarState;
+  converge(): boolean;
 }
 
 /** 一題 (抽象)：在 room 完成；needs = 設計上的前置題 (多解列舉從「前置剛湊齊」的狀態出發)；goal = 魔方排列的條件 (沒給 = 走到那間房即可完成) */
@@ -229,6 +232,8 @@ export interface DialModel {
   mini?: { room: string; card?: string };
   /** v0.4 第五章 開章時的魔方排列 (沒給 = S0；5-2 區 = 5-1 完成後的排列：天窗間與機關原地轉過) */
   startCube?: CubeState;
+  /** v0.4 第五章 5-5 開章時魔方儀已經啟動 (觀星儀在 5-1 啟動過；⑩ 入口檢查不適用) */
+  dialOn?: boolean;
 }
 
 /** both = 兩面都封 (cubeDoor.sealed.both)：人也不能從對面經這扇門走進來 */
@@ -353,7 +358,9 @@ function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet
   // 光的方位換成房間本地 (第四章房間會轉；第三章朝向恆 0)
   if (p.light && lightState(localHits(hitsAt(m.cube, s, p.light.uncovered)[p.room] ?? [], s.rot[p.room] ?? 0), p.light.from, p.light.via) !== 'lit') return false;
   if (p.ink && !(inkAt(m.cube, s)[p.room] ?? []).includes(p.ink.side)) return false;
-  return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)), across: (room, side) => acrossEdge(m.cube, s, room, side) });
+  if (!p.goal) return true;
+  const ls = () => links(m.cube, s, m.doors, platesFor(m, flags));
+  return p.goal(s, flags, { links: ls, across: (room, side) => acrossEdge(m.cube, s, room, side), star: () => starlight(m.cube, s, ls(), m.doors, doorOpenFor(m.doors, flags)), converge: () => converge(m.cube, s) });
 }
 
 export interface DialPuzzleReport {
@@ -514,7 +521,7 @@ function dialGraph(m: DialModel, arr: Arrangements, budgetOf: (room: string, fla
   const finish = pid.get(m.finish) ?? -1;
   const dialRoom = rooms.indexOf(def.dial?.entry.room ?? '');
   const start = rooms.indexOf(m.start);
-  const s0 = enc(0, start, 0, 0, budgetOf(m.start, 0), cs.start);
+  const s0 = enc(0, start, 0, m.dialOn ? 1 : 0, budgetOf(m.start, 0), cs.start);
   const index = new Map<number, number>([[s0, 0]]);
   const order = [s0];
   const entry: number[] = [1];
@@ -784,13 +791,13 @@ export function validateDial(model: DialModel): DialReport {
   const q = [m.start];
   const ls = areaPairs(m, links(def, arr.states[0], m.doors), new Set());
   while (q.length) { const r = q.shift()!; for (const [fr, tr] of ls) if (fr === r && !walkable.has(tr)) { walkable.add(tr); q.push(tr); } }
-  if (!walkable.has(def.dial.entry.room)) entryIssues.push(`dial room ${def.dial.entry.room} is not reachable from ${m.start} without turning`);
+  if (!m.dialOn && !walkable.has(def.dial.entry.room)) entryIssues.push(`dial room ${def.dial.entry.room} is not reachable from ${m.start} without turning`);
 
   return { states: g.states, arrangements: g.arrangements.size, solvable, deadlocks, needsRestart, perPuzzle, budgetBypass, lockIssues, entryIssues, issues };
 }
 
 /** 由內容組出控制盤章節的抽象模型 (門位 = 各房 cubeDoor、預算 = LevelDef.turnBudget) */
-export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini' | 'startCube'> = {}): DialModel {
+export function dialModelOf(cube: CubeDef, rooms: Readonly<Record<string, LevelDef>>, puzzles: readonly DialPuzzle[], start: string, finish: string, extra: Pick<DialModel, 'plates' | 'jams' | 'cards' | 'areas' | 'doorLocks' | 'mini' | 'startCube' | 'dialOn'> = {}): DialModel {
   const budgets: Record<string, { budget: number; p4?: Readonly<Record<string, number>> }> = {};
   for (const [id, lv] of Object.entries(rooms)) budgets[id] = { budget: lv.turnBudget?.base ?? 0, ...(lv.turnBudget?.puzzles ? { p4: lv.turnBudget.puzzles } : {}) };
   // 區 (areas) 的預算 = 所在房的基礎預算 (validateDial 也會自動補)

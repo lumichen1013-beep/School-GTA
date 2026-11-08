@@ -84,8 +84,8 @@ describe('5-3 西窗：資料', () => {
       '5-3', [['5-3', '5-3 爸爸的書桌']], { base: 10 }, '從這扇窗看，路都是側面的。', '爸爸的書桌上，墨和紙湊在一起了。這扇窗，現在轉得動了。', [], []
     ]);
     const doors = west.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, o.x, o.z]);
-    expect(doors).toEqual([['doorS', 4, 4.8], ['hatchD', -3, 1.6]]);
-    expect([levelById('5-3')!.unlock, levelById('5-3')!.abilities, CH5.levels['5-3'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'west', ['5-1', '5-2', '5-3', '5-4']]);
+    expect(doors).toEqual([['doorS', 4, 4.8], ['hatchD', -3, 1.6], ['holeN', -7.6, -4.8]]); // 5-5a 洞位 (平常不在場)
+    expect([levelById('5-3')!.unlock, levelById('5-3')!.abilities, CH5.levels['5-3'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'west', ['5-1', '5-2', '5-3', '5-4', '5-5']]);
   });
 
   it('字條：三張 (L1 / L2 / 劇情)；原文；H1～H4 / H10；間距 ≥ 3', () => {

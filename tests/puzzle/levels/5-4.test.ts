@@ -94,8 +94,8 @@ describe('5-4 北窗：資料', () => {
     expect([north.id, north.puzzles!.map(q => [q.id, TEXT(q.titleKey)]), north.turnBudget, TEXT(north.narrationKey), TEXT(north.nextKey), layoutDepthIssues(north), layoutDepthIssues(west), layoutDepthIssues(east)]).toEqual([
       '5-4', [['5-4', '5-4 吊秤']], { base: 10 }, '從這扇窗看，只看得見自己那一面。', '北窗的秤平了。這扇窗，現在轉得動了。', [], [], []
     ]);
-    expect(north.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, o.x, o.z])).toEqual([['doorE', 9.8, 0], ['hatchD', -3, 1.6]]);
-    expect([levelById('5-4')!.unlock, levelById('5-4')!.abilities, CH5.levels['5-4'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'north', ['5-1', '5-2', '5-3', '5-4']]);
+    expect(north.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, o.x, o.z])).toEqual([['doorE', 9.8, 0], ['hatchD', -3, 1.6], ['holeW', -9.8, 0]]); // 5-5a 洞位 (平常不在場)
+    expect([levelById('5-4')!.unlock, levelById('5-4')!.abilities, CH5.levels['5-4'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'north', ['5-1', '5-2', '5-3', '5-4', '5-5']]);
     // 空的房間：骨架的舊箱與帆布箱堆退役
     expect(north.decor!.map(d => d.kind)).toEqual(['walls', 'atticRoof', 'atticWindow', 'posts']);
   });

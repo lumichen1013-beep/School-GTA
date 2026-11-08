@@ -1,7 +1,7 @@
 // 章節層級狀態 (v0.3；規格 5.4、architecture 4.16)：ChapterSession = 魔方狀態 + 各房快照 + 當前房間的 World。
 // 純資料 + 純函式 (World 本身照舊就地修改)；不 import mechanics (建 World 時由呼叫方傳入機制表，比照 createWorld)
 import type { Box, DoorLinkState, GameEvent, LevelDef, ObjDef, ObjId, World, WorldExt } from './types';
-import { createWorld, type WorldOptions } from './world';
+import { createWorld, say, type WorldOptions } from './world';
 import {
   addSide, applyOp, applyTurn, cellContent, cellsOf, inCube, initialCube, inverseTurn, isBlocked, links, localSide, OPPOSITE, rotateSide, sameCell,
   type Cell, type CubeBlock, type CubeDef, type CubeOp, type CubeState, type DialJamDef, type DoorInfo, type Side, type Turn, type TurnBlockCube
@@ -31,7 +31,7 @@ export interface ChapterSpec {
    * v0.4 第三章 跨房的推導結果 (3-3：半座天平的對面重量 / 已閂住 = ext.balance、伸進這一房的那一截 = ext.protrude)：
    * 由 app 以機制表的純函式注入 (mechanics/index chapterSpecOf)；writeExt / writeLinks 寫入當前房。labels = 即時標籤
    */
-  derive?(room: string, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>): Partial<WorldExt>;
+  derive?(room: string, state: ChapterState, labels: Readonly<Record<string, readonly string[]>>, done?: ReadonlySet<string>): Partial<WorldExt>;
   /**
    * v0.4 第三章 此刻露出來的被蓋住的玻璃 (`room.side`，本地門位；3-4b：巨根是「小」→ 'depths.W')：由 app 以機制表的純函式注入
    * (mechanics/index chapterSpecOf)；lightExt、展開圖 mapLight、validateDial 都以同一個結果呼叫 lightPaths。沒給 = 一律蓋著
@@ -247,7 +247,7 @@ function writeLinks(spec: ChapterSpec, state: ChapterState, w: World): void {
 /** 跨房推導 (ChapterSpec.derive；第三章 3-3)：結果的每個欄位覆寫 ext (沒給的欄位維持) */
 function writeDerived(spec: ChapterSpec, state: ChapterState, w: World, labels: Readonly<Record<string, readonly string[]>>): void {
   if (!spec.derive || !state.cube) return;
-  w.ext = { ...w.ext, ...spec.derive(state.room, state, labels) };
+  w.ext = { ...w.ext, ...spec.derive(state.room, state, labels, doneFlags(spec, state, w)) };
 }
 
 /** 標籤改了 (門牌貼上 / 取下「日」) → 重算當前房間的門接法 (World 只更新 ext) */
@@ -314,12 +314,26 @@ export function captureState(cs: ChapterSession): ChapterState {
 
 /** 依狀態開一章 (新章或讀檔)：建出所在房間，記下進房快照 */
 export function openChapter(spec: ChapterSpec, state: ChapterState, opts: WorldOptions): ChapterSession {
-  const st = clearDoorways(spec, clone(state));
+  const st = redrawCube(spec, clearDoorways(spec, clone(state)));
   const world = loadRoom(spec, st, opts);
+  const redraw = spec.cube?.dial?.redraw;
+  if (redraw?.text && st.flags.includes(redraw.flag) && !state.flags.includes(redraw.flag)) say(world, redraw.text);
   // 控制盤章節：沒有墨量紀錄 (新進房 / 讀到缺欄的存檔) → 補滿到這間房的預算；有 (房內讀檔) → 照存檔，不補墨 (規格 8)
   if (isDialChapter(spec) && !st.turns) st.turns = { left: turnBudgetFor(spec, st, world), undo: [] };
   const cs: ChapterSession = { spec, state: st, entry: st, world };
   return { ...cs, entry: captureState(cs) };
+}
+
+/**
+ * v0.4 第五章 5-5a 地板被重畫 (DialDef.redraw)：人此刻在 redraw.room、when 成立 (各房快照)、還沒重畫過 → 魔方設為 redraw.cube、
+ * 記章節旗標 (就地修改並回傳 state；openChapter 之後的進房快照 = 重畫之後，R 不重演)
+ */
+export function redrawCube(spec: ChapterSpec, state: ChapterState): ChapterState {
+  const r = spec.cube?.dial?.redraw;
+  if (!r || !state.cube || state.room !== r.room || state.flags.includes(r.flag) || !doneFlags(spec, state).has(r.when)) return state;
+  state.cube = clone(r.cube);
+  state.flags = [...state.flags, r.flag];
+  return state;
 }
 
 /** 換房：存當前房快照 → 載入 / 復原目標房 (玩家站在 door 內側) → 記進房快照 */
@@ -478,6 +492,8 @@ export function doneFlags(spec: ChapterSpec, state: ChapterState, world?: World)
     const defs = roomObjects(spec, state, room);
     for (const s of snap.objs) { const d = defs.find(o => o.id === s.id); if (d?.doneFlag && s.used) out.add(d.doneFlag); }
   }
+  // v0.4 第五章 推導旗標 (DialDef.derived；例：ch5.windows = 三扇窗都完成)
+  for (const d of spec.cube?.dial?.derived ?? []) if (d.all.every(f => out.has(f))) out.add(d.flag);
   return out;
 }
 
@@ -535,9 +551,16 @@ export function isLocked(spec: ChapterSpec, state: ChapterState, group: string, 
   return !unlockedGroups(spec, state, world).includes(group);
 }
 
-/** v0.4 第五章 這一組此刻不在轉動模式裡列出 (鎖扣限定了房間、人不在那幾間房；例：不在東窗時沒有「東窗的窗框」) */
-export function groupHidden(spec: ChapterSpec, state: ChapterState, group: string): boolean {
+/** v0.4 第五章 這一組此刻不在轉動模式裡列出 (鎖扣限定了房間、人不在那幾間房；例：不在東窗時沒有「東窗的窗框」；收束之後全部不列) */
+export function groupHidden(spec: ChapterSpec, state: ChapterState, group: string, world?: World): boolean {
+  if (frozen(spec, state, world)) return true;
   return (spec.cube?.dial?.locks ?? []).some(l => l.group === group && !!l.rooms && !l.rooms.includes(state.room));
+}
+
+/** v0.4 第五章 5-5c 收束之後 (DialDef.freeze)：魔方再也轉不動 */
+export function frozen(spec: ChapterSpec, state: ChapterState, world?: World): boolean {
+  const f = spec.cube?.dial?.freeze;
+  return !!f && doneFlags(spec, state, world).has(f.after);
 }
 
 /** v0.4 第五章 人此刻在縮影裡 (mechanics/attic 寫入 World.ext.mini) */
@@ -645,7 +668,7 @@ function tryTurn(cs: ChapterSession, t: Turn): { cube: CubeState; turns: { left:
   if (!state.dial) return { blocked: 'noDial' };
   // v0.4 第五章 縮影：縮影裡只轉得到縮影的頂 / 底 (miniOnly)，縮影外轉不到它們
   if (!def.dial?.groups.some(g => g.id === t.group) || !groupInReach(spec, t.group, world)) return { blocked: 'noGroup' };
-  if (isLocked(spec, state, t.group, world)) return { blocked: 'locked' };
+  if (isLocked(spec, state, t.group, world) || frozen(spec, state, world)) return { blocked: 'locked' };
   if (groupJam(spec, state, t.group, world)) return { blocked: 'jammed' };
   const why = dialCheck(cs, t);
   if (why) return { blocked: why };

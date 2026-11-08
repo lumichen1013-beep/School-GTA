@@ -18,6 +18,8 @@ const objects: ObjDef[] = [
   floor(-10, 10),
   door('S', 'door', 4.0),
   hatch('D', 'door', -3.0, 1.6),
+  // v0.4 5-5a 洞位 (平常不在場；機關的門牌讀作「間」、走道那一頭正對這一面時才接上)
+  door('N', 'door', -7.6, { id: 'holeN', hole: true, labelKey: 'lvl.ch2.hole' }),
   // ── 後景：爸爸的書桌 (合成台 = 攤開的筆記本與吸墨墊；墨水瓶在桌上西端，只在實景拿) ──
   { id: 'deskBook', type: 'writingDesk', readText: 'lvl.5-3.desk.read', doneText: 'lvl.5-3.desk.done', doneFlag: '5-3',
     x: 2.35, y: DESK_H, z: -3.3, w: 0.6, h: 0.1, d: 0.48, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.ch5.west.deskLabel' },

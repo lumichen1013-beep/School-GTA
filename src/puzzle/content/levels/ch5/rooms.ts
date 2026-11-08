@@ -51,6 +51,9 @@ export { sky } from './5-1-sky';
 export const landing = room('landing', -6, 6, [
   door('S', 'door', -2.0, { frameText: 'lvl.ch5.landing.doorS.frame' }),
   hatch('U', 'door', 2.6, -4.4, { labelKey: 'lvl.ch5.ladderU' }),
+  // v0.4 5-5a 洞位 (平常不在場；機關的門牌讀作「間」、走道那一頭正對這一面時才接上)
+  door('E', 'door', 5.8, { id: 'holeE', hole: true, labelKey: 'lvl.ch2.hole' }),
+  door('W', 'door', -5.8, { id: 'holeW', hole: true, labelKey: 'lvl.ch2.hole' }),
   plaque('plaqueLanding', 'lvl.ch5.landing.plaque', -3.4, 0.5, 0.4)
 ], [
   { kind: 'canvasPile', x: -3.6, z: -1.4, seed: 521 },
@@ -68,24 +71,8 @@ export { westRoom as west } from './5-3-west';
 /** 5-4 北窗 (北面心；你的窗)：完整檔在 5-4-north.ts */
 export { northRoom as north } from './5-4-north';
 
-/** 機關的兩扇門：三扇窗都完成才拔得掉星釘 (ch5.windows)；兩面都封 (從接到它的任何一扇門都走不進來) */
-const NAILED = { sealed: { until: 'ch5.windows', text: 'lvl.ch5.engine.nailed', both: true } };
-
-/**
- * 5-5 最後的機關 (底面心 [1,1,0]；Boss 三階段、收束)：北門 / 南門 (都 sealed until ch5.windows「門上釘著三顆星釘。」)、
- * 天花板梯口 (往核心；sealed until 5-5c)。後景 巨大的黃銅齒輪牆與三道光槽 ｜ 中景 機關底盤 (地板被重畫的展開圖) ｜ 前景 箱堆與工具、南門
- */
-export const engine = room('engine', -14, 14, [
-  door('N', 'door', -6.0, NAILED),
-  door('S', 'door', 6.0, NAILED),
-  hatch('U', 'door', 0, -4.4, sealedBy('5-5c', 'lvl.ch5.engine.ceilingSealed')),
-  plaque('base', 'lvl.ch5.engine.base', 0, 0.1, 0.2, 'both', 'lvl.ch5.engine.baseLabel')
-], [
-  { kind: 'gearWall', x: 0, w: 24, seed: 561 },
-  { kind: 'floorDrawing', x: 0, z: 0.2, w: 8, d: 4, seed: 563 },
-  { kind: 'trunks', x: -10.4, z: 3.4, n: 3, seed: 565 },
-  { kind: 'crateStack', x: 10.6, z: 3.0, seed: 567 }
-]);
+/** 5-5 最後的機關 (底面心；Boss 三階段、收束)：完整檔在 5-5-engine.ts */
+export { engineRoom as engine } from './5-5-engine';
 
 /** 林心的門都封著 (5-5c 收束時化開) */
 const CORE = sealedBy('5-5c', 'lvl.ch5.meadow.sealed');

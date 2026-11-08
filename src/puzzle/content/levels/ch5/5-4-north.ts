@@ -18,6 +18,8 @@ const objects: ObjDef[] = [
   floor(-10, 10),
   door('E', 'door', 9.8),
   hatch('D', 'door', -3.0, 1.6),
+  // v0.4 5-5a 洞位 (平常不在場；機關的門牌讀作「間」、走道那一頭正對這一面時才接上)
+  door('W', 'door', -9.8, { id: 'holeW', hole: true, labelKey: 'lvl.ch2.hole' }),
   // ── 後景：北窗 (窗前的紙籤照舊)、窗台角上的天窗銘文 (北；許問津；只在實景；5-5c 引用)、窗框旁的劇情字條 ──
   plaque('window', 'lvl.ch5.north.window', 0, 1.2, -4.85, 'both', 'lvl.ch5.north.windowLabel'),
   plaque('inscriptionN', 'lvl.5-4.inscription', 1.6, 0.9, -4.6, '3d', 'lvl.5-4.inscription.label'),

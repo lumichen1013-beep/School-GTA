@@ -282,7 +282,7 @@ export function deriveTurnMode(cs: ChapterSession, text: Text, sel: TurnModeMode
   const cube = state.cube!;
   // v0.4 第五章：鎖扣限定房間、人不在那幾間房的組不列 (例：不在東窗沒有「東窗的窗框」)
   // v0.4 第五章 縮影 (5-1a)：人在縮影裡只列縮影的頂 / 底 (miniOnly)；縮影外不列它們
-  const all = (def.dial?.groups ?? []).filter(g => groupInReach(spec, g.id, cs.world) && !groupHidden(spec, state, g.id));
+  const all = (def.dial?.groups ?? []).filter(g => groupInReach(spec, g.id, cs.world) && !groupHidden(spec, state, g.id, cs.world));
   const groups = all.filter(g => g.kind !== 'slideCell');
   const headers: TurnHeader[] = [];
   /** 標頭的名稱 (不含「鎖著」)：說明列用 */

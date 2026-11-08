@@ -20,6 +20,7 @@ import { balanceHalfModel, bigPotModel, ledgeModel, pageModel, protrudeStepModel
 import { chaseGateModel, giantRootModel, latticeBoxModel, latticeModel, oldCompassModel, paneFrameModel } from './depths';
 import { barsModel, glassModel, inkwallModel, plankModel, stoneModel } from './porch';
 import { chaserModel } from './chaser';
+import { starSlotsModel } from './engine';
 import { bookWallModel, deskModel, innerShelfModel } from './mezz';
 import { foldCordModel, inkStepModel, rootPlateModel } from './cellar';
 import { inkLockModel, inkMarkModel, inkPipeModel, inkValveModel, markCaseModel } from './ink';
@@ -87,7 +88,8 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 5-3 西窗：爸爸書桌上的筆記本 (合成台)、墨水瓶、許問津的空白羊皮紙 (東窗)
   writingDesk: writingDeskModel, inkBottle: inkBottleModel, parchment: parchmentModel,
   // 5-4 北窗：吊秤、盤上的背包、秤繩那一頭計重的箱子 (西窗的皮箱、東窗的書箱)
-  hangScale: hangScaleModel, backpack: backpackModel, ballastBox: ballastBoxModel
+  hangScale: hangScaleModel, backpack: backpackModel, ballastBox: ballastBoxModel,
+  starSlots: starSlotsModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

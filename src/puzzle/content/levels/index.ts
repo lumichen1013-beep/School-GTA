@@ -18,6 +18,7 @@ import { sky } from './ch5/5-1-sky';
 import { eastRoom } from './ch5/5-2-east';
 import { westRoom } from './ch5/5-3-west';
 import { northRoom } from './ch5/5-4-north';
+import { engineRoom } from './ch5/5-5-engine';
 import { furnace } from './ch4/4-2-furnace';
 import { archive } from './ch4/4-3-archive';
 import { drawer } from './ch4/4-4-drawer';
@@ -84,7 +85,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 5-3 西窗：第五章三扇窗之一 (P13 / P1 爸爸的墨 + 許問津的紙；完成 = 窗框 SW 鬆開)；5-1 通關後開放 (三扇窗任意順序)
   { id: '5-3', chapter: 5, titleKey: 'lvl.5-3.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => westRoom },
   // 5-4 北窗：第五章三扇窗之一 (P17 / P1 吊秤：秤繩從地板垂下去，秤的是那一整間房；完成 = 窗框 SN 鬆開)；5-1 通關後開放 (三扇窗任意順序)
-  { id: '5-4', chapter: 5, titleKey: 'lvl.5-4.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => northRoom }
+  { id: '5-4', chapter: 5, titleKey: 'lvl.5-4.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => northRoom },
+  // 5-5 最後的機關：第五章 Boss 三階段 (5-5a 地板被重畫 / 5-5b 殘影守門 / 5-5c 收束)；三扇窗都通關後開放 (星釘門 = ch5.windows)
+  { id: '5-5', chapter: 5, titleKey: 'lvl.5-5.title', abilities: ['nib', 'scale'], unlock: { after: ['5-2', '5-3', '5-4'] }, load: () => engineRoom }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

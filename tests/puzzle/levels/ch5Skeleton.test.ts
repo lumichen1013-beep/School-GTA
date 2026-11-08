@@ -68,13 +68,13 @@ const spin = (...ts: Turn[]): CubeState => ts.reduce<CubeState>((s, t) => { cons
 
 describe('第五章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第五章 (閣樓主題、levels 5-1)；LevelEntry 5-1 (筆尖 + 比例尺、前置 4-4)；CUBE_CHAPTERS chapter 5 (七間房 + 四格走道、從樓梯口南門進、要尺度卡)', () => {
-    expect(CHAPTERS.find(c => c.id === 5)).toEqual({ id: 5, titleKey: 'ch.5.title', theme: 'attic', levels: ['5-1', '5-2', '5-3', '5-4'] }); // 5-2 東窗登錄；5-3 西窗登錄；5-4 北窗登錄
+    expect(CHAPTERS.find(c => c.id === 5)).toEqual({ id: 5, titleKey: 'ch.5.title', theme: 'attic', levels: ['5-1', '5-2', '5-3', '5-4', '5-5'] }); // 5-2 東窗登錄；5-3 西窗登錄；5-4 北窗登錄；5-5 最後的機關登錄
     expect([TEXT('ch.5.title'), THEMES.attic.id, THEMES.meadow.id]).toEqual(['第五章　閣樓', 'attic', 'meadow']);
     const e = levelById('5-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([5, ['nib', 'scale'], ['4-4'], sky, '天窗間']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect([cubeChapterOf('5-1'), CH5.cube, CH5.start, CH5.levels, CH5.scaleCards, Object.keys(CH5.rooms).sort()]).toEqual([
-      CH5, CH5_CUBE, { room: 'landing', door: 'doorS' }, { '5-1': 'sky', '5-2': 'east', '5-3': 'west', '5-4': 'north' }, true,
+      CH5, CH5_CUBE, { room: 'landing', door: 'doorS' }, { '5-1': 'sky', '5-2': 'east', '5-3': 'west', '5-4': 'north', '5-5': 'engine' }, true,
       ['east', 'engine', 'landing', 'meadow', 'north', 'sky', 'walkA', 'walkB', 'walkC', 'walkD', 'west']
     ]);
     expect(CHAPTERS.find(c => c.id === 6)).toBeUndefined(); // 終章在 6-1 實作時登錄
@@ -183,11 +183,11 @@ describe('第五章骨架：走廊格與連接表', () => {
 describe('第五章骨架：七間占位房', () => {
   it('門位 (id、型別、本地門位、座標、封門)：樓梯口 S 門 / U 窄梯；天窗間 S / E 門、D 地板梯口 (封到 5-5c)；東窗 N / D；西窗 S / D；北窗 E / D；機關 N / S (星釘、兩面都封) / U (封到 5-5c)；林心六個門位都封到 5-5c', () => {
     const doors = (l: typeof sky) => l.objects.filter(o => o.type === 'cubeDoor').map(o => o.type === 'cubeDoor' && [o.id, o.side, o.kind, o.x, o.z, o.sealed?.until ?? null]);
-    expect(doors(landing)).toEqual([['doorS', 'S', 'door', -2, 4.8, null], ['hatchU', 'U', 'door', 2.6, -4.4, null]]);
-    expect(doors(sky)).toEqual([['doorS', 'S', 'door', -8, 4.8, null], ['doorE', 'E', 'door', 11.8, 0, null], ['hatchD', 'D', 'door', 0, 1.6, '5-5c']]);
-    expect(doors(east)).toEqual([['doorN', 'N', 'door', -4, -4.8, null], ['hatchD', 'D', 'door', 3, 1.6, null]]);
-    expect(doors(west)).toEqual([['doorS', 'S', 'door', 4, 4.8, null], ['hatchD', 'D', 'door', -3, 1.6, null]]);
-    expect(doors(north)).toEqual([['doorE', 'E', 'door', 9.8, 0, null], ['hatchD', 'D', 'door', -3, 1.6, null]]);
+    expect(doors(landing)).toEqual([['doorS', 'S', 'door', -2, 4.8, null], ['hatchU', 'U', 'door', 2.6, -4.4, null], ['holeE', 'E', 'door', 5.8, 0, null], ['holeW', 'W', 'door', -5.8, 0, null]]);
+    expect(doors(sky)).toEqual([['doorS', 'S', 'door', -8, 4.8, null], ['doorE', 'E', 'door', 11.8, 0, null], ['holeN', 'N', 'door', 7.6, -4.8, null], ['holeW', 'W', 'door', -11.8, 0, null], ['hatchD', 'D', 'door', 0, 1.6, '5-5c']]);
+    expect(doors(east)).toEqual([['doorN', 'N', 'door', -4, -4.8, null], ['hatchD', 'D', 'door', 3, 1.6, null], ['holeS', 'S', 'door', 0.6, 4.8, null]]);
+    expect(doors(west)).toEqual([['doorS', 'S', 'door', 4, 4.8, null], ['hatchD', 'D', 'door', -3, 1.6, null], ['holeN', 'N', 'door', -7.6, -4.8, null]]);
+    expect(doors(north)).toEqual([['doorE', 'E', 'door', 9.8, 0, null], ['hatchD', 'D', 'door', -3, 1.6, null], ['holeW', 'W', 'door', -9.8, 0, null]]);
     expect(doors(engine)).toEqual([['doorN', 'N', 'door', -6, -4.8, 'ch5.windows'], ['doorS', 'S', 'door', 6, 4.8, 'ch5.windows'], ['hatchU', 'U', 'door', 0, -4.4, '5-5c']]);
     expect(engine.objects.filter(o => o.type === 'cubeDoor' && o.sealed?.both).map(o => o.id)).toEqual(['doorN', 'doorS']);
     expect(doors(meadow).map(d => d && [d[0], d[1], d[5]])).toEqual([['hatchD', 'D', '5-5c'], ['hatchU', 'U', '5-5c'], ['doorN', 'N', '5-5c'], ['doorE', 'E', '5-5c'], ['doorS', 'S', '5-5c'], ['doorW', 'W', '5-5c']]);
@@ -199,7 +199,7 @@ describe('第五章骨架：七間占位房', () => {
       const issues = validateLevel(l, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, abilities: ['nib', 'scale'] });
       expect([id, issues.map(i => i.code)]).toEqual([id, WALKS.includes(id) ? ['level.noExit'] : []]);
       if (!WALKS.includes(id)) expect([id, layoutDepthIssues(l)]).toEqual([id, []]);
-      expect([id, l.theme, l.turnBudget]).toEqual([id, id === 'meadow' ? 'meadow' : 'attic', { base: id === 'meadow' ? 8 : 10 }]);
+      expect([id, l.theme, l.turnBudget]).toEqual([id, id === 'meadow' ? 'meadow' : 'attic', id === 'engine' ? { base: 10, puzzles: { '5-5a': 7 }, refillOn: ['5-5a'] } : { base: id === 'meadow' ? 8 : 10 }]);
     }
     expect(Object.values(ROOMS).map(l => [l.bounds.minX, l.bounds.maxX])).toEqual([[-6, 6], [-12, 12], [-10, 10], [-10, 10], [-10, 10], [-14, 14], [-10, 10], [-6, 6], [-6, 6], [-6, 6], [-6, 6]]);
     expect([sky.id, east.id, west.id, north.id, engine.id, meadow.id, landing.id, walkA.id]).toEqual(['5-1', '5-2', '5-3', '5-4', '5-5', '6-1', 'landing', 'walkA']);

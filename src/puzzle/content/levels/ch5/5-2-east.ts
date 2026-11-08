@@ -19,6 +19,8 @@ const objects: ObjDef[] = [
   floor(-10, 10),
   door('N', 'door', -4.0),
   hatch('D', 'door', 3.0, 1.6),
+  // v0.4 5-5a 洞位 (平常不在場；機關的門牌讀作「間」、走道那一頭正對這一面時才接上)
+  door('S', 'door', 0.6, { id: 'holeS', hole: true, labelKey: 'lvl.ch2.hole' }),
   // ── 中景：東窗的窗框 (兩行直刻的詩；可寫的那一行 = 標籤：窗朝下才讀作倒影、才收詞卡) ──
   { id: 'poem', type: 'poemWindow', face: 'D', upper: 'lvl.5-2.poem.upper', upperFlip: 'lvl.5-2.poem.upperFlip',
     levelText: 'lvl.5-2.poem.level', upText: 'lvl.5-2.poem.up', downText: 'lvl.5-2.poem.down', doneText: 'lvl.5-2.poem.done', doneFlag: '5-2',

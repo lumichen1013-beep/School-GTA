@@ -64,7 +64,7 @@ export function chapterDoors(rooms: Readonly<Record<string, LevelDef>>): DoorInf
       if (o.type !== 'cubeDoor') continue;
       out.push({
         room, door: o.id, side: o.side, kind: o.kind,
-        ...(o.plate ? { plate: { label: o.plate, card: PLATE_CARD } } : {}), ...(o.hole ? { hole: true } : {}), ...(o.glyph ? { glyph: o.glyph } : {})
+        ...(o.plate ? { plate: { label: o.plate, card: PLATE_CARD } } : {}), ...(o.hole ? { hole: true } : {}), ...(o.glyph ? { glyph: o.glyph } : {}), ...(o.sealed ? { sealed: o.sealed.until } : {})
       });
     }
   }

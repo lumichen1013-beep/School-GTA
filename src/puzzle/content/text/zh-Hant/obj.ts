@@ -55,6 +55,7 @@ export const obj = {
   'obj.inkBottle.verb': '拿起',
   'obj.parchment.verb': '拿起',
   'obj.hangScale.verb': '看秤',
+  'obj.starSlots.verb': '看光槽',
   'obj.backpack.verb': '查看',
   'obj.ballastBox.verb': '查看',
   'obj.pane.verb': '拿起',
