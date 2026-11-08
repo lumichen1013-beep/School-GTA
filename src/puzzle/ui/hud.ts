@@ -1,6 +1,5 @@
 import type { Mode } from '../core/types';
 import type { Text } from '../text/text';
-import { ITEM_ICONS } from './icons';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 
@@ -31,7 +30,6 @@ export interface HudData {
 export class PuzzleHud {
   private root = $('pz-root');
   private modeEl = $('pz-mode');
-  private invEl = $('pz-inv');
   private inkEl = $('pz-ink');
   private ink = '';
   private promptEl = $('pz-prompt');
@@ -40,8 +38,6 @@ export class PuzzleHud {
   private clearEl = $('pz-clear');
   private toastUntil = 0;
   private mode: Mode | null = null;
-  private invKey: string | null = null;
-  private invCount = 0;
   private prompt: string | null = null;
   private toastSeq = 0;
   private combineBtn = $('pz-combine');
@@ -54,17 +50,15 @@ export class PuzzleHud {
 
   constructor(private text: Text) {}
 
-  /** 新世界開始：只記下目前訊息序號 (不重播舊訊息)；物品欄下次重畫但不播取得動畫 */
+  /** 新世界開始：只記下目前訊息序號 (不重播舊訊息) */
   reset(msgSeq: number): void {
     this.toastSeq = msgSeq;
-    this.invKey = null;
   }
 
   render(m: HudData, nowMs: number): void {
     if (m.toast.seq !== this.toastSeq) { this.toastSeq = m.toast.seq; this.toast(m.toast.text, nowMs); }
     this.tick(nowMs);
     this.setMode(m.mode, m.modeText);
-    this.setItems(m.items);
     this.setPrompt(m.prompt);
     if ((m.ink ?? '') !== this.ink) { this.ink = m.ink ?? ''; this.inkEl.textContent = this.ink; }
     if ((m.combine ?? '') !== this.combineText) {
@@ -79,21 +73,6 @@ export class PuzzleHud {
     this.mode = m;
     this.modeEl.textContent = label;
     this.root.classList.toggle('mode2d', m === '2d');
-  }
-  private setItems(items: HudData['items']): void {
-    const key = items.map(i => `${i.id}:${i.n}`).join(',');
-    if (key === this.invKey) return;
-    const count = items.reduce((s, i) => s + i.n, 0);
-    if (this.invKey !== null && count > this.invCount) {
-      this.invEl.classList.remove('got');
-      void this.invEl.offsetWidth; // 重新觸發取得動畫
-      this.invEl.classList.add('got');
-    }
-    this.invKey = key;
-    this.invCount = count;
-    this.invEl.innerHTML = items.length
-      ? `${this.text('ui.inv.label')} ${items.map(i => `${ITEM_ICONS[i.id] ?? ''}<b>${i.name}</b>`).join('')}`
-      : this.text('ui.inv.none');
   }
   private setPrompt(text: string | null): void {
     if (text === this.prompt) return;

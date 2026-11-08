@@ -19,6 +19,7 @@ import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom, fillHelp, type HelpRow } from '../ui/dom';
 import { Toolbar } from '../ui/toolbar';
+import { InventoryPopup } from '../ui/inventory';
 import { deriveToolbar } from './toolbarModel';
 import { PuzzleHud } from '../ui/hud';
 import { CubeMapOverlay } from '../ui/cubeMap';
@@ -71,6 +72,7 @@ export class PuzzleApp {
   private renderer: THREE.WebGLRenderer;
   private hud: PuzzleHud;
   private toolbar: Toolbar;
+  private items: InventoryPopup;
   /** 「重置」鈕按下：下一幀當成按了重新進房 (沿用 routeFrame 的確認窗) */
   private restartRequested = false;
   private cubeMap: CubeMapOverlay;
@@ -94,6 +96,7 @@ export class PuzzleApp {
     buildPuzzleDom(root, this.text, this.helpRows());
     this.hud = new PuzzleHud(this.text);
     this.toolbar = new Toolbar(id => this.barClick(id));
+    this.items = new InventoryPopup(root, { pick: id => this.session?.inventoryPick(id), close: () => this.session?.closeInventory() });
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
       tab: () => this.session?.toggleTurnMode(),
       input: i => this.session?.turnInput(i)
@@ -136,6 +139,7 @@ export class PuzzleApp {
       { keys: [keyLabel(b.turnMode[0] ?? ''), keyLabel(b.undo[0] ?? '')], labelKey: 'ui.help.turn' },
       { keys: ['\u2190\u2192\u2191\u2193'], labelKey: this.settings.turnMode === 'instant' ? 'ui.help.turnInstant' : 'ui.help.turnConfirm' },
       { keys: b.combine.map(keyLabel), labelKey: 'ui.help.combine' },
+      { keys: b.inventory.map(keyLabel), labelKey: 'ui.help.items' },
       { keys: b.help.map(keyLabel), labelKey: 'ui.help.toggle' }
     ];
   }
@@ -287,6 +291,7 @@ export class PuzzleApp {
         fx: dir => cssCubeFx(document.getElementById('pz-canvas')!, document.getElementById('pz-veil')!, dir, this.reduceMotion()),
         map: this.cubeMap,
         tray: this.tray,
+        items: this.items,
         calm: this.settings.calmTension,
         still: this.reduceMotion(),
         onTrayOpen: () => this.input.releaseAll(),
@@ -344,9 +349,10 @@ export class PuzzleApp {
   }
 
   /** 工具列：重置 = 重新進房 (確認窗)；魔方 / 2D / 3D = LevelSession.requestMode */
-  private barClick(id: 'reset' | 'cube' | '2d' | '3d'): void {
+  private barClick(id: 'reset' | 'cube' | '2d' | '3d' | 'items'): void {
     if (this.screen.id !== 'level' || !this.session) return;
     if (id === 'reset') this.restartRequested = true;
+    else if (id === 'items') this.session.toggleInventory();
     else this.session.requestMode(id);
   }
 
@@ -481,7 +487,7 @@ export class PuzzleApp {
       touch: this.touch
     };
     this.hud.renderHelp(deriveHelpView(this.settings.helpOpen, ctx, this.text, this.bindings));
-    this.toolbar.render(deriveToolbar({ inLevel: ctx.inLevel, ...(s ? s.toolbarContext : { renderMode: '3d', onCube: false, dialChapter: false, dialActive: false, mapOpen: false }) }, this.text));
+    this.toolbar.render(deriveToolbar({ inLevel: ctx.inLevel, ...(s ? s.toolbarContext : { renderMode: '3d', onCube: false, dialChapter: false, dialActive: false, mapOpen: false, itemCount: 0, itemsOpen: false }) }, this.text));
     if (!ctx.inLevel && this.hud.tipShowing) this.hud.showTip(null, now, 0);
     this.hud.tickTip(now);
     if (this.hud.tipShowing) return;

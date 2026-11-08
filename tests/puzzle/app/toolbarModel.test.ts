@@ -14,31 +14,36 @@ import type { PuzzleHud } from '../../../src/puzzle/ui/hud';
 import { resolveTheme } from '../../../src/puzzle/render/themes';
 import { place } from '../helpers';
 
-const ctx = (o: Partial<ToolbarContext> = {}): ToolbarContext => ({ inLevel: true, renderMode: '3d', onCube: true, dialChapter: true, dialActive: true, mapOpen: false, ...o });
+const ctx = (o: Partial<ToolbarContext> = {}): ToolbarContext => ({ inLevel: true, renderMode: '3d', onCube: true, dialChapter: true, dialActive: true, mapOpen: false, itemCount: 0, itemsOpen: false, ...o });
 const ids = (c: ToolbarContext) => deriveToolbar(c, TEXT).buttons.map(b => [b.id, b.label, b.active, b.enabled]);
 
 describe('deriveToolbar', () => {
   it('控制盤章節、已啟動：重置 + 魔方 / 2D / 3D，目前模式高亮 (實景 = 3D)', () => {
-    expect(ids(ctx())).toEqual([['reset', '重置', false, true], ['cube', '魔方', false, true], ['2d', '2D', false, true], ['3d', '3D', true, true]]);
+    expect(ids(ctx())).toEqual([['reset', '重置', false, true], ['cube', '魔方', false, true], ['2d', '2D', false, true], ['3d', '3D', true, true], ['items', '道具', false, true]]);
     expect(deriveToolbar(ctx(), TEXT).show).toBe(true);
   });
 
   it('藏寶圖 = 2D 高亮；展開圖 / 轉動模式開著 = 魔方高亮', () => {
     expect(activeMode(ctx({ renderMode: '2d' }))).toBe('2d');
     expect(activeMode(ctx({ renderMode: '2d', mapOpen: true }))).toBe('cube');
-    expect(ids(ctx({ renderMode: '2d', mapOpen: true })).map(b => b[2])).toEqual([false, true, false, false]);
+    expect(ids(ctx({ renderMode: '2d', mapOpen: true })).map(b => b[2])).toEqual([false, true, false, false, false]);
   });
 
   it('魔方儀未啟動 / 第一章 (拉桿) = 魔方鈕停用；第一章開著展開圖 = 2D 高亮；單房關卡沒有魔方鈕；不在關卡 = 不顯示', () => {
     expect(ids(ctx({ dialActive: false }))[1]).toEqual(['cube', '魔方', false, false]);
     expect(ids(ctx({ dialChapter: false, dialActive: false, renderMode: '2d', mapOpen: true }))[1]).toEqual(['cube', '魔方', false, false]);
     expect(activeMode(ctx({ dialChapter: false, renderMode: '2d', mapOpen: true }))).toBe('2d');
-    expect(ids(ctx({ onCube: false, dialChapter: false })).map(b => b[0])).toEqual(['reset', '2d', '3d']);
+    expect(ids(ctx({ onCube: false, dialChapter: false })).map(b => b[0])).toEqual(['reset', '2d', '3d', 'items']);
     expect(deriveToolbar(ctx({ inLevel: false }), TEXT).show).toBe(false);
   });
 
   it('觸控 / 輔助技術：每顆都有說明 (aria)', () => {
-    expect(deriveToolbar(ctx(), TEXT).buttons.map(b => b.aria)).toEqual(['重新進房（需確認）', '展開圖與轉動模式', '切到藏寶圖（2D）', '切到實景（3D）']);
+    expect(deriveToolbar(ctx(), TEXT).buttons.map(b => b.aria)).toEqual(['重新進房（需確認）', '展開圖與轉動模式', '切到藏寶圖（2D）', '切到實景（3D）', '道具欄（0 件）']);
+  });
+
+  it('道具鈕：角標 = 持有總數 (0 = 不畫)；道具欄開著 = 高亮', () => {
+    const items = (c: ToolbarContext) => deriveToolbar(c, TEXT).buttons.find(b => b.id === 'items')!;
+    expect(['badge' in items(ctx()), items(ctx({ itemCount: 5, itemsOpen: true }))]).toEqual([false, { id: 'items', label: '道具', aria: '道具欄（5 件）', active: true, enabled: true, badge: 5 }]);
   });
 });
 

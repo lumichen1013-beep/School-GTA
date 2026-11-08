@@ -23,6 +23,8 @@ import { applyChapterEvent } from './chapterEvents';
 import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduceTurnInstant, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel, type TurnStyle } from './cubeMapModel';
 import type { TurnClick } from '../ui/cubeMap';
 import { modeIntent, type BarMode, type ToolbarContext } from './toolbarModel';
+import { deriveInventory, type InventoryView } from './inventoryModel';
+import type { InventoryPopup } from '../ui/inventory';
 import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
 export interface SessionContext {
@@ -39,6 +41,8 @@ export interface SessionContext {
   map?: CubeMapOverlay;
   /** 字卡匣 (N22) */
   tray?: CardTray;
+  /** 道具欄 popup (2026-11-08) */
+  items?: InventoryPopup;
   /** 減弱緊張效果 (驚嚇改平靜版；規格 9.1) */
   calm?: boolean;
   /** 減弱動態 (純裝飾的浮動改為靜止；規格 7.2、story-bible 8.3) */
@@ -90,6 +94,9 @@ export class LevelSession {
   private tapInteract = false;
   /** 工具列的 2D / 3D 鈕：下一幀送一次切換 (flip)；轉場中按下的作廢 */
   private tapFlip = false;
+  /** 道具欄 popup 開著、點選的那一格 (2026-11-08；開著時角色不動、世界照常；展開圖 / 字卡匣 / 轉動模式打開 → 收起) */
+  private invOpen = false;
+  private invSel: string | null = null;
   /** 字卡匣關著時按了 1～3 / X (站在標籤前)：等匣打開後補做這一下 (n = 第幾格；0 = 取下)；E 沒打開匣 (缺卡 / 缺筆尖) → 0.25 秒後作廢 */
   private pendingTray: number | null = null;
   private pendingAge = 0;
@@ -98,6 +105,8 @@ export class LevelSession {
   private turnSel: TurnModeModel['selected'] = null;
   /** 直接轉：滑鼠懸停的標頭 (預覽用；不改焦點) */
   private hoverSel: TurnModeModel['selected'] = null;
+  /** 直接轉：用過方向鍵 / WASD 之後才畫鍵盤焦點的預覽 (只用點的玩家 = 不出現「選中但還沒轉」的樣子) */
+  private keyFocus = false;
   private axes: AxisMemo = { x: 0, z: 0 };
   private chapterQueue: ChapterCommand[] = [];
   /** 魔方儀剛啟動：下一次能進轉動模式時 (切到藏寶圖、站穩) 自動打開展開圖的轉動模式 (規格 5.4.2) */
@@ -148,6 +157,7 @@ export class LevelSession {
     this.roomClearSent = new Set<string>();
     this.trayLabel = null;
     this.pendingTray = null;
+    this.invOpen = false;
     this.commands = [];
     this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm, still: this.ctx.still });
     this.cams = new PuzzleCameras(w);
@@ -237,6 +247,8 @@ export class LevelSession {
     this.turnMode = true;
     this.mapOpen = true;
     this.hoverSel = null;
+    this.keyFocus = false;
+    this.invOpen = false;
     // 直接轉：鍵盤焦點先放在你所在的那一排 (方向鍵按下去就轉)；先預覽再確認：沒有選取
     this.turnSel = this.turnStyle === 'instant' ? deriveTurnMode(this.cs, this.ctx.text, null, 'instant').home ?? null : null;
     this.autoTurn = false;
@@ -255,6 +267,7 @@ export class LevelSession {
     if (i.t === 'hover') { this.hoverSel = instant && i.group !== null && i.dir !== undefined ? { group: i.group, dir: i.dir } : null; return; }
     const m = deriveTurnMode(this.cs, this.ctx.text, this.turnSel, this.turnStyle);
     if (instant) {
+      if (i.t === 'step' || i.t === 'cell') this.keyFocus = true;
       const r = reduceTurnInstant(this.turnSel, i, m);
       if (r.note) say(this.world, r.note.key, r.note.params);
       this.turnSel = r.sel;
@@ -315,6 +328,7 @@ export class LevelSession {
   private openTray(label: string): void {
     this.trayLabel = label;
     this.trayTabSel = null;
+    this.invOpen = false;
     this.mapOpen = false;
     this.turnMode = false;
     this.ctx.onTrayOpen?.();
@@ -338,8 +352,29 @@ export class LevelSession {
   trayRemove(): void { const m = this.trayModel(); const c = m && uncardCommand(m); if (c) this.commands.push(c); }
   /** 工具列要的狀態 (app/toolbarModel；inLevel 由外殼補) */
   get toolbarContext(): Omit<ToolbarContext, 'inLevel'> {
-    return { renderMode: this.renderMode, onCube: this.onCube, dialChapter: isDialChapter(this.cs.spec), dialActive: !!this.cs.state.dial, mapOpen: this.isMapOpen };
+    const itemCount = Object.values(this.world.inv).reduce((s, n) => s + Math.max(0, n), 0);
+    return { renderMode: this.renderMode, onCube: this.onCube, dialChapter: isDialChapter(this.cs.spec), dialActive: !!this.cs.state.dial, mapOpen: this.isMapOpen, itemCount, itemsOpen: this.invOpen };
   }
+
+  /** 道具欄開著 (開發期自動化驗證用) */
+  get isInventoryOpen(): boolean { return this.invOpen; }
+  /** I /「道具」鈕：開 / 關道具欄 (字卡匣開著時不開；打開 = 收起展開圖與轉動模式、放開按著的鍵) */
+  toggleInventory(): void {
+    if (this.invOpen) { this.invOpen = false; return; }
+    if (this.trayLabel !== null || this.fx) return;
+    this.mapOpen = false;
+    this.turnMode = false;
+    this.turnSel = null;
+    this.hoverSel = null;
+    this.invOpen = true;
+    this.invSel = null;
+    this.ctx.releaseInput?.();
+  }
+  closeInventory(): void { this.invOpen = false; }
+  /** 道具欄點一格：顯示它的名稱與說明 */
+  inventoryPick(id: string): void { if (this.invOpen) this.invSel = id; }
+  /** 道具欄的資料 (關著 = null) */
+  inventoryModel(): InventoryView | null { return this.invOpen ? deriveInventory(this.world.inv, this.ctx.text, this.invSel) : null; }
 
   /** 工具列的模式鈕「魔方 / 2D / 3D」(app/toolbarModel modeIntent)：收起展開圖、進轉動模式 (照進入條件說明原因)、下一幀切換 */
   requestMode(m: BarMode): void {
@@ -367,6 +402,7 @@ export class LevelSession {
     if (!this.onCube || this.fx) return;
     if (this.world.player.mode !== '2d') { say(this.world, 'msg.cube.mapOnly2d'); this.mapOpen = false; return; }
     this.mapOpen = !this.mapOpen;
+    if (this.mapOpen) this.invOpen = false;
     if (!this.mapOpen) { this.turnMode = false; this.turnSel = null; }
   }
 
@@ -387,6 +423,11 @@ export class LevelSession {
       return;
     }
     const invBefore = JSON.stringify(this.world.inv);
+    // 道具欄：I 開 / 關、Esc 關 (開著時這一下 Esc 不另做別的)
+    let pressedShell = input.pressed;
+    if (input.pressed.includes('inventory')) this.toggleInventory();
+    else if (this.invOpen && input.pressed.includes('cancel')) { this.invOpen = false; pressedShell = input.pressed.filter(a => a !== 'cancel'); }
+    input = pressedShell === input.pressed ? input : { ...input, pressed: pressedShell };
     if (this.turnMode && (this.world.player.mode !== '2d' || this.trayLabel !== null)) { this.turnMode = false; this.turnSel = null; }
     if (this.turnMode) {
       // 轉動模式：移動軸、跳躍、世界動作不送進世界 (世界照常推進，規格 Q-AF)；方向鍵選標頭、Enter 確認、Z 回退、Esc / Tab 離開、M 關圖
@@ -404,6 +445,8 @@ export class LevelSession {
     if (this.tapInteract) { this.tapInteract = false; if (!pressed.includes('interact')) pressed = [...pressed, 'interact']; }
     if (this.tapFlip) { this.tapFlip = false; if (!pressed.includes('flip')) pressed = [...pressed, 'flip']; }
     let move = { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump };
+    // 道具欄開著：角色不動、不互動 / 切換 (世界照常推進)；M / Tab 照常 (打開展開圖 / 轉動模式會收起道具欄)
+    if (this.invOpen) { pressed = []; move = { moveX: 0, moveZ: 0, jump: false }; }
     if (this.trayLabel !== null) {
       // 字卡匣開著：1～3 貼卡、X 取下、← / → 換頁、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)
       if (!this.trayModel()) this.trayLabel = null;
@@ -423,7 +466,7 @@ export class LevelSession {
       if (input.pressed.includes('turnMode')) this.toggleTurnMode();
       if (input.pressed.includes('combine')) this.combine();
       // 字卡匣關著時按 1～3 / X：站在標籤前 = 按 E 打開並補做這一下；否則說明怎麼打開 (cardTrayModel.closedTrayKey)
-      const k = pressed.includes('interact') ? null : closedTrayKey(this.world, input.pressed);
+      const k = pressed.includes('interact') || this.invOpen ? null : closedTrayKey(this.world, input.pressed);
       if (k?.open) { this.pendingTray = k.n; this.pendingAge = 0; pressed = [...pressed, 'interact']; }
       else if (k?.howto) say(this.world, 'msg.cards.howto');
     }
@@ -464,7 +507,7 @@ export class LevelSession {
     const hud = deriveHud(w, ctx.text, { renderMode: this.renderMode, locked, bindings: ctx.bindings, ink: this.onCube ? inkHud(this.cs, ctx.text, this.renderMode) : null });
     if (this.renderMode === '3d') { this.mapOpen = false; this.turnMode = false; }
     const tray = locked ? null : this.trayModel();
-    if (tray || this.isTurnMode) hud.prompt = null;
+    if (tray || this.isTurnMode || this.invOpen) hud.prompt = null;
     // 互動提示可點 (觸控 = 按 E；mobile-controls 2.1)；展開圖的提示不可點 (另有「圖」鍵)
     ctx.hud.setPromptTap(!!hud.prompt);
     // 2D、在魔方上、沒有其他提示：提示可以看展開圖
@@ -475,6 +518,7 @@ export class LevelSession {
     ctx.map?.setButton(this.onCube && this.renderMode === '2d' && !locked && !tray);
     ctx.map?.render(this.isMapOpen && !locked && !tray ? this.mapModel() : null);
     ctx.tray?.render(tray);
+    ctx.items?.render(locked ? null : this.inventoryModel());
     const p = w.player;
     const prev = this.loop.prev;
     const saved = { x: p.x, y: p.y, z: p.z };
@@ -502,13 +546,14 @@ export class LevelSession {
     const tab = turnTab(this.cs, text, this.turnMode, this.overlay);
     // 直接轉：預覽 = 滑鼠懸停的那一顆 (沒有 = 鍵盤焦點)
     const style = this.turnStyle;
-    const sel = style === 'instant' ? this.hoverSel ?? this.turnSel : this.turnSel;
+    const sel = style === 'instant' ? this.hoverSel ?? (this.keyFocus ? this.turnSel : null) : this.turnSel;
     return { ...m, ...(tab ? { tab } : {}), ...(this.turnMode ? { turn: deriveTurnMode(this.cs, text, sel, style) } : {}) };
   }
 
   dispose(): void {
     this.cancelFx();
     this.ctx.tray?.render(null);
+    this.ctx.items?.render(null);
     this.ctx.map?.render(null);
     this.ctx.map?.setButton(false);
     this.view?.dispose();

@@ -15,12 +15,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 #pz-status span { padding: 5px 14px; display: inline-flex; align-items: center; gap: 6px; height: 24px; }
 #pz-mode { font-weight: 700; letter-spacing: .25em; background: var(--accent) !important; transition: background .3s; }
 #pz-root.mode2d #pz-mode { background: var(--inkblue) !important; color: var(--paper); }
-#pz-inv b { font-weight: 700; color: #a8640f; }
 /* v0.4 控制盤：2D 的墨量小計 (●○ 形狀區分) */
 #pz-ink { color: #2c3fb0; font-weight: 700; letter-spacing: .12em; }
 #pz-status #pz-ink:empty { display: none; }
-#pz-inv svg { display: block; }
-#pz-inv.got { animation: pz-got .9s ease-out; }
 @keyframes pz-got { 0% { transform: scale(1); } 30% { transform: scale(1.18) rotate(-3deg); box-shadow: 0 0 18px 6px rgba(245,194,66,.8); } 100% { transform: scale(1); } }
 /* 操作說明：預設收合成右上角小鈕 (不遮擋畫面與展開圖)；展開的面板在小鈕下方，遇到展開圖 / 字卡匣 / 轉動模式自動讓位 (app/helpModel) */
 #pz-help { position: absolute; top: 58px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.75; display: none;
@@ -38,6 +35,40 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 .pz-bar-btn.active { color: var(--paper); background: var(--inkblue); border-color: var(--ink); }
 .pz-bar-btn[data-bar="3d"].active { color: var(--ink); background: var(--accent); }
 .pz-bar-btn.off { border-style: dashed; opacity: .55; }
+/* 「道具」鈕：角標 = 持有總數；拿到新東西時播一次取得動畫 */
+.pz-bar-btn.items { position: relative; margin-left: 6px; }
+.pz-bar-badge { position: absolute; right: -7px; top: -7px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px;
+  font: 700 11px/18px inherit; font-style: normal; letter-spacing: 0; color: var(--paper); background: #a8640f; border: 1.5px solid var(--ink); }
+.pz-bar-btn.got { animation: pz-got .9s ease-out; }
+/* 道具欄 popup (2026-11-08；ui/inventory)：右上角下方的紙卡；格子 4 欄 (≥ 12 格，超過增列、卡片內捲動)；點一格 → 下方寫名稱與說明 */
+#pz-items {
+  position: absolute; top: 60px; right: 14px; width: min(92vw, 360px); max-height: calc(100% - 60px - 26%); box-sizing: border-box; display: none; flex-direction: column; gap: 8px;
+  padding: 10px 12px 12px; pointer-events: auto; z-index: 6; background: rgba(253,244,225,.97); border: 2px solid var(--ink); border-radius: 12px 4px 12px 4px; box-shadow: 4px 4px 0 rgba(58,38,24,.28);
+}
+#pz-items.show { display: flex; }
+.pz-items-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pz-items-title { letter-spacing: .3em; font-size: 16px; }
+.pz-items-close { min-width: 56px; height: 36px; font: 700 14px/1 inherit; color: var(--ink); background: var(--paper2); border: 2px solid var(--ink); border-radius: 10px; cursor: pointer; }
+.pz-items-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; overflow-y: auto; min-height: 0; flex: 0 1 auto; padding: 2px; }
+.pz-item { position: relative; aspect-ratio: 1; min-height: 52px; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 8px; box-sizing: border-box; }
+.pz-item svg { width: 70%; height: 70%; }
+.pz-item.sel { box-shadow: 0 0 0 3px var(--inkblue); background: #eef1ff; }
+.pz-item.card::after { content: ''; position: absolute; left: 4px; bottom: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--inkblue); }
+.pz-item.empty { cursor: default; background: rgba(246,226,192,.45); border: 1.5px dashed rgba(58,38,24,.3); }
+.pz-item-n { position: absolute; right: 3px; bottom: 2px; font: 700 12px/1 inherit; font-style: normal; color: var(--ink); }
+.pz-items-detail { min-height: 3.6em; font-size: 14px; line-height: 1.6; overflow-y: auto; flex: 0 0 auto; max-height: 8.5em; }
+.pz-items-detail p { margin: 2px 0 0; }
+.pz-items-name { font-size: 15px; }
+.pz-items-hint { color: #6b5440; }
+.pz-items-note { color: #2c3fb0; font-weight: 700; font-size: 13px; }
+@media (max-width: 600px) { #pz-items { top: 110px; left: 10px; right: 10px; width: auto; max-height: calc(100% - 110px - 24%); } }
+@media (max-height: 520px) {
+  #pz-items { top: 64px; max-height: calc(100% - 72px); width: min(70vw, 560px); flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+  #pz-items .pz-items-head { flex: 1 0 100%; }
+  #pz-items .pz-items-grid { flex: 1 1 55%; max-height: calc(100vh - 140px); grid-template-columns: repeat(4, minmax(44px, 1fr)); }
+  #pz-items .pz-items-detail { flex: 1 1 35%; max-height: calc(100vh - 140px); }
+}
 /* 模式字已併進工具列 (目前模式高亮)；元素保留供 HUD 切換 mode2d 樣式 */
 #pz-status #pz-mode { display: none; }
 #pz-help-btn {
@@ -366,12 +397,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   .pz-tray-cards { gap: 8px; }
   .pz-tray-card { min-width: 58px; }
 }
-/* 窄螢幕 (手機)：狀態列讓出右上角的說明小鈕、可換行 (模式字不被擠成直排；持有物多時換行而不是互相擠壓) */
+/* 窄螢幕 (手機)：狀態列 (墨量) 在第二列 */
 /* 觸控 / 窄螢幕：工具列鈕 ≥ 44 px */
 @media (max-width: 600px), (pointer: coarse) {
   .pz-bar-btn { min-width: 44px; height: 44px; padding: 0 8px; }
   #pz-help-btn { height: 44px; }
   #pz-help { top: 66px; }
+  .pz-items-close { height: 44px; }
 }
 /* 直屏窄螢幕：工具列占第一列 (右對齊)，狀態列 (墨 / 持有物) 移到第二列；展開圖卡片往下讓 */
 @media (max-width: 600px) {
@@ -386,8 +418,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 @media (max-width: 600px) {
   #pz-status { right: 14px; flex-wrap: wrap; gap: 6px; font-size: 13px; }
   #pz-status span { padding: 4px 10px; height: auto; min-height: 22px; }
-  #pz-mode { white-space: nowrap; letter-spacing: .12em; }
-  #pz-inv { flex-wrap: wrap; row-gap: 2px; line-height: 1.4; white-space: nowrap; }
 }
 /* 窄螢幕 (手機)：小鈕只剩「？」圖示；展開的面板改成右上角的窄卡 (字小、可捲動)，仍會讓位給展開圖 / 字卡匣 */
 @media (max-width: 600px) {

@@ -15,7 +15,8 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   root.replaceChildren();
   const hud = el('div', 'pz-hud');
   const status = el('div', 'pz-status');
-  status.append(el('span', 'pz-mode', text('term.mode3d')), el('span', 'pz-ink'), el('span', 'pz-inv', text('ui.inv.none')));
+  // 2026-11-08：持有物文字列改成上方工具列「道具」鈕 + 道具欄 popup (ui/inventory)
+  status.append(el('span', 'pz-mode', text('term.mode3d')), el('span', 'pz-ink'));
   const helpEl = el('div', 'pz-help');
   fillHelp(helpEl, text, help);
   // 操作說明預設收合成右上角的小鈕 (H / 點一下展開)；一次性操作小提示在畫面上方，數秒後自動消失 (app/helpModel)
