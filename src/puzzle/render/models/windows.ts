@@ -41,7 +41,7 @@ export function poemWindowModel(p: Painter, d: ObjDef, theme: Theme): PropModel 
   // 玻璃層 (實景)：星光 / 鏡面
   const light = p.mesh(wallPlane(2.3, 1.9), 0xf2e2c8, { opacity: 0.4, outline: false, shadow: false, unique: true, emissive: 0xf2e2c8, emissiveIntensity: 0.6 });
   light.position.set(WALL_X - 0.12, WIN_Y, 0);
-  const mirror = p.mesh(wallPlane(2.3, 1.9), 0x0c0e18, { opacity: 0.85, outline: false, shadow: false, unique: true });
+  const mirror = p.mesh(wallPlane(2.5, 2.1), 0x161a2a, { opacity: 0.96, outline: false, shadow: false, unique: true });
   mirror.position.set(WALL_X - 0.12, WIN_Y, 0);
   g.add(light, mirror);
   let reflect: THREE.Group | null = null;
@@ -66,7 +66,7 @@ export function poemWindowModel(p: Painter, d: ObjDef, theme: Theme): PropModel 
       // 倒影：兩行字上下顛倒地映在鏡面上 (淡)
       reflect = new THREE.Group();
       [d.upper, d.label?.textKey ?? ''].forEach((key, i) => {
-        const r = p.mesh(wallPlane(0.3, 1.7), 0xffffff, { map: verticalText(pal, text(key).replace('{c}', ' '), 'shadow'), opacity: 0.55, outline: false, shadow: false, unique: true });
+        const r = p.mesh(wallPlane(0.3, 1.7), 0xffffff, { map: verticalText(pal, text(key).replace('{c}', ' '), 'reflect'), opacity: 0.7, outline: false, shadow: false, unique: true });
         r.position.set(WALL_X - 0.14, WIN_Y, i === 0 ? 0.6 : -0.6);
         r.scale.y = -1;
         reflect!.add(r);
@@ -86,7 +86,7 @@ export function poemWindowModel(p: Painter, d: ObjDef, theme: Theme): PropModel 
     kl = approach(kl, v === 'up' ? 1 : 0, k);
     kf = approach(kf, v === 'flip' ? 1 : 0, k);
     (light.material as THREE.MeshStandardMaterial).opacity = 0.4 * kl;
-    (mirror.material as THREE.MeshStandardMaterial).opacity = 0.85 * kf;
+    (mirror.material as THREE.MeshStandardMaterial).opacity = 0.96 * kf;
     light.visible = is3d && kl > 0.02;
     mirror.visible = is3d && kf > 0.02;
     reflect!.visible = mirror.visible;

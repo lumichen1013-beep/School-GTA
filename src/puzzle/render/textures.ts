@@ -372,13 +372,14 @@ const CJK_FONT = '"PingFang TC", "Noto Sans TC", "Songti TC", serif';
 /**
  * v0.4 第五章 5-2 窗框上直刻的一行字 (由上往下)：carved = 木頭上的刻字 (實景)、ink = 藏寶圖的墨字、shadow = 地上的字影 / 玻璃裡的倒影 (淡、透明底)
  */
-export const verticalText = (pal: Palette, text: string, look: 'carved' | 'shadow'): THREE.Texture => cachedFor(pal, `vtext|${look}|${text}`, () => canvas(64, 320, g => {
+export const verticalText = (pal: Palette, text: string, look: 'carved' | 'shadow' | 'reflect'): THREE.Texture => cachedFor(pal, `vtext|${look}|${text}`, () => canvas(64, 320, g => {
   const chars = [...text];
   if (look === 'carved') {
     g.fillStyle = shade(0x6b5038, 1.05); g.fillRect(0, 0, 64, 320);
     g.strokeStyle = shade(0x6b5038, 0.6); g.lineWidth = 4; g.strokeRect(3, 3, 58, 314);
   }
-  g.fillStyle = look === 'carved' ? shade(0x6b5038, 0.42) : 'rgba(18,20,34,0.85)';
+  // reflect = 鏡面裡的倒影 (淡的星光色)；shadow = 地上的字影 (深)
+  g.fillStyle = look === 'carved' ? shade(0x6b5038, 0.42) : look === 'reflect' ? 'rgba(214,220,240,0.9)' : 'rgba(18,20,34,0.85)';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.font = `bold 48px ${CJK_FONT}`;
   const step = 300 / Math.max(1, chars.length);
@@ -392,6 +393,8 @@ export const verticalText = (pal: Palette, text: string, look: 'carved' | 'shado
 export const windowSketch = (pal: Palette, right: string, left: string, view: 'level' | 'up' | 'flip'): THREE.Texture => cachedFor(pal, `wsk|${view}|${right}|${left}`, () => canvas(320, 360, g => {
   const ink = toCss(pal.inkBlue);
   const [x0, y0, w, h] = [80, 20, 160, 220];
+  // 速寫紙 (藏寶圖的奶油紙；不透明底，避免透明處畫成黑)
+  g.fillStyle = toCss(pal.paperNote); g.fillRect(0, 0, 320, 360);
   if (view === 'flip') { g.fillStyle = 'rgba(26,30,52,0.82)'; g.fillRect(x0, y0, w, h); }
   if (view === 'up') {
     g.fillStyle = 'rgba(242,226,180,0.55)'; g.fillRect(x0, y0, w, h);
