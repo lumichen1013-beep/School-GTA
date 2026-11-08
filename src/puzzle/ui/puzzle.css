@@ -116,9 +116,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 }
 #pz-narration.hide { opacity: 0; pointer-events: none; }
 #pz-clear {
-  position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
-  color: var(--ink); background: radial-gradient(ellipse at 50% 45%, rgba(253,244,225,.97) 0%, rgba(243,217,182,.96) 80%);
+  position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: flex-start; gap: 14px; text-align: center;
+  color: var(--ink); background: radial-gradient(ellipse at 50% 45%, rgba(253,244,225,.97) 0%, rgba(243,217,182,.96) 80%); overflow: auto; padding: 16px; box-sizing: border-box;
 }
+/* 同 .pz-screen：auto 邊距置中，矮螢幕超高時從頂端捲動 */
+#pz-clear > :first-child { margin-top: auto; }
+#pz-clear > :last-child { margin-bottom: auto; }
 #pz-clear.show { display: flex; }
 #pz-clear h1 { margin: 0; font: 400 34px "Songti TC", "Noto Serif TC", serif; letter-spacing: .3em; }
 #pz-clear p { margin: 0; font-size: 20px; letter-spacing: .15em; color: #6a4a30; }
@@ -135,9 +138,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 #pz-continue[hidden] { display: none; }
 /* 選單 / 暱稱畫面：同一套奶油紙卡片風格 */
 .pz-screen {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px;
   color: var(--ink); background: radial-gradient(ellipse at 50% 45%, #fdf4e1 0%, #f3d9b6 75%, #e8c49a 100%); overflow: auto; padding: 24px; box-sizing: border-box;
 }
+/* 垂直置中但內容超高時從頂端開始、可捲動 (justify-content: center 會把上半部推出視窗外、捲不上去；
+   改由第一個 / 最後一個子元素的 auto 邊距置中：空間不夠時邊距歸 0) */
+.pz-screen > :first-child { margin-top: auto; }
+.pz-screen > :last-child { margin-bottom: auto; }
 .pz-screen h1 { margin: 0; font: 400 34px "Songti TC", "Noto Serif TC", serif; letter-spacing: .3em; }
 .pz-screen h2 { margin: 0 0 10px; font: 400 20px "Songti TC", "Noto Serif TC", serif; letter-spacing: .2em; color: #6a4a30; }
 .pz-card {
