@@ -16,6 +16,7 @@ import { depths } from './ch3/3-4-depths';
 import { hall } from './ch4/4-1-hall';
 import { sky } from './ch5/5-1-sky';
 import { eastRoom } from './ch5/5-2-east';
+import { westRoom } from './ch5/5-3-west';
 import { furnace } from './ch4/4-2-furnace';
 import { archive } from './ch4/4-3-archive';
 import { drawer } from './ch4/4-4-drawer';
@@ -78,7 +79,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 5-1 天窗間：第五章第一關 (魔方 3×3×3 切片轉、控制盤 = 觀星儀)；第四章章門打開 (4-4 通關) 後開放；能力 = 筆尖 + 比例尺 (第五章要「小」；占位版，謎題逐關加入)
   { id: '5-1', chapter: 5, titleKey: 'lvl.5-1.title', abilities: ['nib', 'scale'], unlock: { after: ['4-4'] }, load: () => sky },
   // 5-2 東窗：第五章三扇窗之一 (P18 / P1 倒過來的詩；完成 = 窗框 SE 鬆開)；5-1 通關後開放 (三扇窗任意順序)
-  { id: '5-2', chapter: 5, titleKey: 'lvl.5-2.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => eastRoom }
+  { id: '5-2', chapter: 5, titleKey: 'lvl.5-2.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => eastRoom },
+  // 5-3 西窗：第五章三扇窗之一 (P13 / P1 爸爸的墨 + 許問津的紙；完成 = 窗框 SW 鬆開)；5-1 通關後開放 (三扇窗任意順序)
+  { id: '5-3', chapter: 5, titleKey: 'lvl.5-3.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => westRoom }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

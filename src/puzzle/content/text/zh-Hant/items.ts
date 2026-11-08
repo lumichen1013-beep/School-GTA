@@ -43,6 +43,9 @@ export const items = {
   'item.page.garden.desc': '爸爸的園藝筆記撕下的一頁，畫著一株不認得的植物。',
   'item.chart.desc': '爸爸畫的展開圖，摺痕很深，有幾格被描了又描。',
   'item.notes.father.desc': '爸爸的筆記本，封皮被根繩磨得起毛。',
+  'item.ink.father.desc': '爸爸的墨水瓶，蓋子旋緊了。瓶身還沾著一點乾掉的墨。',
+  'item.parchment.desc': '一捲空白的羊皮紙，用細繩繫著。許問津的東西。',
+  'item.page.blank.desc': '吸過墨的羊皮紙，浮著淡淡的格線。一頁還沒寫字的手記。',
   // 之後新增、還沒寫說明的道具 (後備)
   'item.generic.desc': '老宅裡找到的東西。'
 };

@@ -26,6 +26,7 @@ import { inkLockModel, inkMarkModel, inkPipeModel, inkValveModel, markCaseModel 
 import { archiveScareModel, chartBoardModel, lastDrawerModel, notesDeskModel, sealCabinetModel, symbolKeyModel, symbolLockModel } from './archive';
 import { miniCubeModel, miniGearModel, selfTagModel, starScaleModel, workbenchModel } from './attic';
 import { poemWindowModel, starCaseModel } from './windows';
+import { inkBottleModel, parchmentModel, writingDeskModel } from './desk';
 import type { PropModel } from './types';
 import type { Theme } from '../themes';
 
@@ -81,7 +82,9 @@ export const MODELS: Readonly<Partial<Record<string, ModelFactory>>> = {
   // 5-1 天窗間：桌上的縮影、卡在它底層的齒輪、觀星儀的刻度盤、標籤「你」、工作桌
   miniCube: miniCubeModel, miniGear: miniGearModel, starScale: starScaleModel, selfTag: selfTagModel, workbench: workbenchModel,
   // 5-2 東窗：窗框上的詩 (順讀 / 側影 / 倒影；藏寶圖的窗速寫與標籤)、書案上的星表匣
-  poemWindow: poemWindowModel, starCase: starCaseModel
+  poemWindow: poemWindowModel, starCase: starCaseModel,
+  // 5-3 西窗：爸爸書桌上的筆記本 (合成台)、墨水瓶、許問津的空白羊皮紙 (東窗)
+  writingDesk: writingDeskModel, inkBottle: inkBottleModel, parchment: parchmentModel
 };
 
 /** 未登錄類型的後備外觀：洋紅盒 (開發期一眼看出缺模型，不會隱形) */

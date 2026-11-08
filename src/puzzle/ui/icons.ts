@@ -36,6 +36,9 @@ const ICONS: Readonly<Record<string, (ch: string) => string>> = {
   lens: () => svg(`<circle cx="20" cy="20" r="11" fill="#dfeefa"/><path d="M14 16 q3 -4 8 -4" stroke="${PAPER}" stroke-width="2.5"/><path d="M29 13 l3 -2" stroke-width="1.5"/>`),
   magnifier: () => svg(`<circle cx="16" cy="16" r="10" fill="#dfeefa" stroke-width="3"/><path d="M11 13 q2 -4 7 -4" stroke="${PAPER}" stroke-width="2.5"/><path d="M23 23 L34 34" stroke-width="4"/>`),
   ruler: () => svg(`<rect x="4" y="14" width="32" height="12" rx="1.5" fill="${GOLD}"/><path d="M9 14 v5 M14 14 v3 M19 14 v5 M24 14 v3 M29 14 v5" stroke-width="1.5"/>`),
+  inkBottle: () => svg(`<rect x="11" y="15" width="18" height="19" rx="3" fill="#1c2030"/><rect x="15" y="9" width="10" height="6" fill="${GOLD}"/><path d="M14 22 h12" stroke="${PAPER}" stroke-width="1.5" opacity=".6"/>`),
+  parchment: () => svg(`<rect x="7" y="13" width="26" height="14" rx="7" fill="${PAPER2}"/><ellipse cx="9" cy="20" rx="3" ry="7" fill="${PAPER}"/><path d="M20 13 v14" stroke="${AMBER}" stroke-width="2"/>`),
+  blankPage: () => svg(`<path d="M9 5 h16 l6 6 v24 h-22 Z" fill="${PAPER2}"/><path d="M25 5 v6 h6" fill="none"/><path d="M13 16 h14 M13 21 h14 M13 26 h14" stroke="${AMBER}" stroke-width="1" opacity=".6"/>`),
   generic: () => svg(`<path d="M8 14 l12 -6 l12 6 v14 l-12 6 l-12 -6 Z" fill="${PAPER2}"/><path d="M8 14 l12 6 l12 -6 M20 20 v14" fill="none"/>${glyph('?', INK).replace('y="25"', 'y="19"').replace('font-size="14"', 'font-size="9"')}`)
 };
 
@@ -44,7 +47,8 @@ function iconKind(id: string): string {
   const exact: Readonly<Record<string, string>> = {
     nib: 'nib', 'key.brass': 'key', 'key.study': 'keyStudy', 'key.greenhouse': 'keyGreen', 'key.cellar': 'keyCellar', 'key.bow': 'bow',
     'notes.father': 'notes', 'page.garden': 'page', 'ms.father': 'manuscript', proof: 'proof', chart: 'chart',
-    frame: 'frame', lens: 'lens', magnifier: 'magnifier', scale: 'ruler', 'card.da': 'scaleCard', 'card.xiao': 'scaleCard', 'card.ri': 'partCard', 'card.cai': 'partCard'
+    frame: 'frame', lens: 'lens', magnifier: 'magnifier', scale: 'ruler', 'card.da': 'scaleCard', 'card.xiao': 'scaleCard', 'card.ri': 'partCard', 'card.cai': 'partCard',
+    'ink.father': 'inkBottle', parchment: 'parchment', 'page.blank': 'blankPage'
   };
   if (exact[id]) return exact[id];
   const prefix: ReadonlyArray<[string, string]> = [['tooth.', 'tooth'], ['diary.', 'diary'], ['scrap.', 'scrap'], ['pane.', 'pane'], ['card.', 'wordCard'], ['key.', 'key']];

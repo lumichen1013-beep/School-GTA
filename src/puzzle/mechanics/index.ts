@@ -32,13 +32,14 @@ import { archive } from './archive';
 import { drawerMech } from './drawer';
 import { attic } from './attic';
 import { windows } from './windows';
+import { desk } from './desk';
 import { chapterDoors } from './cube';
 import type { CubeDef } from '../core/cube';
 import { arrivalBlocker, type ChapterSpec } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 
-/** 預設機制表：陣列順序即執行順序 (afterPhysics：plates 必須在 links 之前；scale 的 beforePhysics 重算尺寸 / 位置，balance 在 afterPhysics 讀重量；light 在 afterPhysics 讀章節層寫入的光；night 在 balance 之後讀半座天平是否閂住；depths 在 light 之後讀苔窗是否閂住、花窗讀光；chase 在 depths 之後讀柵門是否開著；mezz = H1 的書牆 / 書櫃，只有類型；attic = 第五章 5-1 縮影：beforePhysics 依標籤「你」定玩家尺寸、afterPhysics 寫 ext.mini、齒輪 / 星圖；windows = 第五章三扇窗的窗框詩與星表匣，只有類型) */
-export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts, deep, scale, balance, nursery, ink, light, night, depths, chase, mezz, cellar, archive, drawerMech, attic, windows];
+/** 預設機制表：陣列順序即執行順序 (afterPhysics：plates 必須在 links 之前；scale 的 beforePhysics 重算尺寸 / 位置，balance 在 afterPhysics 讀重量；light 在 afterPhysics 讀章節層寫入的光；night 在 balance 之後讀半座天平是否閂住；depths 在 light 之後讀苔窗是否閂住、花窗讀光；chase 在 depths 之後讀柵門是否開著；mezz = H1 的書牆 / 書櫃，只有類型；attic = 第五章 5-1 縮影：beforePhysics 依標籤「你」定玩家尺寸、afterPhysics 寫 ext.mini、齒輪 / 星圖；windows = 第五章三扇窗的窗框詩與星表匣，只有類型；desk = 5-3 爸爸的書桌 (合成台)、墨水瓶、羊皮紙，只有類型) */
+export const DEFAULT_MECHANICS: readonly Mechanic[] = [basics, items, links, plates, notes, exit, cube, sequence, labels, coats, dial, shelf, reveal, combineMech, reading, print, manuscripts, deep, scale, balance, nursery, ink, light, night, depths, chase, mezz, cellar, archive, drawerMech, attic, windows, desk];
 
 /**
  * 一章的 ChapterSpec (app / 測試共用)：門位由各房的 cubeDoor 整理 (chapterDoors)；卡榫查詢 (不在場的房) 由 mechanics/scale 注入

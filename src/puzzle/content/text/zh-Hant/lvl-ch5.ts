@@ -44,8 +44,6 @@ export const lvlCh5 = {
   'lvl.ch5.landing.plaque': '木梯的每一階，都被踩出了凹痕。',
   'lvl.ch5.east.plaque': '箱蓋上寫著：星圖，第三冊。',
   'lvl.ch5.west.deskLabel': '爸爸的書桌',
-  'lvl.ch5.west.desk': '桌上的墨水瓶，蓋子沒有旋緊。',
-  'lvl.ch5.west.sill': '窗外是西邊的星空。窗台上，有一圈茶杯的印子。',
   'lvl.ch5.north.windowLabel': '北窗',
   'lvl.ch5.north.window': '北窗外，什麼也看不清楚。',
   'lvl.ch5.north.plaque': '舊箱上壓著一條摺好的毯子。',

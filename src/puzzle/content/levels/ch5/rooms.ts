@@ -62,23 +62,8 @@ export const landing = room('landing', -6, 6, [
 /** 5-2 東窗 (東面心；許問津的窗)：完整檔在 5-2-east.ts */
 export { eastRoom as east } from './5-2-east';
 
-/**
- * 5-3 西窗 (西面心 [0,1,1]；爸爸的窗)：西牆 = 西窗、南門 (前緣，只在實景)、地板梯口。
- * 後景 爸爸的書桌與檯燈 ｜ 中景 西窗與窗台、地板梯口 ｜ 前景 箱堆與摺好的毯子、南門
- */
-export const west = room('west', -10, 10, [
-  door('S', 'door', 4.0),
-  hatch('D', 'door', -3.0, 1.6),
-  plaque('desk', 'lvl.ch5.west.desk', 2.4, 0.82, -3.4, 'both', 'lvl.ch5.west.deskLabel'),
-  plaque('sill', 'lvl.ch5.west.sill', -9.5, 1.0, 0, 'both', 'lvl.ch5.sill')
-], [
-  atticWindow('W', 0),
-  { kind: 'desk', x: 2.4, z: -3.4, rot: Math.PI },
-  { kind: 'stool', x: 2.4, z: -2.2, rot: Math.PI },
-  { kind: 'lantern', x: 2.4, y: 3.6, z: -2.6 },
-  { kind: 'trunks', x: 7.4, z: 3.2, n: 2, seed: 541 },
-  { kind: 'blanket', x: 7.4, z: 3.2 }
-]);
+/** 5-3 西窗 (西面心；爸爸的窗)：完整檔在 5-3-west.ts */
+export { westRoom as west } from './5-3-west';
 
 /**
  * 5-4 北窗 (北面心 [1,0,1]；你的窗)：北牆中央 = 北窗 (後牆)、東門、地板梯口。

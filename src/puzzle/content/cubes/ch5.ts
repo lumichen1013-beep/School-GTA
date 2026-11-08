@@ -160,6 +160,29 @@ export const CH5_ZONE52 = {
   finish: 'SE.turn'
 };
 
+/** 5-3 區用的魔方：中間片 + 西窗的窗框 (SW：5-3 之後、只在西窗) */
+export const CH5_WEST_CUBE: CubeDef = {
+  ...CH5_CUBE,
+  dial: { ...CH5_CUBE.dial!, groups: [...CH5_MIDDLE, CH5_CUBE.dial!.groups.find(g => g.id === 'SW')!], locks: CH5_CUBE.dial!.locks.filter(l => l.group === 'SW'), miniOnly: [], jams: [], marks: [] }
+};
+
+/**
+ * 5-3 區 (devtools/validateDial；規格「5-3 西窗（細化）」抽象模型)：中間片 + 西窗的窗框；起點 = 5-1 完成 (CH5_AFTER51，人在天窗間)。
+ * 題：parchment = 人在東窗 (許問津的空白羊皮紙隨時拿得到)；5-3 = 人在西窗、手上有羊皮紙 (墨水瓶在西窗、合成台在西窗 → 不進模型)。
+ * 東窗與西窗是對面的面心 (任何排列都不直接相連)：兩題之間一定要經過一間橋房。
+ * 窗框 SW 鬆開後轉一次 (SW.turn) 不進本模型：加上第三題狀態超過 2×10⁶ (2,029,770)；由 levels/5-3 實跑驗證
+ */
+export const CH5_ZONE53 = {
+  cube: CH5_WEST_CUBE,
+  puzzles: [
+    { id: 'parchment', room: 'east', needs: [] },
+    { id: '5-3', room: 'west', needs: ['parchment'], goal: (_s: CubeState, f: ReadonlySet<string>) => f.has('parchment') }
+  ] as readonly ZonePuzzle[],
+  startCube: CH5_AFTER51,
+  start: 'sky',
+  finish: '5-3'
+};
+
 /** 房間 room 此刻在哪個面 (面心格朝外的方位；不在面心 = null) */
 export function faceOf(s: CubeState, room: string): 'N' | 'S' | 'E' | 'W' | 'U' | 'D' | null {
   const c = s.pos[room];

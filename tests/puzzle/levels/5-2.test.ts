@@ -83,7 +83,7 @@ describe('5-2 東窗：資料', () => {
     expect([east.id, east.puzzles!.map(q => [q.id, TEXT(q.titleKey)]), east.turnBudget, TEXT(east.narrationKey), TEXT(east.nextKey), layoutDepthIssues(east)]).toEqual([
       '5-2', [['5-2', '5-2 倒過來的詩']], { base: 10 }, '從這扇窗看，整棟房子像一個方塊。', '東窗的詩讀通了。這扇窗，現在轉得動了。', []
     ]);
-    expect([levelById('5-2')!.unlock, levelById('5-2')!.abilities, CH5.levels['5-2'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'east', ['5-1', '5-2']]);
+    expect([levelById('5-2')!.unlock, levelById('5-2')!.abilities, CH5.levels['5-2'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'east', ['5-1', '5-2', '5-3']]);
   });
 
   it('字條：三張 (L1 / L2 / 劇情)；原文；H1～H4 / H10；間距 ≥ 3、離窗 ≥ 2.6；天窗銘文 (東) 只在實景', () => {

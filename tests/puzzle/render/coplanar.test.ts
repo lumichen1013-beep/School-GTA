@@ -549,4 +549,30 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
       view.dispose();
     }
   });
+
+  it('5-3 的狀態 (西窗：書桌組、墨水瓶、合成前 / 後的筆記本；東窗：羊皮紙原尺寸 / 大 / 小) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    for (const used of [false, true]) {
+      const w = newWorld(west);
+      w.ext = { cube: { links: {}, at: [0, 1, 1] }, dial: { active: true }, unlocked: used ? ['SW'] : [] };
+      const view = new PuzzleScene(w, THEMES.attic);
+      const cams = new PuzzleCameras(w);
+      w.byId.get('deskBook')!.used = used;
+      for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([used, zFightPairs(view.scene, [west.bounds.minX + 3, west.bounds.maxX - 3])]).toEqual([used, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 3, cams.active('2d'));
+      view.dispose();
+    }
+    for (const c of [[], ['card.da'], ['card.xiao']]) {
+      const w = newWorld(east);
+      w.ext = { cube: { links: {}, at: [2, 1, 1] }, dial: { active: true }, labels: { parchment: c } };
+      const view = new PuzzleScene(w, THEMES.attic);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([c, zFightPairs(view.scene, [east.bounds.minX + 3, east.bounds.maxX - 3])]).toEqual([c, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 3, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

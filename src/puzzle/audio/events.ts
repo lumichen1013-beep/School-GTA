@@ -232,7 +232,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 第五章 5-1：星圖對上刻度 (溫和的亮燈聲)、齒輪掉出軌道 (卡榫打開)、縮影的底層轉過 (轉動聲)
   starScale: 'sfx.lamp.on', miniGear: 'sfx.latch.open', miniCube: 'sfx.dial.turn',
   // 5-2 東窗：詩讀通 (窗框的星釘鬆開)、打開星表匣
-  poemWindow: 'sfx.latch.open', starCase: 'sfx.drawer.open'
+  poemWindow: 'sfx.latch.open', starCase: 'sfx.drawer.open',
+  // 5-3 西窗：在爸爸的書桌上合成手記頁 (星釘鬆開)
+  writingDesk: 'sfx.latch.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };

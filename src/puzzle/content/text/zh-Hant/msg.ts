@@ -78,6 +78,8 @@ export const msg = {
   // N24 顯影 / N28 合成 (2-2)
   'msg.reveal.noNib': '少了筆尖，塗不開。',
   'msg.combine.magnifier': '你把鏡片嵌進空鏡框，喀的一聲。成了一支放大鏡。',
+  'msg.combine.page': '你把羊皮紙攤在吸墨墊上，旋開墨水瓶。紙吸了墨，浮出淡淡的格線——一頁可以寫字的手記。窗框上的一顆星釘，跟著鬆開了。',
+  'msg.combine.noDesk': '墨和紙都在手上，可是這裡沒有能攤平紙、放穩墨水瓶的桌面。',
   'msg.combine.half': '手上只有一樣，湊不起來。',
   'msg.combine.none': '手上沒有能湊在一起的東西。',
   'msg.print.wheel': '字輪轉到「{glyph}」。',

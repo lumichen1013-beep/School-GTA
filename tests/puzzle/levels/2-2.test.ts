@@ -158,7 +158,11 @@ describe('2-2 閱覽室：資料與驗證器', () => {
   it('開場旁白 / 通關文字 (story-bible 7.3)；物件與模型一致：淡墨 doneFlag 2-2a、下聯 2-2b、書脊 2-2c', () => {
     expect([TEXT(reading.narrationKey), TEXT(reading.nextKey)]).toEqual(['桌上攤著一本只寫了開頭的書。', '書的下一頁，有人接著寫了一句。']);
     expect([def('veil').doneFlag, def('lower').doneFlag, def('spine').doneFlag]).toEqual(['2-2a', '2-2b', '2-2c']);
-    expect(RECIPES).toEqual([{ parts: ['frame', 'lens'], out: 'magnifier', text: 'msg.combine.magnifier' }]);
+    expect(RECIPES).toEqual([
+      { parts: ['frame', 'lens'], out: 'magnifier', text: 'msg.combine.magnifier' },
+      // 5-3 西窗 (第五章；合成台 = 爸爸的書桌)
+      { parts: ['ink.father', 'parchment'], out: 'page.blank', text: 'msg.combine.page', station: 'writingDesk', stationText: 'msg.combine.noDesk' }
+    ]);
   });
 });
 

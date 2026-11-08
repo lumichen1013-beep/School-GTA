@@ -423,3 +423,30 @@ export const quillDecor: DecorFactory = (p, item) => {
   g.add(p.mesh(merge([part(new THREE.ConeGeometry(0.035, 0.42, 6).scale(1, 1, 0.25), 0.06, 0.26, 0, 0, 0, -0.45)]), 0xe8e0cc, { outline: false, shadow: false }));
   return { root: g, only3d: [g] };
 };
+
+/**
+ * dadDesk：爸爸的書桌 (5-3 西窗；靠後牆、長邊朝房內)：桌面 + 抽屜櫃 + 桌腳 (木，一個網格)、抽屜把手與檯燈座 / 燈桿 (黃銅，一個網格)、
+ * 燈罩、一疊筆記 (紙)、白瓷咖啡杯與杯碟 (一個網格)；桌面高 0.76 (同 decor desk)。物件 (筆記本、墨水瓶) 放在桌面西半；欄位 x、z
+ */
+export const dadDeskDecor: DecorFactory = (p, item, { theme: { pal } }) => {
+  const g = new THREE.Group();
+  g.position.set(num(item, 'x'), 0, num(item, 'z'));
+  const W = 2.0, D = 0.8;
+  g.add(p.mesh(merge([
+    part(box(W, 0.07, D), 0, 0.76, 0), part(box(0.56, 0.72, D - 0.06), W / 2 - 0.3, 0.36, 0),
+    part(box(0.06, 0.72, D - 0.1), -W / 2 + 0.05, 0.36, 0), part(box(W - 0.6, 0.06, 0.04), -0.25, 0.68, D / 2 - 0.05)
+  ]), pal.shelf, { map: crateWood(pal), flat: pal.shelf }));
+  g.add(p.mesh(merge([
+    ...[0.18, 0.42, 0.62].map(y => part(box(0.14, 0.025, 0.03), W / 2 - 0.3, y, D / 2 - 0.02)),
+    part(new THREE.CylinderGeometry(0.09, 0.11, 0.03, 12), 0.75, 0.81, -0.2), part(new THREE.CylinderGeometry(0.015, 0.015, 0.44, 6), 0.75, 1.03, -0.2)
+  ]), pal.brass, { metalness: 0.7, roughness: 0.3, outline: false }));
+  g.add(p.mesh(part(new THREE.CylinderGeometry(0.07, 0.15, 0.14, 14, 1, true), 0.75, 1.26, -0.2), pal.lampShade, { outline: false, side: THREE.DoubleSide }));
+  const papers: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 4; i++) papers.push(part(box(0.3, 0.012, 0.22), 0.45 + i * 0.006, 0.8 + i * 0.013, -0.12 + i * 0.004, 0, (i - 1.5) * 0.08, 0));
+  g.add(p.mesh(merge(papers), pal.paperNote, { outline: false }));
+  g.add(p.mesh(merge([
+    part(new THREE.CylinderGeometry(0.075, 0.075, 0.01, 14), 0.55, 0.8, 0.25), part(new THREE.CylinderGeometry(0.045, 0.04, 0.09, 12), 0.55, 0.85, 0.25),
+    part(new THREE.TorusGeometry(0.025, 0.007, 5, 10), 0.605, 0.855, 0.25)
+  ]), 0xede6d8, { outline: false }));
+  return { root: g, only3d: [g] };
+};

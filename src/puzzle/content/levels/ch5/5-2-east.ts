@@ -5,6 +5,7 @@ import { atticWindow, door, floor, hatch, plaque } from './parts';
 //   x∈[-10, 10]、z∈[-5, 5]；東牆 = 東窗 (不是門)、北門 (後牆 x -4)、地板梯口 (3, 1.6)
 // 分區：後景 北門、樑下的古籍書架、梁上掛的手抄星表、立柱 ｜
 //   中景 東窗 (窗框兩側直刻的兩行詩 = poemWindow；窗台角上的天窗銘文 (東))、許問津的書案 (長邊朝窗) 與案上的星表匣、羽毛筆、案旁的古籍、地板梯口 ｜
+//   (5-3) 古籍書架西端靠著許問津的空白羊皮紙 (5-3 西窗的另一件道具) ｜
 //   前景 西南角舊箱與箱蓋紙籤、三張字條 (落地木柱；離窗 ≥ 2.6：藏寶圖裡站在窗前按 E 開的是詩的標籤)
 // 謎題：5-2 倒過來的詩 (P18 / P1)：右行「上在星首仰」、左行「下在星頭＿」順讀不通；東窗在底面心 (窗朝下：玻璃成了鏡子) → 倒讀
 //   「仰首星在上，＿頭星在下」→ 貼「低」或「垂」(詞典另收「俯」)；「抬」= 無效字；不在底面 = 一張都不收 (label.flip)
@@ -32,6 +33,10 @@ const objects: ObjDef[] = [
   // 書案上的星表匣 (三張詞卡；只在實景打開)
   { id: 'starCase', type: 'starCase', cards: ['card.tai', 'card.di', 'card.chui'], useText: 'lvl.5-2.case.open', emptyText: 'lvl.5-2.case.empty',
     x: 5.6, y: DESK_H, z: -1.0, w: 0.6, h: 0.32, d: 0.42, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-2.case' },
+  // 5-3 的另一件道具：許問津的空白羊皮紙 (靠在古籍書架西端的一捲；名詞標籤帶方槽：「大」帶不動、「小」寫不下；只在實景拿)
+  { id: 'parchment', type: 'parchment', item: 'parchment', useText: 'lvl.5-3.parchment.take', bigText: 'lvl.5-3.parchment.big', smallText: 'lvl.5-3.parchment.small',
+    x: 0.9, y: 0, z: -3.4, w: 0.2, h: 0.9, d: 0.2, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-3.parchment',
+    label: { id: 'parchment', kind: 'noun', textKey: 'lvl.5-3.parchment.tag', scale: true } },
   // ── 前景：箱蓋紙籤、字條 (父親的筆記；story-bible 7.3) ──
   plaque('plaqueEast', 'lvl.ch5.east.plaque', -6.4, 0.9, 3.2),
   { ...noteBase, id: 'noteA', x: -8.6, z: 2.6, textKey: 'lvl.5-2.note.a' },
