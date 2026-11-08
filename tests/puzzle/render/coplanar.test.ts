@@ -575,4 +575,20 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
       view.dispose();
     }
   });
+
+  it('5-4 的狀態 (北窗：吊秤吊著東窗 / 機關 / 西窗、背包原尺寸 / 大 / 小、平了閂住) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+    const cases: Array<[number, string[], boolean]> = [[4, [], false], [0, ['card.xiao'], false], [3, ['card.da'], false], [3, ['card.da'], true]];
+    for (const [other, c, used] of cases) {
+      const w = newWorld(north);
+      w.ext = { cube: { links: {}, at: [1, 0, 1] }, dial: { active: true }, unlocked: used ? ['SN'] : [], labels: { 'scale:bag': c }, balance: { scale: { other, room: 'east', titleKey: 'lvl.5-2.title', at: '1,0,1' } } };
+      w.byId.get('scale')!.used = used;
+      const view = new PuzzleScene(w, THEMES.attic);
+      const cams = new PuzzleCameras(w);
+      for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));
+      expect([other, c, used, zFightPairs(view.scene, [north.bounds.minX + 3, north.bounds.maxX - 3])]).toEqual([other, c, used, []]);
+      w.player.mode = '2d';
+      view.update('2d', 1 / 60, 3, cams.active('2d'));
+      view.dispose();
+    }
+  });
 });

@@ -85,7 +85,7 @@ describe('5-3 西窗：資料', () => {
     ]);
     const doors = west.objects.filter(o => o.type === 'cubeDoor').map(o => [o.id, o.x, o.z]);
     expect(doors).toEqual([['doorS', 4, 4.8], ['hatchD', -3, 1.6]]);
-    expect([levelById('5-3')!.unlock, levelById('5-3')!.abilities, CH5.levels['5-3'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'west', ['5-1', '5-2', '5-3']]);
+    expect([levelById('5-3')!.unlock, levelById('5-3')!.abilities, CH5.levels['5-3'], CHAPTERS.find(c => c.id === 5)!.levels]).toEqual([{ after: ['5-1'] }, ['nib', 'scale'], 'west', ['5-1', '5-2', '5-3', '5-4']]);
   });
 
   it('字條：三張 (L1 / L2 / 劇情)；原文；H1～H4 / H10；間距 ≥ 3', () => {

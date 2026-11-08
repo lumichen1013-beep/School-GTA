@@ -21,6 +21,8 @@ declare module '../core/types' {
     jam?: boolean;
     /** 沒有尺度卡時的重量 (天平；預設 2 = 原尺寸) */
     weight?: number;
+    /** v0.4 5-4 吊秤：秤繩吊著這間房時，這個物件計入那一頭的重量 (重物箱；mechanics/cross balanceExt) */
+    ballast?: boolean;
     /** v0.4 used 之後一直以「小」計 (不論標籤上有沒有卡；3-1b 之後的樹根「縮回土裡」) */
     stayShrunk?: boolean;
     /** v0.4 used = 被推過：位置改為 [x, z] (巨盆；不在場的房讀快照的 used) */

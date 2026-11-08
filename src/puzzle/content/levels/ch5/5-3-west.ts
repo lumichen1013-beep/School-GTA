@@ -28,7 +28,10 @@ const objects: ObjDef[] = [
   plaque('inscriptionW', 'lvl.5-3.inscription', -9.5, 0.9, 1.8, '3d', 'lvl.5-3.inscription.label'),
   // ── 前景：字條 (父親的筆記；story-bible 7.3) ──
   { ...noteBase, id: 'noteA', x: -7.6, z: 3.0, textKey: 'lvl.5-3.note.a' },
-  { ...noteBase, id: 'noteA2', x: 6.0, z: 1.4, textKey: 'lvl.5-3.note.a2', revealAfter: 240 }
+  { ...noteBase, id: 'noteA2', x: 6.0, z: 1.4, textKey: 'lvl.5-3.note.a2', revealAfter: 240 },
+  // 5-4 的重物：爸爸的舊皮箱 (東南角舊箱旁；秤繩吊著西窗時計重 3；蓋上一個銅環；搬不動)
+  { id: 'trunkDad', type: 'ballastBox', look: 'trunk', fixedText: 'lvl.5-4.trunk.fixed', ballast: true, weight: 3,
+    x: 5.4, y: 0, z: 3.7, w: 1.0, h: 0.6, d: 0.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-4.trunk' }
 ];
 
 const decor: DecorItem[] = [

@@ -84,6 +84,8 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'starCase') return [o.emptyText, label];
   if (o.type === 'writingDesk') return [o.readText, o.doneText, label];
   if (o.type === 'parchment') return [o.bigText, o.smallText, label];
+  if (o.type === 'hangScale') return [o.mineText, o.otherText, o.nearText, o.sameText, o.solvedText, o.doneText, label];
+  if (o.type === 'backpack' || o.type === 'ballastBox') return [o.fixedText, label];
   if (o.type === 'poemWindow') return [o.upper, o.upperFlip, o.levelText, o.upText, o.downText, o.doneText, label, o.label?.solvedText, o.label?.flip?.textKey, o.label?.flip?.wrongText];
   if (o.type === 'typeCase') return [o.emptyText, label];
   if (o.type === 'patternCabinet') return [o.okText, o.notText, o.readText, label];

@@ -1,6 +1,6 @@
 // 章節抽象模型驗證 (v0.3；規格 5.4.8、architecture 6.6)：廣度優先搜尋所有可達狀態。
 // 檢查：① 有解 ② 任一可達狀態都能到終點 (卡死 = 0) ③ 最短解的轉動次數 ④ 拿掉任一必要步驟就無解 (捷徑檢查)。純函式
-import { applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, localSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
+import { acrossEdge, applyOp, applyTurn, cellsOf, cubeKey, sameCell, initialCube, isBlocked, links, localSide, turnDirs, type CubeDef, type CubeState, type DoorInfo, type Link, type Side, type Turn } from '../core/cube';
 import { inkPaths, jamActive, lightPaths, lightState, type LightHit } from '../core/chapter';
 import type { LevelDef } from '../core/types';
 import { chapterDoors, leverOp } from '../mechanics/cube';
@@ -145,7 +145,11 @@ export function chapterOneModel(def: CubeDef, data: typeof CH1_MODEL): ChapterMo
 // ── v0.4 控制盤章節：validateDial (規格 5.4.8 ⑥～⑪、D16；architecture 4.16.1；決策 Q13：回退不另建模) ──
 
 /** 題目條件可用的跨房資訊：此刻的連接表 (含此組旗標下讀作「間」的門) */
-export interface GoalCtx { links(): readonly Link[] }
+export interface GoalCtx {
+  links(): readonly Link[];
+  /** v0.4 第五章 5-4 吊秤：這間房此刻本地 side 那格稜另一頭的面心房 (core/cube acrossEdge；content 只能 import 核心型別) */
+  across(room: string, side: Side): string | null;
+}
 
 /** 一題 (抽象)：在 room 完成；needs = 設計上的前置題 (多解列舉從「前置剛湊齊」的狀態出發)；goal = 魔方排列的條件 (沒給 = 走到那間房即可完成) */
 export interface DialPuzzle {
@@ -349,7 +353,7 @@ function goalHolds(m: DialModel, p: DialPuzzle, s: CubeState, flags: ReadonlySet
   // 光的方位換成房間本地 (第四章房間會轉；第三章朝向恆 0)
   if (p.light && lightState(localHits(hitsAt(m.cube, s, p.light.uncovered)[p.room] ?? [], s.rot[p.room] ?? 0), p.light.from, p.light.via) !== 'lit') return false;
   if (p.ink && !(inkAt(m.cube, s)[p.room] ?? []).includes(p.ink.side)) return false;
-  return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)) });
+  return !p.goal || p.goal(s, flags, { links: () => links(m.cube, s, m.doors, platesFor(m, flags)), across: (room, side) => acrossEdge(m.cube, s, room, side) });
 }
 
 export interface DialPuzzleReport {

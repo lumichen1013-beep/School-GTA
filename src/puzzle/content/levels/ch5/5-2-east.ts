@@ -41,7 +41,10 @@ const objects: ObjDef[] = [
   plaque('plaqueEast', 'lvl.ch5.east.plaque', -6.4, 0.9, 3.2),
   { ...noteBase, id: 'noteA', x: -8.6, z: 2.6, textKey: 'lvl.5-2.note.a' },
   { ...noteBase, id: 'noteA2', x: -2.0, z: 3.4, textKey: 'lvl.5-2.note.a2', revealAfter: 240 },
-  { ...noteBase, id: 'noteStory', x: 6.6, z: 2.6, textKey: 'lvl.5-2.note.story' }
+  { ...noteBase, id: 'noteStory', x: 6.6, z: 2.6, textKey: 'lvl.5-2.note.story' },
+  // 5-4 的重物：許問津的書箱 (西南角舊箱的東邊；秤繩吊著東窗時計重 4；蓋上一個銅環；搬不動)
+  { id: 'chestBooks', type: 'ballastBox', look: 'books', fixedText: 'lvl.5-4.books.fixed', ballast: true, weight: 4,
+    x: -4.4, y: 0, z: 3.7, w: 1.0, h: 0.7, d: 0.6, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-4.books' }
 ];
 
 const decor: DecorItem[] = [

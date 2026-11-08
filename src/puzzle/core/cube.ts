@@ -136,6 +136,22 @@ export function faceOfCell(at: readonly number[] | undefined): Side | null {
   return null;
 }
 
+/**
+ * v0.4 第五章 5-4 吊秤 (規格「5-4 北窗（細化）」)：面心房 room 此刻本地 side 朝向的鄰格是一格稜 → 那格稜另一頭的面心格上的房
+ * (稜只鄰接兩個面心；稜上是空格或走廊格都一樣)。side 朝外 / 朝核心、room 不在面心、那一格沒有房 (或是走廊格) = null
+ */
+export function acrossEdge(def: CubeDef, s: CubeState, room: string, side: Side): string | null {
+  const p = s.pos[room];
+  if (!p || !faceOfCell(p)) return null;
+  const e = addSide(p, rotateSide(side, s.rot[room] ?? 0));
+  if (!inCube(def, e) || e.every(v => v === 1)) return null;
+  // 面心只有一個座標不是 1：那個座標拉回 1 = 稜的另一個面心鄰格
+  const q: Cell = [p[0] !== 1 ? 1 : e[0], p[1] !== 1 ? 1 : e[1], p[2] !== 1 ? 1 : e[2]];
+  if (sameCell(q, p) || !faceOfCell(q)) return null;
+  const corridors = new Set(def.corridors ?? []);
+  return Object.keys(s.pos).find(r => !corridors.has(r) && sameCell(s.pos[r], q)) ?? null;
+}
+
 // ── v0.4 第五章 朝向 24 種 (規格「第五章共用規則」朝向)：ORIENTS[i] = 本地 N E S W U D 此刻朝向的世界方位 ──
 
 /** 三個軸的 ↻ (從軸的正向看順時針；與 applyTurn 的格位映射同向)：上下軸 北 → 東 → 南 → 西、東西軸 上 → 北 → 下 → 南、南北軸 上 → 西 → 下 → 東 */

@@ -46,7 +46,6 @@ export const lvlCh5 = {
   'lvl.ch5.west.deskLabel': '爸爸的書桌',
   'lvl.ch5.north.windowLabel': '北窗',
   'lvl.ch5.north.window': '北窗外，什麼也看不清楚。',
-  'lvl.ch5.north.plaque': '舊箱上壓著一條摺好的毯子。',
   'lvl.ch5.engine.baseLabel': '機關的底盤',
   'lvl.ch5.engine.base': '地板上畫著一張展開圖，有人一筆一筆重畫過。',
   'lvl.ch5.meadow.treeLabel': '古樹',

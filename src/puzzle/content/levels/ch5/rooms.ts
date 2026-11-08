@@ -1,5 +1,5 @@
 import type { DecorItem, LevelDef, ObjDef } from '../../../core/types';
-import { atticWindow, door, floor, hatch, plaque, sealedBy } from './parts';
+import { door, floor, hatch, plaque, sealedBy } from './parts';
 
 // 第五章的房間 (規格 6「第五章骨架與銜接（v0.4 細化）」)：樓梯口 (裝飾房：入口)、5-1 天窗間 (另檔 5-1-sky.ts，這裡轉出)、5-2 東窗、5-3 西窗、
 // 5-4 北窗、5-5 最後的機關、6-1 林心草地 (核心) 的占位版與四格梁上走道 (走廊格：沒有門的占位，只在展開圖)；謎題逐關取代。
@@ -65,21 +65,8 @@ export { eastRoom as east } from './5-2-east';
 /** 5-3 西窗 (西面心；爸爸的窗)：完整檔在 5-3-west.ts */
 export { westRoom as west } from './5-3-west';
 
-/**
- * 5-4 北窗 (北面心 [1,0,1]；你的窗)：北牆中央 = 北窗 (後牆)、東門、地板梯口。
- * 後景 北窗與兩側的立柱 ｜ 中景 天平的座 (5-4 放上)、東門 ｜ 前景 舊箱與紙籤
- */
-export const north = room('north', -10, 10, [
-  door('E', 'door', 9.8),
-  hatch('D', 'door', -3.0, 1.6),
-  plaque('window', 'lvl.ch5.north.window', 0, 1.2, -4.85, 'both', 'lvl.ch5.north.windowLabel'),
-  plaque('plaqueNorth', 'lvl.ch5.north.plaque', 5.6, 0.9, 3.2)
-], [
-  atticWindow('N', 0, 2.6, 1.8, 2.3),
-  { kind: 'posts', xs: '-2.0,2.0', z: -4.5 },
-  { kind: 'trunks', x: 5.6, z: 3.4, n: 3, seed: 551 },
-  { kind: 'canvasPile', x: -7.4, z: -1.2, seed: 553 }
-]);
+/** 5-4 北窗 (北面心；你的窗)：完整檔在 5-4-north.ts */
+export { northRoom as north } from './5-4-north';
 
 /** 機關的兩扇門：三扇窗都完成才拔得掉星釘 (ch5.windows)；兩面都封 (從接到它的任何一扇門都走不進來) */
 const NAILED = { sealed: { until: 'ch5.windows', text: 'lvl.ch5.engine.nailed', both: true } };

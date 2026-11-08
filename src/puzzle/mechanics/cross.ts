@@ -2,9 +2,11 @@
 // - ext.balance：當前房的每個半座天平 (balanceHalf)，它的門此刻拱門對拱門接到另一半所在那扇門 → other = 對面那盤的重量 (對面房的關卡資料 + 章節標籤)；
 //   done = 另一半已閂住 (對面房的快照)
 // - ext.protrude：隔壁房此刻從拱門伸進來的東西 (mechanics/scale protrusionsInto)
+// - v0.4 5-4 吊秤 (hangScale)：秤繩那一頭 = core/cube acrossEdge 的那一間；other = 那間房標了 ballast 的物件重量和 (關卡資料 + 章節標籤)、
+//   room / titleKey = 那間房、at = 本房此刻的格；那一格沒有房 = 只寫 at (秤繩垂著)
 import type { ObjDef, ObjId, WorldExt } from '../core/types';
 import type { ChapterState } from '../core/chapter';
-import { links } from '../core/cube';
+import { acrossEdge, links } from '../core/cube';
 import { defWeight, protrusionsInto, type CrossRooms } from './scale';
 
 type Labels = Readonly<Record<string, readonly string[]>>;
@@ -20,7 +22,19 @@ function findDef(c: CrossRooms, id: ObjId): { room: string; def: ObjDef } | null
 /** 這一房此刻的半座天平推導 */
 export function balanceExt(c: CrossRooms, room: string, state: ChapterState, labels: Labels): NonNullable<WorldExt['balance']> {
   const out: Record<ObjId, { other?: number; done?: boolean }> = {};
-  const halves = (c.rooms[room]?.objects ?? []).filter(d => d.type === 'balanceHalf');
+  const objs = c.rooms[room]?.objects ?? [];
+  for (const h of objs) {
+    if (h.type !== 'hangScale' || !c.cube || !state.cube) continue;
+    const other = acrossEdge(c.cube, state.cube, room, h.hook);
+    const entry: { other?: number; done?: boolean; room?: string; titleKey?: string; at?: string } = { at: (state.cube.pos[room] ?? []).join(',') };
+    if (other && c.rooms[other]) {
+      entry.room = other;
+      entry.titleKey = c.rooms[other].titleKey;
+      entry.other = c.rooms[other].objects.reduce((n, d) => (d.ballast ? n + defWeight(d, labels) : n), 0);
+    }
+    out[h.id] = entry;
+  }
+  const halves = objs.filter(d => d.type === 'balanceHalf');
   if (!halves.length) return out;
   const ls = c.cube && state.cube ? links(c.cube, state.cube, c.doors) : [];
   for (const h of halves) {

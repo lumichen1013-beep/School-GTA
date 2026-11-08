@@ -17,6 +17,7 @@ import { hall } from './ch4/4-1-hall';
 import { sky } from './ch5/5-1-sky';
 import { eastRoom } from './ch5/5-2-east';
 import { westRoom } from './ch5/5-3-west';
+import { northRoom } from './ch5/5-4-north';
 import { furnace } from './ch4/4-2-furnace';
 import { archive } from './ch4/4-3-archive';
 import { drawer } from './ch4/4-4-drawer';
@@ -81,7 +82,9 @@ export const LEVELS: readonly LevelEntry[] = [
   // 5-2 東窗：第五章三扇窗之一 (P18 / P1 倒過來的詩；完成 = 窗框 SE 鬆開)；5-1 通關後開放 (三扇窗任意順序)
   { id: '5-2', chapter: 5, titleKey: 'lvl.5-2.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => eastRoom },
   // 5-3 西窗：第五章三扇窗之一 (P13 / P1 爸爸的墨 + 許問津的紙；完成 = 窗框 SW 鬆開)；5-1 通關後開放 (三扇窗任意順序)
-  { id: '5-3', chapter: 5, titleKey: 'lvl.5-3.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => westRoom }
+  { id: '5-3', chapter: 5, titleKey: 'lvl.5-3.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => westRoom },
+  // 5-4 北窗：第五章三扇窗之一 (P17 / P1 吊秤：秤繩從地板垂下去，秤的是那一整間房；完成 = 窗框 SN 鬆開)；5-1 通關後開放 (三扇窗任意順序)
+  { id: '5-4', chapter: 5, titleKey: 'lvl.5-4.title', abilities: ['nib', 'scale'], unlock: { after: ['5-1'] }, load: () => northRoom }
 ];
 
 export const levelById = (id: string): LevelEntry | undefined => LEVELS.find(e => e.id === id);

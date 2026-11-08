@@ -8,7 +8,7 @@
 // 中間片只搬動面心與稜：房間只在 6 個面之間換位、朝外的那一面永遠朝外；房間之間靠稜上的走廊格 (corridors) 相通。角與其餘稜是空格
 // 組 = X1 / Y1 / Z1 (中間片) + 窗框 SE / SW / SN (spin：那扇窗的房間原地轉；星釘鎖到 5-2 / 5-3 / 5-4，且只在人在那間窗房時可轉)。
 // 縮影的頂 / 底 (ST / SB，miniOnly) 與終章的真外圈 (FE / FW / FN / FT) 逐關加入 (5-1a、6-1)
-import type { CubeDef, CubeState, TurnGroup } from '../../core/cube';
+import type { CubeDef, CubeState, Side, TurnGroup } from '../../core/cube';
 import type { ZonePuzzle } from './ch2';
 
 /** 三條中間片 (觀星儀一啟動就開；骨架區只開這三條) */
@@ -182,6 +182,40 @@ export const CH5_ZONE53 = {
   start: 'sky',
   finish: '5-3'
 };
+
+/** 5-4 區用的魔方：中間片 + 北窗的窗框 (SN：5-4 之後、只在北窗) */
+export const CH5_NORTH_CUBE: CubeDef = {
+  ...CH5_CUBE,
+  dial: { ...CH5_CUBE.dial!, groups: [...CH5_MIDDLE, CH5_CUBE.dial!.groups.find(g => g.id === 'SN')!], locks: CH5_CUBE.dial!.locks.filter(l => l.group === 'SN'), miniOnly: [], jams: [], marks: [] }
+};
+
+/**
+ * 5-4 吊秤 (規格「5-4 北窗（細化）」)：秤繩從北窗的地板 (本地 D) 垂下去，吊著那格稜另一頭的面心房；秤的是那間房裡的重物 (ballast)。
+ * CH5_BALLAST = 各房重物的重量和 (西窗爸爸的舊皮箱 3、東窗許問津的書箱 4；沒列 = 0；與關卡資料一致由 levels/5-4 驗證)；
+ * BAG = 背包可量的重量 (小 1 / 原 2 / 大 3；拿掉尺度卡 = 只有 2)
+ */
+export const CH5_HANG: { room: string; hook: Side } = { room: 'north', hook: 'D' };
+export const CH5_BALLAST: Readonly<Record<string, number>> = { west: 3, east: 4 };
+export const CH5_BAG: readonly number[] = [1, 2, 3];
+/** 秤繩那一頭此刻的重量 (hanged = 秤繩此刻吊著的房：core/cube acrossEdge(def, s, 'north', 'D')；validateDial 的 GoalCtx.across) */
+export const hangWeight = (hanged: string | null, ballast: Readonly<Record<string, number>> = CH5_BALLAST): number => ballast[hanged ?? ''] ?? 0;
+
+/**
+ * 5-4 區 (devtools/validateDial；規格「5-4 北窗（細化）」抽象模型)：中間片 + 北窗的窗框；起點 = 5-1 完成 (CH5_AFTER51，人在天窗間)。
+ * 題：5-4 = 人在北窗、秤繩那一頭的重量是背包量得到的 (bag；尺度卡在北窗隨時貼得上 → 卡片不進模型)；
+ * SN.turn = 窗框鬆開後在北窗轉一次 (終點)。bag / ballast 可換 (拿掉尺度卡 = [2]、拿掉皮箱 = 西窗不列)；span = 多解列舉的步數上限 (拿掉要素的變體只看有沒有解)
+ */
+export const ch5Zone54 = (bag: readonly number[] = CH5_BAG, ballast: Readonly<Record<string, number>> = CH5_BALLAST, withSpin = true, span?: number) => ({
+  cube: CH5_NORTH_CUBE,
+  puzzles: [
+    { id: '5-4', room: 'north', needs: [], ...(span ? { span } : {}), goal: (_s: CubeState, _f: ReadonlySet<string>, ctx) => bag.includes(hangWeight(ctx.across(CH5_HANG.room, CH5_HANG.hook), ballast)) },
+    ...(withSpin ? [{ id: 'SN.turn', room: 'north', needs: ['5-4'], teaching: true, turn: 'SN' }] : [])
+  ] as readonly ZonePuzzle[],
+  startCube: CH5_AFTER51,
+  start: 'sky',
+  finish: withSpin ? 'SN.turn' : '5-4'
+});
+export const CH5_ZONE54 = ch5Zone54();
 
 /** 房間 room 此刻在哪個面 (面心格朝外的方位；不在面心 = null) */
 export function faceOf(s: CubeState, room: string): 'N' | 'S' | 'E' | 'W' | 'U' | 'D' | null {

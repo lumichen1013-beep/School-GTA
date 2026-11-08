@@ -38,5 +38,6 @@ import { lvlCh5 } from './lvl-ch5';
 import { lvl51 } from './lvl-5-1';
 import { lvl52 } from './lvl-5-2';
 import { lvl53 } from './lvl-5-3';
+import { lvl54 } from './lvl-5-4';
 
-export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...csCh2, ...csCh3, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvl25, ...lvlH1, ...lvlCh2, ...lvl31, ...lvl32, ...lvl33, ...lvl34, ...lvlCh3, ...lvlCh4, ...lvl41, ...lvl42, ...lvl43, ...lvl44, ...csNight, ...lvlCh5, ...lvl51, ...lvl52, ...lvl53, ...csAttic, ...uiSound, ...uiControls, ...items };
+export const zhHant: Readonly<Record<string, string>> = { ...term, ...msg, ...obj, ...ui, ...ch, ...lvl11, ...lvl12, ...lvl13, ...lvlCh1, ...csPrologue, ...csCh2, ...csCh3, ...lvlProto, ...lvl21, ...lvl22, ...lvl23, ...lvl24, ...lvl25, ...lvlH1, ...lvlCh2, ...lvl31, ...lvl32, ...lvl33, ...lvl34, ...lvlCh3, ...lvlCh4, ...lvl41, ...lvl42, ...lvl43, ...lvl44, ...csNight, ...lvlCh5, ...lvl51, ...lvl52, ...lvl53, ...lvl54, ...csAttic, ...uiSound, ...uiControls, ...items };

@@ -234,7 +234,9 @@ const USED_ON: Readonly<Record<string, string>> = {
   // 5-2 東窗：詩讀通 (窗框的星釘鬆開)、打開星表匣
   poemWindow: 'sfx.latch.open', starCase: 'sfx.drawer.open',
   // 5-3 西窗：在爸爸的書桌上合成手記頁 (星釘鬆開)
-  writingDesk: 'sfx.latch.open'
+  writingDesk: 'sfx.latch.open',
+  // 5-4 北窗：吊秤平了 (星釘鬆開)
+  hangScale: 'sfx.latch.open'
 };
 const USED_OFF: Readonly<Record<string, string>> = { lampBook: 'sfx.lamp.off', cord: 'sfx.cord.reset', typeWheel: 'sfx.cord.pull' };
 const GONE_ON: Readonly<Record<string, string>> = { gate: 'sfx.gate.open', inkwall: 'sfx.gate.open' };
