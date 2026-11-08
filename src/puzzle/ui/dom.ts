@@ -27,7 +27,10 @@ export function buildPuzzleDom(root: HTMLElement, text: Text, help: readonly Hel
   const combine = el('button', 'pz-combine') as HTMLButtonElement;
   combine.type = 'button';
   combine.tabIndex = -1;
-  hud.append(status, helpBtn, helpEl, el('div', 'pz-tip'), el('div', 'pz-prompt'), combine, el('div', 'pz-toast'));
+  // 畫面上方的工具列 (重置 / 魔方 / 2D / 3D；ui/toolbar) 與操作說明小鈕放在同一個右上角容器 (不互相重疊)
+  const topRight = el('div', 'pz-topright');
+  topRight.append(el('div', 'pz-bar'), helpBtn);
+  hud.append(status, topRight, helpEl, el('div', 'pz-tip'), el('div', 'pz-prompt'), combine, el('div', 'pz-toast'));
   const clear = el('div', 'pz-clear');
   const replay = el('button', 'pz-replay', text('ui.clear.replay')) as HTMLButtonElement;
   replay.type = 'button';

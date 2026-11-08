@@ -55,14 +55,15 @@ describe('deriveHud (純函式)', () => {
 });
 
 describe('deriveHelp', () => {
-  it('預設按鍵產生與舊 puzzle.html 相同的操作說明', () => {
-    expect(deriveHelp(DEFAULT_BINDINGS).map(r => [r.keys, TEXT(r.labelKey)])).toEqual([
-      [['WASD'], '移動'], [['Space'], '跳'], [['F', 'Q'], '點鋼筆（切換）'], [['E'], '互動'], [['T'], '物歸原處'], [['R'], '重新進房']
+  it('預設按鍵產生與舊 puzzle.html 相同的操作說明 (重新進房改為上方「重置」鈕：沒綁鍵時按鍵框寫鈕上的字)', () => {
+    expect(deriveHelp(DEFAULT_BINDINGS, '重置').map(r => [r.keys, TEXT(r.labelKey)])).toEqual([
+      [['WASD'], '移動'], [['Space'], '跳'], [['F', 'Q'], '點鋼筆（切換）'], [['E'], '互動'], [['T'], '物歸原處'], [['重置'], '重新進房']
     ]);
+    expect(deriveHelp(DEFAULT_BINDINGS).at(-1)!.keys).toEqual([]);
   });
 
   it('重綁後說明一致', () => {
-    const b = mergeBindings(DEFAULT_BINDINGS, { up: ['KeyI'], left: ['KeyJ'], down: ['KeyK'], right: ['KeyL'], flip: ['Digit1'] });
-    expect(deriveHelp(b).map(r => r.keys)).toEqual([['IJKL'], ['Space'], ['1'], ['E'], ['T'], ['R']]);
+    const b = mergeBindings(DEFAULT_BINDINGS, { up: ['KeyI'], left: ['KeyJ'], down: ['KeyK'], right: ['KeyL'], flip: ['Digit1'], restart: ['KeyR'] });
+    expect(deriveHelp(b, '重置').map(r => r.keys)).toEqual([['IJKL'], ['Space'], ['1'], ['E'], ['T'], ['R']]);
   });
 });

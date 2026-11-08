@@ -44,7 +44,14 @@ describe('KeyboardSource', () => {
     expect(f.pressed).toEqual([]);
     fw.fire('keydown', 'KeyE'); fw.fire('keydown', 'KeyQ'); fw.fire('keydown', 'KeyR');
     f = k.poll();
-    expect(f.pressed).toEqual(['flip', 'interact', 'restart']);
+    // 2026-11-08：R 不再是重新進房 (改用畫面上方的「重置」鈕)；重綁回 R 照樣是 restart
+    expect(f.pressed).toEqual(['flip', 'interact']);
+    expect(DEFAULT_BINDINGS.restart).toEqual([]);
+    const kr = new KeyboardSource(mergeBindings(DEFAULT_BINDINGS, { restart: ['KeyR'] }), fw.target);
+    fw.fire('keydown', 'KeyR');
+    expect(kr.poll().pressed).toEqual(['restart']);
+    kr.dispose();
+    k.poll();
     fw.fire('keydown', 'KeyE', true);
     f = k.poll();
     expect([f.pressed, f.anyKey]).toEqual([[], true]);

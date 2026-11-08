@@ -22,6 +22,7 @@ import { deriveHud } from './hudModel';
 import { applyChapterEvent } from './chapterEvents';
 import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduceTurnInstant, reduceTurnMode, turnModeFrame, turnTab, type AxisMemo, type TurnModeInput, type TurnModeModel, type TurnStyle } from './cubeMapModel';
 import type { TurnClick } from '../ui/cubeMap';
+import { modeIntent, type BarMode, type ToolbarContext } from './toolbarModel';
 import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
 export interface SessionContext {
@@ -87,6 +88,8 @@ export class LevelSession {
   private traySeq = 0;
   private commands: WorldCommand[] = [];
   private tapInteract = false;
+  /** 工具列的 2D / 3D 鈕：下一幀送一次切換 (flip)；轉場中按下的作廢 */
+  private tapFlip = false;
   /** 字卡匣關著時按了 1～3 / X (站在標籤前)：等匣打開後補做這一下 (n = 第幾格；0 = 取下)；E 沒打開匣 (缺卡 / 缺筆尖) → 0.25 秒後作廢 */
   private pendingTray: number | null = null;
   private pendingAge = 0;
@@ -333,6 +336,21 @@ export class LevelSession {
   /** 字卡匣：貼第 n 格的卡 (1 起算) / 取下標籤上的卡 (指令下一幀進世界) */
   trayPick(n: number): void { const m = this.trayModel(); const c = m && slotCommand(m, n); if (c) this.commands.push(c); }
   trayRemove(): void { const m = this.trayModel(); const c = m && uncardCommand(m); if (c) this.commands.push(c); }
+  /** 工具列要的狀態 (app/toolbarModel；inLevel 由外殼補) */
+  get toolbarContext(): Omit<ToolbarContext, 'inLevel'> {
+    return { renderMode: this.renderMode, onCube: this.onCube, dialChapter: isDialChapter(this.cs.spec), dialActive: !!this.cs.state.dial, mapOpen: this.isMapOpen };
+  }
+
+  /** 工具列的模式鈕「魔方 / 2D / 3D」(app/toolbarModel modeIntent)：收起展開圖、進轉動模式 (照進入條件說明原因)、下一幀切換 */
+  requestMode(m: BarMode): void {
+    if (this.fx) return;
+    const i = modeIntent(m, { inLevel: true, ...this.toolbarContext });
+    if (i.say) say(this.world, i.say);
+    if (i.closeMap) { this.mapOpen = false; this.turnMode = false; this.turnSel = null; this.hoverSel = null; }
+    if (i.turnMode) this.toggleTurnMode();
+    if (i.flip) this.tapFlip = true;
+  }
+
   /** 點互動提示 (觸控)：等同下一幀按 E */
   tap(): void { this.tapInteract = true; }
   /** C / 「合成」鈕：把手上的道具依配方合成 (N28；指令下一幀進世界) */
@@ -362,6 +380,7 @@ export class LevelSession {
     if (this.fx) {
       // 轉場中的輸入一律丟棄；方向軸也記下 (轉場中按下、之後仍按著的鍵不會在轉場結束時變成「剛按下」的一步)
       this.axes = { x: Math.sign(input.moveX), z: Math.sign(input.moveZ) };
+      this.tapFlip = false;
       const r = this.fx.fx.tick(Math.min(Math.max(elapsedSec, 0), 1 / 20));
       if (r.swapNow) this.fx.onSwap();
       if (r.done) this.fx = null;
@@ -383,6 +402,7 @@ export class LevelSession {
     }
     let pressed = input.pressed.filter(isWorldAction);
     if (this.tapInteract) { this.tapInteract = false; if (!pressed.includes('interact')) pressed = [...pressed, 'interact']; }
+    if (this.tapFlip) { this.tapFlip = false; if (!pressed.includes('flip')) pressed = [...pressed, 'flip']; }
     let move = { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump };
     if (this.trayLabel !== null) {
       // 字卡匣開著：1～3 貼卡、X 取下、← / → 換頁、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)

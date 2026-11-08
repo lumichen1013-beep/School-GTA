@@ -12,7 +12,8 @@ export const DEFAULT_BINDINGS: Bindings = {
   flip: ['KeyF', 'KeyQ'],
   reset: ['KeyT'],
   interact: ['KeyE'],
-  restart: ['KeyR'],
+  /** 重新進房：2026-11-08 起沒有預設按鍵 (改用畫面上方的「重置」鈕；可在 settings.keys 重綁) */
+  restart: [],
   /** 確認窗：Enter 確認、Esc 取消 */
   confirm: ['Enter', 'NumpadEnter'],
   cancel: ['Escape'],

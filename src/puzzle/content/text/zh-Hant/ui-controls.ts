@@ -31,10 +31,8 @@ export const uiControls = {
   'ui.bar.items': '道具',
   'ui.bar.items.aria': '道具欄（{n} 件）',
   'msg.bar.leverCube': '這裡的魔方靠房間裡的拉桿轉。展開圖可以點「圖」打開。',
-  'msg.bar.mode2d': '已經在[[term.mode2d]]上了。',
-  'msg.bar.mode3d': '已經在[[term.mode3d]]裡了。',
   // 操作說明 (H 面板)：取代 R 的「重新進房」
-  'ui.help.bar': '上方按鈕：重置／魔方／2D／3D／道具',
+  'ui.help.bar': '上方按鈕：魔方（展開圖與轉動）／2D／3D',
   'ui.help.items': '道具欄',
   // 道具欄 popup (app/inventoryModel)
   'ui.items.title': '道具欄',

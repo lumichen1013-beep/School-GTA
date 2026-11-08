@@ -48,8 +48,11 @@ export function deriveHud(w: World, text: Text, view: HudView): HudModel {
   };
 }
 
-/** 操作說明由按鍵設定產生 (重綁後說明自動一致)；移動鍵合併成一個按鍵框 (WASD) */
-export function deriveHelp(b: Bindings): HelpRow[] {
+/**
+ * 操作說明由按鍵設定產生 (重綁後說明自動一致)；移動鍵合併成一個按鍵框 (WASD)。
+ * 重新進房沒有預設按鍵 (畫面上方的「重置」鈕)：沒綁鍵時按鍵框寫 resetLabel (鈕上的字)
+ */
+export function deriveHelp(b: Bindings, resetLabel = ''): HelpRow[] {
   const all = (codes: readonly string[]): string[] => codes.map(keyLabel);
   return [
     { keys: [[b.up, b.left, b.down, b.right].map(c => keyLabel(c[0] ?? '')).join('')], labelKey: 'ui.help.move' },
@@ -57,6 +60,6 @@ export function deriveHelp(b: Bindings): HelpRow[] {
     { keys: all(b.flip), labelKey: 'ui.help.flip' },
     { keys: all(b.interact), labelKey: 'ui.help.interact' },
     { keys: all(b.reset), labelKey: 'ui.help.reset' },
-    { keys: all(b.restart), labelKey: 'ui.help.restart', noteKey: 'ui.help.restart.note' }
+    { keys: b.restart.length ? all(b.restart) : resetLabel ? [resetLabel] : [], labelKey: 'ui.help.restart', noteKey: 'ui.help.restart.note' }
   ];
 }

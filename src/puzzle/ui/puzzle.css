@@ -23,18 +23,32 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 #pz-inv.got { animation: pz-got .9s ease-out; }
 @keyframes pz-got { 0% { transform: scale(1); } 30% { transform: scale(1.18) rotate(-3deg); box-shadow: 0 0 18px 6px rgba(245,194,66,.8); } 100% { transform: scale(1); } }
 /* 操作說明：預設收合成右上角小鈕 (不遮擋畫面與展開圖)；展開的面板在小鈕下方，遇到展開圖 / 字卡匣 / 轉動模式自動讓位 (app/helpModel) */
-#pz-help { position: absolute; top: 52px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.75; display: none;
+#pz-help { position: absolute; top: 58px; right: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.75; display: none;
   max-height: calc(100% - 52px - 24%); overflow: auto; box-sizing: border-box; background: rgba(253,244,225,.94); z-index: 4; }
 #pz-help.show { display: block; }
+/* 右上角：工具列 (重置 / 魔方 / 2D / 3D；ui/toolbar) + 操作說明小鈕，同一列不互相重疊 */
+#pz-topright { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; align-items: center; z-index: 6; }
+#pz-bar { display: none; gap: 6px; align-items: center; }
+#pz-bar.show { display: flex; }
+.pz-bar-btn {
+  min-width: 46px; height: 34px; padding: 0 10px; pointer-events: auto; cursor: pointer; font: 700 14px/1 inherit; letter-spacing: .08em; color: var(--ink);
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 10px 4px 10px 4px; box-shadow: 2px 2px 0 rgba(58,38,24,.25);
+}
+.pz-bar-btn.reset { margin-right: 6px; background: var(--paper2); }
+.pz-bar-btn.active { color: var(--paper); background: var(--inkblue); border-color: var(--ink); }
+.pz-bar-btn[data-bar="3d"].active { color: var(--ink); background: var(--accent); }
+.pz-bar-btn.off { border-style: dashed; opacity: .55; }
+/* 模式字已併進工具列 (目前模式高亮)；元素保留供 HUD 切換 mode2d 樣式 */
+#pz-status #pz-mode { display: none; }
 #pz-help-btn {
-  position: absolute; top: 14px; right: 14px; height: 30px; padding: 0 12px; display: none; align-items: center; gap: 6px; pointer-events: auto; cursor: pointer;
+  position: relative; height: 30px; padding: 0 12px; display: none; align-items: center; gap: 6px; pointer-events: auto; cursor: pointer;
   font: 13px/1 inherit; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 rgba(58,38,24,.25); opacity: .85;
 }
 #pz-help-btn.show { display: inline-flex; }
 #pz-help-btn.open { opacity: 1; background: var(--paper2); }
 #pz-help-btn i { font-style: normal; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: var(--paper); font-size: 12px; }
 #pz-tip {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 4px 14px; font-size: 13px; line-height: 1.5;
+  position: absolute; bottom: 28%; left: 50%; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 4px 14px; font-size: 13px; line-height: 1.5;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--paper); background: rgba(58,38,24,.86); border-radius: 999px;
   opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 7;
 }
@@ -276,7 +290,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 @media (max-width: 600px), (pointer: coarse) { .pz-map-keys { display: none; } }
 /* 橫屏矮螢幕 (手機橫放)：轉動模式的卡片拉高到狀態列以下的全部高度 (移動鍵此時本來就停用)，收起圖例與鍵盤說明 */
 @media (max-height: 520px) {
-  .pz-map.turning { top: 50px; height: calc(100vh - 58px); padding: 4px 10px 6px; }
+  .pz-map.turning { top: 64px; height: calc(100vh - 70px); padding: 4px 10px 6px; }
   .pz-map.turning .pz-map-legend, .pz-map.turning .pz-map-keys { display: none; }
   .pz-map.turning .pz-turn-btns { gap: 8px; }
 }
@@ -353,15 +367,31 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
   .pz-tray-card { min-width: 58px; }
 }
 /* 窄螢幕 (手機)：狀態列讓出右上角的說明小鈕、可換行 (模式字不被擠成直排；持有物多時換行而不是互相擠壓) */
+/* 觸控 / 窄螢幕：工具列鈕 ≥ 44 px */
+@media (max-width: 600px), (pointer: coarse) {
+  .pz-bar-btn { min-width: 44px; height: 44px; padding: 0 8px; }
+  #pz-help-btn { height: 44px; }
+  #pz-help { top: 66px; }
+}
+/* 直屏窄螢幕：工具列占第一列 (右對齊)，狀態列 (墨 / 持有物) 移到第二列；展開圖卡片往下讓 */
 @media (max-width: 600px) {
-  #pz-status { right: 58px; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+  #pz-topright { left: 10px; right: 10px; justify-content: flex-end; gap: 6px; }
+  #pz-bar { gap: 5px; }
+  .pz-bar-btn.reset { margin-right: auto; }
+  #pz-bar { flex: 1; }
+  #pz-status { top: 66px; }
+  .pz-map { top: 110px; }
+  #pz-help { top: 66px; }
+}
+@media (max-width: 600px) {
+  #pz-status { right: 14px; flex-wrap: wrap; gap: 6px; font-size: 13px; }
   #pz-status span { padding: 4px 10px; height: auto; min-height: 22px; }
   #pz-mode { white-space: nowrap; letter-spacing: .12em; }
   #pz-inv { flex-wrap: wrap; row-gap: 2px; line-height: 1.4; white-space: nowrap; }
 }
 /* 窄螢幕 (手機)：小鈕只剩「？」圖示；展開的面板改成右上角的窄卡 (字小、可捲動)，仍會讓位給展開圖 / 字卡匣 */
 @media (max-width: 600px) {
-  #pz-help-btn { width: 32px; padding: 0; justify-content: center; }
+  #pz-help-btn { width: 44px; padding: 0; justify-content: center; }
   #pz-help-btn span { display: none; }
   #pz-help { left: 14px; right: 14px; font-size: 12px; line-height: 1.6; }
   #pz-tip { font-size: 12px; padding: 4px 10px; }

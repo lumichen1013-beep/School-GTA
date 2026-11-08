@@ -18,6 +18,8 @@ import { chapterClearAlso, isUnlocked, levelState, listedInMenu, nextAfterClear,
 import { cssCubeFx, cssFade, TRANSITIONS } from '../render/transitions';
 import { resolveTheme } from '../render/themes';
 import { buildPuzzleDom, fillHelp, type HelpRow } from '../ui/dom';
+import { Toolbar } from '../ui/toolbar';
+import { deriveToolbar } from './toolbarModel';
 import { PuzzleHud } from '../ui/hud';
 import { CubeMapOverlay } from '../ui/cubeMap';
 import { CardTray } from '../ui/cardTray';
@@ -68,6 +70,9 @@ export class PuzzleApp {
   private bindings: Bindings = mergeBindings(DEFAULT_BINDINGS, this.settings.keys);
   private renderer: THREE.WebGLRenderer;
   private hud: PuzzleHud;
+  private toolbar: Toolbar;
+  /** 「重置」鈕按下：下一幀當成按了重新進房 (沿用 routeFrame 的確認窗) */
+  private restartRequested = false;
   private cubeMap: CubeMapOverlay;
   private tray: CardTray;
   private input: InputSource;
@@ -88,6 +93,7 @@ export class PuzzleApp {
   constructor(root: HTMLElement) {
     buildPuzzleDom(root, this.text, this.helpRows());
     this.hud = new PuzzleHud(this.text);
+    this.toolbar = new Toolbar(id => this.barClick(id));
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
       tab: () => this.session?.toggleTurnMode(),
       input: i => this.session?.turnInput(i)
@@ -125,7 +131,7 @@ export class PuzzleApp {
   private helpRows(): HelpRow[] {
     const b = this.bindings;
     return [
-      ...deriveHelp(b), { keys: b.map.map(keyLabel), labelKey: 'ui.help.map' },
+      ...deriveHelp(b, this.text('ui.bar.reset')), { keys: [], labelKey: 'ui.help.bar' }, { keys: b.map.map(keyLabel), labelKey: 'ui.help.map' },
       { keys: [this.text('ui.help.cards.keys', { a: keyLabel(b.slot1[0] ?? ''), b: keyLabel(b.slot3[0] ?? '') }), keyLabel(b.uncard[0] ?? '')], labelKey: 'ui.help.cards' },
       { keys: [keyLabel(b.turnMode[0] ?? ''), keyLabel(b.undo[0] ?? '')], labelKey: 'ui.help.turn' },
       { keys: ['\u2190\u2192\u2191\u2193'], labelKey: this.settings.turnMode === 'instant' ? 'ui.help.turnInstant' : 'ui.help.turnConfirm' },
@@ -337,7 +343,14 @@ export class PuzzleApp {
     this.session = null;
   }
 
-  /** R / 重玩：同一關重新開始 (不重播旁白)；選單 / 暱稱畫面中無效 */
+  /** 工具列：重置 = 重新進房 (確認窗)；魔方 / 2D / 3D = LevelSession.requestMode */
+  private barClick(id: 'reset' | 'cube' | '2d' | '3d'): void {
+    if (this.screen.id !== 'level' || !this.session) return;
+    if (id === 'reset') this.restartRequested = true;
+    else this.session.requestMode(id);
+  }
+
+  /** 重置鈕 / 重玩：同一關重新開始 (不重播旁白)；選單 / 暱稱畫面中無效 */
   private restart(): void {
     const s = this.screen;
     if (s.id === 'clear') this.go({ id: 'level', levelId: s.levelId });
@@ -468,6 +481,7 @@ export class PuzzleApp {
       touch: this.touch
     };
     this.hud.renderHelp(deriveHelpView(this.settings.helpOpen, ctx, this.text, this.bindings));
+    this.toolbar.render(deriveToolbar({ inLevel: ctx.inLevel, ...(s ? s.toolbarContext : { renderMode: '3d', onCube: false, dialChapter: false, dialActive: false, mapOpen: false }) }, this.text));
     if (!ctx.inLevel && this.hud.tipShowing) this.hud.showTip(null, now, 0);
     this.hud.tickTip(now);
     if (this.hud.tipShowing) return;
@@ -501,7 +515,9 @@ export class PuzzleApp {
     if (input.anyKey) this.skipNarration();
     if (input.pressed.includes('help')) this.toggleHelp();
     if (this.narrationUntil && now > this.narrationUntil) this.skipNarration();
-    switch (routeFrame(this.confirm, this.screen.id, input.pressed, now)) {
+    const pressed = this.restartRequested && this.screen.id === 'level' ? [...input.pressed, 'restart' as const] : input.pressed;
+    this.restartRequested = false;
+    switch (routeFrame(this.confirm, this.screen.id, pressed, now)) {
       // 通關畫面開著：世界照常推進 (過場、動畫)，但不收玩家輸入 (按 E 不會撿到通關畫面底下的東西)
       case 'update': this.session?.update(elapsed, this.screen.id === 'clear' ? { ...input, moveX: 0, moveZ: 0, jump: false, pressed: [] } : input); break;
       case 'open': this.openConfirm(now); break;
