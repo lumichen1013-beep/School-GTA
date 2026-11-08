@@ -35,6 +35,11 @@ const objects: ObjDef[] = [
   plate('plateN', 'plate:engineN', -6.0, 1.6, -4.4),
   { ...wallNote, id: 'noteA', x: -12.4, textKey: 'lvl.5-5.note.a' },
   { ...wallNote, id: 'noteB', x: 12.4, textKey: 'lvl.5-5.note.b' },
+  // ── 5-5b 殘影守門 (追逐 3)：許問津的守衛沿光路從東窗走過來 (推導物件，只在藏寶圖)；東窗斷開、另一扇窗的光接上 = 5-5b 的旗標物件 ──
+  { id: 'chaser', type: 'engineChaser', derived: true, from: 'east', trigger: 'slots', cut: 'chaseCut', omenSec: 3, enterSec: 2, speed: 2.4, assistAfter: 3, assistFactor: 0.8,
+    checkpoints: [-11.0, 11.0], checkZ: -0.2, omenText: 'lvl.5-5.chase.omen', caughtText: 'lvl.5-5.chase.caught', cutText: 'lvl.5-5.chase.cut', darkText: 'lvl.5-5.chase.dark', flag: 'chase:5-5',
+    x: -6.0, y: 0, z: -3.6, w: 0.6, h: 1.7, d: 0.6, visible: '2d', solid: false },
+  { id: 'chaseCut', type: 'chaseMark', doneFlag: '5-5b', x: -6.0, y: 2.9, z: -4.6, w: 0.2, h: 0.1, d: 0.2, visible: '3d', solid: false },
   // ── 中景：機關底盤 (被重畫的展開圖；資訊)、5-5c 的 L1 字條 ──
   plaque('base', 'lvl.5-5.base', -2.4, 0.1, 1.6, 'both', 'lvl.ch5.engine.baseLabel'),
   { ...noteBase, id: 'noteC', x: -9.4, z: 0.4, textKey: 'lvl.5-5.note.c' },

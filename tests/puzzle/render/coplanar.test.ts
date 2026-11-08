@@ -592,13 +592,14 @@ describe('渲染：深度打架 (共面)：第五章閣樓的占位房 (斜屋�
     }
   });
 
-  it('5-5 的狀態 (機關：光槽全暗 / 亮兩道 / 三道閂住、門牌貼「日」) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
+  it('5-5 的狀態 (機關：光槽全暗 / 亮兩道 / 三道閂住、門牌貼「日」、殘影在場) 3D 鏡頭看得到的面沒有共面；藏寶圖畫得出來', () => {
     const cases: Array<[string[], boolean, string[]]> = [[[], false, []], [['east', 'north'], false, ['card.ri']], [['east', 'west', 'north'], true, ['card.ri']]];
     for (const [reach, used, plate] of cases) {
       const w = newWorld(engine);
       w.ext = { cube: { links: {}, at: [1, 1, 0] }, dial: { active: true }, labels: { 'plate:engineN': plate },
-        starlight: { lit: reach, reach, behind: [], slits: { east: 'v', west: 'v', north: 'v' }, faces: { east: 'E', west: 'W', north: 'N' }, converge: false } };
+        starlight: { lit: reach, reach, behind: [], linked: reach, via: {}, slits: { east: 'v', west: 'v', north: 'v' }, faces: { east: 'E', west: 'W', north: 'N' }, converge: false } };
       w.byId.get('slots')!.used = used;
+      w.byId.get('chaser')!.used = used;
       const view = new PuzzleScene(w, THEMES.attic);
       const cams = new PuzzleCameras(w);
       for (let i = 0; i < 130; i++) view.update('3d', 1 / 60, i / 60, cams.active('3d'));

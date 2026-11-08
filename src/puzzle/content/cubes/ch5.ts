@@ -280,3 +280,20 @@ export const ch5Zone55a = (plate: 'doorN' | 'doorS' | null = 'doorN') => ({
   finish: '5-5a'
 });
 export const CH5_ZONE55A = ch5Zone55a();
+
+/**
+ * 5-5b 殘影守門 (devtools/validateDial；規格「5-5 最後的機關（細化）」抽象模型 CH5_ZONE55B)：中間片；起點 = 5-5a 的一種終局 (start；人在機關、「日」在北門)。
+ * 題：ch5.windows (教學：開章即成立；北門的「日」從這一刻就貼著 = plates when ch5.windows)、5-5b (東窗不再和機關連在一起，同時另一扇窗的星光照得進機關)
+ */
+export const ch5Zone55b = (start: CubeState) => ({
+  cube: CH5_MIDDLE_CUBE,
+  puzzles: [
+    { id: 'ch5.windows', room: 'engine', needs: [], teaching: true },
+    { id: '5-5b', room: 'engine', needs: ['ch5.windows'], goal: (_s: CubeState, _f: ReadonlySet<string>, ctx) => { const st = ctx.star(); return !st.linked.includes('east') && st.reach.some(w => w !== 'east'); } }
+  ] as readonly ZonePuzzle[],
+  plates: [{ room: 'engine', door: 'doorN', when: 'ch5.windows' }],
+  startCube: start,
+  dialOn: true,
+  start: 'engine',
+  finish: '5-5b'
+});

@@ -36,7 +36,7 @@ interface ZoneLink { from: { room: string; door: string }; to: { room: string; d
 /** 區模型的一題 (devtools DialPuzzle 的內容版)；light = 第三章光路條件 (這間房要有從 from 進來、穿過至少 via 間房的光；validateDial 以 core/chapter lightPaths 判定) */
 export interface ZonePuzzle {
   id: string; room: string; needs: readonly string[]; teaching?: boolean;
-  goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[]; across(room: string, side: Side): string | null; star(): { lit: readonly string[]; reach: readonly string[] }; converge(): boolean }) => boolean;
+  goal?: (s: CubeState, flags: ReadonlySet<string>, ctx: { links(): readonly ZoneLink[]; across(room: string, side: Side): string | null; star(): { lit: readonly string[]; reach: readonly string[]; linked: readonly string[] }; converge(): boolean }) => boolean;
   light?: { from: Side; via: number; uncovered?: readonly string[] };
   /** v0.4 第四章 墨流 (validateDial 同名欄位)：這間房的這個匯點 (本地門位) 此刻收到墨 */
   ink?: { side: Side };

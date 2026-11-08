@@ -173,8 +173,11 @@ export function acrossEdge(def: CubeDef, s: CubeState, room: string, side: Side)
 export type Slit = 'v' | 'h';
 export const slitOf = (s: CubeState, room: string): Slit => { const u = rotateSide('U', s.rot[room] ?? 0); return u === 'U' || u === 'D' ? 'v' : 'h'; };
 
-/** 星光此刻：lit = 看得見星星的窗房；reach = 星光照得進 target 的窗；behind = 星光照到 target 某扇門外的那一間、卻沒接進來 (門後是牆) */
-export interface StarState { lit: string[]; reach: string[]; behind: string[] }
+/**
+ * 星光此刻：lit = 看得見星星的窗房；reach = 星光照得進 target 的窗；behind = 星光照到 target 某扇門外的那一間、卻沒接進來 (門後是牆)；
+ * linked = 此刻沿接通的門和 target 連在一起的窗 (不論看不看得見星星；5-5b 殘影的來路)、via = 那扇窗是從 target 的哪一扇門連過去的
+ */
+export interface StarState { lit: string[]; reach: string[]; behind: string[]; linked: string[]; via: Record<string, string> }
 
 /** 封住的門 (DoorInfo.sealed) 在這組旗標下是否打開 (洞位、沒封的門 = 開著) */
 export const doorOpenFor = (doors: readonly DoorInfo[], done: ReadonlySet<string>) => (room: string, door: string): boolean => {
@@ -188,7 +191,7 @@ export const doorOpenFor = (doors: readonly DoorInfo[], done: ReadonlySet<string
  */
 export function starlight(def: CubeDef, s: CubeState, ls: readonly Link[], doors: readonly DoorInfo[], open: (room: string, door: string) => boolean): StarState {
   const st = def.stars;
-  if (!st) return { lit: [], reach: [], behind: [] };
+  if (!st) return { lit: [], reach: [], behind: [], linked: [], via: {} };
   const lit = st.windows.filter(w => { const f = faceOfCell(s.pos[w]); return !!f && st.faces.includes(f); });
   const adj = new Map<string, Set<string>>();
   const add = (a: string, b: string) => { (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b); };
@@ -198,6 +201,15 @@ export function starlight(def: CubeDef, s: CubeState, ls: readonly Link[], doors
   }
   const comp = (from: string): Set<string> => { const seen = new Set([from]); const q = [from]; while (q.length) for (const r of adj.get(q.shift()!) ?? []) if (!seen.has(r)) { seen.add(r); q.push(r); } return seen; };
   const reach = lit.filter(w => comp(w).has(st.target));
+  // target 的每一扇門各自連到哪幾間 (不經過 target 本身)
+  const via: Record<string, string> = {};
+  for (const l of ls) {
+    if (l.from.room !== st.target || !('room' in l.to) || !open(l.from.room, l.from.door) || !open(l.to.room, l.to.door)) continue;
+    const seen = new Set([st.target, l.to.room]); const q = [l.to.room];
+    while (q.length) for (const r of adj.get(q.shift()!) ?? []) if (!seen.has(r)) { seen.add(r); q.push(r); }
+    for (const w of st.windows) if (seen.has(w) && !(w in via)) via[w] = l.from.door;
+  }
+  const linked = st.windows.filter(w => w in via);
   // target 的門此刻朝著一格梁上走道、走道那一頭的房 (門後是牆：沒有接上)
   const outside = doors.filter(d => d.room === st.target && !d.hole && open(d.room, d.door) && !ls.some(l => l.from.room === d.room && l.from.door === d.door)).flatMap(d => {
     const at = s.pos[st.target];
@@ -208,7 +220,7 @@ export function starlight(def: CubeDef, s: CubeState, ls: readonly Link[], doors
     return r ? [r] : [];
   });
   const behind = lit.filter(w => !reach.includes(w) && outside.some(r => comp(w).has(r)));
-  return { lit, reach, behind };
+  return { lit, reach, behind, linked, via };
 }
 
 /** 三道光落在同一點 (CubeDef.stars.slits)：每扇窗都看得見星星、窗縫都是 slits 要的方向 */

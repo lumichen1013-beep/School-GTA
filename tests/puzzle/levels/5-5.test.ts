@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { LEVELS, levelById } from '../../../src/puzzle/content/levels';
 import { CHAPTERS } from '../../../src/puzzle/content/chapters';
 import { CUBE_CHAPTERS } from '../../../src/puzzle/content/cubes';
-import { CH5_AFTER51, CH5_CUBE, CH5_REDRAW, CH5_ZONE55A, ch5Zone55a, faceOf } from '../../../src/puzzle/content/cubes/ch5';
+import { CH5_AFTER51, CH5_CUBE, CH5_REDRAW, CH5_ZONE55A, ch5Zone55a, ch5Zone55b, faceOf } from '../../../src/puzzle/content/cubes/ch5';
+import { engineChaseRun } from '../../../src/puzzle/mechanics/engine';
 import { east, engine, landing, north, sky, west } from '../../../src/puzzle/content/levels/ch5/rooms';
 import { zhHant } from '../../../src/puzzle/content/text/zh-Hant';
 import { DEFAULT_MECHANICS, chapterSpecOf } from '../../../src/puzzle/mechanics';
@@ -76,6 +77,17 @@ const SLOTS: Cmd[] = [{ walkTo: [3.2, -3.6] }, { expect: w => expect(findTarget(
 const SOLVED = '三扇窗的光，一扇接一扇，從那道門縫流了進來。齒輪牆上的三道光槽同時亮了——機關醒了。';
 const A = 'Y1- X1- Z1- Z1- X1- Z1+';
 const B = 'Y1+ Z1+ X1- Y1- Y1- X1-';
+/** 5-5a 的 13 種 6 轉解 (探索腳本 / validateDial 列舉) */
+const ALL_A = ['X1+ Y1- X1- Y1- X1+ Z1+', A, 'Y1- X1- Z1+ Z1+ X1- Z1+', 'Y1- X1+ Z1- Z1- X1+ Z1+', 'Y1- X1+ Z1+ Z1+ X1+ Z1+', 'Y1+ X1- Y1- Y1- X1- Z1-', 'Y1+ X1- Y1+ Y1+ X1- Z1-',
+  'Y1+ X1+ Y1- Y1- X1+ Z1-', 'Y1+ X1+ Y1+ Y1+ X1+ Z1-', B, 'Y1+ Z1+ X1- Y1+ Y1+ X1-', 'Y1+ Z1+ X1+ Y1- Y1- X1+', 'Y1+ Z1+ X1+ Y1+ Y1+ X1+'];
+/** 5-5a 完成 (解法 A)、人在機關 (藏寶圖)；殘影還沒出來 */
+const after55a = (calm = false): ChapterSession => {
+  const cs = in2d(play(in2d(play(intoEngine(), TAKE_RI)), PLATE('N')));
+  if (calm) cs.world.rt.calm = true;
+  return turn(cs, ...seq(A));
+};
+/** 藏寶圖裡原地等 (秒) */
+const wait = (cs: ChapterSession, sec: number) => play(cs, [{ wait: sec }]);
 
 describe('5-5 最後的機關：資料', () => {
   it('validateLevel / validateEntry 0 issue；三題；墨 10 (5-5a 進行中 7、完成補滿)；三帶；門位不變 + 門牌；通關文字；登錄 (三扇窗都通關後開放)', () => {
@@ -239,6 +251,73 @@ describe('5-5a validateDial (CH5_ZONE55A) 與拿掉要素', () => {
       expect([p, validateDial(dialModelOf(z.cube, CH5.rooms, z.puzzles, z.start, z.finish, { startCube: z.startCube, plates: z.plates, dialOn: z.dialOn })).solvable]).toEqual([p, false]);
     }
   }, 180_000);
+});
+
+describe('5-5b 殘影守門 (P8 / P6；追逐 3)', () => {
+  it('5-5a 完成 → 靜 2 秒 → 預兆 3 秒 (殘影出現在北門：東窗從北門的「間」連過來) → 出門 2 秒 → 在藏寶圖追；一直待在藏寶圖 = 被追上回檢查點 (不扣墨、不退旗標)；確定性', () => {
+    const go = () => {
+      let cs = after55a();
+      const t0 = cs.world.time;
+      cs.world.player.x = 8; // 離北門遠一點 (在藏寶圖裡等)
+      const trace: Array<[string, number, number]> = [];
+      for (let i = 0; i < 100; i++) { cs = wait(cs, 0.1); const r = engineChaseRun(cs.world); trace.push([r.phase, Math.round((cs.world.time - t0) * 10) / 10, Math.round(get(cs, 'chaser').x * 100) / 100]); }
+      return { cs, trace };
+    };
+    const a = go();
+    const first = (ph: string) => a.trace.find(t => t[0] === ph)!;
+    // 靜 2 秒 → 預兆 (殘影出現在北門 x −6) → 3 秒 → 出門 → 2 秒 → 追
+    expect([first('omen')[1], first('omen')[2], first('enter')[1] - first('omen')[1], first('run')[1] - first('enter')[1]]).toEqual([2, -6, 3, 2]);
+    expect(go().trace).toEqual(a.trace);
+    let cs = a.cs;
+    for (let i = 0; i < 40 && engineChaseRun(cs.world).caught === 0; i++) cs = wait(cs, 0.5);
+    expect([engineChaseRun(cs.world).caught, cs.world.player.x, cs.world.msg, doneFlags(cs.spec, cs.state, cs.world).has('5-5a'), cs.state.turns!.left]).toEqual([
+      1, 11, '圖面一皺。你回到了齒輪牆的另一頭。', true, 10
+    ]);
+  });
+
+  it('東西軸 ↻ → 上下軸 ↺：東窗斷開、北窗的光從北門的「間」照進來 = 5-5b (殘影被拉回)；只斷開不接光 = 殘影退回、光槽全暗；取下「日」也算斷開', () => {
+    let cs = wait(after55a(), 6);
+    expect(engineChaseRun(cs.world).phase).not.toBe('idle');
+    cs = turn(cs, T('X1', 1), T('Z1', -1));
+    const st = cs.world.ext.starlight!;
+    expect([st.linked.includes('east'), st.reach, get(cs, 'chaseCut').used, cs.world.msg, engineChaseRun(cs.world).phase, get(cs, 'chaser').used]).toEqual([
+      false, ['north'], true, '殘影被拉回東窗那頭。另一扇窗的光接了上來——第二道光，落進機關。', 'idle', false
+    ]);
+    expect(doneFlags(cs.spec, cs.state, cs.world).has('5-5b')).toBe(true);
+    // 只斷開、沒有第二道光：取下北門的「日」(東窗的洞消失)
+    let d = wait(after55a(), 6);
+    d = play(d, UNPLATE('N'));
+    d = wait(d, 0.1);
+    expect([d.world.ext.starlight!.linked, get(d, 'chaseCut').used, d.world.msg, engineChaseRun(d.world).phase]).toEqual([[], false, '殘影退回去了。可是光槽全暗——光也跟著斷了。', 'idle']);
+    // 再貼回去 → 東窗又接上：殘影又來
+    d = wait(play(d, PLATE('N')), 2.5);
+    expect(engineChaseRun(d.world).phase).toBe('omen');
+  });
+
+  it('減弱緊張效果：殘影不出現，但仍要完成轉動', () => {
+    let cs = wait(after55a(true), 8);
+    expect([engineChaseRun(cs.world).phase, get(cs, 'chaser').used, get(cs, 'chaseCut').used]).toEqual(['idle', false, false]);
+    cs = turn(cs, T('X1', 1), T('X1', 1));
+    expect([get(cs, 'chaseCut').used, doneFlags(cs.spec, cs.state, cs.world).has('5-5b')]).toEqual([true, true]);
+  });
+
+  it('5-5a 的 13 種解都成立、終局只有兩種 (機關在南面 / 北面、北窗在頂面)；CH5_ZONE55B 從兩種終局各自最短 2、卡死 0', () => {
+    const ends = new Map<string, CubeState>();
+    for (const q of ALL_A) {
+      const s = apply(CH5_REDRAW, seq(q));
+      expect([q, faceOf(s, 'north')]).toEqual([q, 'U']);
+      ends.set(cubeKey(s, CH5_CUBE), s);
+    }
+    expect([...ends.values()].map(s => faceOf(s, 'engine')).sort()).toEqual(['N', 'S']);
+    for (const s of ends.values()) {
+      const z = ch5Zone55b(s);
+      const r = validateDial(dialModelOf(z.cube, CH5.rooms, z.puzzles, z.start, z.finish, { startCube: z.startCube, plates: z.plates, dialOn: z.dialOn }));
+      expect([faceOf(s, 'engine'), r.solvable, r.deadlocks, r.issues, r.states < 2_000_000, r.arrangements]).toEqual([faceOf(s, 'engine'), true, [], [], true, 12288]);
+      const p = r.perPuzzle.find(x => x.id === '5-5b')!;
+      expect([p.shortest, p.second, p.issues]).toEqual([2, 2, []]);
+      expect(p.distinct).toBeGreaterThanOrEqual(2);
+    }
+  }, 300_000);
 });
 
 describe('5-5 音訊', () => {
