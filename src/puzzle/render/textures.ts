@@ -366,3 +366,49 @@ export const bookRow = (pal: Palette, seed: number, look: 'spine' | 'back'): THR
   t.wrapS = THREE.RepeatWrapping;
   return t;
 };
+
+const CJK_FONT = '"PingFang TC", "Noto Sans TC", "Songti TC", serif';
+
+/**
+ * v0.4 第五章 5-2 窗框上直刻的一行字 (由上往下)：carved = 木頭上的刻字 (實景)、ink = 藏寶圖的墨字、shadow = 地上的字影 / 玻璃裡的倒影 (淡、透明底)
+ */
+export const verticalText = (pal: Palette, text: string, look: 'carved' | 'shadow'): THREE.Texture => cachedFor(pal, `vtext|${look}|${text}`, () => canvas(64, 320, g => {
+  const chars = [...text];
+  if (look === 'carved') {
+    g.fillStyle = shade(0x6b5038, 1.05); g.fillRect(0, 0, 64, 320);
+    g.strokeStyle = shade(0x6b5038, 0.6); g.lineWidth = 4; g.strokeRect(3, 3, 58, 314);
+  }
+  g.fillStyle = look === 'carved' ? shade(0x6b5038, 0.42) : 'rgba(18,20,34,0.85)';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `bold 48px ${CJK_FONT}`;
+  const step = 300 / Math.max(1, chars.length);
+  chars.forEach((ch, i) => g.fillText(ch, 32, 10 + step * (i + 0.5)));
+}));
+
+/**
+ * v0.4 第五章 5-2 藏寶圖上的東窗速寫：窗格 + 兩行直書的詩 (右 = right、左 = left；由上往下)。
+ * view：level = 順刻；up = 玻璃畫滿星光、兩行字橫躺在窗下 (側影)；flip = 玻璃塗黑 (鏡子)、兩行照倒影的順序寫正 (倒讀)
+ */
+export const windowSketch = (pal: Palette, right: string, left: string, view: 'level' | 'up' | 'flip'): THREE.Texture => cachedFor(pal, `wsk|${view}|${right}|${left}`, () => canvas(320, 360, g => {
+  const ink = toCss(pal.inkBlue);
+  const [x0, y0, w, h] = [80, 20, 160, 220];
+  if (view === 'flip') { g.fillStyle = 'rgba(26,30,52,0.82)'; g.fillRect(x0, y0, w, h); }
+  if (view === 'up') {
+    g.fillStyle = 'rgba(242,226,180,0.55)'; g.fillRect(x0, y0, w, h);
+    g.strokeStyle = 'rgba(176,138,74,0.7)'; g.lineWidth = 2;
+    for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(x0 + 10 + i * 24, y0 + 6); g.lineTo(x0 + 2 + i * 24, y0 + h - 6); g.stroke(); }
+  }
+  g.strokeStyle = ink; g.lineWidth = 6; g.strokeRect(x0, y0, w, h);
+  g.lineWidth = 3; g.beginPath(); g.moveTo(x0 + w / 2, y0); g.lineTo(x0 + w / 2, y0 + h); g.moveTo(x0, y0 + h / 2); g.lineTo(x0 + w, y0 + h / 2); g.stroke();
+  if (view === 'flip') {
+    // 鏡子裡的幾顆星 (倒影)
+    g.fillStyle = 'rgba(230,233,242,0.8)';
+    for (const [sx, sy] of [[108, 52], [196, 78], [130, 170], [214, 206], [158, 120]]) { g.beginPath(); g.arc(sx, sy, 2.5, 0, Math.PI * 2); g.fill(); }
+  }
+  g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `bold 34px ${CJK_FONT}`;
+  const col = (s: string, x: number) => [...s].forEach((ch, i) => g.fillText(ch, x, y0 + 22 + i * 44));
+  if (view !== 'up') { col(right, 280); col(left, 40); return; }
+  // 側影：兩行字橫躺在窗下 (每個字轉 90°)
+  const row = (s: string, y: number) => [...s].forEach((ch, i) => { g.save(); g.translate(250 - i * 44, y); g.rotate(Math.PI / 2); g.fillText(ch, 0, 0); g.restore(); });
+  row(right, 284); row(left, 330);
+}));

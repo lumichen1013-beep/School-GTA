@@ -413,3 +413,13 @@ export const leavesDecor: DecorFactory = (_p, item, { level }) => {
   const m = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(v, 3)), new THREE.PointsMaterial({ color: 0xc98a3a, size: 0.12 }));
   return { root: m, only3d: [m] };
 };
+
+/** quill：書案上的墨壺與羽毛筆 (5-2 許問津的書案)；欄位 x、y (桌面高)、z；只在實景 */
+export const quillDecor: DecorFactory = (p, item) => {
+  const g = new THREE.Group();
+  g.position.set(num(item, 'x'), num(item, 'y', 0.76), num(item, 'z'));
+  g.add(p.mesh(merge([part(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 10), 0, 0.04, 0), part(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 8), 0, 0.09, 0)]), 0x1e2230, { outline: false }));
+  // 羽毛：細長的扁錐，斜插在墨壺裡
+  g.add(p.mesh(merge([part(new THREE.ConeGeometry(0.035, 0.42, 6).scale(1, 1, 0.25), 0.06, 0.26, 0, 0, 0, -0.45)]), 0xe8e0cc, { outline: false, shadow: false }));
+  return { root: g, only3d: [g] };
+};

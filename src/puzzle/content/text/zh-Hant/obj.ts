@@ -49,6 +49,8 @@ export const obj = {
   'obj.miniCube.verb': '查看',
   'obj.miniGear.verb': '查看',
   'obj.starScale.verb': '看刻度',
+  'obj.poemWindow.verb': '看窗框',
+  'obj.starCase.verb': '打開',
   'obj.pane.verb': '拿起',
   'obj.sensor.verb': '查看',
   'obj.balance.verb': '查看',

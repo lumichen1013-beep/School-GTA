@@ -6,7 +6,7 @@ import { attachedCards, cardsOn, CARDS, labelTarget, TRAY_SLOTS, trayCards, writ
 import { findTarget } from '../core/interact';
 import type { InputAction } from '../input/types';
 import { WORD_KEYS } from '../mechanics/cube';
-import { leverWord } from '../mechanics/labels';
+import { blankTextKey, leverWord } from '../mechanics/labels';
 import type { CardTrayModel } from '../ui/cardTray';
 
 export type { CardTrayModel } from '../ui/cardTray';
@@ -26,7 +26,9 @@ export function labelGlyph(w: World, text: Text, o: ObjState): { now: string; ba
   if (l.kind === 'blank') {
     // 字謎空格 (2-2b)：原字 = 空格「＿」；貼了詞卡 = 卡面的字填進去
     const card = cardsOn(w, l.id)[0];
-    const fill = (c: string) => (l.textKey ? text(l.textKey, { c }) : c);
+    // v0.4 第五章 5-2 換讀法：此刻的讀法 (blankTextKey)
+    const key = blankTextKey(w, o);
+    const fill = (c: string) => (key ? text(key, { c }) : c);
     return { now: fill(card ? cardGlyph(text, card) : text('ui.label.blank')), base: fill(text('ui.label.blank')) };
   }
   const t = l.textKey ? text(l.textKey) : '';
@@ -99,7 +101,7 @@ export function deriveCardTray(w: World, text: Text, feedbackSeq: number, tab?: 
       return card ? { card, glyph: cardGlyph(text, card), name: cardName(text, card), key: String(i + 1) } : { card: null, glyph: '', name: text('ui.cards.empty'), key: String(i + 1) };
     }),
     attached: attachedCards(w, t).map(card => ({ card, glyph: cardGlyph(text, card), name: cardName(text, card) })),
-    message: LABEL_MSGS.has(w.msgKey) ? w.msg : '',
+    message: LABEL_MSGS.has(w.msgKey) || w.msgKey === t.def.label.flip?.wrongText ? w.msg : '',
     feedbackSeq,
     text: {
       head: text('ui.cards.head', { title: labelTitle(w, text, t) }), close: text('ui.cards.close'),

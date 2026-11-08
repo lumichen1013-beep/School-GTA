@@ -5,6 +5,7 @@ import type { Mechanic } from '../core/registry';
 import type { WorldCommand } from '../core/actions';
 import type { ItemId, ObjId, ObjState, TextKey, World } from '../core/types';
 import { INTERACT_RANGE, PLAYER_H } from '../core/constants';
+import { faceOfCell, type Side } from '../core/cube';
 import { distanceTo } from '../core/interact';
 import { isActiveIn } from '../core/presence';
 import { addItem, hasItem, say } from '../core/world';
@@ -40,6 +41,11 @@ declare module '../core/types' {
       self?: boolean;
       /** v0.4 第五章 5-1 不收任何尺度卡 (方槽照畫；貼上 = 說這句、卡片退回；例：把縮影本身標「小」) */
       refuse?: TextKey;
+      /**
+       * v0.4 第五章 5-2 換讀法 (只用在 kind 'blank')：這間房此刻在 face 那一面 (core/cube faceOfCell(ext.cube.at)) → 標籤讀作 textKey (flip 的)、
+       * 照 answers 收卡；不然讀作原本的 textKey、一張都不收 (說 wrongText、卡片退回、字顫動同無效字)
+       */
+      flip?: { face: Side; textKey: TextKey; wrongText: TextKey };
     };
   }
 }
@@ -57,7 +63,9 @@ export const canWrite = (w: World): boolean => hasItem(w, WRITE_ABILITY) || w.ab
 export interface CardDef { slot: 'word' | 'part' | 'scale'; dir?: LeverWord; glyph?: TextKey }
 /** 第二章字謎的詞卡 (2-2b：外 / 內 / 前；裡 / 邊 = 詞典先列的同義字，本章目前沒有卡) */
 const WORD_CARDS: Readonly<Record<string, TextKey>> = {
-  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
+  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian',
+  // v0.4 第五章 5-2 東窗的詩 (星表匣：抬 / 低 / 垂；俯 = 詞典先列的同義字，本章沒有卡)
+  tai: 'term.glyph.tai', di: 'term.glyph.di', chui: 'term.glyph.chui', fu: 'term.glyph.fu'
 };
 /** 部件卡 (門牌「門」+「日」=「間」；「才」=「閉」) */
 const PART_CARDS: Readonly<Record<string, TextKey>> = { ri: 'term.glyph.ri', cai: 'term.glyph.cai' };
@@ -118,6 +126,16 @@ export function leverWord(w: World, o: ObjState): LeverWord {
   return base;
 }
 
+/** v0.4 第五章 5-2：換讀法此刻成立 (這間房在 label.flip.face 那一面) */
+export const labelFlipped = (w: World, o: ObjState): boolean => {
+  const f = o.def.label?.flip;
+  return !!f && faceOfCell(w.ext.cube?.at) === f.face;
+};
+
+/** 字謎空格此刻的讀法 (文字 key；換讀法成立 = flip.textKey) */
+export const blankTextKey = (w: World, o: ObjState): TextKey | undefined =>
+  (labelFlipped(w, o) ? o.def.label?.flip?.textKey : undefined) ?? o.def.label?.textKey;
+
 /** 標籤此刻看不到 (label.after 指向的物件還沒 used) */
 export const labelCovered = (w: World, o: ObjState): boolean => {
   const after = o.def.label?.after;
@@ -175,6 +193,13 @@ function card(w: World, cmd: Extract<WorldCommand, { t: 'card' }>): void {
   if (!o) return;
   if (!canWrite(w)) { say(w, 'msg.label.noNib'); return; }
   if (!hasItem(w, cmd.card)) return;
+  // v0.4 第五章 5-2 換讀法還沒成立 (順著刻的那一行)：一張都不收
+  const flip = o.def.label?.flip;
+  if (flip && !labelFlipped(w, o)) {
+    say(w, flip.wrongText);
+    w.events.push({ t: 'card', label: cmd.label, ok: false });
+    return;
+  }
   if (!accepts(o, cmd.card)) {
     // 無效字：不生效、卡片留在匣裡 (規格 D15：字顫動、墨色變淡、輕音效由 UI / 呈現層播)
     say(w, 'msg.label.invalid');

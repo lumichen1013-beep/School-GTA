@@ -49,7 +49,7 @@ export const CUBE_CHAPTERS: readonly CubeChapter[] = [
   // 梁上走道 A～D (走廊格)；從地下室的木梯進樓梯口南門；第五章要「大」「小」尺度卡 (scaleCards)
   {
     chapter: 5, cube: CH5_CUBE, rooms: { landing, sky, east, west, north, engine, meadow, walkA, walkB, walkC, walkD },
-    start: { room: 'landing', door: 'doorS' }, levels: { '5-1': 'sky' }, scaleCards: true
+    start: { room: 'landing', door: 'doorS' }, levels: { '5-1': 'sky', '5-2': 'east' }, scaleCards: true
   }
 ];
 

@@ -81,6 +81,8 @@ function typeKeys(o: ObjDef): (string | undefined)[] {
   if (o.type === 'smallPrint') return [o.readText, o.firstText, label];
   if (o.type === 'coupletCabinet') return [o.upper, o.lockedRead, o.openRead, label];
   if (o.type === 'cardCatalog') return [o.emptyText, label];
+  if (o.type === 'starCase') return [o.emptyText, label];
+  if (o.type === 'poemWindow') return [o.upper, o.upperFlip, o.levelText, o.upText, o.downText, o.doneText, label, o.label?.solvedText, o.label?.flip?.textKey, o.label?.flip?.wrongText];
   if (o.type === 'typeCase') return [o.emptyText, label];
   if (o.type === 'patternCabinet') return [o.okText, o.notText, o.readText, label];
   if (o.type === 'smallCabinet') return [o.lockedRead, o.openRead, label];
@@ -178,7 +180,7 @@ export function validateLevel(def: LevelDef, ctx: ValidateContext): LevelIssue[]
   const byId = new Map(def.objects.map(o => [o.id, o]));
   const granted = new Set(def.objects.flatMap(o => [
     o.grants, o.type === 'drawer' || o.type === 'lampLock' || o.type === 'bookLock' || o.type === 'smallPrint' ? o.reward : undefined, o.label?.reward,
-    ...(o.type === 'hook' || o.type === 'latticeBox' ? o.also ?? [] : []), ...(o.type === 'ruler' ? o.also : []), ...(o.type === 'cardCatalog' ? o.cards : [])
+    ...(o.type === 'hook' || o.type === 'latticeBox' ? o.also ?? [] : []), ...(o.type === 'ruler' ? o.also : []), ...(o.type === 'cardCatalog' || o.type === 'starCase' ? o.cards : [])
   ]).filter((g): g is string => typeof g === 'string'));
   // 合成的產物 (N28)：配方的兩件都是章節道具 (可能在別的房間)，所以產物視為取得得到 (配料的來源由章節模型 validateDial 驗)
   for (const r of RECIPES) granted.add(r.out);

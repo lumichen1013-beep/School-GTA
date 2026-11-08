@@ -68,13 +68,13 @@ const spin = (...ts: Turn[]): CubeState => ts.reduce<CubeState>((s, t) => { cons
 
 describe('第五章骨架：登錄表與魔方', () => {
   it('CHAPTERS 第五章 (閣樓主題、levels 5-1)；LevelEntry 5-1 (筆尖 + 比例尺、前置 4-4)；CUBE_CHAPTERS chapter 5 (七間房 + 四格走道、從樓梯口南門進、要尺度卡)', () => {
-    expect(CHAPTERS.find(c => c.id === 5)).toEqual({ id: 5, titleKey: 'ch.5.title', theme: 'attic', levels: ['5-1'] });
+    expect(CHAPTERS.find(c => c.id === 5)).toEqual({ id: 5, titleKey: 'ch.5.title', theme: 'attic', levels: ['5-1', '5-2'] }); // 5-2 東窗登錄
     expect([TEXT('ch.5.title'), THEMES.attic.id, THEMES.meadow.id]).toEqual(['第五章　閣樓', 'attic', 'meadow']);
     const e = levelById('5-1')!;
     expect([e.chapter, e.abilities, e.unlock.after, e.load(), TEXT(e.titleKey)]).toEqual([5, ['nib', 'scale'], ['4-4'], sky, '天窗間']);
     expect(validateEntry(e, { mechanics: DEFAULT_MECHANICS, bundle: zhHant, levels: LEVELS, chapters: CHAPTERS })).toEqual([]);
     expect([cubeChapterOf('5-1'), CH5.cube, CH5.start, CH5.levels, CH5.scaleCards, Object.keys(CH5.rooms).sort()]).toEqual([
-      CH5, CH5_CUBE, { room: 'landing', door: 'doorS' }, { '5-1': 'sky' }, true,
+      CH5, CH5_CUBE, { room: 'landing', door: 'doorS' }, { '5-1': 'sky', '5-2': 'east' }, true,
       ['east', 'engine', 'landing', 'meadow', 'north', 'sky', 'walkA', 'walkB', 'walkC', 'walkD', 'west']
     ]);
     expect(CHAPTERS.find(c => c.id === 6)).toBeUndefined(); // 終章在 6-1 實作時登錄

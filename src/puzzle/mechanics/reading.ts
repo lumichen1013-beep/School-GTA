@@ -3,7 +3,7 @@
 // - 下聯 couplet：只畫在藏寶圖上的墨字；本身不可互動，2D 站在它前面按 E = 開字卡匣 (標籤 kind 'blank'，mechanics/labels)
 // - 卡片目錄櫃 cardCatalog：3D 拉抽屜 → 取得 cards (詞卡)，used；之後再按 = 空了
 import type { Mechanic } from '../core/registry';
-import type { ItemId, TextKey } from '../core/types';
+import type { ItemId, ObjState, TextKey, World } from '../core/types';
 import { addItem, say } from '../core/world';
 
 declare module '../core/types' {
@@ -21,6 +21,14 @@ declare module '../core/types' {
   }
 }
 
+/** 拿抽屜 / 匣裡的詞卡 (2-2 卡片目錄櫃、5-2 星表匣共用)：第一次 = 取得 cards、used、useText；之後 = emptyText */
+export function takeCards(w: World, o: ObjState, cards: readonly ItemId[], emptyText: TextKey): void {
+  if (o.used) { say(w, emptyText); return; }
+  o.used = true;
+  for (const c of cards) addItem(w, c, 1);
+  say(w, o.def.useText ?? emptyText);
+}
+
 export const reading: Mechanic = {
   id: 'reading',
   types: {
@@ -36,11 +44,7 @@ export const reading: Mechanic = {
       verbKey: 'obj.cardCatalog.verb',
       usableWhenUsed: true,
       interact: (w, o) => {
-        if (o.def.type !== 'cardCatalog') return;
-        if (o.used) { say(w, o.def.emptyText); return; }
-        o.used = true;
-        for (const c of o.def.cards) addItem(w, c, 1);
-        say(w, o.def.useText ?? o.def.emptyText);
+        if (o.def.type === 'cardCatalog') takeCards(w, o, o.def.cards, o.def.emptyText);
       }
     }
   }

@@ -123,6 +123,19 @@ export const sameCell = (a: Cell, b: Cell): boolean => a[0] === b[0] && a[1] ===
 export const addSide = (c: Cell, s: Side): Cell => [c[0] + VEC[s][0], c[1] + VEC[s][1], c[2] + VEC[s][2]];
 export const inCube = (def: CubeDef, c: Cell): boolean => c.every((v, i) => v >= 0 && v < def.dims[i]);
 
+/**
+ * v0.4 第五章 3×3×3 面心格此刻朝外的世界方位 (房間朝外永遠朝外：面心房的「哪一面」)；不是面心 / 沒有格位 = null
+ * (5-2 東窗：窗朝下 = 東窗在底面心；與 content/cubes/ch5 faceOf 同一條件)
+ */
+export function faceOfCell(at: readonly number[] | undefined): Side | null {
+  if (!at) return null;
+  const [x, y, z] = at;
+  if (y === 1 && z === 1) return x === 2 ? 'E' : x === 0 ? 'W' : null;
+  if (x === 1 && z === 1) return y === 0 ? 'N' : y === 2 ? 'S' : null;
+  if (x === 1 && y === 1) return z === 2 ? 'U' : z === 0 ? 'D' : null;
+  return null;
+}
+
 // ── v0.4 第五章 朝向 24 種 (規格「第五章共用規則」朝向)：ORIENTS[i] = 本地 N E S W U D 此刻朝向的世界方位 ──
 
 /** 三個軸的 ↻ (從軸的正向看順時針；與 applyTurn 的格位映射同向)：上下軸 北 → 東 → 南 → 西、東西軸 上 → 北 → 下 → 南、南北軸 上 → 西 → 下 → 東 */

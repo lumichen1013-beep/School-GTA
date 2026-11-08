@@ -12,7 +12,7 @@ import {
 } from './cellar';
 import {
   ancientTreeDecor, atticRoofDecor, atticWindowDecor, blanketDecor, canvasPileDecor, floorDrawingDecor, gearWallDecor, grassDecor, leavesDecor, postsDecor,
-  railingDecor, skyWindowDecor, starCeilingDecor, starChartDecor, stoneTableDecor, telescopeDecor, trunksDecor
+  quillDecor, railingDecor, skyWindowDecor, starCeilingDecor, starChartDecor, stoneTableDecor, telescopeDecor, trunksDecor
 } from './attic';
 import type { DecorFactory } from './types';
 
@@ -42,7 +42,7 @@ export const DECOR: Readonly<Partial<Record<string, DecorFactory>>> = {
   lantern: lanternDecor, wellMouth: wellMouthDecor, stoneRail: stoneRailDecor, greenhouseStair: greenhouseStairDecor, atticStair: atticStairDecor, crateStack: crateStackDecor, shelfRow: shelfRowDecor,
   // 觀星閣樓 (第五章；只在實景，窗框兩個視角都畫)：斜屋頂與椽樑、立柱、天窗與塵光、星圖天花板、牆上的窗、星表、望遠鏡、舊箱、帆布箱堆、欄杆、毯子、齒輪牆、重畫的展開圖
   atticRoof: atticRoofDecor, posts: postsDecor, skyWindow: skyWindowDecor, starCeiling: starCeilingDecor, atticWindow: atticWindowDecor, starChart: starChartDecor,
-  telescope: telescopeDecor, trunks: trunksDecor, canvasPile: canvasPileDecor, railing: railingDecor, blanket: blanketDecor, gearWall: gearWallDecor, floorDrawing: floorDrawingDecor,
+  telescope: telescopeDecor, trunks: trunksDecor, canvasPile: canvasPileDecor, railing: railingDecor, blanket: blanketDecor, gearWall: gearWallDecor, floorDrawing: floorDrawingDecor, quill: quillDecor,
   // 林心草地 (終章 6-1 骨架版)：古樹、草地、石台、落葉
   ancientTree: ancientTreeDecor, grass: grassDecor, stoneTable: stoneTableDecor, leaves: leavesDecor
 };

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ObjDef } from '../../core/types';
+import { faceOfCell } from '../../core/cube';
 import type { Painter } from '../materials';
 import type { Theme } from '../themes';
 import { labelTag, scaleCornerTag } from '../textures';
@@ -15,7 +16,8 @@ const WORD_KEY = (w: string): string => WORD_KEYS[w] ?? WORD_KEYS.up;
 const cardWord = (card: string): string | null => /^card\.(\w+)$/.exec(card)?.[1] ?? null;
 /** 字謎詞卡的卡面字 key (與 mechanics/labels CARDS 的 glyph 相同；render 只能 import type) */
 const GLYPH_KEYS: Readonly<Record<string, string>> = {
-  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian'
+  wai: 'term.glyph.wai', nei: 'term.glyph.nei', qian: 'term.glyph.qian', li: 'term.glyph.li', bian: 'term.glyph.bian',
+  tai: 'term.glyph.tai', di: 'term.glyph.di', chui: 'term.glyph.chui', fu: 'term.glyph.fu'
 };
 /** 尺度卡 (N23；mechanics/scale SCALE_GLYPHS 同值；render 只能 import type) */
 const SCALE_GLYPH_KEYS: Readonly<Record<string, string>> = { 'card.da': 'term.glyph.da', 'card.xiao': 'term.glyph.xiao' };
@@ -50,7 +52,9 @@ export function labelText(c: ModelCtx, d: ObjDef): { text: string; covered: bool
   if (l.kind === 'blank') {
     // 字謎空格 (2-2b)：空著 = 「＿」；貼了詞卡 = 卡面的字 (term.glyph.<字>，mechanics/labels 的命名慣例)
     const glyph = c.world.rt.text(w !== undefined && GLYPH_KEYS[w] ? GLYPH_KEYS[w] : 'ui.label.blank');
-    return { text: l.textKey ? c.world.rt.text(l.textKey, { c: glyph }) : '', covered: w !== undefined };
+    // v0.4 第五章 5-2 換讀法 (label.flip；同 mechanics/labels blankTextKey)：這間房在那一面 = 倒讀
+    const key = l.flip && faceOfCell(c.world.ext.cube?.at) === l.flip.face ? l.flip.textKey : l.textKey;
+    return { text: key ? c.world.rt.text(key, { c: glyph }) : '', covered: w !== undefined };
   }
   if (l.kind === 'strip') return { text: c.world.rt.text((c.obj.used ? l.stripped : undefined) ?? l.textKey ?? ''), covered: false };
   if (l.kind === 'plate') {
@@ -96,7 +100,7 @@ export function labelBadge(p: Painter, d: ObjDef, { pal }: Theme, root: THREE.Gr
     }
     for (const [k, m] of meshes) m.visible = k === key;
     const w = c.world;
-    if (lastSeq >= 0 && w.msgSeq !== lastSeq && w.msgKey === 'msg.label.invalid' && Math.abs(w.player.x - c.obj.x) < 2.2) shake = SHAKE_SEC;
+    if (lastSeq >= 0 && w.msgSeq !== lastSeq && (w.msgKey === 'msg.label.invalid' || w.msgKey === d.label?.flip?.wrongText) && Math.abs(w.player.x - c.obj.x) < 2.2) shake = SHAKE_SEC;
     lastSeq = w.msgSeq;
     shake = Math.max(0, shake - c.dt);
     const k = shake / SHAKE_SEC;

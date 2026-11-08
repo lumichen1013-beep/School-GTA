@@ -107,7 +107,7 @@ const PURE_LAYERS: readonly string[] = ['core', 'mechanics', 'content', 'meta', 
 const DOM_GLOBALS = new Set(['document', 'window', 'localStorage', 'sessionStorage', 'navigator', 'requestAnimationFrame', 'cancelAnimationFrame', 'HTMLElement']);
 const NONDET_MEMBERS = new Set(['performance.now', 'Date.now', 'Math.random']);
 /** render 對 core 的值匯入白名單 (2.3 第 7 點；只用查詢函式) */
-const RENDER_CORE_VALUES = new Set(['isActiveIn', 'allObjs', 'objBox']);
+const RENDER_CORE_VALUES = new Set(['isActiveIn', 'allObjs', 'objBox', 'faceOfCell']);
 
 // ── 已知例外 (顯式資料；新增違規不在此清單 → 失敗；清單項不再發生 → 也失敗，必須刪除) ──
 

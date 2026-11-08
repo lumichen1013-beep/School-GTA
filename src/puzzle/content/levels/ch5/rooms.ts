@@ -59,21 +59,8 @@ export const landing = room('landing', -6, 6, [
   { kind: 'starChart', x: 0.6, z: -4.2, n: 1, seed: 523 }
 ], { start: { x: -2.0, y: 0, z: 3.2 } });
 
-/**
- * 5-2 東窗 (東面心 [2,1,1]；許問津的窗)：東牆 = 東窗 (不是門)、北門、地板梯口。
- * 後景 樑下的書架與星表、北門 ｜ 中景 東窗與窗台 (許問津的詩，5-2 加) ｜ 前景 箱堆、地板梯口旁的紙籤
- */
-export const east = room('east', -10, 10, [
-  door('N', 'door', -4.0),
-  hatch('D', 'door', 3.0, 1.6),
-  plaque('sill', 'lvl.ch5.east.sill', 9.5, 1.0, 0, 'both', 'lvl.ch5.sill'),
-  plaque('plaqueEast', 'lvl.ch5.east.plaque', -6.4, 0.9, 3.2)
-], [
-  atticWindow('E', 0),
-  { kind: 'shelfRow', x: 3.4, z: -3.9, n: 2, seed: 531 },
-  { kind: 'starChart', x: -7.0, z: -3.4, n: 2, seed: 533 },
-  { kind: 'trunks', x: -6.4, z: 3.4, n: 3, seed: 535 }
-]);
+/** 5-2 東窗 (東面心；許問津的窗)：完整檔在 5-2-east.ts */
+export { eastRoom as east } from './5-2-east';
 
 /**
  * 5-3 西窗 (西面心 [0,1,1]；爸爸的窗)：西牆 = 西窗、南門 (前緣，只在實景)、地板梯口。
