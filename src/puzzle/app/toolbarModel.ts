@@ -26,6 +26,8 @@ export interface ToolbarContext {
   /** 持有道具總數 (「道具」鈕的角標) 與道具欄開著 */
   itemCount: number;
   itemsOpen: boolean;
+  /** 設定 popup 開著 (2026-11-08；齒輪 / Esc) */
+  settingsOpen: boolean;
 }
 
 
@@ -43,7 +45,9 @@ export function deriveToolbar(ctx: ToolbarContext, text: Text): ToolbarView {
     { id: '2d', label: text('ui.bar.mode2d'), aria: text('ui.bar.mode2d.aria'), active: act === '2d', enabled: true },
     { id: '3d', label: text('ui.bar.mode3d'), aria: text('ui.bar.mode3d.aria'), active: act === '3d', enabled: true },
     // 道具欄 (I)：角標 = 持有總數
-    { id: 'items', label: text('ui.bar.items'), aria: text('ui.bar.items.aria', { n: ctx.itemCount }), active: ctx.itemsOpen, enabled: true, ...(ctx.itemCount ? { badge: ctx.itemCount } : {}) }
+    { id: 'items', label: text('ui.bar.items'), aria: text('ui.bar.items.aria', { n: ctx.itemCount }), active: ctx.itemsOpen, enabled: true, ...(ctx.itemCount ? { badge: ctx.itemCount } : {}) },
+    // 設定 (Esc)：聲音、轉動方式、回到選單…
+    { id: 'settings', label: text('ui.bar.settings'), aria: text('ui.bar.settings.aria'), active: ctx.settingsOpen, enabled: true }
   );
   return { show: ctx.inLevel, buttons };
 }

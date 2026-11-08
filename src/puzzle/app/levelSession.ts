@@ -24,6 +24,7 @@ import { deriveCubeMap, deriveTurnMode, dialBlockKey, inkHud, previewFor, reduce
 import type { TurnClick } from '../ui/cubeMap';
 import { modeIntent, type BarMode, type ToolbarContext } from './toolbarModel';
 import { deriveInventory, type InventoryView } from './inventoryModel';
+import { escapeAction } from './settingsModel';
 import type { InventoryPopup } from '../ui/inventory';
 import { closedTrayKey, deriveCardTray, shiftTab, slotCommand, uncardCommand, type TrayTab } from './cardTrayModel';
 
@@ -94,8 +95,11 @@ export class LevelSession {
   private tapInteract = false;
   /** 工具列的 2D / 3D 鈕：下一幀送一次切換 (flip)；轉場中按下的作廢 */
   private tapFlip = false;
-  /** 道具欄 popup 開著、點選的那一格 (2026-11-08；開著時角色不動、世界照常；展開圖 / 字卡匣 / 轉動模式打開 → 收起) */
-  private invOpen = false;
+  /**
+   * 浮層 popup (2026-11-08)：道具欄 / 設定 (同時最多一個)；開著時角色不動、世界照常；展開圖 / 字卡匣 / 轉動模式打開 → 收起。
+   * invSel = 道具欄點選的那一格
+   */
+  private panel: 'items' | 'settings' | null = null;
   private invSel: string | null = null;
   /** 字卡匣關著時按了 1～3 / X (站在標籤前)：等匣打開後補做這一下 (n = 第幾格；0 = 取下)；E 沒打開匣 (缺卡 / 缺筆尖) → 0.25 秒後作廢 */
   private pendingTray: number | null = null;
@@ -157,7 +161,7 @@ export class LevelSession {
     this.roomClearSent = new Set<string>();
     this.trayLabel = null;
     this.pendingTray = null;
-    this.invOpen = false;
+    this.panel = null;
     this.commands = [];
     this.view = new PuzzleScene(w, this.ctx.theme, { calm: this.ctx.calm, still: this.ctx.still });
     this.cams = new PuzzleCameras(w);
@@ -248,7 +252,7 @@ export class LevelSession {
     this.mapOpen = true;
     this.hoverSel = null;
     this.keyFocus = false;
-    this.invOpen = false;
+    this.panel = null;
     // 直接轉：鍵盤焦點先放在你所在的那一排 (方向鍵按下去就轉)；先預覽再確認：沒有選取
     this.turnSel = this.turnStyle === 'instant' ? deriveTurnMode(this.cs, this.ctx.text, null, 'instant').home ?? null : null;
     this.autoTurn = false;
@@ -328,7 +332,7 @@ export class LevelSession {
   private openTray(label: string): void {
     this.trayLabel = label;
     this.trayTabSel = null;
-    this.invOpen = false;
+    this.panel = null;
     this.mapOpen = false;
     this.turnMode = false;
     this.ctx.onTrayOpen?.();
@@ -353,28 +357,42 @@ export class LevelSession {
   /** 工具列要的狀態 (app/toolbarModel；inLevel 由外殼補) */
   get toolbarContext(): Omit<ToolbarContext, 'inLevel'> {
     const itemCount = Object.values(this.world.inv).reduce((s, n) => s + Math.max(0, n), 0);
-    return { renderMode: this.renderMode, onCube: this.onCube, dialChapter: isDialChapter(this.cs.spec), dialActive: !!this.cs.state.dial, mapOpen: this.isMapOpen, itemCount, itemsOpen: this.invOpen };
+    return { renderMode: this.renderMode, onCube: this.onCube, dialChapter: isDialChapter(this.cs.spec), dialActive: !!this.cs.state.dial, mapOpen: this.isMapOpen, itemCount, itemsOpen: this.panel === 'items', settingsOpen: this.panel === 'settings' };
   }
 
   /** 道具欄開著 (開發期自動化驗證用) */
-  get isInventoryOpen(): boolean { return this.invOpen; }
-  /** I /「道具」鈕：開 / 關道具欄 (字卡匣開著時不開；打開 = 收起展開圖與轉動模式、放開按著的鍵) */
-  toggleInventory(): void {
-    if (this.invOpen) { this.invOpen = false; return; }
-    if (this.trayLabel !== null || this.fx) return;
+  get isInventoryOpen(): boolean { return this.panel === 'items'; }
+  /** 設定 popup 開著 (外殼依此畫 / 收起設定 popup) */
+  get isSettingsOpen(): boolean { return this.panel === 'settings'; }
+  /** Esc / 工具列「設定」：開 / 關設定 popup (字卡匣開著、轉場中不開；打開 = 收起展開圖 / 轉動模式 / 道具欄、放開按著的鍵) */
+  toggleSettings(): void {
+    if (this.panel === 'settings') { this.panel = null; return; }
+    if (!this.openPanel()) return;
+    this.panel = 'settings';
+  }
+  closeSettings(): void { if (this.panel === 'settings') this.panel = null; }
+  /** 開浮層前的共同收尾：字卡匣 / 轉場中不開；收起展開圖與轉動模式、放開按著的鍵 */
+  private openPanel(): boolean {
+    if (this.trayLabel !== null || this.fx) return false;
     this.mapOpen = false;
     this.turnMode = false;
     this.turnSel = null;
     this.hoverSel = null;
-    this.invOpen = true;
-    this.invSel = null;
     this.ctx.releaseInput?.();
+    return true;
   }
-  closeInventory(): void { this.invOpen = false; }
+  /** I /「道具」鈕：開 / 關道具欄 (字卡匣開著時不開；打開 = 收起展開圖與轉動模式、放開按著的鍵) */
+  toggleInventory(): void {
+    if (this.panel === 'items') { this.panel = null; return; }
+    if (!this.openPanel()) return;
+    this.panel = 'items';
+    this.invSel = null;
+  }
+  closeInventory(): void { if (this.panel === 'items') this.panel = null; }
   /** 道具欄點一格：顯示它的名稱與說明 */
-  inventoryPick(id: string): void { if (this.invOpen) this.invSel = id; }
+  inventoryPick(id: string): void { if (this.panel === 'items') this.invSel = id; }
   /** 道具欄的資料 (關著 = null) */
-  inventoryModel(): InventoryView | null { return this.invOpen ? deriveInventory(this.world.inv, this.ctx.text, this.invSel) : null; }
+  inventoryModel(): InventoryView | null { return this.panel === 'items' ? deriveInventory(this.world.inv, this.ctx.text, this.invSel) : null; }
 
   /** 工具列的模式鈕「魔方 / 2D / 3D」(app/toolbarModel modeIntent)：收起展開圖、進轉動模式 (照進入條件說明原因)、下一幀切換 */
   requestMode(m: BarMode): void {
@@ -402,7 +420,7 @@ export class LevelSession {
     if (!this.onCube || this.fx) return;
     if (this.world.player.mode !== '2d') { say(this.world, 'msg.cube.mapOnly2d'); this.mapOpen = false; return; }
     this.mapOpen = !this.mapOpen;
-    if (this.mapOpen) this.invOpen = false;
+    if (this.mapOpen) this.panel = null;
     if (!this.mapOpen) { this.turnMode = false; this.turnSel = null; }
   }
 
@@ -423,11 +441,16 @@ export class LevelSession {
       return;
     }
     const invBefore = JSON.stringify(this.world.inv);
-    // 道具欄：I 開 / 關、Esc 關 (開著時這一下 Esc 不另做別的)
-    let pressedShell = input.pressed;
+    // 道具欄 I 開 / 關；Esc 的優先順序 (app/settingsModel escapeAction)：浮層 (道具欄 / 設定) 關 > 轉動模式離開 / 字卡匣關 (照舊) > 開設定
+    // (確認窗開著時外殼的 routeFrame 已攔下 Esc，不會進到這裡)
     if (input.pressed.includes('inventory')) this.toggleInventory();
-    else if (this.invOpen && input.pressed.includes('cancel')) { this.invOpen = false; pressedShell = input.pressed.filter(a => a !== 'cancel'); }
-    input = pressedShell === input.pressed ? input : { ...input, pressed: pressedShell };
+    else if (input.pressed.includes('cancel')) {
+      const a = escapeAction({ panel: this.panel, turnMode: this.turnMode, tray: this.trayLabel !== null });
+      if (a !== 'pass') {
+        if (a === 'closePanel') this.panel = null; else this.toggleSettings();
+        input = { ...input, pressed: input.pressed.filter(x => x !== 'cancel') };
+      }
+    }
     if (this.turnMode && (this.world.player.mode !== '2d' || this.trayLabel !== null)) { this.turnMode = false; this.turnSel = null; }
     if (this.turnMode) {
       // 轉動模式：移動軸、跳躍、世界動作不送進世界 (世界照常推進，規格 Q-AF)；方向鍵選標頭、Enter 確認、Z 回退、Esc / Tab 離開、M 關圖
@@ -446,7 +469,7 @@ export class LevelSession {
     if (this.tapFlip) { this.tapFlip = false; if (!pressed.includes('flip')) pressed = [...pressed, 'flip']; }
     let move = { moveX: input.moveX, moveZ: input.moveZ, jump: input.jump };
     // 道具欄開著：角色不動、不互動 / 切換 (世界照常推進)；M / Tab 照常 (打開展開圖 / 轉動模式會收起道具欄)
-    if (this.invOpen) { pressed = []; move = { moveX: 0, moveZ: 0, jump: false }; }
+    if (this.panel) { pressed = []; move = { moveX: 0, moveZ: 0, jump: false }; }
     if (this.trayLabel !== null) {
       // 字卡匣開著：1～3 貼卡、X 取下、← / → 換頁、Esc / E 關閉；不移動、不切換 (離開範圍 / 回實景 → 自動關閉)
       if (!this.trayModel()) this.trayLabel = null;
@@ -466,7 +489,7 @@ export class LevelSession {
       if (input.pressed.includes('turnMode')) this.toggleTurnMode();
       if (input.pressed.includes('combine')) this.combine();
       // 字卡匣關著時按 1～3 / X：站在標籤前 = 按 E 打開並補做這一下；否則說明怎麼打開 (cardTrayModel.closedTrayKey)
-      const k = pressed.includes('interact') || this.invOpen ? null : closedTrayKey(this.world, input.pressed);
+      const k = pressed.includes('interact') || this.panel ? null : closedTrayKey(this.world, input.pressed);
       if (k?.open) { this.pendingTray = k.n; this.pendingAge = 0; pressed = [...pressed, 'interact']; }
       else if (k?.howto) say(this.world, 'msg.cards.howto');
     }
@@ -507,7 +530,7 @@ export class LevelSession {
     const hud = deriveHud(w, ctx.text, { renderMode: this.renderMode, locked, bindings: ctx.bindings, ink: this.onCube ? inkHud(this.cs, ctx.text, this.renderMode) : null });
     if (this.renderMode === '3d') { this.mapOpen = false; this.turnMode = false; }
     const tray = locked ? null : this.trayModel();
-    if (tray || this.isTurnMode || this.invOpen) hud.prompt = null;
+    if (tray || this.isTurnMode || this.panel) hud.prompt = null;
     // 互動提示可點 (觸控 = 按 E；mobile-controls 2.1)；展開圖的提示不可點 (另有「圖」鍵)
     ctx.hud.setPromptTap(!!hud.prompt);
     // 2D、在魔方上、沒有其他提示：提示可以看展開圖

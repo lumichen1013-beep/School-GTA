@@ -40,6 +40,32 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1d; fon
 .pz-bar-badge { position: absolute; right: -7px; top: -7px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px;
   font: 700 11px/18px inherit; font-style: normal; letter-spacing: 0; color: var(--paper); background: #a8640f; border: 1.5px solid var(--ink); }
 .pz-bar-btn.got { animation: pz-got .9s ease-out; }
+/* 「設定」鈕 (齒輪 + 字；手機只剩齒輪) */
+.pz-bar-btn.settings { display: inline-flex; align-items: center; gap: 4px; }
+.pz-bar-btn.settings svg { display: block; }
+/* 關卡中的「設定」popup (ui/settingsPanel)：同道具欄的位置與紙卡，內容可捲動 */
+#pz-settings {
+  position: absolute; top: 60px; right: 14px; width: min(92vw, 400px); max-height: calc(100% - 72px); box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px 12px; pointer-events: auto; z-index: 8; background: rgba(253,244,225,.98); border: 2px solid var(--ink); border-radius: 12px 4px 12px 4px; box-shadow: 4px 4px 0 rgba(58,38,24,.28);
+}
+#pz-settings .pz-panel-body { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+#pz-settings .pz-settings { margin: 0; padding: 0; background: none; border: 0; box-shadow: none; width: auto; }
+#pz-settings h3 { margin: 4px 0 2px; font-size: 14px; letter-spacing: .2em; color: #6a4a30; }
+#pz-settings .pz-setting { min-height: 44px; }
+.pz-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pz-panel-actions .pz-btn { flex: 1 1 40%; min-height: 44px; }
+/* 重置記錄：次要樣式、紅褐色警示 */
+.pz-btn.pz-btn-danger { color: #8a3b12; background: transparent; border: 2px dashed #8a3b12; box-shadow: none; }
+.pz-btn.pz-btn-danger:disabled { opacity: .45; cursor: default; }
+.pz-btn.pz-btn-danger:hover:not(:disabled) { color: #8a3b12; background: rgba(138,59,18,.1); }
+.pz-panel-actions .pz-btn-danger { flex-basis: 100%; }
+.pz-reset .pz-check { display: flex; gap: 10px; align-items: center; min-height: 44px; text-align: left; cursor: pointer; }
+.pz-reset .pz-check input { width: 22px; height: 22px; accent-color: #8a3b12; flex: none; }
+.pz-reset-msg { min-height: 0; margin: 0; font-weight: 700; }
+.pz-reset-msg.bad { color: #8a3b12; }
+.pz-reset-msg:empty { display: none; }
+@media (max-width: 600px) { #pz-settings { top: 110px; left: 10px; right: 10px; width: auto; max-height: calc(100% - 120px); } .pz-bar-btn.settings span { display: none; } }
+@media (max-height: 520px) { #pz-settings { top: 64px; max-height: calc(100% - 70px); width: min(80vw, 520px); } }
 /* 道具欄 popup (2026-11-08；ui/inventory)：右上角下方的紙卡；格子 4 欄 (≥ 12 格，超過增列、卡片內捲動)；點一格 → 下方寫名稱與說明 */
 #pz-items {
   position: absolute; top: 60px; right: 14px; width: min(92vw, 360px); max-height: calc(100% - 60px - 26%); box-sizing: border-box; display: none; flex-direction: column; gap: 8px;

@@ -105,6 +105,7 @@ export class AudioBridge {
   }
 
   /** 設定改變 (音量 / 靜音 / 減弱緊張效果) */
+  /** 設定改了 (關卡中的「設定」popup / 重置記錄)：音量與靜音立即套用 */
   applySettings(s: Settings): void {
     this.manager.setVolumes(volumesOf(s));
     this.manager.setCalm(s.calmTension);

@@ -27,7 +27,12 @@ import { CardTray } from '../ui/cardTray';
 import { keyLabel } from '../input/bindings';
 import { showMenu } from '../ui/screens/menu';
 import { showNickname } from '../ui/screens/nickname';
-import { showRestartConfirm, showSkipConfirm } from '../ui/confirm';
+import { showConfirm, showRestartConfirm, showSkipConfirm } from '../ui/confirm';
+import { SettingsPanel } from '../ui/settingsPanel';
+import { ResetDialog } from '../ui/resetDialog';
+import { canConfirmReset } from './settingsModel';
+import { resetRecords } from '../meta/reset';
+
 import { showMemories, type CutsceneSettingsModel } from '../ui/screens/memories';
 import { showControlsSettings } from '../ui/screens/controls';
 import { showCutsceneUi, type CutsceneUi } from '../ui/cutscene';
@@ -75,6 +80,11 @@ export class PuzzleApp {
   private items: InventoryPopup;
   /** 「重置」鈕按下：下一幀當成按了重新進房 (沿用 routeFrame 的確認窗) */
   private restartRequested = false;
+  /** 確認窗要做的事：重新進房 (重置鈕) / 回到選單 (設定 popup) */
+  private confirmKind: 'restart' | 'menu' = 'restart';
+  /** 關卡中的「設定」popup (齒輪 / Esc) 與重置記錄確認窗 */
+  private settingsPanel!: SettingsPanel;
+  private resetDialog!: ResetDialog;
   private cubeMap: CubeMapOverlay;
   private tray: CardTray;
   private input: InputSource;
@@ -96,6 +106,8 @@ export class PuzzleApp {
     buildPuzzleDom(root, this.text, this.helpRows());
     this.hud = new PuzzleHud(this.text);
     this.toolbar = new Toolbar(id => this.barClick(id));
+    this.settingsPanel = new SettingsPanel(root, this.text);
+    this.resetDialog = new ResetDialog(this.text);
     this.items = new InventoryPopup(root, { pick: id => this.session?.inventoryPick(id), close: () => this.session?.closeInventory() });
     this.cubeMap = new CubeMapOverlay(root, this.text, () => this.session?.toggleMap(), {
       tab: () => this.session?.toggleTurnMode(),
@@ -140,6 +152,7 @@ export class PuzzleApp {
       { keys: ['\u2190\u2192\u2191\u2193'], labelKey: this.settings.turnMode === 'instant' ? 'ui.help.turnInstant' : 'ui.help.turnConfirm' },
       { keys: b.combine.map(keyLabel), labelKey: 'ui.help.combine' },
       { keys: b.inventory.map(keyLabel), labelKey: 'ui.help.items' },
+      { keys: b.cancel.map(keyLabel), labelKey: 'ui.help.settings' },
       { keys: b.help.map(keyLabel), labelKey: 'ui.help.toggle' }
     ];
   }
@@ -349,9 +362,10 @@ export class PuzzleApp {
   }
 
   /** 工具列：重置 = 重新進房 (確認窗)；魔方 / 2D / 3D = LevelSession.requestMode */
-  private barClick(id: 'reset' | 'cube' | '2d' | '3d' | 'items'): void {
+  private barClick(id: 'reset' | 'cube' | '2d' | '3d' | 'items' | 'settings'): void {
     if (this.screen.id !== 'level' || !this.session) return;
     if (id === 'reset') this.restartRequested = true;
+    else if (id === 'settings') this.session.toggleSettings();
     else if (id === 'items') this.session.toggleInventory();
     else this.session.requestMode(id);
   }
@@ -365,12 +379,59 @@ export class PuzzleApp {
   }
 
   /** 開啟「重新開始本關」確認窗：遊戲暫停，按著的鍵一律視為放開 */
-  private openConfirm(nowMs: number): void {
+  private openConfirm(nowMs: number, kind: 'restart' | 'menu' = 'restart'): void {
     this.input.releaseAll();
-    this.closeConfirmUi = showRestartConfirm(this.text, {
-      onConfirm: () => { this.closeConfirm(); this.restart(); },
-      onCancel: () => this.closeConfirm()
-    });
+    this.confirmKind = kind;
+    const cb = { onConfirm: () => this.confirmed(), onCancel: () => this.closeConfirm() };
+    this.closeConfirmUi = kind === 'menu'
+      ? showConfirm(this.text, { title: 'ui.confirm.menu.title', body: 'ui.confirm.menu.body', ok: 'ui.confirm.menu.ok', cancel: 'ui.confirm.menu.cancel' }, cb)
+      : showRestartConfirm(this.text, cb);
+  }
+
+  /** 確認窗按下確認 (Enter 或點鈕)：重新進房 / 回到選單 */
+  private confirmed(): void {
+    const kind = this.confirmKind;
+    this.closeConfirm();
+    if (kind === 'menu') this.go({ id: 'menu' }); else this.restart();
+  }
+
+  /** 設定 popup 的「回到選單」：同重置鈕的確認窗 (Enter / Esc、300 ms 保護)；說明進度已自動存檔 */
+  private askMenu(): void {
+    if (this.screen.id !== 'level') return;
+    this.session?.closeSettings();
+    this.confirm.open(performance.now());
+    this.openConfirm(performance.now(), 'menu');
+  }
+
+  /** 重置記錄：兩段式確認窗 (設定 popup / 選單的操作頁)；取消不改任何東西 */
+  private openReset(): void {
+    this.input.releaseAll();
+    this.resetDialog.open({ canConfirm: canConfirmReset, cancel: () => this.resetDialog.close(), confirm: w => this.performReset(w) });
+  }
+
+  /**
+   * 執行重置：清掉 puzzle: 前綴的存檔 (設定預設保留) → 重新讀存檔 / 設定 (= 全新玩家) → 收掉 session / 浮層 / 過場 → 回到暱稱畫面 (之後照首次流程播序章)。
+   * 刪不掉 → 確認窗寫原因、什麼都不換；記憶體版 → 完成訊息另加提醒
+   */
+  private performReset(withSettings: boolean): void {
+    const r = resetRecords(this.storage, { withSettings });
+    if (!r.ok) { this.resetDialog.fail(this.text('ui.reset.failed', { keys: r.failed.join(this.text('ui.reset.sep')) })); return; }
+    this.settingsPanel.hide();
+    this.closeConfirm();
+    this.closeControls?.();
+    this.closeControls = null;
+    this.save = loadSave(this.storage);
+    if (withSettings) {
+      this.settings = loadSettings(this.storage);
+      this.bindings = mergeBindings(DEFAULT_BINDINGS, this.settings.keys);
+      this.input.dispose();
+      this.input = new KeyboardSource(this.bindings);
+      this.audioBridge.applySettings(this.settings);
+    }
+    fillHelp(document.getElementById('pz-help')!, this.text, this.helpRows());
+    this.hud.showTip(null, performance.now(), 0);
+    this.go({ id: 'nickname' });
+    this.resetDialog.done(this.text(r.memory ? 'ui.reset.memory' : 'ui.reset.done'), this.text('ui.nickname.ok'), () => this.resetDialog.close());
   }
 
   private closeConfirm(): void {
@@ -397,8 +458,39 @@ export class PuzzleApp {
   private openControls(): void {
     this.closeControls?.();
     this.closeControls = showControlsSettings(this.text, { turnMode: this.settings.turnMode }, {
-      change: v => { this.settings = { ...this.settings, ...v }; writeSettings(this.storage, this.settings); fillHelp(document.getElementById('pz-help')!, this.text, this.helpRows()); },
-      back: () => { this.closeControls?.(); this.closeControls = null; }
+      change: v => this.patchSettings(v),
+      back: () => { this.closeControls?.(); this.closeControls = null; },
+      reset: () => this.openReset()
+    });
+  }
+
+  /** 設定改了 (選單的操作頁 / 關卡中的設定 popup)：寫入、音量即時套用、操作說明依轉動方式重建 */
+  private patchSettings(v: Partial<Settings>): void {
+    this.settings = { ...this.settings, ...v };
+    writeSettings(this.storage, this.settings);
+    this.audioBridge.applySettings(this.settings);
+    fillHelp(document.getElementById('pz-help')!, this.text, this.helpRows());
+  }
+
+  /** 關卡中的設定 popup：跟著 session 的開關狀態顯示 / 收起 (打開時建好內容) */
+  private syncSettingsPanel(): void {
+    const want = this.screen.id === 'level' && !!this.session?.isSettingsOpen;
+    if (want === this.settingsPanel.isShown) return;
+    if (!want) { this.settingsPanel.hide(); return; }
+    const s = this.settings;
+    this.settingsPanel.show({
+      sound: { masterVolume: s.masterVolume, musicVolume: s.musicVolume, sfxVolume: s.sfxVolume, mute: s.mute, calmTension: s.calmTension },
+      controls: { turnMode: s.turnMode },
+      display: { reduceMotion: s.reduceMotion, textSpeed: s.textSpeed }
+    }, {
+      sound: v => this.patchSettings(v),
+      preview: kind => this.audioBridge.manager.play(kind === 'music' ? 'sfx.puzzle.solved' : 'sfx.pickup'),
+      controls: v => this.patchSettings(v),
+      display: v => this.patchSettings(v),
+      help: () => { this.session?.closeSettings(); if (!this.settings.helpOpen) this.toggleHelp(); },
+      menu: () => this.askMenu(),
+      reset: () => this.openReset(),
+      close: () => this.session?.closeSettings()
     });
   }
 
@@ -487,7 +579,8 @@ export class PuzzleApp {
       touch: this.touch
     };
     this.hud.renderHelp(deriveHelpView(this.settings.helpOpen, ctx, this.text, this.bindings));
-    this.toolbar.render(deriveToolbar({ inLevel: ctx.inLevel, ...(s ? s.toolbarContext : { renderMode: '3d', onCube: false, dialChapter: false, dialActive: false, mapOpen: false, itemCount: 0, itemsOpen: false }) }, this.text));
+    this.toolbar.render(deriveToolbar({ inLevel: ctx.inLevel, ...(s ? s.toolbarContext : { renderMode: '3d', onCube: false, dialChapter: false, dialActive: false, mapOpen: false, itemCount: 0, itemsOpen: false, settingsOpen: false }) }, this.text));
+    this.syncSettingsPanel();
     if (!ctx.inLevel && this.hud.tipShowing) this.hud.showTip(null, now, 0);
     this.hud.tickTip(now);
     if (this.hud.tipShowing) return;
@@ -511,7 +604,11 @@ export class PuzzleApp {
   private frame(now: number): void {
     const elapsed = (now - this.last) / 1000;
     this.last = now;
-    const input = this.input.poll();
+    const raw = this.input.poll();
+    // 重置記錄確認窗開著：Esc = 取消；其餘輸入不進遊戲 (世界照常推進)
+    const modal = this.resetDialog.isOpen;
+    if (modal && raw.pressed.includes('cancel')) this.resetDialog.close();
+    const input = modal ? { ...raw, moveX: 0, moveZ: 0, jump: false, pressed: [] } : raw;
     if (this.cs) {
       this.cutsceneFrame(elapsed, input);
       this.renderHelp(now);
@@ -527,7 +624,7 @@ export class PuzzleApp {
       // 通關畫面開著：世界照常推進 (過場、動畫)，但不收玩家輸入 (按 E 不會撿到通關畫面底下的東西)
       case 'update': this.session?.update(elapsed, this.screen.id === 'clear' ? { ...input, moveX: 0, moveZ: 0, jump: false, pressed: [] } : input); break;
       case 'open': this.openConfirm(now); break;
-      case 'confirm': this.closeConfirm(); this.restart(); break;
+      case 'confirm': this.confirmed(); break;
       case 'cancel': this.closeConfirm(); break;
       case 'restart': this.restart(); break;
       default: break;

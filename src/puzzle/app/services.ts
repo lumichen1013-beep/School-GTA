@@ -11,7 +11,7 @@ export function browserStorage(): KeyValueStorage {
     ls = window.localStorage;
     ls.getItem(STORAGE_PREFIX + 'probe');
   } catch {
-    return memoryStorage();
+    return { ...memoryStorage(), persistent: false };
   }
   const guard = (k: string): string => {
     if (!k.startsWith(STORAGE_PREFIX)) throw new Error(`storage key must start with ${STORAGE_PREFIX}: ${k}`);
@@ -20,6 +20,9 @@ export function browserStorage(): KeyValueStorage {
   return {
     get: k => ls.getItem(guard(k)),
     set: (k, v) => { try { ls.setItem(guard(k), v); } catch { /* 配額已滿：本次不存 */ } },
-    remove: k => ls.removeItem(guard(k))
+    remove: k => ls.removeItem(guard(k)),
+    // 只列本作前綴的鍵 (重置記錄不碰 GTA 主遊戲的 localStorage)
+    keys: () => Array.from({ length: ls.length }, (_, i) => ls.key(i)).filter((k): k is string => !!k && k.startsWith(STORAGE_PREFIX)),
+    persistent: true
   };
 }
