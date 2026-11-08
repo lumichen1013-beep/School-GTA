@@ -130,7 +130,7 @@ describe('5-3 道具：墨水瓶、羊皮紙', () => {
     let cs = in2d(in3d(through(turn(after51(), T('X1', 1), T('Y1', 1)), 'doorE')));
     cs = play(cs, [{ walkTo: [0.9, null] }, card('parchment', 'card.da'), { wait: 0.05 }]);
     cs = play(in3d(cs), [{ walkTo: [0.9, -2.6] }, { act: 'interact' }]);
-    expect([cs.world.msg, hasItem(cs.world, 'parchment'), get(cs, 'parchment').gone]).toEqual(['羊皮紙捲脹得比你還粗，抱不起來——也塞不過門。', false, false]);
+    expect([cs.world.msg, hasItem(cs.world, 'parchment'), get(cs, 'parchment').gone]).toEqual(['羊皮紙捲變得又長又沉，抱不起來——也塞不過門。', false, false]);
     cs = play(in2d(cs), [{ walkTo: [0.9, null] }, uncard('parchment', 'card.da'), card('parchment', 'card.xiao'), { wait: 0.05 }]);
     cs = play(in3d(cs), [{ walkTo: [0.9, -2.6] }, { act: 'interact' }]);
     expect([cs.world.msg, hasItem(cs.world, 'parchment')]).toEqual(['羊皮紙縮得像一根火柴。這麼小，寫不下一頁。', false]);

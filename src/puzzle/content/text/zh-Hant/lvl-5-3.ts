@@ -14,7 +14,7 @@ export const lvl53 = {
   'lvl.5-3.parchment': '羊皮紙',
   'lvl.5-3.parchment.tag': '羊皮紙',
   'lvl.5-3.parchment.take': '一捲空白的羊皮紙，用細繩繫著。你把它收了起來。',
-  'lvl.5-3.parchment.big': '羊皮紙捲脹得比你還粗，抱不起來——也塞不過門。',
+  'lvl.5-3.parchment.big': '羊皮紙捲變得又長又沉，抱不起來——也塞不過門。',
   'lvl.5-3.parchment.small': '羊皮紙縮得像一根火柴。這麼小，寫不下一頁。',
   // 天窗銘文 (西；爸爸的鉛筆字，劃掉重寫：三段裡的誤推，與東窗那段矛盾；資訊物件，5-5c 引用)
   'lvl.5-3.inscription.label': '天窗銘文',

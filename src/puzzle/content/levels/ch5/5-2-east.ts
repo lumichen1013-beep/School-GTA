@@ -35,7 +35,7 @@ const objects: ObjDef[] = [
     x: 5.6, y: DESK_H, z: -1.0, w: 0.6, h: 0.32, d: 0.42, visible: '3d', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-2.case' },
   // 5-3 的另一件道具：許問津的空白羊皮紙 (靠在古籍書架西端的一捲；名詞標籤帶方槽：「大」帶不動、「小」寫不下；只在實景拿)
   { id: 'parchment', type: 'parchment', item: 'parchment', useText: 'lvl.5-3.parchment.take', bigText: 'lvl.5-3.parchment.big', smallText: 'lvl.5-3.parchment.small',
-    x: 0.9, y: 0, z: -3.4, w: 0.2, h: 0.9, d: 0.2, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-3.parchment',
+    x: 0.9, y: 0, z: -3.4, w: 0.3, h: 0.9, d: 0.3, visible: 'both', solid: false, interactable: true, interactIn: '3d', labelKey: 'lvl.5-3.parchment',
     label: { id: 'parchment', kind: 'noun', textKey: 'lvl.5-3.parchment.tag', scale: true } },
   // ── 前景：箱蓋紙籤、字條 (父親的筆記；story-bible 7.3) ──
   plaque('plaqueEast', 'lvl.ch5.east.plaque', -6.4, 0.9, 3.2),
